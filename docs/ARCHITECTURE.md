@@ -13,6 +13,7 @@
   - First v2 primitives in place:
     - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`)
     - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `path`, `isMethod`)
+    - middleware contracts and execution pipeline (`MiddlewareInterface`, `MiddlewarePipeline`)
 - Routing (attributes, repository, resolver, middleware)
   - Seed primitive in place: immutable `Route` value object (`method`, `path`, `handler`, `constraints`) with normalized definition helpers
 - Controller (base class, route hooks)
@@ -47,6 +48,12 @@
 - Added parameterized path matching support (`/users/{id}`) with optional per-parameter regex constraints.
 - Missing route lookups now raise explicit runtime errors (`No route matched METHOD /path`).
 - Added unit tests for successful matches, path normalization, parameter extraction, constraint checks, and miss handling.
+
+## Implemented Slice: Middleware pipeline (Phase 2 seed)
+- Added `Http\MiddlewareInterface` as the common middleware contract.
+- Added immutable `Http\MiddlewarePipeline` with `pipe()` and `handle()` methods.
+- Pipeline composition runs middleware in registration order and resolves into a destination handler.
+- Added unit tests for middleware ordering and immutable pipeline extension.
 
 ## Non-goals for v2 core
 - Full ORM
