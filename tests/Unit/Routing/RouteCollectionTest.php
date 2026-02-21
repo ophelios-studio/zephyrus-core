@@ -17,10 +17,11 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users', 'UserController@index'));
         $collection->add(Route::define('POST', '/users', 'UserController@store'));
 
-        $route = $collection->match('get', '/users');
+        $match = $collection->match('get', '/users');
 
-        self::assertSame('GET', $route->method);
-        self::assertSame('UserController@index', $route->handler);
+        self::assertSame('GET', $match->route->method);
+        self::assertSame('UserController@index', $match->route->handler);
+        self::assertSame([], $match->parameters);
     }
 
     public function testMatchNormalizesPathInput(): void
@@ -28,9 +29,40 @@ final class RouteCollectionTest extends TestCase
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', 'health', 'HealthController@show'));
 
-        $route = $collection->match('GET', 'health');
+        $match = $collection->match('GET', 'health');
 
-        self::assertSame('/health', $route->path);
+        self::assertSame('/health', $match->route->path);
+    }
+
+    public function testMatchExtractsPathParameters(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $match = $collection->match('GET', '/users/42');
+
+        self::assertSame('42', $match->parameter('id'));
+    }
+
+    public function testMatchAppliesParameterConstraints(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+']));
+
+        $match = $collection->match('GET', '/users/1337');
+
+        self::assertSame('1337', $match->parameter('id'));
+    }
+
+    public function testMatchThrowsRuntimeExceptionWhenConstraintFails(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+']));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('No route matched GET /users/abc');
+
+        $collection->match('GET', '/users/abc');
     }
 
     public function testMatchThrowsRuntimeExceptionWhenNoRouteMatches(): void

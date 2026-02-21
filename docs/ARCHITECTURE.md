@@ -43,8 +43,10 @@
 ## Implemented Slice: Routing RouteCollection matcher (Phase 2 seed)
 - Added `Routing\RouteCollection` to register and resolve route definitions.
 - Added `match(method, path)` lookup with method/path normalization.
+- Added `Routing\RouteMatch` value object to return both matched route and extracted parameters.
+- Added parameterized path matching support (`/users/{id}`) with optional per-parameter regex constraints.
 - Missing route lookups now raise explicit runtime errors (`No route matched METHOD /path`).
-- Added unit tests for successful matches, path normalization, and miss handling.
+- Added unit tests for successful matches, path normalization, parameter extraction, constraint checks, and miss handling.
 
 ## Non-goals for v2 core
 - Full ORM
