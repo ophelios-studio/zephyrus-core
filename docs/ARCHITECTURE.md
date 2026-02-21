@@ -10,6 +10,7 @@
 ## Planned Core Modules
 - Core (kernel, app lifecycle, errors)
 - Http (request/response, headers, content negotiation)
+  - First v2 primitive now in place: immutable `Response` value object with helpers (`text`, `json`, `withHeader`, `withStatus`).
 - Routing (attributes, repository, resolver, middleware)
 - Controller (base class, route hooks)
 - Validation (form/value validators + error bag)
