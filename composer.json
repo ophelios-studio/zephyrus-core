@@ -11,12 +11,12 @@
   },
   "autoload": {
     "psr-4": {
-      "Zephyrus2\\": "src/Zephyrus2/"
+      "Zephyrus\\": "src/Zephyrus/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "Zephyrus2\\Tests\\": "tests/"
+      "Zephyrus\\Tests\\": "tests/"
     }
   },
   "scripts": {

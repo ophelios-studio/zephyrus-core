@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Zephyrus2\Tests\Unit\Core\Config;
+namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\TestCase;
-use Zephyrus2\Core\Config\ApplicationConfig;
-use Zephyrus2\Core\Config\Environment;
+use Zephyrus\Core\Config\ApplicationConfig;
+use Zephyrus\Core\Config\Environment;
 
 final class ApplicationConfigTest extends TestCase
 {

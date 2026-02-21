@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Zephyrus2\Core;
+namespace Zephyrus\Core;
 
 final class Kernel
 {

@@ -1,4 +1,4 @@
-# Zephyrus2 Roadmap
+# Zephyrus Roadmap
 
 ## Phase 0 - Foundations
 - Bootstrap repository, coding standards, CI, PHPUnit, static analysis.
@@ -35,7 +35,7 @@
 
 ## Phase 7 - Docs + Migration
 - Feature docs for each module.
-- Zephyrus1 -> Zephyrus2 migration guide.
+- Zephyrus1 -> Zephyrus migration guide.
 - CodeQuill migration checklist and compatibility bridge.
 
 ## Phase 8 - Web3 Extension Track

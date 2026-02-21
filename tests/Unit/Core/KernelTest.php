@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Zephyrus2\Tests\Unit\Core;
+namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\TestCase;
-use Zephyrus2\Core\Kernel;
+use Zephyrus\Core\Kernel;
 
 final class KernelTest extends TestCase
 {

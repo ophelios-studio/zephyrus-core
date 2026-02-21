@@ -1,4 +1,4 @@
-# Zephyrus2
+# Zephyrus
 
 Cohesive, test-driven PHP 8.4+ framework core.
 
