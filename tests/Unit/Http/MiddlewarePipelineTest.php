@@ -68,4 +68,32 @@ final class MiddlewarePipelineTest extends TestCase
         self::assertArrayNotHasKey('X-Destination', $responseOriginal->headers);
         self::assertSame('yes', $responseExtended->headers['X-Destination']);
     }
+
+    public function testPipeManyAppendsMiddlewaresInOrder(): void
+    {
+        $pipeline = new MiddlewarePipeline();
+
+        $extended = $pipeline->pipeMany([
+            new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request)->withHeader('X-One', '1');
+                }
+            },
+            new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request)->withHeader('X-Two', '2');
+                }
+            },
+        ]);
+
+        $response = $extended->handle(
+            Request::fromArray('GET', '/health'),
+            static fn (Request $request): Response => Response::text('ok'),
+        );
+
+        self::assertSame('1', $response->headers['X-One']);
+        self::assertSame('2', $response->headers['X-Two']);
+    }
 }

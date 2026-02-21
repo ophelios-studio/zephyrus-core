@@ -19,7 +19,7 @@ final class RouteDispatcherTest extends TestCase
     public function testDispatchResolvesRouteAndRunsPipeline(): void
     {
         $routes = new RouteCollection();
-        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+']));
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+'], ['auth']));
 
         $pipeline = new MiddlewarePipeline([
             new class implements MiddlewareInterface {
@@ -38,12 +38,23 @@ final class RouteDispatcherTest extends TestCase
                 'id' => $match->parameter('id'),
                 'path' => $request->path(),
             ]),
+            routeMiddlewareResolver: static fn (string $name): MiddlewareInterface => new class($name) implements MiddlewareInterface {
+                public function __construct(private string $name)
+                {
+                }
+
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request)->withHeader('X-Route-Middleware', $this->name);
+                }
+            },
         );
 
         $response = $dispatcher->dispatch(Request::fromArray('GET', '/users/42?expand=roles'));
 
         self::assertSame(200, $response->status);
         self::assertSame('on', $response->headers['X-Pipeline']);
+        self::assertSame('auth', $response->headers['X-Route-Middleware']);
         self::assertStringContainsString('"handler":"UserController@show"', $response->body);
         self::assertStringContainsString('"id":"42"', $response->body);
         self::assertStringContainsString('"path":"\\/users\\/42"', $response->body);

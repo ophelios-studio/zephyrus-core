@@ -33,4 +33,11 @@ final class RouteTest extends TestCase
         self::assertTrue($route->matchesMethod('delete'));
         self::assertFalse($route->matchesMethod('PATCH'));
     }
+
+    public function testDefineAcceptsRouteMiddlewareNames(): void
+    {
+        $route = Route::define('GET', '/users', 'UserController@index', [], ['auth', 'audit']);
+
+        self::assertSame(['auth', 'audit'], $route->middlewares);
+    }
 }

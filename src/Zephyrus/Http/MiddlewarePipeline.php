@@ -28,6 +28,20 @@ final class MiddlewarePipeline
     }
 
     /**
+     * @param array<int, MiddlewareInterface> $middlewares
+     */
+    public function pipeMany(array $middlewares): self
+    {
+        $pipeline = $this;
+
+        foreach ($middlewares as $middleware) {
+            $pipeline = $pipeline->pipe($middleware);
+        }
+
+        return $pipeline;
+    }
+
+    /**
      * @param callable(Request): Response $destination
      */
     public function handle(Request $request, callable $destination): Response
