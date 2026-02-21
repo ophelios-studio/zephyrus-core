@@ -55,6 +55,12 @@
 - Pipeline composition runs middleware in registration order and resolves into a destination handler.
 - Added unit tests for middleware ordering and immutable pipeline extension.
 
+## Implemented Slice: Route dispatcher bridge (Phase 2 seed)
+- Added `Routing\RouteDispatcher` to connect request path/method matching to middleware execution.
+- Dispatcher resolves a `RouteMatch` from `RouteCollection`, then executes a resolver callable through `MiddlewarePipeline`.
+- Enables first end-to-end flow: `Request -> Route match -> Middleware pipeline -> Response`.
+- Added unit test coverage for parameterized route dispatch and middleware-applied response headers.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
