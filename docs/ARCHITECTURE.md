@@ -14,6 +14,7 @@
     - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`)
     - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `path`, `isMethod`)
 - Routing (attributes, repository, resolver, middleware)
+  - Seed primitive in place: immutable `Route` value object (`method`, `path`, `handler`, `constraints`) with normalized definition helpers
 - Controller (base class, route hooks)
 - Validation (form/value validators + error bag)
 - Data (broker contracts, db connection abstractions)
@@ -32,6 +33,12 @@
 - Added factory constructors for common responses: `text()`, `json()`, and `noContent()`.
 - Added immutable mutation helpers: `withHeader()` and `withStatus()`.
 - JSON responses automatically set `Content-Type: application/json; charset=utf-8`.
+
+## Implemented Slice: Routing Route object (Phase 2 seed)
+- Added immutable `Routing\Route` primitive with normalized `method` and `path`.
+- Added `Route::define()` to standardize route creation from string inputs.
+- Added `matchesMethod()` helper for case-insensitive method checks.
+- Added unit tests for method normalization, root path handling, and method matching.
 
 ## Non-goals for v2 core
 - Full ORM
