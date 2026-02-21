@@ -27,6 +27,12 @@
 - Default behavior is secure by default: unknown or missing environment falls back to `production`.
 - Debug defaults to off for production-like environments and on for development/testing unless explicitly overridden.
 
+## Implemented Slice: Http Response object (Phase 1 seed)
+- Added immutable `Http\Response` value object (`status`, `body`, `headers`).
+- Added factory constructors for common responses: `text()`, `json()`, and `noContent()`.
+- Added immutable mutation helpers: `withHeader()` and `withStatus()`.
+- JSON responses automatically set `Content-Type: application/json; charset=utf-8`.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

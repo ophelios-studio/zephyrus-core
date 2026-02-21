@@ -9,16 +9,16 @@ use Zephyrus\Http\Response;
 
 final class ResponseTest extends TestCase
 {
-    public function testTextResponseSetsExpectedContentType(): void
+    public function testTextFactoryBuildsPlainTextResponse(): void
     {
-        $response = Response::text('ok');
+        $response = Response::text('hello');
 
         self::assertSame(200, $response->status);
-        self::assertSame('ok', $response->body);
+        self::assertSame('hello', $response->body);
         self::assertSame('text/plain; charset=utf-8', $response->headers['Content-Type']);
     }
 
-    public function testJsonResponseEncodesPayloadAndSetsContentType(): void
+    public function testJsonFactoryEncodesPayloadAndSetsContentTypeHeader(): void
     {
         $response = Response::json(['ok' => true], 201);
 
@@ -27,13 +27,21 @@ final class ResponseTest extends TestCase
         self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
     }
 
-    public function testWithHeaderReturnsNewInstance(): void
+    public function testNoContentFactoryBuilds204WithoutBody(): void
     {
-        $response = Response::text('ok');
-        $withHeader = $response->withHeader('X-Test', '1');
+        $response = Response::noContent();
 
-        self::assertNotSame($response, $withHeader);
-        self::assertArrayNotHasKey('X-Test', $response->headers);
-        self::assertSame('1', $withHeader->headers['X-Test']);
+        self::assertSame(204, $response->status);
+        self::assertSame('', $response->body);
+    }
+
+    public function testWithHeaderReturnsNewResponseInstance(): void
+    {
+        $initial = Response::text('ok');
+        $updated = $initial->withHeader('X-Trace-Id', 'abc123');
+
+        self::assertNotSame($initial, $updated);
+        self::assertArrayNotHasKey('X-Trace-Id', $initial->headers);
+        self::assertSame('abc123', $updated->headers['X-Trace-Id']);
     }
 }

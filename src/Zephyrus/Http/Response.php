@@ -37,6 +37,11 @@ final readonly class Response
         );
     }
 
+    public static function noContent(): self
+    {
+        return new self(body: '', status: 204, headers: []);
+    }
+
     public function withHeader(string $name, string $value): self
     {
         $headers = $this->headers;
