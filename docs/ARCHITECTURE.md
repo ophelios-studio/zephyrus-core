@@ -40,6 +40,12 @@
 - Added `matchesMethod()` helper for case-insensitive method checks.
 - Added unit tests for method normalization, root path handling, and method matching.
 
+## Implemented Slice: Routing RouteCollection matcher (Phase 2 seed)
+- Added `Routing\RouteCollection` to register and resolve route definitions.
+- Added `match(method, path)` lookup with method/path normalization.
+- Missing route lookups now raise explicit runtime errors (`No route matched METHOD /path`).
+- Added unit tests for successful matches, path normalization, and miss handling.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
