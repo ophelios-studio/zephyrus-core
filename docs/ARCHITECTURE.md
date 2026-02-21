@@ -18,6 +18,12 @@
 - Session (stores, rotation, policies)
 - Config (typed section objects)
 
+## Implemented Slice: ApplicationConfig (Phase 3 seed)
+- Added `Environment` enum with normalized aliases (`prod`, `dev`, `local`, etc.).
+- Added immutable `ApplicationConfig` with typed `environment` and `debug` fields.
+- Default behavior is secure by default: unknown or missing environment falls back to `production`.
+- Debug defaults to off for production-like environments and on for development/testing unless explicitly overridden.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
