@@ -36,4 +36,16 @@ final class RequestTest extends TestCase
         self::assertSame('molt', $request->input('name'));
         self::assertNull($request->input('missing'));
     }
+
+    public function testPathAndMethodHelpers(): void
+    {
+        $request = Request::fromArray(
+            method: 'post',
+            uri: '/users/42?expand=roles',
+        );
+
+        self::assertSame('/users/42', $request->path());
+        self::assertTrue($request->isMethod('POST'));
+        self::assertFalse($request->isMethod('GET'));
+    }
 }

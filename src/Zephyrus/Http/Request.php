@@ -56,6 +56,16 @@ final readonly class Request
         return $this->headers[strtolower($name)] ?? $default;
     }
 
+    public function path(): string
+    {
+        return (string) parse_url($this->uri, PHP_URL_PATH);
+    }
+
+    public function isMethod(string $method): bool
+    {
+        return $this->method === strtoupper($method);
+    }
+
     /**
      * @param array<string, string> $headers
      * @return array<string, string>
