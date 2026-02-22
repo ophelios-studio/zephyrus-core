@@ -110,6 +110,19 @@
 - Supports repeatable attributes (one method handles multiple paths/verbs), preserved constraints and middleware names, and named-route lookup after `controller()` registration.
 - Added unit tests for attribute discovery (empty, simple, repeatable, protected method filtering, missing class), router integration (combined fluent + controller, named-route lookup, constraint preservation).
 
+## Implemented Slice: Controller base class + HandlerResolver (Phase 2)
+- Added `Controller\Controller` abstract base class with protected response-building helpers (`json`, `created`, `text`, `noContent`, `respond`). Controllers are not required to extend it — the resolver works with any plain object returning a `Response`.
+- Added `Routing\HandlerResolver` to resolve `ClassName@method` handler strings into `Response` values using PHP reflection-based argument injection:
+  - Parameters type-hinted as `Request` receive the current request instance.
+  - Parameters whose name matches a hydrated route attribute (e.g. `int $id`) are injected and cast to the declared scalar type (`int`, `float`, `bool`).
+  - Parameters with declared default values fall back silently.
+  - All other unresolvable parameters throw `HandlerResolverException`.
+- An optional factory callable (`(class-string): object`) can be injected into `HandlerResolver` for DI container integration; defaults to `new $class()`.
+- Added `Routing\Exception\HandlerResolverException` with named factory methods for invalid format, unresolvable method, and unresolved parameter failure modes.
+- `HandlerResolver::resolve(RouteMatch, Request): Response` matches the `$resolver` callable signature expected by `RouteDispatcher`, enabling zero-boilerplate wiring.
+- Added `HandlerResolverTest` (14 tests) covering: plain dispatch, Request injection, int/float/string attribute casting, default-value fallback, mixed injection, extended controller helpers, custom factory, invalid format, missing method, unresolved parameter, and full RouteDispatcher integration.
+- Added `ControllerTest` (7 tests) covering: json/created/text/noContent/respond helpers and abstract class verification.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
