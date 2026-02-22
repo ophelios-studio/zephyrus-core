@@ -11,6 +11,7 @@ final readonly class RouteUrlGenerator
     public function __construct(
         private RouteCollection $routes,
         private ?string $baseUrl = null,
+        private ?RouteSignature $signature = null,
     ) {
     }
 
@@ -59,5 +60,18 @@ final readonly class RouteUrlGenerator
         }
 
         return rtrim($this->baseUrl, '/') . $url;
+    }
+
+    /**
+     * @param array<string, scalar> $parameters
+     * @param array<string, scalar|array<scalar>> $query
+     */
+    public function generateSigned(string $routeName, array $parameters = [], array $query = []): string
+    {
+        if ($this->signature === null) {
+            throw new RouteUrlGenerationException('Cannot generate signed URL without a RouteSignature instance');
+        }
+
+        return $this->signature->sign($this->generate($routeName, $parameters, $query));
     }
 }

@@ -109,4 +109,30 @@ final class RouteUrlGeneratorTest extends TestCase
 
         self::assertSame('https://example.com/health', $url);
     }
+
+    public function testGenerateSignedUsesInjectedSignature(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, 'https://example.com', $signature);
+
+        $signedUrl = $generator->generateSigned('users.show', ['id' => 42], ['expand' => 'roles']);
+
+        self::assertTrue($signature->verify($signedUrl));
+    }
+
+    public function testGenerateSignedThrowsWhenSignerIsMissing(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Cannot generate signed URL without a RouteSignature instance');
+
+        $generator->generateSigned('users.show', ['id' => 42]);
+    }
 }
