@@ -135,13 +135,24 @@ The override value is uppercased and applied only when the raw method is
 
 The single entry point for request handling. Its only job is:
 
-1. Delegate to `RouteDispatcher::dispatch()`.
-2. Catch any `Throwable` and convert it to a `Response` via
+1. Dispatch `RequestEvent` (when an `EventDispatcher` is attached).
+2. Delegate to `RouteDispatcher::dispatch()` unless a request listener
+   short-circuits with `$event->setResponse(...)`.
+3. Catch any `Throwable` and convert it to a `Response` via
    `HttpExceptionResponder`.
+4. Dispatch `ResponseEvent` before returning the final response.
 
 ```php
 $response = $kernel->handle($request);
 ```
+
+For class-based listeners, `KernelSubscriber` provides a typed convenience base:
+
+- `onRequest(RequestEvent $event)`
+- `onResponse(ResponseEvent $event)`
+
+It auto-registers both hooks via `getSubscribedEvents()` and exposes
+`requestPriority()` / `responsePriority()` override points.
 
 ---
 
