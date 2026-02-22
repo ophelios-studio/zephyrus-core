@@ -69,6 +69,12 @@
 - Added explicit generation exception paths for unknown route names, missing parameters, and missing URL signer.
 - Added unit tests for successful generation, encoding, query generation, absolute URL generation, signed URL generation, and failure scenarios.
 
+## Implemented Slice: Route cache persistence (Phase 2 seed)
+- Added `Routing\RouteCache` to persist route collections to JSON cache files and restore them.
+- Cached payload includes method, path, handler, constraints, middleware names, and route name.
+- Added strict validation + dedicated `RouteCacheException` for cache read/write/decode/shape failures.
+- Added unit tests for cache round-trip, missing cache files, and invalid JSON payload handling.
+
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)
 - Added `Http\MiddlewareInterface` as the common middleware contract.
 - Added immutable `Http\MiddlewarePipeline` with `pipe()` and `handle()` methods.
