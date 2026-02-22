@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing\Exception;
 
-use RuntimeException;
+use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
-final class MethodNotAllowedException extends RuntimeException
+final class MethodNotAllowedException extends ZephyrusRuntimeException
 {
     /**
      * @param array<int, string> $allowedMethods

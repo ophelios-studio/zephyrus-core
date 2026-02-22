@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing\Exception;
 
-use RuntimeException;
+use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
-final class RouteSignatureException extends RuntimeException
+final class RouteSignatureException extends ZephyrusRuntimeException
 {
 }

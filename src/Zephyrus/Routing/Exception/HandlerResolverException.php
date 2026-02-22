@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Zephyrus\Routing\Exception;
 
 use ReflectionException;
-use RuntimeException;
+use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
-final class HandlerResolverException extends RuntimeException
+final class HandlerResolverException extends ZephyrusRuntimeException
 {
     public static function invalidHandlerFormat(string $handler): self
     {
