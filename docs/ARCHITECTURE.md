@@ -56,6 +56,12 @@
 - Pipeline composition runs middleware in registration order and resolves into a destination handler.
 - Added unit tests for middleware ordering and immutable pipeline extension.
 
+## Implemented Slice: HTTP exception responder (Phase 1 seed)
+- Added `Http\Error\HttpExceptionResponder` to map framework exceptions into baseline HTTP responses.
+- Route misses map to `404 Not Found`, method mismatches map to `405 Method Not Allowed` with `Allow` header.
+- Unknown exceptions map to `500 Internal Server Error`.
+- Added unit coverage for all exception-to-response mappings.
+
 ## Implemented Slice: Route dispatcher bridge (Phase 2 seed)
 - Added `Routing\RouteDispatcher` to connect request path/method matching to middleware execution.
 - Dispatcher resolves a `RouteMatch` from `RouteCollection`, then executes a resolver callable through `MiddlewarePipeline`.
