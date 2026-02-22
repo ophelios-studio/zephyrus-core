@@ -197,6 +197,15 @@
 - Added `SecurityConfigTest` (9 tests) and `ConfigurationTest` (14 tests) covering: defaults, camelCase/snake_case keys, precedence, `maxBodySize` zero, `allowedHosts` reindexing, all validation failures, section hydration, null database, all-sections-together, and exception propagation from each section.
 - Total test suite: **298 tests, 580 assertions**, line coverage **96.50%** (690/715).
 
+## Implemented Slice: Validation seed — Rule, Rules, FieldValidator, ErrorBag, FormValidator (Phase 4)
+- Added `Validation\Rule` — immutable value object wrapping a validator `\Closure` and an error message. Created via `Rule::of(callable, message)`.
+- Added `Validation\Rules` — static factory providing 11 built-in rules: `required`, `minLength`, `maxLength`, `email`, `integer`, `numeric`, `min`, `max`, `between`, `regex`, `in`, `url`, `notBlank`. All produce sensible default messages; every message is overridable.
+- Added `Validation\FieldValidator` — immutable list of `Rule` objects for a single field. `withRules(Rule...)` constructs; `addRule(Rule)` returns a new copy with the rule appended. `validate(mixed): string[]` runs all rules and returns collected error messages.
+- Added `Validation\ErrorBag` — mutable result container mapping field names to `string[]` error lists. Helpers: `hasErrors()`, `hasErrorsFor(field)`, `errorsFor(field)`, `firstFor(field)`, `failingFields()`, `allMessages()`, `toArray()`.
+- Added `Validation\FormValidator` — orchestrates named `FieldValidator` instances against a `string => mixed` payload. Missing keys are validated as `null` (required-rule catches absent fields). `withField(name, validator)` returns an immutable copy. `validate(array): ErrorBag` collects all field errors.
+- Added 70 unit tests across 5 test classes (`RuleTest` 5, `RulesTest` 32, `FieldValidatorTest` 10, `ErrorBagTest` 12, `FormValidatorTest` 11) covering: pass/fail for every built-in rule, null/empty/type edge cases, default and custom messages, strict `in()` type comparison, immutable `addRule`/`withField` chains, missing-field null treatment, partial and full failures, `between`/`in` integration in full form flow.
+- Total test suite: **368 tests, 707 assertions**, line coverage **96.75%** (774/800).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
