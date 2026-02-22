@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use RuntimeException;
+use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
@@ -60,6 +61,8 @@ final class KernelBuilder
     /** @var callable(class-string): object|null */
     private mixed $controllerFactory = null;
 
+    private ?EventDispatcher $eventDispatcher = null;
+
     public static function create(): self
     {
         return new self();
@@ -109,6 +112,21 @@ final class KernelBuilder
     }
 
     /**
+     * Attaches an EventDispatcher so the kernel fires RequestEvent and
+     * ResponseEvent on every handled request.
+     *
+     * When omitted (default) the kernel operates without event hooks, which
+     * preserves the behaviour of previous versions.
+     */
+    public function withEventDispatcher(EventDispatcher $dispatcher): self
+    {
+        $clone = clone $this;
+        $clone->eventDispatcher = $dispatcher;
+
+        return $clone;
+    }
+
+    /**
      * Overrides the default controller factory (`new $class()`) with a custom
      * callable — typically a DI container resolver.
      *
@@ -149,6 +167,6 @@ final class KernelBuilder
                 : null,
         );
 
-        return new HttpKernel($dispatcher, new HttpExceptionResponder());
+        return new HttpKernel($dispatcher, new HttpExceptionResponder(), $this->eventDispatcher);
     }
 }
