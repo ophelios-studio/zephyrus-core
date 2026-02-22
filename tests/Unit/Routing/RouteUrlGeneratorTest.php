@@ -85,4 +85,28 @@ final class RouteUrlGeneratorTest extends TestCase
 
         self::assertSame('/search?q=hello%20world&tags%5B0%5D=php&tags%5B1%5D=zephyrus%202', $path);
     }
+
+    public function testGeneratePrependsBaseUrlWhenConfigured(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        $generator = new RouteUrlGenerator($routes, 'https://example.com');
+
+        $url = $generator->generate('users.show', ['id' => 42], ['expand' => 'roles']);
+
+        self::assertSame('https://example.com/users/42?expand=roles', $url);
+    }
+
+    public function testGenerateNormalizesTrailingSlashFromBaseUrl(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $generator = new RouteUrlGenerator($routes, 'https://example.com/');
+
+        $url = $generator->generate('health.show');
+
+        self::assertSame('https://example.com/health', $url);
+    }
 }

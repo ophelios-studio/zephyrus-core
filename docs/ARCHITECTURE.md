@@ -64,8 +64,9 @@
 - Route parameters are required and URL-encoded (`rawurlencode`) for safe path generation.
 - Added optional query-string generation with deterministic key ordering.
 - Query generation uses RFC3986 encoding and supports array parameters.
+- Added optional base-URL support for generating absolute route URLs.
 - Added explicit generation exception path for unknown route names and missing parameters.
-- Added unit tests for successful generation, encoding, query generation, and failure scenarios.
+- Added unit tests for successful generation, encoding, query generation, absolute URL generation, and failure scenarios.
 
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)
 - Added `Http\MiddlewareInterface` as the common middleware contract.

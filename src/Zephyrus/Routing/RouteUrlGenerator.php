@@ -8,8 +8,10 @@ use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 
 final readonly class RouteUrlGenerator
 {
-    public function __construct(private RouteCollection $routes)
-    {
+    public function __construct(
+        private RouteCollection $routes,
+        private ?string $baseUrl = null,
+    ) {
     }
 
     /**
@@ -44,13 +46,18 @@ final readonly class RouteUrlGenerator
 
         $resolvedPath = $path ?? $route->path;
 
-        if ($query === []) {
-            return $resolvedPath;
+        $url = $resolvedPath;
+
+        if ($query !== []) {
+            ksort($query);
+            $queryString = http_build_query($query, arg_separator: '&', encoding_type: PHP_QUERY_RFC3986);
+            $url = $queryString === '' ? $url : $url . '?' . $queryString;
         }
 
-        ksort($query);
-        $queryString = http_build_query($query, arg_separator: '&', encoding_type: PHP_QUERY_RFC3986);
+        if ($this->baseUrl === null) {
+            return $url;
+        }
 
-        return $queryString === '' ? $resolvedPath : $resolvedPath . '?' . $queryString;
+        return rtrim($this->baseUrl, '/') . $url;
     }
 }
