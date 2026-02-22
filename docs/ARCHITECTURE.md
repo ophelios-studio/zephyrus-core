@@ -59,6 +59,12 @@
 - Added immutable `RouteCollection::withRoute()` helper plus route-name lookup support (`findByName`).
 - Added unit tests for verb helper behavior, route naming, grouped routing, constraints/middleware registration, CRUD resource wiring, and immutable chaining.
 
+## Implemented Slice: Named route URL generation (Phase 2 seed)
+- Added `Routing\RouteUrlGenerator` to build paths from named routes and parameter maps.
+- Route parameters are required and URL-encoded (`rawurlencode`) for safe path generation.
+- Added explicit generation exception path for unknown route names and missing parameters.
+- Added unit tests for successful generation, encoding, and failure scenarios.
+
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)
 - Added `Http\MiddlewareInterface` as the common middleware contract.
 - Added immutable `Http\MiddlewarePipeline` with `pipe()` and `handle()` methods.
