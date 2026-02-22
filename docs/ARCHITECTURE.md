@@ -62,6 +62,12 @@
 - Unknown exceptions map to `500 Internal Server Error`.
 - Added unit coverage for all exception-to-response mappings.
 
+## Implemented Slice: HttpKernel request lifecycle bridge (Phase 1 seed)
+- Added `Core\HttpKernel` to centralize request handling flow.
+- Kernel delegates dispatch to `RouteDispatcher` and converts thrown exceptions through `HttpExceptionResponder`.
+- Establishes baseline lifecycle: `Request -> Dispatcher -> Response` with framework-level exception mapping.
+- Added unit tests for successful dispatch and route-not-found handling through the kernel.
+
 ## Implemented Slice: Route dispatcher bridge (Phase 2 seed)
 - Added `Routing\RouteDispatcher` to connect request path/method matching to middleware execution.
 - Dispatcher resolves a `RouteMatch` from `RouteCollection`, then executes a resolver callable through `MiddlewarePipeline`.
