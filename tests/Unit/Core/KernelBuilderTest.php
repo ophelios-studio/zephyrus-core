@@ -170,6 +170,24 @@ final class KernelBuilderTest extends TestCase
         self::assertSame('passed', $response->headers['X-Auth']);
     }
 
+    public function testUnknownNamedRouteMiddlewareYields500Response(): void
+    {
+        $router = (new Router())->get(
+            '/protected',
+            KernelBuilderFixtureController::class . '@ping',
+            middlewares: ['missing'],
+        );
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/protected'));
+
+        self::assertSame(500, $response->status);
+        self::assertSame('Internal Server Error', $response->body);
+    }
+
     // -- Controller factory ---------------------------------------------------
 
     public function testControllerFactoryIsInvokedOnDispatch(): void

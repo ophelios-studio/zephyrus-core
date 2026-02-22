@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
-use RuntimeException;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\HandlerResolver;
 use Zephyrus\Routing\RouteDispatcher;
 use Zephyrus\Routing\Router;
@@ -162,7 +162,7 @@ final class KernelBuilder
             routeMiddlewareResolver: $namedMiddlewares !== []
                 ? static function (string $name) use ($namedMiddlewares): MiddlewareInterface {
                     return $namedMiddlewares[$name]
-                        ?? throw new RuntimeException(sprintf("No middleware registered for name '%s'.", $name));
+                        ?? throw RouteMiddlewareException::unknownMiddleware($name);
                 }
                 : null,
         );
