@@ -1,0 +1,69 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Zephyrus\Core\Config;
+
+/**
+ * Immutable top-level configuration tree.
+ *
+ * Aggregates all typed section objects from a single nested array, providing
+ * a single entry point for application configuration.  Every section except
+ * `database` is always present with safe defaults so callers never need null
+ * checks for the common sections.  `database` is nullable because a database
+ * connection is not universally required (CLI tools, API consumers, etc.).
+ *
+ * Typical usage:
+ *
+ *   $config = Configuration::fromArray(require __DIR__ . '/../config/app.php');
+ *   $config->application->environment  // Environment::Production
+ *   $config->database?->host           // 'localhost' or null if not configured
+ *
+ * The `defaults()` factory produces a fully populated configuration using the
+ * built-in defaults of every section — useful in tests and minimal bootstraps.
+ */
+final readonly class Configuration
+{
+    public function __construct(
+        public ApplicationConfig $application,
+        public SessionConfig     $session,
+        public SecurityConfig    $security,
+        public ?DatabaseConfig   $database,
+    ) {
+    }
+
+    /**
+     * Build a Configuration tree from a nested key-value array.
+     *
+     * Each top-level key maps to a configuration section:
+     *   'application' => ApplicationConfig::fromArray(...)
+     *   'session'     => SessionConfig::fromArray(...)
+     *   'security'    => SecurityConfig::fromArray(...)
+     *   'database'    => DatabaseConfig::fromArray(...) — omit to leave null
+     *
+     * @param array<string, mixed> $config
+     * @throws ConfigurationException if any section value violates its constraints.
+     */
+    public static function fromArray(array $config): self
+    {
+        return new self(
+            application: ApplicationConfig::fromArray((array) ($config['application'] ?? [])),
+            session:     SessionConfig::fromArray((array) ($config['session']     ?? [])),
+            security:    SecurityConfig::fromArray((array) ($config['security']   ?? [])),
+            database:    isset($config['database'])
+                ? DatabaseConfig::fromArray((array) $config['database'])
+                : null,
+        );
+    }
+
+    /**
+     * Produce a configuration tree where every section uses its built-in defaults.
+     *
+     * Equivalent to `Configuration::fromArray([])`.  Useful in tests and
+     * minimal bootstraps that don't need a config file.
+     */
+    public static function defaults(): self
+    {
+        return self::fromArray([]);
+    }
+}
