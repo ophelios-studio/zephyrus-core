@@ -67,6 +67,24 @@ final class FormValidator
     }
 
     /**
+     * Validates the payload and throws ValidationException when any field fails.
+     *
+     * @param array<string, mixed> $data
+     *
+     * @throws ValidationException
+     */
+    public function validateOrFail(array $data): ErrorBag
+    {
+        $bag = $this->validate($data);
+
+        if ($bag->hasErrors()) {
+            throw ValidationException::fromErrorBag($bag);
+        }
+
+        return $bag;
+    }
+
+    /**
      * @return array<string, FieldValidator>
      */
     public function fields(): array
