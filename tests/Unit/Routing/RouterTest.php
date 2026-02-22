@@ -77,4 +77,20 @@ final class RouterTest extends TestCase
         self::assertSame('DELETE', $routes[5]->method);
         self::assertSame('UserController@delete', $routes[5]->handler);
     }
+
+    public function testGroupAppliesPrefixAndSharedMiddlewares(): void
+    {
+        $router = (new Router())->group('/api/v1', static fn (Router $router): Router => $router
+            ->get('/health', 'HealthController@show')
+            ->get('/users/{id}', 'UserController@show', ['id' => '\\d+'], ['auth']), ['api']);
+
+        $routes = $router->routes()->all();
+
+        self::assertCount(2, $routes);
+        self::assertSame('/api/v1/health', $routes[0]->path);
+        self::assertSame(['api'], $routes[0]->middlewares);
+
+        self::assertSame('/api/v1/users/{id}', $routes[1]->path);
+        self::assertSame(['api', 'auth'], $routes[1]->middlewares);
+    }
 }

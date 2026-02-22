@@ -32,6 +32,30 @@ final class Router
     }
 
     /**
+     * @param callable(self): self $registrar
+     * @param array<int, string> $middlewares
+     */
+    public function group(string $prefix, callable $registrar, array $middlewares = []): self
+    {
+        $scoped = new self();
+        $scopedResult = $registrar($scoped);
+
+        $router = $this;
+
+        foreach ($scopedResult->routes()->all() as $route) {
+            $router = $router->add(
+                method: $route->method,
+                path: $this->joinPath($prefix, $route->path),
+                handler: $route->handler,
+                constraints: $route->constraints,
+                middlewares: array_values(array_unique([...$middlewares, ...$route->middlewares])),
+            );
+        }
+
+        return $router;
+    }
+
+    /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
      */
@@ -105,5 +129,25 @@ final class Router
     public function routes(): RouteCollection
     {
         return $this->routes;
+    }
+
+    private function joinPath(string $prefix, string $path): string
+    {
+        $left = trim($prefix, '/');
+        $right = trim($path, '/');
+
+        if ($left === '' && $right === '') {
+            return '/';
+        }
+
+        if ($left === '') {
+            return '/' . $right;
+        }
+
+        if ($right === '') {
+            return '/' . $left;
+        }
+
+        return '/' . $left . '/' . $right;
     }
 }
