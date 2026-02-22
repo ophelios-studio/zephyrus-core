@@ -14,8 +14,9 @@ final readonly class RouteUrlGenerator
 
     /**
      * @param array<string, scalar> $parameters
+     * @param array<string, scalar|array<scalar>> $query
      */
-    public function generate(string $routeName, array $parameters = []): string
+    public function generate(string $routeName, array $parameters = [], array $query = []): string
     {
         $route = $this->routes->findByName($routeName);
 
@@ -41,6 +42,15 @@ final readonly class RouteUrlGenerator
             $route->path,
         );
 
-        return $path ?? $route->path;
+        $resolvedPath = $path ?? $route->path;
+
+        if ($query === []) {
+            return $resolvedPath;
+        }
+
+        ksort($query);
+        $queryString = http_build_query($query, arg_separator: '&', encoding_type: PHP_QUERY_RFC3986);
+
+        return $queryString === '' ? $resolvedPath : $resolvedPath . '?' . $queryString;
     }
 }

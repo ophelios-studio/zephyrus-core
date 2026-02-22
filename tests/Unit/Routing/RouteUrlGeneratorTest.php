@@ -58,4 +58,31 @@ final class RouteUrlGeneratorTest extends TestCase
 
         $generator->generate('users.show');
     }
+
+    public function testGenerateAppendsSortedQueryStringWhenProvided(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $path = $generator->generate('users.show', ['id' => 42], ['expand' => 'roles', 'page' => 2]);
+
+        self::assertSame('/users/42?expand=roles&page=2', $path);
+    }
+
+    public function testGenerateEncodesArrayAndSpecialCharactersInQuery(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/search', 'SearchController@index', name: 'search.index'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $path = $generator->generate('search.index', query: [
+            'q' => 'hello world',
+            'tags' => ['php', 'zephyrus 2'],
+        ]);
+
+        self::assertSame('/search?q=hello%20world&tags%5B0%5D=php&tags%5B1%5D=zephyrus%202', $path);
+    }
 }
