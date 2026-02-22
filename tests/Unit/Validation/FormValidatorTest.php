@@ -9,6 +9,7 @@ use Zephyrus\Validation\ErrorBag;
 use Zephyrus\Validation\FieldValidator;
 use Zephyrus\Validation\FormValidator;
 use Zephyrus\Validation\Rules;
+use Zephyrus\Validation\ValidationException;
 
 final class FormValidatorTest extends TestCase
 {
@@ -279,5 +280,33 @@ final class FormValidatorTest extends TestCase
         ]);
 
         self::assertFalse($bag->hasErrors());
+    }
+
+    public function testValidateOrFailReturnsBagWhenValid(): void
+    {
+        $form = new FormValidator([
+            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+        ]);
+
+        $bag = $form->validateOrFail(['email' => 'ok@example.com']);
+
+        self::assertInstanceOf(ErrorBag::class, $bag);
+        self::assertFalse($bag->hasErrors());
+    }
+
+    public function testValidateOrFailThrowsValidationExceptionWhenInvalid(): void
+    {
+        $form = new FormValidator([
+            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+        ]);
+
+        try {
+            $form->validateOrFail(['email' => 'not-an-email']);
+            self::fail('Expected ValidationException to be thrown.');
+        } catch (ValidationException $e) {
+            self::assertSame('Validation failed.', $e->getMessage());
+            self::assertTrue($e->errors()->hasErrorsFor('email'));
+            self::assertSame('Must be a valid email address.', $e->errors()->firstFor('email'));
+        }
     }
 }
