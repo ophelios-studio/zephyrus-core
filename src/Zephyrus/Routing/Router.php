@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
-use RuntimeException;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 
 final class Router
 {
@@ -231,7 +231,7 @@ final class Router
         foreach ($middlewares as $name) {
             if (isset($this->middlewareGroups[$name])) {
                 if (in_array($name, $stack, true)) {
-                    throw new RuntimeException(sprintf('Circular middleware group reference detected: %s', implode(' -> ', [...$stack, $name])));
+                    throw RouteMiddlewareException::circularGroupReference($stack, $name);
                 }
 
                 $expanded = [

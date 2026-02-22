@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Router;
 
 // ---------------------------------------------------------------------------
@@ -229,7 +230,7 @@ final class RouterTest extends TestCase
 
     public function testMiddlewareGroupDetectsCircularReferences(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RouteMiddlewareException::class);
         $this->expectExceptionMessage('Circular middleware group reference detected');
 
         (new Router())

@@ -118,7 +118,7 @@
 - Dispatcher resolves a `RouteMatch` from `RouteCollection`, then executes a resolver callable through `MiddlewarePipeline`.
 - Unknown named route middleware now throws `Routing\Exception\RouteMiddlewareException` for a typed failure path.
 - Added named route middleware support on `Route` definitions (e.g., `['auth', 'audit']`) and middleware resolver binding in dispatcher.
-- Added reusable router middleware groups via `Router::middlewareGroup(name, [...])`, including nested group expansion at registration-time and circular-reference detection.
+- Added reusable router middleware groups via `Router::middlewareGroup(name, [...])`, including nested group expansion at registration-time and typed circular-reference failure via `RouteMiddlewareException`.
 - Dispatcher now hydrates matched route parameters into request attributes before middleware/handler execution.
 - Enables first end-to-end flow: `Request -> Route match -> Global middleware -> Route middleware -> Response`.
 - Added unit test coverage for parameterized route dispatch, request attribute hydration, and middleware-applied response headers.
