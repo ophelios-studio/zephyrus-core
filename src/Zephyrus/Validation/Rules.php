@@ -113,5 +113,89 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts: true, false, 1, 0, '1', '0', 'true', 'false' (case-insensitive).
+     */
+    public static function boolean(string $message = 'Must be a boolean value.'): Rule
+    {
+        return Rule::of(
+            function (mixed $v): bool {
+                if (is_bool($v) || $v === 1 || $v === 0) {
+                    return true;
+                }
+                if (!is_string($v) && !is_int($v)) {
+                    return false;
+                }
+                return in_array(strtolower((string) $v), ['1', '0', 'true', 'false'], strict: true);
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates any standard UUID format (8-4-4-4-12 hex, case-insensitive).
+     */
+    public static function uuid(string $message = 'Must be a valid UUID.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match(
+                '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
+                $v,
+            ) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates a date string against the given format (default Y-m-d).
+     * Uses DateTime::createFromFormat with strict overflow checking.
+     */
+    public static function date(string $format = 'Y-m-d', string $message = ''): Rule
+    {
+        return Rule::of(
+            function (mixed $v) use ($format): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+                $dt = \DateTime::createFromFormat($format, $v);
+                return $dt !== false && $dt->format($format) === $v;
+            },
+            $message ?: "Must be a valid date in {$format} format.",
+        );
+    }
+
+    /**
+     * Validates that an array has at least $min items.
+     */
+    public static function countMin(int $min, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_array($v) && count($v) >= $min,
+            $message ?: "Must have at least {$min} item(s).",
+        );
+    }
+
+    /**
+     * Validates that an array has at most $max items.
+     */
+    public static function countMax(int $max, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_array($v) && count($v) <= $max,
+            $message ?: "Must have at most {$max} item(s).",
+        );
+    }
+
+    /**
+     * Validates a valid IPv4 or IPv6 address.
+     */
+    public static function ip(string $message = 'Must be a valid IP address.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP) !== false,
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

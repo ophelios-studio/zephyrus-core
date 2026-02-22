@@ -28,10 +28,27 @@ final class FormValidator
     }
 
     /**
+     * Merges all fields from $sub prefixed with "$prefix." (immutable).
+     *
+     * Allows reusable sub-validators to be composed into a parent:
+     *   $form->withNested('address', $addressValidator)
+     * registers 'address.city', 'address.zip', etc.
+     */
+    public function withNested(string $prefix, self $sub): self
+    {
+        $clone = clone $this;
+        foreach ($sub->fields as $name => $validator) {
+            $clone->fields["{$prefix}.{$name}"] = $validator;
+        }
+        return $clone;
+    }
+
+    /**
      * Validates $data against all registered field validators.
      *
-     * Missing fields are validated as null, allowing required-rule to catch
-     * absent keys without the caller needing to pre-fill defaults.
+     * Field names containing "." are resolved as dot-paths into nested arrays
+     * (e.g. "address.city" → $data['address']['city']).  Missing keys at any
+     * depth are treated as null so that required-rule catches absent fields.
      *
      * @param array<string, mixed> $data
      */
@@ -39,7 +56,9 @@ final class FormValidator
     {
         $bag = new ErrorBag();
         foreach ($this->fields as $field => $validator) {
-            $value = $data[$field] ?? null;
+            $value = str_contains($field, '.')
+                ? $this->resolveDotPath($data, $field)
+                : ($data[$field] ?? null);
             foreach ($validator->validate($value) as $message) {
                 $bag->add($field, $message);
             }
@@ -53,5 +72,24 @@ final class FormValidator
     public function fields(): array
     {
         return $this->fields;
+    }
+
+    /**
+     * Resolves a dot-notation path into a nested array.
+     * Returns null if any key in the chain is missing or non-array.
+     *
+     * @param array<string, mixed> $data
+     */
+    private function resolveDotPath(array $data, string $path): mixed
+    {
+        $keys    = explode('.', $path);
+        $current = $data;
+        foreach ($keys as $key) {
+            if (!is_array($current) || !array_key_exists($key, $current)) {
+                return null;
+            }
+            $current = $current[$key];
+        }
+        return $current;
     }
 }
