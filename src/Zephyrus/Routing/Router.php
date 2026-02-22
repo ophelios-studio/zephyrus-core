@@ -76,6 +76,32 @@ final class Router
         return $this->add('DELETE', $path, $handler, $constraints, $middlewares);
     }
 
+    /**
+     * Registers conventional CRUD routes for a resource controller.
+     *
+     * Generated handlers:
+     * - GET    /resource           -> Controller@index
+     * - GET    /resource/{id}      -> Controller@show
+     * - POST   /resource           -> Controller@store
+     * - PUT    /resource/{id}      -> Controller@update
+     * - PATCH  /resource/{id}      -> Controller@patch
+     * - DELETE /resource/{id}      -> Controller@delete
+     *
+     * @param array<int, string> $middlewares
+     */
+    public function resource(string $resourcePath, string $controller, array $middlewares = []): self
+    {
+        $basePath = '/' . trim($resourcePath, '/');
+
+        return $this
+            ->get($basePath, sprintf('%s@index', $controller), middlewares: $middlewares)
+            ->get($basePath . '/{id}', sprintf('%s@show', $controller), ['id' => '\\d+'], $middlewares)
+            ->post($basePath, sprintf('%s@store', $controller), middlewares: $middlewares)
+            ->put($basePath . '/{id}', sprintf('%s@update', $controller), ['id' => '\\d+'], $middlewares)
+            ->patch($basePath . '/{id}', sprintf('%s@patch', $controller), ['id' => '\\d+'], $middlewares)
+            ->delete($basePath . '/{id}', sprintf('%s@delete', $controller), ['id' => '\\d+'], $middlewares);
+    }
+
     public function routes(): RouteCollection
     {
         return $this->routes;

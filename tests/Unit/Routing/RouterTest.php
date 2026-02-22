@@ -56,4 +56,25 @@ final class RouterTest extends TestCase
         self::assertCount(0, $router->routes()->all());
         self::assertCount(1, $next->routes()->all());
     }
+
+    public function testResourceRegistersConventionalCrudRoutes(): void
+    {
+        $router = (new Router())->resource('/users', 'UserController', ['auth']);
+
+        $routes = $router->routes()->all();
+
+        self::assertCount(6, $routes);
+        self::assertSame('GET', $routes[0]->method);
+        self::assertSame('/users', $routes[0]->path);
+        self::assertSame('UserController@index', $routes[0]->handler);
+
+        self::assertSame('GET', $routes[1]->method);
+        self::assertSame('/users/{id}', $routes[1]->path);
+        self::assertSame('UserController@show', $routes[1]->handler);
+        self::assertSame(['id' => '\\d+'], $routes[1]->constraints);
+        self::assertSame(['auth'], $routes[1]->middlewares);
+
+        self::assertSame('DELETE', $routes[5]->method);
+        self::assertSame('UserController@delete', $routes[5]->handler);
+    }
 }
