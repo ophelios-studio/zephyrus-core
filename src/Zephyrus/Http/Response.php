@@ -74,6 +74,21 @@ final readonly class Response
         return new self(body: '', status: 204, headers: []);
     }
 
+    /**
+     * Returns a redirect response. The given URL is placed in the Location
+     * header and the body is empty.
+     *
+     * Default status is 302 Found. Common alternatives:
+     *   301  Moved Permanently  — cacheable, only safe to use for GET/HEAD.
+     *   303  See Other          — redirect-after-POST pattern.
+     *   307  Temporary Redirect — preserves request method.
+     *   308  Permanent Redirect — preserves request method, cacheable.
+     */
+    public static function redirect(string $url, int $status = 302): self
+    {
+        return new self(body: '', status: $status, headers: ['Location' => $url]);
+    }
+
     public function withHeader(string $name, string $value): self
     {
         $headers = $this->headers;

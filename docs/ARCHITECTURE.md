@@ -11,7 +11,7 @@
 - Core (kernel, app lifecycle, errors)
 - Http (request/response, headers, content negotiation)
   - First v2 primitives in place:
-    - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`); `send()` SAPI emitter with status-line and header emission; `statusPhrase()` and `toStatusLine()` helpers
+    - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `redirect`, `withHeader`, `withStatus`); `send()` SAPI emitter with status-line and header emission; `statusPhrase()` and `toStatusLine()` helpers
     - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `cookie`, `path`, `isMethod`, `isJson`, `isSecure`, `attribute`, `withAttribute`, `withAttributes`); `fromGlobals()` production factory with superglobal parsing, header extraction, body negotiation, and method override
     - middleware contracts and execution pipeline (`MiddlewareInterface`, `MiddlewarePipeline`)
 - Routing (attributes, repository, resolver, middleware)
@@ -165,6 +165,18 @@
   - Plain POPOs (no interface) bypass hook logic entirely — zero overhead and no breaking change.
 - Typical use cases: auth guards (return 401/403 from `before()`), secure-header decoration, audit logging (`after()`).
 - Added 8 unit tests in `ControllerTest`, 6 unit tests in `HandlerResolverTest`, and 5 integration tests in `HttpKernelWiringTest` covering every hook combination (short-circuit, pass-through, decorate, both hooks together/halted).
+
+## Implemented Slice: Response::redirect() + public/index.php bootstrap (Phase 1)
+- Added `Response::redirect(string $url, int $status = 302): self` — a redirect-response factory that sets the `Location` header and an empty body. Covers the full 3xx range: 301 Moved Permanently, 302 Found (default), 303 See Other (redirect-after-POST), 307 Temporary Redirect, 308 Permanent Redirect.
+- Added `public/index.php` as the canonical framework bootstrap example, demonstrating the complete entry-point loop:
+  - `Request::fromGlobals()` builds an immutable `Request` from PHP superglobals.
+  - `KernelBuilder::create()->withRouter(…)->withMiddleware(…)->build()` assembles the kernel.
+  - `$kernel->handle($request)->send()` dispatches and emits the response.
+- The bootstrap example covers: attribute-based routing (`#[Route]` on controller methods), a `before()` auth guard (API-key check), an `after()` hook that stamps security headers, typed route-parameter injection (`int $id`), `Request` injection for POST bodies, redirect-after-POST pattern via `Response::redirect('/users/42', 303)`, and a global `RequestIdMiddleware`.
+- Included nginx and Apache web-server configuration hints as comments at the end of `public/index.php`.
+- Added `tests/Integration/BootstrapExampleTest.php` (13 integration tests) validating the full bootstrap pattern: health endpoint JSON, per-request unique `X-Request-Id`, 401 without API key, 200 with API key, `X-Frame-Options` header from `after()`, typed route parameter injection, 303 redirect on POST, public article routes, 404/405 error handling, and `Response::redirect()` standalone assertions.
+- Added 6 unit tests in `ResponseTest` covering default 302, 301/303/307/308 overrides, absolute URL, and empty body guarantee.
+- Http primitives bullet updated: `redirect()` added to the `Response` helper list.
 
 ## Non-goals for v2 core
 - Full ORM
