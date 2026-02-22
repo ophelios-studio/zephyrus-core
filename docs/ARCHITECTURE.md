@@ -219,6 +219,24 @@
 - Added 28 tests in `RulesTest` covering all six new rules: pass/fail/default-message for every variant.
 - Total test suite: **401 tests, 795 assertions**, line coverage **96.94%** (825/851).
 
+## Implemented Slice: Data module seed — Database, Broker, DatabaseException (Phase 5)
+- Added `Data\Database` — thin PDO wrapper providing a clean construction path from `DatabaseConfig` or an injected PDO, uniform `DatabaseException` wrapping for all PDO failures, a `transaction()` helper that commits on success and rolls back on throws (with nested-transaction reuse), and a `query()` helper that prepares + binds params returning a `PDOStatement`.
+- Added `Data\Broker` — abstract base for domain-specific data brokers with protected query helpers: `select()` (fetch all rows), `selectOne()` (first row or null), `selectCount()` (scalar aggregate cast to int), `execute()` (INSERT/UPDATE/DELETE row count), `lastInsertId()`, and `transaction()` delegation. Encapsulates all SQL inside subclasses; accepts and returns plain arrays.
+- Added `Data\DatabaseException` — typed `ZephyrusRuntimeException` subclass with named factories: `connectionFailed(dsn, reason)`, `queryFailed(sql, reason)`, `transactionFailed(reason)`, `fromPdoException(PDOException, context)`.
+- Added 32 unit tests across 3 test classes (`DatabaseTest` 13, `BrokerTest` 13, `DatabaseExceptionTest` 6) using an in-memory SQLite PDO — no real DB required.
+
+## Implemented Slice: Security module seed — SecureHeadersConfig + SecureHeadersMiddleware (Phase 5)
+- Added `Security\SecureHeadersConfig` — immutable config for HTTP security response headers, following current OWASP guidance:
+  - `xFrameOptions` (default `'SAMEORIGIN'`), `xContentTypeOptions` (default `'nosniff'`), `referrerPolicy` (default `'strict-origin-when-cross-origin'`), `xssProtection` (default `'0'` — disables the legacy XSS Auditor which modern browsers no longer use).
+  - `hstsMaxAge: int` (default `0` — disabled; set to e.g. `31_536_000` to enable), `hstsIncludeSubdomains: bool`.
+  - `csp: string` (default `''` — no CSP emitted by default; every app needs its own policy), `permissionsPolicy: string` (default `''`).
+  - An empty string value for any header disables that header entirely (useful to opt-out of specific defaults).
+  - `fromArray()` accepts camelCase and snake_case key variants; camelCase takes precedence. `defaults()` factory provides the full recommended baseline.
+  - `hstsHeaderValue(): string` returns the formatted HSTS header value or empty string when disabled.
+- Added `Security\SecureHeadersMiddleware` — implements `MiddlewareInterface`; calls `$next`, then appends configured headers via `Response::withHeader()` (immutable). HSTS is only emitted when `$request->isSecure()` returns true (HTTPS URI). Headers with empty string config values are skipped.
+- Added 34 unit tests across 2 test classes (`SecureHeadersConfigTest` 16, `SecureHeadersMiddlewareTest` 18) covering: all default values, camelCase/snake_case key handling, precedence, empty-string opt-out, HSTS header value formatting (enabled/disabled/includeSubDomains), HSTS gating on HTTP vs HTTPS, CSP/Permissions-Policy conditional emission, individual header opt-out, response immutability, and a full all-headers-together HTTPS snapshot.
+- Total test suite: **467 tests, 906 assertions**, line coverage **95.25%** (922/968), Security module at **100%** line and method coverage.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
