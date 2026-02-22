@@ -1,0 +1,316 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Zephyrus\Tests\Unit\Routing;
+
+use PHPUnit\Framework\TestCase;
+use Zephyrus\Controller\Controller;
+use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
+use Zephyrus\Routing\Exception\HandlerResolverException;
+use Zephyrus\Routing\HandlerResolver;
+use Zephyrus\Routing\Route;
+use Zephyrus\Routing\RouteMatch;
+
+// ---------------------------------------------------------------------------
+// Fixture controllers used only in this test file
+// ---------------------------------------------------------------------------
+
+/**
+ * A plain POPO controller (no base class) — resolver should work regardless.
+ */
+final class PlainHandlerController
+{
+    public function hello(): Response
+    {
+        return Response::text('hello');
+    }
+
+    public function withRequest(Request $request): Response
+    {
+        return Response::text($request->path());
+    }
+
+    public function withIntParam(int $id): Response
+    {
+        return Response::json(['id' => $id]);
+    }
+
+    public function withFloatParam(float $score): Response
+    {
+        return Response::json(['score' => $score]);
+    }
+
+    public function withStringParam(string $slug): Response
+    {
+        return Response::text($slug);
+    }
+
+    public function withDefault(string $format = 'json'): Response
+    {
+        return Response::text($format);
+    }
+
+    public function withMixed(Request $request, int $id): Response
+    {
+        return Response::json(['path' => $request->path(), 'id' => $id]);
+    }
+}
+
+/**
+ * A controller with a method whose parameter cannot be resolved.
+ * (Not Request-typed, has no matching attribute, and no default.)
+ */
+final class UnresolvableParamController
+{
+    public function act(string $missing): Response
+    {
+        return Response::text($missing);
+    }
+}
+
+/**
+ * A Controller subclass that uses the base-class response helpers.
+ */
+final class ExtendedHandlerController extends Controller
+{
+    public function index(): Response
+    {
+        return $this->json(['ok' => true]);
+    }
+
+    public function show(int $id): Response
+    {
+        return $this->json(['id' => $id]);
+    }
+
+    public function store(Request $request): Response
+    {
+        return $this->created(['name' => $request->input('name')]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+final class HandlerResolverTest extends TestCase
+{
+    private HandlerResolver $resolver;
+
+    protected function setUp(): void
+    {
+        $this->resolver = new HandlerResolver();
+    }
+
+    // -- Basic dispatch -------------------------------------------------------
+
+    public function testResolvesPlainMethodWithNoParams(): void
+    {
+        $match = $this->makeMatch('GET', '/hello', PlainHandlerController::class . '@hello');
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/hello'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('hello', $response->body);
+    }
+
+    // -- Request injection ----------------------------------------------------
+
+    public function testInjectsRequestByTypeHint(): void
+    {
+        $match = $this->makeMatch('GET', '/path', PlainHandlerController::class . '@withRequest');
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/path'));
+
+        self::assertSame('/path', $response->body);
+    }
+
+    // -- Scalar parameter injection -------------------------------------------
+
+    public function testInjectsIntAttributeFromRouteParam(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{id}', PlainHandlerController::class . '@withIntParam', ['id' => '42']);
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/42')->withAttribute('id', '42'),
+        );
+
+        self::assertStringContainsString('"id":42', $response->body);
+    }
+
+    public function testInjectsFloatAttributeFromRouteParam(): void
+    {
+        $match = $this->makeMatch('GET', '/scores/{score}', PlainHandlerController::class . '@withFloatParam', ['score' => '9.5']);
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/scores/9.5')->withAttribute('score', '9.5'),
+        );
+
+        self::assertStringContainsString('"score":9.5', $response->body);
+    }
+
+    public function testInjectsStringAttributeFromRouteParam(): void
+    {
+        $match = $this->makeMatch('GET', '/posts/{slug}', PlainHandlerController::class . '@withStringParam', ['slug' => 'hello-world']);
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/posts/hello-world')->withAttribute('slug', 'hello-world'),
+        );
+
+        self::assertSame('hello-world', $response->body);
+    }
+
+    public function testFallsBackToDefaultValueWhenAttributeAbsent(): void
+    {
+        $match = $this->makeMatch('GET', '/export', PlainHandlerController::class . '@withDefault');
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/export'));
+
+        self::assertSame('json', $response->body);
+    }
+
+    public function testInjectsMixedRequestAndScalarParam(): void
+    {
+        $match = $this->makeMatch('GET', '/users/{id}', PlainHandlerController::class . '@withMixed', ['id' => '7']);
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/users/7')->withAttribute('id', '7'),
+        );
+
+        self::assertStringContainsString('"path":"\/users\/7"', $response->body);
+        self::assertStringContainsString('"id":7', $response->body);
+    }
+
+    // -- Controller subclass --------------------------------------------------
+
+    public function testExtendedControllerIndexReturnsJson(): void
+    {
+        $match = $this->makeMatch('GET', '/items', ExtendedHandlerController::class . '@index');
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/items'));
+
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('"ok":true', $response->body);
+    }
+
+    public function testExtendedControllerShowInjectsIntParam(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{id}', ExtendedHandlerController::class . '@show', ['id' => '5']);
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/5')->withAttribute('id', '5'),
+        );
+
+        self::assertStringContainsString('"id":5', $response->body);
+    }
+
+    public function testExtendedControllerStoreInjectsRequest(): void
+    {
+        $match = $this->makeMatch('POST', '/items', ExtendedHandlerController::class . '@store');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('POST', '/items', parsedBody: ['name' => 'Widget']),
+        );
+
+        self::assertSame(201, $response->status);
+        self::assertStringContainsString('"name":"Widget"', $response->body);
+    }
+
+    // -- Custom factory -------------------------------------------------------
+
+    public function testCustomFactoryIsUsedToInstantiateController(): void
+    {
+        $factoryCallCount = 0;
+
+        $resolver = new HandlerResolver(function (string $class) use (&$factoryCallCount): object {
+            $factoryCallCount++;
+
+            return new $class();
+        });
+
+        $match = $this->makeMatch('GET', '/hello', PlainHandlerController::class . '@hello');
+
+        $resolver->resolve($match, Request::fromArray('GET', '/hello'));
+
+        self::assertSame(1, $factoryCallCount);
+    }
+
+    // -- Error cases ----------------------------------------------------------
+
+    public function testInvalidHandlerFormatThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/not a valid ClassName@method/');
+
+        $match = $this->makeMatch('GET', '/', 'NoAtSign');
+
+        $this->resolver->resolve($match, Request::fromArray('GET', '/'));
+    }
+
+    public function testUnresolvableMethodThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/does not exist/');
+
+        $match = $this->makeMatch('GET', '/', PlainHandlerController::class . '@nonexistent');
+
+        $this->resolver->resolve($match, Request::fromArray('GET', '/'));
+    }
+
+    public function testUnresolvedParameterThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/Cannot resolve parameter/');
+
+        $match = $this->makeMatch('GET', '/', UnresolvableParamController::class . '@act');
+
+        // Request has no 'missing' attribute and method has no default → must throw.
+        $this->resolver->resolve($match, Request::fromArray('GET', '/'));
+    }
+
+    // -- RouteDispatcher integration ------------------------------------------
+
+    public function testIntegratesWithRouteDispatcherAsResolver(): void
+    {
+        $routes = new \Zephyrus\Routing\RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', PlainHandlerController::class . '@withIntParam', ['id' => '\d+']));
+
+        $pipeline = new \Zephyrus\Http\MiddlewarePipeline([]);
+
+        $resolver = new HandlerResolver();
+
+        $dispatcher = new \Zephyrus\Routing\RouteDispatcher(
+            routes: $routes,
+            pipeline: $pipeline,
+            resolver: $resolver->resolve(...),
+        );
+
+        $response = $dispatcher->dispatch(Request::fromArray('GET', '/users/99'));
+
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('"id":99', $response->body);
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * @param array<string, string> $attributes
+     */
+    private function makeMatch(
+        string $method,
+        string $path,
+        string $handler,
+        array $attributes = [],
+    ): RouteMatch {
+        return new RouteMatch(
+            route: Route::define($method, $path, $handler),
+            parameters: $attributes,
+        );
+    }
+}
