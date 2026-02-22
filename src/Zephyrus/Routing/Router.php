@@ -4,15 +4,43 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use RuntimeException;
+
 final class Router
 {
     private RouteCollection $routes;
     private RouteAttributeReader $attributeReader;
 
-    public function __construct(?RouteCollection $routes = null, ?RouteAttributeReader $reader = null)
-    {
+    /** @var array<string, array<int, string>> */
+    private array $middlewareGroups;
+
+    /**
+     * @param array<string, array<int, string>> $middlewareGroups
+     */
+    public function __construct(
+        ?RouteCollection $routes = null,
+        ?RouteAttributeReader $reader = null,
+        array $middlewareGroups = [],
+    ) {
         $this->routes = $routes ?? new RouteCollection();
         $this->attributeReader = $reader ?? new RouteAttributeReader();
+        $this->middlewareGroups = $middlewareGroups;
+    }
+
+    /**
+     * Registers a reusable middleware group alias.
+     *
+     * Group entries may include both concrete middleware names and other group
+     * names; group expansion happens when routes are registered.
+     *
+     * @param array<int, string> $middlewares
+     */
+    public function middlewareGroup(string $name, array $middlewares): self
+    {
+        $clone = clone $this;
+        $clone->middlewareGroups[$name] = array_values($middlewares);
+
+        return $clone;
     }
 
     /**
@@ -28,15 +56,16 @@ final class Router
     ): self {
         return new self(
             $this->routes->withRoute(
-                Route::define($method, $path, $handler, $constraints, $middlewares),
+                Route::define($method, $path, $handler, $constraints, $this->expandMiddlewares($middlewares)),
             ),
             $this->attributeReader,
+            $this->middlewareGroups,
         );
     }
 
     public function name(string $routeName): self
     {
-        return new self($this->routes->withLastRouteName($routeName), $this->attributeReader);
+        return new self($this->routes->withLastRouteName($routeName), $this->attributeReader, $this->middlewareGroups);
     }
 
     /**
@@ -45,7 +74,7 @@ final class Router
      */
     public function group(string $prefix, callable $registrar, array $middlewares = []): self
     {
-        $scoped = new self(null, $this->attributeReader);
+        $scoped = new self(null, $this->attributeReader, $this->middlewareGroups);
         $scopedResult = $registrar($scoped);
 
         $router = $this;
@@ -148,8 +177,16 @@ final class Router
 
         foreach ($discovered as $route) {
             $router = new self(
-                $router->routes->withRoute($route),
+                $router->routes->withRoute(new Route(
+                    method: $route->method,
+                    path: $route->path,
+                    handler: $route->handler,
+                    constraints: $route->constraints,
+                    middlewares: $router->expandMiddlewares($route->middlewares),
+                    name: $route->name,
+                )),
                 $router->attributeReader,
+                $router->middlewareGroups,
             );
         }
 
@@ -179,5 +216,34 @@ final class Router
         }
 
         return '/' . $left . '/' . $right;
+    }
+
+    /**
+     * @param array<int, string> $middlewares
+     * @param array<int, string> $stack
+     *
+     * @return array<int, string>
+     */
+    private function expandMiddlewares(array $middlewares, array $stack = []): array
+    {
+        $expanded = [];
+
+        foreach ($middlewares as $name) {
+            if (isset($this->middlewareGroups[$name])) {
+                if (in_array($name, $stack, true)) {
+                    throw new RuntimeException(sprintf('Circular middleware group reference detected: %s', implode(' -> ', [...$stack, $name])));
+                }
+
+                $expanded = [
+                    ...$expanded,
+                    ...$this->expandMiddlewares($this->middlewareGroups[$name], [...$stack, $name]),
+                ];
+                continue;
+            }
+
+            $expanded[] = $name;
+        }
+
+        return array_values(array_unique($expanded));
     }
 }

@@ -29,6 +29,12 @@ class NoAttributeController
     public function index(): void {}
 }
 
+class MiddlewareGroupAttributeController
+{
+    #[RouteAttribute('/dashboard', 'GET', middlewares: ['web'])]
+    public function dashboard(): void {}
+}
+
 // ---------------------------------------------------------------------------
 
 final class RouterTest extends TestCase
@@ -185,5 +191,50 @@ final class RouterTest extends TestCase
             ->controller(UserAttributeController::class);
 
         self::assertCount(4, $router->routes()->all());
+    }
+
+    public function testMiddlewareGroupExpandsOnRouteRegistration(): void
+    {
+        $router = (new Router())
+            ->middlewareGroup('web', ['csrf', 'session'])
+            ->get('/profile', 'ProfileController@show', middlewares: ['web', 'auth']);
+
+        $route = $router->routes()->all()[0];
+
+        self::assertSame(['csrf', 'session', 'auth'], $route->middlewares);
+    }
+
+    public function testMiddlewareGroupCanReferenceOtherGroups(): void
+    {
+        $router = (new Router())
+            ->middlewareGroup('web', ['csrf', 'session'])
+            ->middlewareGroup('secure-web', ['web', 'auth'])
+            ->get('/settings', 'SettingsController@index', middlewares: ['secure-web']);
+
+        $route = $router->routes()->all()[0];
+
+        self::assertSame(['csrf', 'session', 'auth'], $route->middlewares);
+    }
+
+    public function testMiddlewareGroupExpandsForAttributeDiscoveredRoutes(): void
+    {
+        $router = (new Router())
+            ->middlewareGroup('web', ['csrf', 'session'])
+            ->controller(MiddlewareGroupAttributeController::class);
+
+        $route = $router->routes()->all()[0];
+
+        self::assertSame(['csrf', 'session'], $route->middlewares);
+    }
+
+    public function testMiddlewareGroupDetectsCircularReferences(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Circular middleware group reference detected');
+
+        (new Router())
+            ->middlewareGroup('a', ['b'])
+            ->middlewareGroup('b', ['a'])
+            ->get('/loop', 'LoopController@index', middlewares: ['a']);
     }
 }
