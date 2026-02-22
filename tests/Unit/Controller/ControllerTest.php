@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Controller;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Controller\Controller;
+use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
@@ -43,6 +44,71 @@ final class SampleController extends Controller
     public function custom(): Response
     {
         return $this->respond(['error' => 'not found'], 404);
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Lifecycle fixtures
+// ---------------------------------------------------------------------------
+
+/** Override before() to guard access */
+final class GuardedController extends Controller
+{
+    public bool $handlerCalled = false;
+
+    public function before(Request $request): ?Response
+    {
+        if ($request->header('X-Token') !== 'secret') {
+            return Response::json(['error' => 'Unauthorized'], 401);
+        }
+
+        return null;
+    }
+
+    public function act(): Response
+    {
+        $this->handlerCalled = true;
+
+        return $this->json(['ok' => true]);
+    }
+}
+
+/** Override after() to add a response header */
+final class HeaderDecoratingController extends Controller
+{
+    public function after(Request $request, Response $response): Response
+    {
+        return $response->withHeader('X-Powered-By', 'Zephyrus');
+    }
+
+    public function act(): Response
+    {
+        return $this->json(['data' => 'value']);
+    }
+}
+
+/** Override both hooks */
+final class BothHooksController extends Controller
+{
+    public function before(Request $request): ?Response
+    {
+        if ($request->query('block') === '1') {
+            return Response::text('blocked', 403);
+        }
+
+        return null;
+    }
+
+    public function after(Request $request, Response $response): Response
+    {
+        return $response->withHeader('X-After', 'yes');
+    }
+
+    public function act(): Response
+    {
+        return $this->text('handled');
     }
 }
 
@@ -113,5 +179,88 @@ final class ControllerTest extends TestCase
         $reflection = new \ReflectionClass(Controller::class);
 
         self::assertTrue($reflection->isAbstract());
+    }
+
+    // -- ControllerLifecycleInterface -----------------------------------------
+
+    public function testControllerImplementsLifecycleInterface(): void
+    {
+        self::assertInstanceOf(ControllerLifecycleInterface::class, $this->controller);
+    }
+
+    public function testBeforeDefaultReturnsNull(): void
+    {
+        $request = Request::fromArray('GET', '/');
+
+        self::assertNull($this->controller->before($request));
+    }
+
+    public function testAfterDefaultPassesThroughResponse(): void
+    {
+        $request  = Request::fromArray('GET', '/');
+        $response = Response::text('hello');
+
+        $result = $this->controller->after($request, $response);
+
+        self::assertSame($response, $result);
+    }
+
+    public function testOverriddenBeforeReturnsResponseOnFailure(): void
+    {
+        $controller = new GuardedController();
+        $request    = Request::fromArray('GET', '/', headers: ['X-Token' => 'wrong']);
+
+        $early = $controller->before($request);
+
+        self::assertNotNull($early);
+        self::assertSame(401, $early->status);
+        self::assertStringContainsString('"error":"Unauthorized"', $early->body);
+    }
+
+    public function testOverriddenBeforeReturnsNullOnSuccess(): void
+    {
+        $controller = new GuardedController();
+        $request    = Request::fromArray('GET', '/', headers: ['X-Token' => 'secret']);
+
+        self::assertNull($controller->before($request));
+    }
+
+    public function testOverriddenAfterDecoratesResponse(): void
+    {
+        $controller = new HeaderDecoratingController();
+        $request    = Request::fromArray('GET', '/');
+        $response   = Response::text('body');
+
+        $decorated = $controller->after($request, $response);
+
+        self::assertSame('Zephyrus', $decorated->headers['X-Powered-By']);
+        self::assertSame('body', $decorated->body);
+    }
+
+    public function testBothHooksAppliedTogether(): void
+    {
+        $controller = new BothHooksController();
+
+        // before() passes → after() adds header.
+        $request = Request::fromArray('GET', '/act');
+        self::assertNull($controller->before($request));
+
+        $response  = $controller->act();
+        $decorated = $controller->after($request, $response);
+
+        self::assertSame('yes', $decorated->headers['X-After']);
+        self::assertSame('handled', $decorated->body);
+    }
+
+    public function testBothHooksShortCircuitsBeforeHandler(): void
+    {
+        $controller = new BothHooksController();
+        $request    = Request::fromArray('GET', '/act', query: ['block' => '1']);
+
+        $early = $controller->before($request);
+
+        self::assertNotNull($early);
+        self::assertSame(403, $early->status);
+        self::assertSame('blocked', $early->body);
     }
 }
