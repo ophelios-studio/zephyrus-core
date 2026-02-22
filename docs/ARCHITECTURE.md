@@ -123,6 +123,18 @@
 - Added `HandlerResolverTest` (14 tests) covering: plain dispatch, Request injection, int/float/string attribute casting, default-value fallback, mixed injection, extended controller helpers, custom factory, invalid format, missing method, unresolved parameter, and full RouteDispatcher integration.
 - Added `ControllerTest` (7 tests) covering: json/created/text/noContent/respond helpers and abstract class verification.
 
+## Implemented Slice: HttpKernel end-to-end wiring via KernelBuilder (Phase 1)
+- Added `Core\KernelBuilder` fluent builder that assembles a production-ready `HttpKernel` from high-level configuration without requiring callers to understand the internal pipeline construction.
+- Builder wires: `Router → RouteCollection → RouteDispatcher (+ MiddlewarePipeline + HandlerResolver) → HttpKernel`.
+- `withRouter(Router)` — supplies route definitions (fluent, attribute-based, or resource-style).
+- `withMiddleware(MiddlewareInterface)` — appends a global middleware that wraps every request/response pair.
+- `registerMiddleware(string, MiddlewareInterface)` — binds a named middleware for route-level dispatch (referenced by name in route definitions).
+- `withControllerFactory(callable)` — injects a DI container resolver (`(class-string): object`) used by `HandlerResolver` to instantiate controllers.
+- `build()` — assembles and returns an `HttpKernel`; builder is immutable (each `withX` returns a new clone), so `build()` may be called multiple times safely.
+- Added `KernelBuilderTest` (15 tests) covering: immutable fluent chain, defaults, empty router yields 404, global middleware, multiple middlewares, named route middleware, controller factory invocation, and multi-call build invariant.
+- Added `HttpKernelWiringTest` (20 integration tests, new Integration suite) covering the full end-to-end dispatch path: plain controller dispatch, route parameter injection (int/string/multi), Request injection, mixed injection, POST body, 404/405 error handling, JSON content negotiation, global middleware ordering, named route middleware scoping, global+route middleware combined, attribute-based routes, resource CRUD routes, custom DI factory, grouped routes with shared middleware.
+- See `docs/REQUEST_LIFECYCLE.md` for the full annotated request flow.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
