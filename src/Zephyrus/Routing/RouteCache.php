@@ -15,7 +15,7 @@ final class RouteCache
 
     public function save(RouteCollection $routes): void
     {
-        $payload = array_map(
+        $routesPayload = array_map(
             static fn (Route $route): array => [
                 'method' => $route->method,
                 'path' => $route->path,
@@ -26,6 +26,14 @@ final class RouteCache
             ],
             $routes->all(),
         );
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routesPayload,
+        ];
 
         try {
             $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
@@ -66,9 +74,26 @@ final class RouteCache
             throw new RouteCacheException('Route cache payload must decode to an array');
         }
 
+        if (!isset($decoded['routes']) || !is_array($decoded['routes'])) {
+            throw new RouteCacheException('Route cache payload missing routes section');
+        }
+
+        $meta = $decoded['meta'] ?? null;
+        if ($meta !== null && (!is_array($meta) || !isset($meta['routes_hash']) || !is_string($meta['routes_hash']))) {
+            throw new RouteCacheException('Route cache payload contains invalid metadata');
+        }
+
+        $routesPayload = $decoded['routes'];
+        if ($meta !== null) {
+            $actualHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
+            if (!hash_equals($meta['routes_hash'], $actualHash)) {
+                throw new RouteCacheException('Route cache payload hash mismatch');
+            }
+        }
+
         $collection = new RouteCollection();
 
-        foreach ($decoded as $entry) {
+        foreach ($routesPayload as $entry) {
             if (!is_array($entry)) {
                 throw new RouteCacheException('Route cache entry must be an object-like array');
             }

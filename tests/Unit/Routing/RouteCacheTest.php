@@ -68,4 +68,45 @@ final class RouteCacheTest extends TestCase
 
         $cache->load();
     }
+
+    public function testLoadThrowsWhenRoutesSectionMissing(): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['meta' => ['version' => 1]], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload missing routes section');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsOnHashMismatch(): void
+    {
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => 'invalid-hash',
+            ],
+            'routes' => [
+                [
+                    'method' => 'GET',
+                    'path' => '/health',
+                    'handler' => 'HealthController@show',
+                    'constraints' => [],
+                    'middlewares' => [],
+                    'name' => 'health.show',
+                ],
+            ],
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload hash mismatch');
+
+        $cache->load();
+    }
 }

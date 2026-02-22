@@ -71,9 +71,9 @@
 
 ## Implemented Slice: Route cache persistence (Phase 2 seed)
 - Added `Routing\RouteCache` to persist route collections to JSON cache files and restore them.
-- Cached payload includes method, path, handler, constraints, middleware names, and route name.
-- Added strict validation + dedicated `RouteCacheException` for cache read/write/decode/shape failures.
-- Added unit tests for cache round-trip, missing cache files, and invalid JSON payload handling.
+- Cached payload includes route data plus metadata (`version`, `routes_hash`) for integrity checks.
+- Added strict validation + dedicated `RouteCacheException` for cache read/write/decode/shape/hash failures.
+- Added unit tests for cache round-trip, missing cache files, invalid JSON payload handling, and hash mismatch detection.
 
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)
 - Added `Http\MiddlewareInterface` as the common middleware contract.
