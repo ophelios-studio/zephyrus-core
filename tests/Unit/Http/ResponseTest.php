@@ -41,6 +41,56 @@ final class ResponseTest extends TestCase
         self::assertSame('', $response->body);
     }
 
+    public function testRedirectFactoryDefaultsTo302(): void
+    {
+        $response = Response::redirect('/login');
+
+        self::assertSame(302, $response->status);
+        self::assertSame('/login', $response->headers['Location']);
+        self::assertSame('', $response->body);
+    }
+
+    public function testRedirectFactoryAllows301PermanentRedirect(): void
+    {
+        $response = Response::redirect('/new-home', 301);
+
+        self::assertSame(301, $response->status);
+        self::assertSame('/new-home', $response->headers['Location']);
+    }
+
+    public function testRedirectFactoryAllows303SeeOther(): void
+    {
+        $response = Response::redirect('/dashboard', 303);
+
+        self::assertSame(303, $response->status);
+        self::assertSame('/dashboard', $response->headers['Location']);
+    }
+
+    public function testRedirectFactoryAllows307TemporaryRedirect(): void
+    {
+        $response = Response::redirect('/retry', 307);
+
+        self::assertSame(307, $response->status);
+        self::assertSame('/retry', $response->headers['Location']);
+    }
+
+    public function testRedirectFactoryAllows308PermanentRedirectPreservingMethod(): void
+    {
+        $response = Response::redirect('/new-api', 308);
+
+        self::assertSame(308, $response->status);
+        self::assertSame('/new-api', $response->headers['Location']);
+    }
+
+    public function testRedirectFactoryAcceptsAbsoluteUrl(): void
+    {
+        $response = Response::redirect('https://example.com/path?q=1');
+
+        self::assertSame(302, $response->status);
+        self::assertSame('https://example.com/path?q=1', $response->headers['Location']);
+        self::assertSame('', $response->body);
+    }
+
     // -------------------------------------------------------------------------
     // Immutable mutation helpers
     // -------------------------------------------------------------------------
