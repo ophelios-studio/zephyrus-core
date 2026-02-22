@@ -9,6 +9,7 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\RouteDispatcher;
@@ -60,5 +61,22 @@ final class RouteDispatcherTest extends TestCase
         self::assertStringContainsString('"id":"42"', $response->body);
         self::assertStringContainsString('"requestId":"42"', $response->body);
         self::assertStringContainsString('"path":"\\/users\\/42"', $response->body);
+    }
+
+    public function testDispatchThrowsTypedExceptionForUnknownNamedRouteMiddleware(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', middlewares: ['missing']));
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+        );
+
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessage('Unknown route middleware: missing');
+
+        $dispatcher->dispatch(Request::fromArray('GET', '/users'));
     }
 }

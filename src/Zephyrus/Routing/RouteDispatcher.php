@@ -9,6 +9,7 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 
 final readonly class RouteDispatcher
 {
@@ -35,7 +36,7 @@ final readonly class RouteDispatcher
         $this->resolver = Closure::fromCallable($resolver);
         $this->routeMiddlewareResolver = $routeMiddlewareResolver !== null
             ? Closure::fromCallable($routeMiddlewareResolver)
-            : static fn (string $name): MiddlewareInterface => throw new \RuntimeException(sprintf('Unknown route middleware: %s', $name));
+            : static fn (string $name): MiddlewareInterface => throw RouteMiddlewareException::unknownMiddleware($name);
     }
 
     public function dispatch(Request $request): Response
