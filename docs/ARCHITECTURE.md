@@ -154,6 +154,18 @@
 - Added `HttpKernelWiringTest` (20 integration tests, new Integration suite) covering the full end-to-end dispatch path: plain controller dispatch, route parameter injection (int/string/multi), Request injection, mixed injection, POST body, 404/405 error handling, JSON content negotiation, global middleware ordering, named route middleware scoping, global+route middleware combined, attribute-based routes, resource CRUD routes, custom DI factory, grouped routes with shared middleware.
 - See `docs/REQUEST_LIFECYCLE.md` for the full annotated request flow.
 
+## Implemented Slice: Controller lifecycle hooks — before/after (Phase 2)
+- New `Controller\ControllerLifecycleInterface` with two hook contracts:
+  - `before(Request): ?Response` — pre-dispatch; return a Response to short-circuit, null to continue.
+  - `after(Request, Response): Response` — post-dispatch; may decorate or replace the handler's Response.
+- `Controller` base class now implements the interface with no-op defaults (before → null, after → identity passthrough).
+- `HandlerResolver::resolve()` checks `instanceof ControllerLifecycleInterface` around the handler invocation:
+  - Calls `before()`; returns early if non-null (handler method is never invoked).
+  - Calls `after()` on the handler's Response before returning.
+  - Plain POPOs (no interface) bypass hook logic entirely — zero overhead and no breaking change.
+- Typical use cases: auth guards (return 401/403 from `before()`), secure-header decoration, audit logging (`after()`).
+- Added 8 unit tests in `ControllerTest`, 6 unit tests in `HandlerResolverTest`, and 5 integration tests in `HttpKernelWiringTest` covering every hook combination (short-circuit, pass-through, decorate, both hooks together/halted).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
