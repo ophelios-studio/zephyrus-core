@@ -102,6 +102,14 @@
 - Enables first end-to-end flow: `Request -> Route match -> Global middleware -> Route middleware -> Response`.
 - Added unit test coverage for parameterized route dispatch, request attribute hydration, and middleware-applied response headers.
 
+## Implemented Slice: Attribute-first route definitions (Phase 2)
+- Added `Routing\Attribute\Route` PHP 8 repeatable attribute for decorating controller methods with route metadata (`path`, `method`, `constraints`, `middlewares`, `name`).
+- Added `Routing\RouteAttributeReader` to discover all public methods annotated with `#[Route]` on a given class via reflection, returning typed `Route` value objects with handler strings set to `ClassName@methodName`.
+- Extended `Router` with a `controller(className)` method that registers all attribute-discovered routes in one call and integrates cleanly with existing fluent chains (`get`, `group`, `resource`, etc.).
+- Added `Routing\Exception\RouteAttributeException` for reflection failures on non-existent classes.
+- Supports repeatable attributes (one method handles multiple paths/verbs), preserved constraints and middleware names, and named-route lookup after `controller()` registration.
+- Added unit tests for attribute discovery (empty, simple, repeatable, protected method filtering, missing class), router integration (combined fluent + controller, named-route lookup, constraint preservation).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

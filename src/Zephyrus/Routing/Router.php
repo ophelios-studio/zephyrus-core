@@ -7,10 +7,12 @@ namespace Zephyrus\Routing;
 final class Router
 {
     private RouteCollection $routes;
+    private RouteAttributeReader $attributeReader;
 
-    public function __construct(?RouteCollection $routes = null)
+    public function __construct(?RouteCollection $routes = null, ?RouteAttributeReader $reader = null)
     {
         $this->routes = $routes ?? new RouteCollection();
+        $this->attributeReader = $reader ?? new RouteAttributeReader();
     }
 
     /**
@@ -28,12 +30,13 @@ final class Router
             $this->routes->withRoute(
                 Route::define($method, $path, $handler, $constraints, $middlewares),
             ),
+            $this->attributeReader,
         );
     }
 
     public function name(string $routeName): self
     {
-        return new self($this->routes->withLastRouteName($routeName));
+        return new self($this->routes->withLastRouteName($routeName), $this->attributeReader);
     }
 
     /**
@@ -42,7 +45,7 @@ final class Router
      */
     public function group(string $prefix, callable $registrar, array $middlewares = []): self
     {
-        $scoped = new self();
+        $scoped = new self(null, $this->attributeReader);
         $scopedResult = $registrar($scoped);
 
         $router = $this;
@@ -129,6 +132,28 @@ final class Router
             ->put($basePath . '/{id}', sprintf('%s@update', $controller), ['id' => '\\d+'], $middlewares)
             ->patch($basePath . '/{id}', sprintf('%s@patch', $controller), ['id' => '\\d+'], $middlewares)
             ->delete($basePath . '/{id}', sprintf('%s@delete', $controller), ['id' => '\\d+'], $middlewares);
+    }
+
+    /**
+     * Registers all routes discovered via #[Route] attributes on the given
+     * controller class. Handler strings are set to `ClassName@methodName`.
+     *
+     * @param class-string $className
+     */
+    public function controller(string $className): self
+    {
+        $discovered = $this->attributeReader->read($className);
+
+        $router = $this;
+
+        foreach ($discovered as $route) {
+            $router = new self(
+                $router->routes->withRoute($route),
+                $router->attributeReader,
+            );
+        }
+
+        return $router;
     }
 
     public function routes(): RouteCollection
