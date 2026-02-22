@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Http\Error;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Zephyrus\Http\Error\HttpExceptionResponder;
+use Zephyrus\Http\Request;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
 
@@ -41,5 +42,22 @@ final class HttpExceptionResponderTest extends TestCase
 
         self::assertSame(500, $response->status);
         self::assertSame('Internal Server Error', $response->body);
+    }
+
+    public function testFormatsErrorAsJsonWhenRequestAcceptsJson(): void
+    {
+        $responder = new HttpExceptionResponder();
+
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/missing',
+            headers: ['Accept' => 'application/json'],
+        );
+
+        $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
+
+        self::assertSame(404, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
 }

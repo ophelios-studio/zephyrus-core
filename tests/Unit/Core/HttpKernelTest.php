@@ -53,4 +53,27 @@ final class HttpKernelTest extends TestCase
         self::assertSame(404, $response->status);
         self::assertSame('Not Found', $response->body);
     }
+
+    public function testHandleReturnsJsonErrorWhenRequestAcceptsJson(): void
+    {
+        $routes = new RouteCollection();
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+        );
+
+        $kernel = new HttpKernel($dispatcher, new HttpExceptionResponder());
+
+        $response = $kernel->handle(Request::fromArray(
+            method: 'GET',
+            uri: '/missing',
+            headers: ['Accept' => 'application/json'],
+        ));
+
+        self::assertSame(404, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
+    }
 }

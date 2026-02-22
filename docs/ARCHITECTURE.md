@@ -60,7 +60,8 @@
 - Added `Http\Error\HttpExceptionResponder` to map framework exceptions into baseline HTTP responses.
 - Route misses map to `404 Not Found`, method mismatches map to `405 Method Not Allowed` with `Allow` header.
 - Unknown exceptions map to `500 Internal Server Error`.
-- Added unit coverage for all exception-to-response mappings.
+- Added content negotiation for error format: JSON payloads when request `Accept` includes `application/json` (or problem+json), text otherwise.
+- Added unit coverage for exception-to-response mappings and format negotiation.
 
 ## Implemented Slice: HttpKernel request lifecycle bridge (Phase 1 seed)
 - Added `Core\HttpKernel` to centralize request handling flow.

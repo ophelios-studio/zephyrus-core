@@ -23,7 +23,7 @@ final readonly class HttpKernel
         try {
             return $this->dispatcher->dispatch($request);
         } catch (Throwable $exception) {
-            return $this->exceptionResponder->toResponse($exception);
+            return $this->exceptionResponder->toResponse($exception, $request);
         }
     }
 }
