@@ -19,6 +19,15 @@ final class RouteCollection
         $this->routes[] = $route;
     }
 
+    public function withRoute(Route $route): self
+    {
+        $collection = new self();
+        $collection->routes = $this->routes;
+        $collection->routes[] = $route;
+
+        return $collection;
+    }
+
     /**
      * @return array<int, Route>
      */

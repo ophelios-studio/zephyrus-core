@@ -50,6 +50,12 @@
 - Matching failures now distinguish between `RouteNotFoundException` and `MethodNotAllowedException` for clearer HTTP-layer handling.
 - Added unit tests for successful matches, path normalization, parameter extraction, constraint checks, and miss handling.
 
+## Implemented Slice: Router registration DSL (Phase 2 seed)
+- Added `Routing\Router` fluent registration API with verb helpers (`get`, `post`, `put`, `patch`, `delete`) and generic `add`.
+- Router registration now preserves immutability, returning a new router instance for each added route.
+- Added immutable `RouteCollection::withRoute()` helper to support fluent registration chains.
+- Added unit tests for verb helper behavior, constraints/middleware registration, and immutable chaining.
+
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)
 - Added `Http\MiddlewareInterface` as the common middleware contract.
 - Added immutable `Http\MiddlewarePipeline` with `pipe()` and `handle()` methods.
