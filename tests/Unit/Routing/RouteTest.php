@@ -40,4 +40,13 @@ final class RouteTest extends TestCase
 
         self::assertSame(['auth', 'audit'], $route->middlewares);
     }
+
+    public function testWithNameReturnsNamedClone(): void
+    {
+        $route = Route::define('GET', '/users', 'UserController@index');
+        $named = $route->withName('users.index');
+
+        self::assertNull($route->name);
+        self::assertSame('users.index', $named->name);
+    }
 }

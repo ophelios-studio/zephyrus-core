@@ -16,6 +16,7 @@ final readonly class Route
         public string $handler,
         public array $constraints = [],
         public array $middlewares = [],
+        public ?string $name = null,
     ) {
     }
 
@@ -29,6 +30,7 @@ final readonly class Route
         string $handler,
         array $constraints = [],
         array $middlewares = [],
+        ?string $name = null,
     ): self {
         $normalizedPath = '/' . trim($path, '/');
 
@@ -38,11 +40,24 @@ final readonly class Route
             handler: $handler,
             constraints: $constraints,
             middlewares: $middlewares,
+            name: $name,
         );
     }
 
     public function matchesMethod(string $method): bool
     {
         return $this->method === strtoupper($method);
+    }
+
+    public function withName(string $name): self
+    {
+        return new self(
+            method: $this->method,
+            path: $this->path,
+            handler: $this->handler,
+            constraints: $this->constraints,
+            middlewares: $this->middlewares,
+            name: $name,
+        );
     }
 }

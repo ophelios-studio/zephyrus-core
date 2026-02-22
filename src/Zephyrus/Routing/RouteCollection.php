@@ -28,6 +28,32 @@ final class RouteCollection
         return $collection;
     }
 
+    public function withLastRouteName(string $name): self
+    {
+        if ($this->routes === []) {
+            return $this;
+        }
+
+        $collection = new self();
+        $collection->routes = $this->routes;
+
+        $lastIndex = count($collection->routes) - 1;
+        $collection->routes[$lastIndex] = $collection->routes[$lastIndex]->withName($name);
+
+        return $collection;
+    }
+
+    public function findByName(string $name): ?Route
+    {
+        foreach ($this->routes as $route) {
+            if ($route->name === $name) {
+                return $route;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * @return array<int, Route>
      */

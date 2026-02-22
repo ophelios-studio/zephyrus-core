@@ -52,11 +52,12 @@
 
 ## Implemented Slice: Router registration DSL (Phase 2 seed)
 - Added `Routing\Router` fluent registration API with verb helpers (`get`, `post`, `put`, `patch`, `delete`) and generic `add`.
+- Added `name(routeName)` helper to name the most recently registered route in fluent chains.
 - Added `group(prefix, registrar, middlewares)` helper to scope route registration under shared prefixes and middleware names.
 - Added `resource()` helper to register conventional CRUD routes for controller-based modules.
 - Router registration preserves immutability, returning a new router instance for each added route.
-- Added immutable `RouteCollection::withRoute()` helper to support fluent registration chains.
-- Added unit tests for verb helper behavior, grouped routing, constraints/middleware registration, CRUD resource wiring, and immutable chaining.
+- Added immutable `RouteCollection::withRoute()` helper plus route-name lookup support (`findByName`).
+- Added unit tests for verb helper behavior, route naming, grouped routing, constraints/middleware registration, CRUD resource wiring, and immutable chaining.
 
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)
 - Added `Http\MiddlewareInterface` as the common middleware contract.

@@ -108,4 +108,15 @@ final class RouteCollectionTest extends TestCase
 
         self::assertSame('hello world', $match->parameter('name'));
     }
+
+    public function testFindByNameReturnsNamedRouteWhenPresent(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index', name: 'users.index'));
+
+        $route = $collection->findByName('users.index');
+
+        self::assertNotNull($route);
+        self::assertSame('/users', $route->path);
+    }
 }

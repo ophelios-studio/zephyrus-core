@@ -31,6 +31,11 @@ final class Router
         );
     }
 
+    public function name(string $routeName): self
+    {
+        return new self($this->routes->withLastRouteName($routeName));
+    }
+
     /**
      * @param callable(self): self $registrar
      * @param array<int, string> $middlewares

@@ -93,4 +93,16 @@ final class RouterTest extends TestCase
         self::assertSame('/api/v1/users/{id}', $routes[1]->path);
         self::assertSame(['api', 'auth'], $routes[1]->middlewares);
     }
+
+    public function testNameAssignsNameToMostRecentlyRegisteredRoute(): void
+    {
+        $router = (new Router())
+            ->get('/health', 'HealthController@show')
+            ->name('health.show');
+
+        $route = $router->routes()->findByName('health.show');
+
+        self::assertNotNull($route);
+        self::assertSame('/health', $route->path);
+    }
 }
