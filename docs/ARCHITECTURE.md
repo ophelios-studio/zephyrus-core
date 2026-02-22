@@ -178,6 +178,25 @@
 - Added 6 unit tests in `ResponseTest` covering default 302, 301/303/307/308 overrides, absolute URL, and empty body guarantee.
 - Http primitives bullet updated: `redirect()` added to the `Response` helper list.
 
+## Implemented Slice: SecurityConfig + Configuration aggregate (Phase 3)
+- Added `Core\Config\SecurityConfig` — immutable typed config section for HTTP security behaviour:
+  - `forceHttps: bool` (default: `false`) — redirect plain-HTTP requests to HTTPS.
+  - `csrfEnabled: bool` (default: `true`) — enable CSRF token verification on mutating requests.
+  - `allowedHosts: string[]` (default: `[]`) — restrict accepted `Host` headers; empty = any host.
+  - `maxBodySize: int` (default: `2_097_152` = 2 MB; `0` = unlimited) — max request body bytes.
+  - Accepts both camelCase and snake_case key variants; camelCase takes precedence when both are supplied.
+  - Validation: `maxBodySize < 0` throws; non-string or empty-string entries in `allowedHosts` throw; throws `ConfigurationException` in all cases.
+- Added `Core\Config\Configuration` — immutable top-level config tree aggregating all typed sections:
+  - Sections: `application: ApplicationConfig`, `session: SessionConfig`, `security: SecurityConfig`, `database: ?DatabaseConfig` (null when absent — DB is optional).
+  - `fromArray(array $config): self` — builds the full tree from a single nested array, propagating `ConfigurationException` from any section on invalid values.
+  - `defaults(): self` — factory for a fully populated tree using every section's built-in defaults; useful in tests and minimal bootstraps.
+  - Callers no longer need to construct section objects individually — one `Configuration::fromArray(require 'config.php')` provides the full typed tree.
+- Expanded thin test coverage for `DatabaseConfig` and `SessionConfig`:
+  - `DatabaseConfig`: added port boundary tests (1, 65535, 0, 65536), explicit-value round-trip, empty `database`/`username` validation — 10 tests total (was 2).
+  - `SessionConfig`: added camelCase/snake_case key acceptance, `sameSite` data provider (Strict/Lax/None), empty-name and negative-lifetime failures — 9 tests total (was 2).
+- Added `SecurityConfigTest` (9 tests) and `ConfigurationTest` (14 tests) covering: defaults, camelCase/snake_case keys, precedence, `maxBodySize` zero, `allowedHosts` reindexing, all validation failures, section hydration, null database, all-sections-together, and exception propagation from each section.
+- Total test suite: **298 tests, 580 assertions**, line coverage **96.50%** (690/715).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
