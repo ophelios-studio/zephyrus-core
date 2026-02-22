@@ -5,7 +5,31 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Router;
+
+// ---------------------------------------------------------------------------
+// Fixture controllers for Router::controller() tests
+// ---------------------------------------------------------------------------
+
+class UserAttributeController
+{
+    #[RouteAttribute('/users', 'GET', name: 'users.index')]
+    public function index(): void {}
+
+    #[RouteAttribute('/users/{id}', 'GET', constraints: ['id' => '\d+'], name: 'users.show')]
+    public function show(): void {}
+
+    #[RouteAttribute('/users', 'POST')]
+    public function store(): void {}
+}
+
+class NoAttributeController
+{
+    public function index(): void {}
+}
+
+// ---------------------------------------------------------------------------
 
 final class RouterTest extends TestCase
 {
@@ -104,5 +128,62 @@ final class RouterTest extends TestCase
 
         self::assertNotNull($route);
         self::assertSame('/health', $route->path);
+    }
+
+    public function testControllerRegistersAttributeDefinedRoutes(): void
+    {
+        $router = (new Router())->controller(UserAttributeController::class);
+
+        $routes = $router->routes()->all();
+
+        self::assertCount(3, $routes);
+    }
+
+    public function testControllerHandlerStringsPointToClass(): void
+    {
+        $router = (new Router())->controller(UserAttributeController::class);
+
+        $handlers = array_map(fn ($r) => $r->handler, $router->routes()->all());
+
+        self::assertContains(UserAttributeController::class . '@index', $handlers);
+        self::assertContains(UserAttributeController::class . '@show', $handlers);
+        self::assertContains(UserAttributeController::class . '@store', $handlers);
+    }
+
+    public function testControllerPreservesNameForLookup(): void
+    {
+        $router = (new Router())->controller(UserAttributeController::class);
+
+        $route = $router->routes()->findByName('users.index');
+
+        self::assertNotNull($route);
+        self::assertSame('/users', $route->path);
+        self::assertSame('GET', $route->method);
+    }
+
+    public function testControllerPreservesConstraints(): void
+    {
+        $router = (new Router())->controller(UserAttributeController::class);
+
+        $route = $router->routes()->findByName('users.show');
+
+        self::assertNotNull($route);
+        self::assertSame(['id' => '\d+'], $route->constraints);
+    }
+
+    public function testControllerWithNoAttributesYieldsNoRoutes(): void
+    {
+        $router = (new Router())->controller(NoAttributeController::class);
+
+        self::assertCount(0, $router->routes()->all());
+    }
+
+    public function testControllerCanBeCombinedWithFluentRegistration(): void
+    {
+        $router = (new Router())
+            ->get('/health', 'HealthController@show')
+            ->controller(UserAttributeController::class);
+
+        self::assertCount(4, $router->routes()->all());
     }
 }
