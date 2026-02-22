@@ -12,4 +12,15 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     {
         return new self(sprintf('Unknown route middleware: %s', $name));
     }
+
+    /**
+     * @param array<int, string> $stack
+     */
+    public static function circularGroupReference(array $stack, string $name): self
+    {
+        return new self(sprintf(
+            'Circular middleware group reference detected: %s',
+            implode(' -> ', [...$stack, $name]),
+        ));
+    }
 }
