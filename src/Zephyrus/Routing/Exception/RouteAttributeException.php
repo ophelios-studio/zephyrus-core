@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Zephyrus\Routing\Exception;
 
 use ReflectionException;
-use RuntimeException;
+use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
-final class RouteAttributeException extends RuntimeException
+final class RouteAttributeException extends ZephyrusRuntimeException
 {
     public static function unresolvableClass(string $className, ReflectionException $previous): self
     {
