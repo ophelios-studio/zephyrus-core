@@ -46,6 +46,7 @@
 - Added `match(method, path)` lookup with method/path normalization.
 - Added `Routing\RouteMatch` value object to return both matched route and extracted parameters.
 - Added parameterized path matching support (`/users/{id}`) with optional per-parameter regex constraints.
+- Path normalization now handles trailing slashes, query strings, and URL-decoded segments before matching.
 - Missing route lookups now raise explicit runtime errors (`No route matched METHOD /path`).
 - Added unit tests for successful matches, path normalization, parameter extraction, constraint checks, and miss handling.
 

@@ -28,8 +28,7 @@ final class RouteCollection
 
     public function match(string $method, string $path): RouteMatch
     {
-        $normalizedPath = '/' . trim($path, '/');
-        $normalizedPath = $normalizedPath === '/' ? '/' : $normalizedPath;
+        $normalizedPath = $this->normalizePath($path);
 
         foreach ($this->routes as $route) {
             if (!$route->matchesMethod($method)) {
@@ -92,11 +91,23 @@ final class RouteCollection
      */
     private function segments(string $path): array
     {
-        if ($path === '/') {
+        $normalized = $this->normalizePath($path);
+
+        if ($normalized === '/') {
             return [];
         }
 
-        return explode('/', ltrim($path, '/'));
+        return explode('/', ltrim($normalized, '/'));
+    }
+
+    private function normalizePath(string $path): string
+    {
+        $parsedPath = (string) parse_url($path, PHP_URL_PATH);
+        $decodedPath = rawurldecode($parsedPath);
+
+        $normalized = '/' . trim($decodedPath, '/');
+
+        return $normalized === '/' ? '/' : $normalized;
     }
 
     private function isParameterSegment(string $segment): bool

@@ -75,4 +75,24 @@ final class RouteCollectionTest extends TestCase
 
         $collection->match('DELETE', '/users');
     }
+
+    public function testMatchIgnoresTrailingSlashAndQueryString(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $match = $collection->match('GET', '/users/42/?expand=roles');
+
+        self::assertSame('42', $match->parameter('id'));
+    }
+
+    public function testMatchDecodesEncodedPathSegmentsBeforeConstraintChecks(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/tags/{name}', 'TagController@show', ['name' => '[a-z ]+']));
+
+        $match = $collection->match('GET', '/tags/hello%20world');
+
+        self::assertSame('hello world', $match->parameter('name'));
+    }
 }
