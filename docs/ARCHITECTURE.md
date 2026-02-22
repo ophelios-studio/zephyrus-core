@@ -11,7 +11,7 @@
 - Core (kernel, app lifecycle, errors)
 - Http (request/response, headers, content negotiation)
   - First v2 primitives in place:
-    - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`)
+    - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`); `send()` SAPI emitter with status-line and header emission; `statusPhrase()` and `toStatusLine()` helpers
     - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `cookie`, `path`, `isMethod`, `isJson`, `isSecure`, `attribute`, `withAttribute`, `withAttributes`); `fromGlobals()` production factory with superglobal parsing, header extraction, body negotiation, and method override
     - middleware contracts and execution pipeline (`MiddlewareInterface`, `MiddlewarePipeline`)
 - Routing (attributes, repository, resolver, middleware)
@@ -44,6 +44,15 @@
 - Added factory constructors for common responses: `text()`, `json()`, and `noContent()`.
 - Added immutable mutation helpers: `withHeader()` and `withStatus()`.
 - JSON responses automatically set `Content-Type: application/json; charset=utf-8`.
+
+## Implemented Slice: Response::send() SAPI emission (Phase 1)
+- Added `Response::send()` to complete the `fromGlobals → handle → send` lifecycle loop.
+- `send()` emits the HTTP status line via `header($statusLine, true, $code)`, then each response header via `toHeaderLines()`, then echoes the body.
+- Header emission is guarded by `headers_sent()` to avoid PHP warnings when output has already started.
+- Added `statusPhrase(): string` — maps the response's status code to its IANA reason phrase (covers 100–504); unknown codes return `'Unknown Status'`.
+- Added `toStatusLine(): string` — returns the formatted `HTTP/1.1 {code} {phrase}` string; independently testable without touching the SAPI.
+- Added `toHeaderLines(): string[]` — returns each header as a `"Name: value"` string in map-insertion order; `send()` passes these directly to `header()`, and tests can assert on them without a web SAPI context (PHP CLI does not surface custom headers via `headers_list()`).
+- Added 30 new tests in `ResponseTest` covering: `withStatus()` and `withHeader()` immutability, `statusPhrase()` for 18 common codes (via data provider) and two unknown fallbacks, `toStatusLine()` for 5 variants, `toHeaderLines()` for empty/single/multiple/ordered cases, `send()` body output (6 cases: plain text, JSON, 204, empty, multiline, binary), and SAPI status-code emission (5 `@RunInSeparateProcess` cases verifying `http_response_code()` for 200/201/404/204/405).
 
 ## Implemented Slice: Routing Route object (Phase 2 seed)
 - Added immutable `Routing\Route` primitive with normalized `method` and `path`.

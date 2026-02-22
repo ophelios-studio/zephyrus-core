@@ -46,6 +46,15 @@ $_SERVER / $_GET / $_POST / $_COOKIE / php://input
          ├─ MethodNotAllowedException  → 405 Method Not Allowed (Allow header set)
          └─ anything else             → 500 Internal Server Error
                └─ content negotiated: JSON when Accept includes application/json
+        │
+        ▼
+  (immutable Response value object)
+        │
+        ▼
+  Response::send()          ← SAPI emission (completes the loop)
+        ├─ header("HTTP/1.1 {status} {phrase}", true, $status)
+        ├─ header("{Name}: {value}")  ← for each header in the map
+        └─ echo $body
 ```
 
 ---
@@ -133,6 +142,53 @@ The single entry point for request handling. Its only job is:
 ```php
 $response = $kernel->handle($request);
 ```
+
+---
+
+### `Response::send()`
+
+The final step in the lifecycle: emits the `Response` value object to the SAPI
+(web server or CLI). Calling `send()` completes the `fromGlobals → handle → send`
+loop:
+
+```php
+// public/index.php
+$request  = Request::fromGlobals();
+$response = $kernel->handle($request);
+$response->send();              // ← emits HTTP status line, headers, body
+```
+
+**Emission order**
+
+1. **Status line** — `HTTP/1.1 {code} {phrase}` via `header()`, with the
+   numeric code passed as the third argument so PHP's SAPI layer records the
+   response code correctly.
+2. **Headers** — one `header()` call per entry in `Response::$headers`, emitted
+   in map-insertion order.
+3. **Body** — `echo $body`.
+
+**`headers_sent()` guard**
+
+Header emission is wrapped in `if (!headers_sent())` so that calling `send()`
+after output has already started (e.g. a misconfigured entry point) silently
+skips header emission rather than triggering PHP warnings. The body is always
+echoed regardless.
+
+**SAPI-agnostic inspection helpers**
+
+Three helper methods expose the emission logic as pure return values — no SAPI
+calls, fully unit-testable in CLI/PHPUnit:
+
+| Method             | Example return value                                     |
+|--------------------|----------------------------------------------------------|
+| `statusPhrase()`   | `'OK'`, `'Not Found'`, …                                 |
+| `toStatusLine()`   | `'HTTP/1.1 200 OK'`                                      |
+| `toHeaderLines()`  | `['Content-Type: application/json; charset=utf-8', …]`  |
+
+`send()` uses `toStatusLine()` and `toHeaderLines()` internally, so testing
+these helpers gives complete coverage of what `send()` would emit.
+`statusPhrase()` covers all standard HTTP/1.1 codes (100–504); unrecognized
+codes return `'Unknown Status'`.
 
 ---
 
