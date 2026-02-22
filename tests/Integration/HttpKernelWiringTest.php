@@ -415,6 +415,79 @@ final class HttpKernelWiringTest extends TestCase
         self::assertSame('ok', $dashboard->headers['X-Auth']);
         self::assertSame('ok', $users->headers['X-Auth']);
     }
+
+    // -- Controller lifecycle hooks -------------------------------------------
+
+    public function testBeforeHookShortCircuitsUnauthorizedRequest(): void
+    {
+        $router = (new Router())
+            ->get('/secure', WiringSecuredController::class . '@act');
+
+        $kernel = KernelBuilder::create()->withRouter($router)->build();
+
+        // No token → before() returns 401.
+        $response = $kernel->handle(Request::fromArray('GET', '/secure'));
+
+        self::assertSame(401, $response->status);
+        self::assertStringContainsString('"error":"Unauthorized"', $response->body);
+    }
+
+    public function testBeforeHookPassesThroughAuthorizedRequest(): void
+    {
+        $router = (new Router())
+            ->get('/secure', WiringSecuredController::class . '@act');
+
+        $kernel = KernelBuilder::create()->withRouter($router)->build();
+
+        $response = $kernel->handle(
+            Request::fromArray('GET', '/secure', headers: ['X-Token' => 'valid']),
+        );
+
+        self::assertSame(200, $response->status);
+        self::assertSame('authorized', $response->body);
+    }
+
+    public function testAfterHookDecoratesEveryResponse(): void
+    {
+        $router = (new Router())
+            ->get('/stamp', WiringStampController::class . '@act');
+
+        $kernel = KernelBuilder::create()->withRouter($router)->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/stamp'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('stamped', $response->headers['X-Stamp']);
+    }
+
+    public function testAfterHookDoesNotRunWhenBeforeShortCircuits(): void
+    {
+        $router = (new Router())
+            ->get('/combo', WiringComboController::class . '@act');
+
+        $kernel = KernelBuilder::create()->withRouter($router)->build();
+
+        // before() returns 403 → after() should never add X-Combo.
+        $response = $kernel->handle(
+            Request::fromArray('GET', '/combo', headers: ['X-Halt' => '1']),
+        );
+
+        self::assertSame(403, $response->status);
+        self::assertArrayNotHasKey('X-Combo', $response->headers);
+    }
+
+    public function testAfterHookRunsWhenBeforePassesThrough(): void
+    {
+        $router = (new Router())
+            ->get('/combo', WiringComboController::class . '@act');
+
+        $kernel = KernelBuilder::create()->withRouter($router)->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/combo'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('yes', $response->headers['X-Combo']);
+    }
 }
 
 // ===========================================================================
@@ -534,6 +607,61 @@ final class WiringAttributeController
     public function show(int $id): Response
     {
         return Response::json(['product_id' => $id]);
+    }
+}
+
+/** Guards via before(): requires X-Token: valid header. */
+final class WiringSecuredController extends Controller
+{
+    public function before(Request $request): ?Response
+    {
+        if ($request->header('X-Token') !== 'valid') {
+            return $this->respond(['error' => 'Unauthorized'], 401);
+        }
+
+        return null;
+    }
+
+    public function act(): Response
+    {
+        return $this->text('authorized');
+    }
+}
+
+/** Stamps X-Stamp header via after() on every response. */
+final class WiringStampController extends Controller
+{
+    public function after(Request $request, Response $response): Response
+    {
+        return $response->withHeader('X-Stamp', 'stamped');
+    }
+
+    public function act(): Response
+    {
+        return $this->text('body');
+    }
+}
+
+/** Both hooks: before() halts on X-Halt:1; after() adds X-Combo:yes. */
+final class WiringComboController extends Controller
+{
+    public function before(Request $request): ?Response
+    {
+        if ($request->header('X-Halt') === '1') {
+            return Response::text('halted', 403);
+        }
+
+        return null;
+    }
+
+    public function after(Request $request, Response $response): Response
+    {
+        return $response->withHeader('X-Combo', 'yes');
+    }
+
+    public function act(): Response
+    {
+        return $this->text('combo');
     }
 }
 

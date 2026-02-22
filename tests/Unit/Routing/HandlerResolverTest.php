@@ -71,6 +71,72 @@ final class UnresolvableParamController
 }
 
 /**
+ * Controller that guards via before(): returns 403 when request carries
+ * X-Block header, otherwise null.
+ */
+final class BeforeGuardController extends Controller
+{
+    public bool $handlerInvoked = false;
+
+    public function before(Request $request): ?Response
+    {
+        if ($request->header('X-Block') === '1') {
+            return Response::text('blocked', 403);
+        }
+
+        return null;
+    }
+
+    public function act(): Response
+    {
+        $this->handlerInvoked = true;
+
+        return Response::text('ok');
+    }
+}
+
+/**
+ * Controller that decorates responses via after(): adds X-After header.
+ */
+final class AfterDecoratorController extends Controller
+{
+    public function after(Request $request, Response $response): Response
+    {
+        return $response->withHeader('X-After', 'decorated');
+    }
+
+    public function act(): Response
+    {
+        return Response::text('result');
+    }
+}
+
+/**
+ * Controller with both hooks: before blocks on X-Block, after stamps X-After.
+ */
+final class BothLifecycleController extends Controller
+{
+    public function before(Request $request): ?Response
+    {
+        if ($request->header('X-Block') === '1') {
+            return Response::text('halted', 401);
+        }
+
+        return null;
+    }
+
+    public function after(Request $request, Response $response): Response
+    {
+        return $response->withHeader('X-After', 'yes');
+    }
+
+    public function act(): Response
+    {
+        return Response::text('dispatched');
+    }
+}
+
+/**
  * A Controller subclass that uses the base-class response helpers.
  */
 final class ExtendedHandlerController extends Controller
@@ -272,6 +338,71 @@ final class HandlerResolverTest extends TestCase
 
         // Request has no 'missing' attribute and method has no default → must throw.
         $this->resolver->resolve($match, Request::fromArray('GET', '/'));
+    }
+
+    // -- Lifecycle hooks (before / after) -------------------------------------
+
+    public function testPlainPopoControllerHasNoLifecycleHooks(): void
+    {
+        // PlainHandlerController has no before/after — resolver must not error.
+        $match    = $this->makeMatch('GET', '/hello', PlainHandlerController::class . '@hello');
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/hello'));
+
+        self::assertSame('hello', $response->body);
+    }
+
+    public function testBeforeHookShortCircuitsDispatchWhenNonNull(): void
+    {
+        $match   = $this->makeMatch('GET', '/act', BeforeGuardController::class . '@act');
+        $request = Request::fromArray('GET', '/act', headers: ['X-Block' => '1']);
+
+        $response = $this->resolver->resolve($match, $request);
+
+        // Handler method must NOT have been called.
+        self::assertSame(403, $response->status);
+        self::assertSame('blocked', $response->body);
+    }
+
+    public function testBeforeHookNullAllowsDispatchToContinue(): void
+    {
+        $match    = $this->makeMatch('GET', '/act', BeforeGuardController::class . '@act');
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
+
+        // No X-Block header → before() returns null → handler runs.
+        self::assertSame(200, $response->status);
+        self::assertSame('ok', $response->body);
+    }
+
+    public function testAfterHookReceivesAndDecoratesHandlerResponse(): void
+    {
+        $match    = $this->makeMatch('GET', '/act', AfterDecoratorController::class . '@act');
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
+
+        self::assertSame('result', $response->body);
+        self::assertSame('decorated', $response->headers['X-After']);
+    }
+
+    public function testBothHooksApplied(): void
+    {
+        $match    = $this->makeMatch('GET', '/act', BothLifecycleController::class . '@act');
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
+
+        // before() passes, handler runs, after() stamps header.
+        self::assertSame('dispatched', $response->body);
+        self::assertSame('yes', $response->headers['X-After']);
+    }
+
+    public function testBothHooksBeforeShortCircuitsSkipsAfter(): void
+    {
+        $match   = $this->makeMatch('GET', '/act', BothLifecycleController::class . '@act');
+        $request = Request::fromArray('GET', '/act', headers: ['X-Block' => '1']);
+
+        $response = $this->resolver->resolve($match, $request);
+
+        // before() short-circuits → after() never decorates, no X-After header.
+        self::assertSame(401, $response->status);
+        self::assertSame('halted', $response->body);
+        self::assertArrayNotHasKey('X-After', $response->headers);
     }
 
     // -- RouteDispatcher integration ------------------------------------------

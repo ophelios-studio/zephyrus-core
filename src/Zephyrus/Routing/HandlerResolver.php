@@ -8,6 +8,7 @@ use Closure;
 use ReflectionException;
 use ReflectionMethod;
 use ReflectionNamedType;
+use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\HandlerResolverException;
@@ -55,7 +56,23 @@ final class HandlerResolver
 
         $controller = ($this->factory)($class);
 
-        return $this->invoke($controller, $class, $method, $request);
+        // before() hook — short-circuit if a Response is returned.
+        if ($controller instanceof ControllerLifecycleInterface) {
+            $early = $controller->before($request);
+
+            if ($early !== null) {
+                return $early;
+            }
+        }
+
+        $response = $this->invoke($controller, $class, $method, $request);
+
+        // after() hook — may decorate the handler's Response.
+        if ($controller instanceof ControllerLifecycleInterface) {
+            $response = $controller->after($request, $response);
+        }
+
+        return $response;
     }
 
     // -------------------------------------------------------------------------
