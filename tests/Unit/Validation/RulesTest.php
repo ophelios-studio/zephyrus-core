@@ -227,4 +227,176 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::notBlank()->test(null));
         self::assertFalse(Rules::notBlank()->test(42));
     }
+
+    // ---- boolean ----
+
+    public function testBooleanPassesNativeBool(): void
+    {
+        self::assertTrue(Rules::boolean()->test(true));
+        self::assertTrue(Rules::boolean()->test(false));
+    }
+
+    public function testBooleanPassesIntegerZeroAndOne(): void
+    {
+        self::assertTrue(Rules::boolean()->test(1));
+        self::assertTrue(Rules::boolean()->test(0));
+    }
+
+    public function testBooleanPassesStringVariants(): void
+    {
+        self::assertTrue(Rules::boolean()->test('1'));
+        self::assertTrue(Rules::boolean()->test('0'));
+        self::assertTrue(Rules::boolean()->test('true'));
+        self::assertTrue(Rules::boolean()->test('false'));
+        self::assertTrue(Rules::boolean()->test('TRUE'));
+        self::assertTrue(Rules::boolean()->test('FALSE'));
+    }
+
+    public function testBooleanFails(): void
+    {
+        self::assertFalse(Rules::boolean()->test('yes'));
+        self::assertFalse(Rules::boolean()->test('no'));
+        self::assertFalse(Rules::boolean()->test(2));
+        self::assertFalse(Rules::boolean()->test(null));
+        self::assertFalse(Rules::boolean()->test([]));
+    }
+
+    public function testBooleanDefaultMessage(): void
+    {
+        self::assertSame('Must be a boolean value.', Rules::boolean()->errorMessage());
+    }
+
+    // ---- uuid ----
+
+    public function testUuidPasses(): void
+    {
+        self::assertTrue(Rules::uuid()->test('550e8400-e29b-41d4-a716-446655440000'));
+        self::assertTrue(Rules::uuid()->test('550E8400-E29B-41D4-A716-446655440000')); // uppercase
+        self::assertTrue(Rules::uuid()->test('00000000-0000-0000-0000-000000000000'));
+    }
+
+    public function testUuidFails(): void
+    {
+        self::assertFalse(Rules::uuid()->test('not-a-uuid'));
+        self::assertFalse(Rules::uuid()->test('550e8400-e29b-41d4-a716-44665544000'));  // too short
+        self::assertFalse(Rules::uuid()->test('550e8400-e29b-41d4-a716-4466554400000')); // too long
+        self::assertFalse(Rules::uuid()->test(null));
+        self::assertFalse(Rules::uuid()->test(42));
+    }
+
+    public function testUuidDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid UUID.', Rules::uuid()->errorMessage());
+    }
+
+    // ---- date ----
+
+    public function testDatePassesDefaultFormat(): void
+    {
+        self::assertTrue(Rules::date()->test('2024-02-29')); // leap year
+        self::assertTrue(Rules::date()->test('2026-01-01'));
+    }
+
+    public function testDateFailsInvalidDate(): void
+    {
+        self::assertFalse(Rules::date()->test('2023-02-29')); // not a leap year
+        self::assertFalse(Rules::date()->test('2026-13-01')); // month 13
+        self::assertFalse(Rules::date()->test('not-a-date'));
+        self::assertFalse(Rules::date()->test(null));
+        self::assertFalse(Rules::date()->test(20240101));
+    }
+
+    public function testDatePassesCustomFormat(): void
+    {
+        self::assertTrue(Rules::date('d/m/Y')->test('29/02/2024'));
+        self::assertTrue(Rules::date('Y')->test('2026'));
+    }
+
+    public function testDateFailsWrongFormat(): void
+    {
+        self::assertFalse(Rules::date('Y-m-d')->test('01/01/2026'));
+    }
+
+    public function testDateDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid date in Y-m-d format.', Rules::date()->errorMessage());
+    }
+
+    public function testDateCustomFormatMessage(): void
+    {
+        self::assertSame('Must be a valid date in d/m/Y format.', Rules::date('d/m/Y')->errorMessage());
+    }
+
+    // ---- countMin / countMax ----
+
+    public function testCountMinPasses(): void
+    {
+        self::assertTrue(Rules::countMin(1)->test(['a']));
+        self::assertTrue(Rules::countMin(3)->test([1, 2, 3]));
+        self::assertTrue(Rules::countMin(0)->test([]));
+    }
+
+    public function testCountMinFails(): void
+    {
+        self::assertFalse(Rules::countMin(2)->test(['a']));
+        self::assertFalse(Rules::countMin(1)->test([]));
+        self::assertFalse(Rules::countMin(1)->test('not-array'));
+        self::assertFalse(Rules::countMin(1)->test(null));
+    }
+
+    public function testCountMinDefaultMessage(): void
+    {
+        self::assertSame('Must have at least 2 item(s).', Rules::countMin(2)->errorMessage());
+    }
+
+    public function testCountMaxPasses(): void
+    {
+        self::assertTrue(Rules::countMax(3)->test([1, 2, 3]));
+        self::assertTrue(Rules::countMax(3)->test([1, 2]));
+        self::assertTrue(Rules::countMax(0)->test([]));
+    }
+
+    public function testCountMaxFails(): void
+    {
+        self::assertFalse(Rules::countMax(2)->test([1, 2, 3]));
+        self::assertFalse(Rules::countMax(0)->test(['a']));
+        self::assertFalse(Rules::countMax(5)->test('not-array'));
+        self::assertFalse(Rules::countMax(5)->test(null));
+    }
+
+    public function testCountMaxDefaultMessage(): void
+    {
+        self::assertSame('Must have at most 5 item(s).', Rules::countMax(5)->errorMessage());
+    }
+
+    // ---- ip ----
+
+    public function testIpPassesIPv4(): void
+    {
+        self::assertTrue(Rules::ip()->test('192.168.1.1'));
+        self::assertTrue(Rules::ip()->test('127.0.0.1'));
+        self::assertTrue(Rules::ip()->test('0.0.0.0'));
+        self::assertTrue(Rules::ip()->test('255.255.255.255'));
+    }
+
+    public function testIpPassesIPv6(): void
+    {
+        self::assertTrue(Rules::ip()->test('::1'));
+        self::assertTrue(Rules::ip()->test('2001:db8::1'));
+        self::assertTrue(Rules::ip()->test('2001:0db8:0000:0000:0000:0000:0000:0001'));
+    }
+
+    public function testIpFails(): void
+    {
+        self::assertFalse(Rules::ip()->test('999.999.999.999'));
+        self::assertFalse(Rules::ip()->test('not-an-ip'));
+        self::assertFalse(Rules::ip()->test('192.168.1'));
+        self::assertFalse(Rules::ip()->test(null));
+        self::assertFalse(Rules::ip()->test(127));
+    }
+
+    public function testIpDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid IP address.', Rules::ip()->errorMessage());
+    }
 }

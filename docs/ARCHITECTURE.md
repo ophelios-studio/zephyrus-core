@@ -206,6 +206,19 @@
 - Added 70 unit tests across 5 test classes (`RuleTest` 5, `RulesTest` 32, `FieldValidatorTest` 10, `ErrorBagTest` 12, `FormValidatorTest` 11) covering: pass/fail for every built-in rule, null/empty/type edge cases, default and custom messages, strict `in()` type comparison, immutable `addRule`/`withField` chains, missing-field null treatment, partial and full failures, `between`/`in` integration in full form flow.
 - Total test suite: **368 tests, 707 assertions**, line coverage **96.75%** (774/800).
 
+## Implemented Slice: Nested payload validation + expanded rule set (Phase 4)
+- Extended `FormValidator` with dot-path field resolution: field names containing `.` (e.g. `user.name`) are resolved as nested array paths against the payload. Missing keys at any depth yield `null`, allowing `required` to catch absent nested fields naturally.
+- Added `FormValidator::withNested(string $prefix, FormValidator $sub): self` — merges all fields from a sub-validator under a shared prefix (`address.city`, `address.zip`). Immutable; returns a new clone. Enables composable, reusable sub-validator blocks.
+- Added 6 new built-in rules to `Rules` (19 total, up from 13):
+  - `boolean()` — accepts `true`, `false`, `1`, `0`, `'1'`, `'0'`, `'true'`, `'false'` (case-insensitive); rejects `'yes'`/`'no'` and other truthy strings.
+  - `uuid()` — validates standard 8-4-4-4-12 hex UUID format (any version, case-insensitive).
+  - `date(string $format = 'Y-m-d')` — validates date strings against a PHP format string using `DateTime::createFromFormat` with strict overflow checking (e.g. Feb 29 only valid on leap years).
+  - `countMin(int $min)` / `countMax(int $max)` — validates that an array has at least/at most N items; non-arrays always fail.
+  - `ip()` — validates valid IPv4 or IPv6 addresses via `FILTER_VALIDATE_IP`.
+- Added 9 tests in `FormValidatorTest` covering: dot-path field resolution, missing parent/leaf keys, deep three-level nesting, non-array intermediate node, `withNested()` registration/immutability/full-pass/partial-fail.
+- Added 28 tests in `RulesTest` covering all six new rules: pass/fail/default-message for every variant.
+- Total test suite: **401 tests, 795 assertions**, line coverage **96.94%** (825/851).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
