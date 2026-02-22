@@ -30,7 +30,8 @@
 
 ## Phase 6 - Sessions + Security Essentials
 - Session manager redesign.
-- CSRF, authorization guard, secure headers.
+- Session-backed CsrfTokenManager (satisfies CsrfTokenManagerInterface from Phase 5).
+- Authorization guard.
 - No legacy IDS module.
 
 ## Phase 7 - Docs + Migration

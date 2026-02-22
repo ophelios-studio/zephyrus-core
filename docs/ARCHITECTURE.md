@@ -237,6 +237,31 @@
 - Added 34 unit tests across 2 test classes (`SecureHeadersConfigTest` 16, `SecureHeadersMiddlewareTest` 18) covering: all default values, camelCase/snake_case key handling, precedence, empty-string opt-out, HSTS header value formatting (enabled/disabled/includeSubDomains), HSTS gating on HTTP vs HTTPS, CSP/Permissions-Policy conditional emission, individual header opt-out, response immutability, and a full all-headers-together HTTPS snapshot.
 - Total test suite: **467 tests, 906 assertions**, line coverage **95.25%** (922/968), Security module at **100%** line and method coverage.
 
+## Implemented Slice: ForceHttpsMiddleware + CsrfMiddleware (Phase 5 Security continuation)
+
+### ForceHttpsMiddleware
+- Added `Security\ForceHttpsMiddleware` — implements `MiddlewareInterface`; short-circuits on plain-HTTP requests, returning a **308 Permanent Redirect** to the HTTPS equivalent URL. 308 is used (not 301) so the original HTTP method and body are preserved across the redirect.
+- HTTPS requests pass straight through to the next middleware with zero overhead.
+- Port rewriting: default HTTP port `:80` is stripped from the HTTPS URL so the redirect is clean (e.g. `http://host:80/path` → `https://host/path`). Non-standard ports are preserved (useful for local dev on `:8080`).
+- Recommended placement: first in the global middleware pipeline, before auth, CSRF, or any other gate middleware.
+- Added 9 unit tests in `ForceHttpsMiddlewareTest` covering: secure pass-through (GET/POST), HTTP→HTTPS redirect with path/query preservation, port-80 stripping, non-standard port preservation, 308 on DELETE, inner-handler-not-called verification.
+
+### CsrfTokenManagerInterface
+- Added `Security\CsrfTokenManagerInterface` — two-method contract: `getToken(): string` (returns the current session token) and `isTokenValid(string $submitted): bool` (constant-time comparison). Encourages timing-safe implementations via `hash_equals()`.
+- Designed for inversion of control: the Phase 6 session-backed implementation will satisfy this interface without changing the middleware.
+
+### CsrfMiddleware
+- Added `Security\CsrfMiddleware` — implements `MiddlewareInterface`; enforces synchronizer-token CSRF protection on all state-changing requests.
+- **Safe methods** (GET, HEAD, OPTIONS, TRACE) pass through without token check.
+- **State-changing methods** (POST, PUT, PATCH, DELETE) must supply a valid CSRF token or the middleware returns `403 Forbidden` with a JSON error body without calling the inner handler.
+- **Token lookup order** (first match wins): request body field (default `_csrf_token`) → request header (default `X-CSRF-Token`). Both sources are checked so HTML forms and AJAX/fetch clients work with the same token.
+- Body field name and header name are injectable at construction time (`bodyField`, `headerName`) for framework interoperability (e.g. `_token` / `X-XSRF-TOKEN`).
+- Added 18 unit tests in `CsrfMiddlewareTest` covering: all four safe methods pass-through, all four state-changing methods rejected without token, valid token via body field (POST/PUT), valid token via header (POST/DELETE), invalid token in body/header returns 403, body-field takes precedence over header, custom body/header names, JSON 403 body shape, inner-handler-not-called on rejection, manager `getToken()` surface.
+
+### Totals after this slice
+- Total test suite: **495 tests, 942 assertions**, line coverage TBD (run with `XDEBUG_MODE=coverage`).
+- Security module: `SecureHeadersConfig`, `SecureHeadersMiddleware`, `ForceHttpsMiddleware`, `CsrfTokenManagerInterface`, `CsrfMiddleware`.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
