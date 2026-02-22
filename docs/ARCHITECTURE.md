@@ -47,7 +47,7 @@
 - Added `Routing\RouteMatch` value object to return both matched route and extracted parameters.
 - Added parameterized path matching support (`/users/{id}`) with optional per-parameter regex constraints.
 - Path normalization now handles trailing slashes, query strings, and URL-decoded segments before matching.
-- Missing route lookups now raise explicit runtime errors (`No route matched METHOD /path`).
+- Matching failures now distinguish between `RouteNotFoundException` and `MethodNotAllowedException` for clearer HTTP-layer handling.
 - Added unit tests for successful matches, path normalization, parameter extraction, constraint checks, and miss handling.
 
 ## Implemented Slice: Middleware pipeline (Phase 2 seed)

@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
+use Zephyrus\Routing\Exception\MethodNotAllowedException;
+use Zephyrus\Routing\Exception\RouteNotFoundException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
 
@@ -54,26 +55,38 @@ final class RouteCollectionTest extends TestCase
         self::assertSame('1337', $match->parameter('id'));
     }
 
-    public function testMatchThrowsRuntimeExceptionWhenConstraintFails(): void
+    public function testMatchThrowsRouteNotFoundExceptionWhenConstraintFails(): void
     {
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+']));
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(RouteNotFoundException::class);
         $this->expectExceptionMessage('No route matched GET /users/abc');
 
         $collection->match('GET', '/users/abc');
     }
 
-    public function testMatchThrowsRuntimeExceptionWhenNoRouteMatches(): void
+    public function testMatchThrowsMethodNotAllowedExceptionWhenPathMatchesWithDifferentMethod(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+
+        $this->expectException(MethodNotAllowedException::class);
+        $this->expectExceptionMessage('Method not allowed for /users. Allowed: GET, POST');
+
+        $collection->match('DELETE', '/users');
+    }
+
+    public function testMatchThrowsRouteNotFoundExceptionWhenNoRouteMatches(): void
     {
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/users', 'UserController@index'));
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('No route matched DELETE /users');
+        $this->expectException(RouteNotFoundException::class);
+        $this->expectExceptionMessage('No route matched GET /projects');
 
-        $collection->match('DELETE', '/users');
+        $collection->match('GET', '/projects');
     }
 
     public function testMatchIgnoresTrailingSlashAndQueryString(): void

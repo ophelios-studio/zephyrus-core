@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
-use RuntimeException;
+use Zephyrus\Routing\Exception\MethodNotAllowedException;
+use Zephyrus\Routing\Exception\RouteNotFoundException;
 
 final class RouteCollection
 {
@@ -29,22 +30,31 @@ final class RouteCollection
     public function match(string $method, string $path): RouteMatch
     {
         $normalizedPath = $this->normalizePath($path);
+        $allowedMethods = [];
 
         foreach ($this->routes as $route) {
-            if (!$route->matchesMethod($method)) {
-                continue;
-            }
-
             $parameters = $this->extractParameters($route, $normalizedPath);
 
             if ($parameters === null) {
                 continue;
             }
 
+            if (!$route->matchesMethod($method)) {
+                $allowedMethods[] = $route->method;
+                continue;
+            }
+
             return new RouteMatch(route: $route, parameters: $parameters);
         }
 
-        throw new RuntimeException(sprintf('No route matched %s %s', strtoupper($method), $normalizedPath));
+        if ($allowedMethods !== []) {
+            $allowedMethods = array_values(array_unique($allowedMethods));
+            sort($allowedMethods);
+
+            throw new MethodNotAllowedException($allowedMethods, $normalizedPath);
+        }
+
+        throw new RouteNotFoundException(sprintf('No route matched %s %s', strtoupper($method), $normalizedPath));
     }
 
     /**
