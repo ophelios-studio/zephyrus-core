@@ -41,6 +41,8 @@ final readonly class RouteDispatcher
     public function dispatch(Request $request): Response
     {
         $match = $this->routes->match($request->method, $request->path());
+        $request = $request->withAttributes($match->parameters);
+
         $routeMiddlewares = array_map(
             fn (string $name): MiddlewareInterface => ($this->routeMiddlewareResolver)($name),
             $match->route->middlewares,

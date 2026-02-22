@@ -10,6 +10,7 @@ final readonly class Request
      * @param array<string, mixed> $query
      * @param array<string, mixed> $parsedBody
      * @param array<string, string> $headers
+     * @param array<string, mixed> $attributes
      */
     public function __construct(
         public string $method,
@@ -17,6 +18,7 @@ final readonly class Request
         public array $query = [],
         public array $parsedBody = [],
         public array $headers = [],
+        public array $attributes = [],
     ) {
     }
 
@@ -24,6 +26,7 @@ final readonly class Request
      * @param array<string, mixed> $query
      * @param array<string, mixed> $parsedBody
      * @param array<string, string> $headers
+     * @param array<string, mixed> $attributes
      */
     public static function fromArray(
         string $method,
@@ -31,6 +34,7 @@ final readonly class Request
         array $query = [],
         array $parsedBody = [],
         array $headers = [],
+        array $attributes = [],
     ): self {
         return new self(
             method: strtoupper($method),
@@ -38,6 +42,7 @@ final readonly class Request
             query: $query,
             parsedBody: $parsedBody,
             headers: self::normalizeHeaders($headers),
+            attributes: $attributes,
         );
     }
 
@@ -64,6 +69,41 @@ final readonly class Request
     public function isMethod(string $method): bool
     {
         return $this->method === strtoupper($method);
+    }
+
+    public function attribute(string $key, mixed $default = null): mixed
+    {
+        return $this->attributes[$key] ?? $default;
+    }
+
+    public function withAttribute(string $key, mixed $value): self
+    {
+        $attributes = $this->attributes;
+        $attributes[$key] = $value;
+
+        return new self(
+            method: $this->method,
+            uri: $this->uri,
+            query: $this->query,
+            parsedBody: $this->parsedBody,
+            headers: $this->headers,
+            attributes: $attributes,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    public function withAttributes(array $attributes): self
+    {
+        return new self(
+            method: $this->method,
+            uri: $this->uri,
+            query: $this->query,
+            parsedBody: $this->parsedBody,
+            headers: $this->headers,
+            attributes: $attributes,
+        );
     }
 
     /**

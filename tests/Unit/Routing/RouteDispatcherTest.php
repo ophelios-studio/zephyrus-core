@@ -36,6 +36,7 @@ final class RouteDispatcherTest extends TestCase
             resolver: static fn (RouteMatch $match, Request $request): Response => Response::json([
                 'handler' => $match->route->handler,
                 'id' => $match->parameter('id'),
+                'requestId' => $request->attribute('id'),
                 'path' => $request->path(),
             ]),
             routeMiddlewareResolver: static fn (string $name): MiddlewareInterface => new class($name) implements MiddlewareInterface {
@@ -57,6 +58,7 @@ final class RouteDispatcherTest extends TestCase
         self::assertSame('auth', $response->headers['X-Route-Middleware']);
         self::assertStringContainsString('"handler":"UserController@show"', $response->body);
         self::assertStringContainsString('"id":"42"', $response->body);
+        self::assertStringContainsString('"requestId":"42"', $response->body);
         self::assertStringContainsString('"path":"\\/users\\/42"', $response->body);
     }
 }

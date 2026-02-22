@@ -48,4 +48,16 @@ final class RequestTest extends TestCase
         self::assertTrue($request->isMethod('POST'));
         self::assertFalse($request->isMethod('GET'));
     }
+
+    public function testAttributeHelpersAreImmutable(): void
+    {
+        $request = Request::fromArray('GET', '/users', attributes: ['tenant' => 'acme']);
+        $updated = $request->withAttribute('userId', '42');
+
+        self::assertSame('acme', $request->attribute('tenant'));
+        self::assertNull($request->attribute('userId'));
+
+        self::assertSame('acme', $updated->attribute('tenant'));
+        self::assertSame('42', $updated->attribute('userId'));
+    }
 }

@@ -12,7 +12,7 @@
 - Http (request/response, headers, content negotiation)
   - First v2 primitives in place:
     - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`)
-    - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `path`, `isMethod`)
+    - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `path`, `isMethod`, `attribute`, `withAttribute`, `withAttributes`)
     - middleware contracts and execution pipeline (`MiddlewareInterface`, `MiddlewarePipeline`)
 - Routing (attributes, repository, resolver, middleware)
   - Seed primitive in place: immutable `Route` value object (`method`, `path`, `handler`, `constraints`) with normalized definition helpers
@@ -59,8 +59,9 @@
 - Added `Routing\RouteDispatcher` to connect request path/method matching to middleware execution.
 - Dispatcher resolves a `RouteMatch` from `RouteCollection`, then executes a resolver callable through `MiddlewarePipeline`.
 - Added named route middleware support on `Route` definitions (e.g., `['auth', 'audit']`) and middleware resolver binding in dispatcher.
+- Dispatcher now hydrates matched route parameters into request attributes before middleware/handler execution.
 - Enables first end-to-end flow: `Request -> Route match -> Global middleware -> Route middleware -> Response`.
-- Added unit test coverage for parameterized route dispatch and middleware-applied response headers.
+- Added unit test coverage for parameterized route dispatch, request attribute hydration, and middleware-applied response headers.
 
 ## Non-goals for v2 core
 - Full ORM
