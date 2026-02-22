@@ -9,10 +9,15 @@ point through to the final `Response`, covering every component in the
 ## High-level flow
 
 ```
-$_SERVER / PSR-7 / test array
+$_SERVER / $_GET / $_POST / $_COOKIE / php://input
         │
         ▼
-  Request::fromArray()      ← immutable value object
+  Request::fromGlobals()    ← production entry point (parses superglobals)
+        │   (or)
+  Request::fromArray()      ← test/synthetic entry point
+        │
+        ▼
+  (immutable Request value object)
         │
         ▼
   HttpKernel::handle()      ← single public entry point
@@ -51,18 +56,69 @@ $_SERVER / PSR-7 / test array
 
 An immutable value object that carries all input for one HTTP transaction.
 
-| Property      | Description                                    |
-|---------------|------------------------------------------------|
-| `method`      | Normalized uppercase HTTP verb (`GET`, `POST`) |
-| `uri`         | Raw URI string including query string          |
-| `query`       | Parsed query string parameters                 |
-| `parsedBody`  | Decoded request body (POST/JSON fields)        |
-| `headers`     | Lowercased header map                          |
-| `attributes`  | Mutable overlay populated during dispatch      |
+| Property      | Description                                              |
+|---------------|----------------------------------------------------------|
+| `method`      | Normalized uppercase HTTP verb (`GET`, `POST`, …)        |
+| `uri`         | Full URI string including scheme, host, and query string |
+| `query`       | Parsed query string parameters (`$_GET`)                 |
+| `parsedBody`  | Decoded request body (POST fields or JSON payload)       |
+| `headers`     | Lowercased header map                                    |
+| `cookies`     | Cookie name → value map (`$_COOKIE`)                     |
+| `attributes`  | Mutable overlay populated during dispatch                |
 
 Route parameters (e.g. `{id}`) are injected into `attributes` by
 `RouteDispatcher` before the middleware pipeline runs — so both middleware
 and the final handler see the enriched request.
+
+#### `Request::fromGlobals()`
+
+The production bootstrap factory. It reads PHP superglobals and applies several
+normalization steps before constructing the immutable value object:
+
+```php
+// public/index.php
+$request  = Request::fromGlobals();
+$response = $kernel->handle($request);
+$response->send();
+```
+
+**Superglobal mapping**
+
+| Parameter   | Default source  | Notes                                                      |
+|-------------|-----------------|------------------------------------------------------------|
+| `$server`   | `$_SERVER`      | Used for method, URI, and header extraction                |
+| `$get`      | `$_GET`         | Becomes `query`                                            |
+| `$post`     | `$_POST`        | Used for form bodies; ignored for JSON                     |
+| `$cookie`   | `$_COOKIE`      | Becomes `cookies`                                          |
+| `$rawBody`  | `php://input`   | Injected for JSON decoding; useful to override in tests    |
+
+**Header extraction**
+
+PHP surfaces HTTP headers in `$_SERVER` using the `HTTP_` prefix with
+underscores instead of hyphens (e.g. `X-Request-Id` → `HTTP_X_REQUEST_ID`).
+`fromGlobals()` strips the prefix, lowercases the name, and restores hyphens.
+`CONTENT_TYPE`, `CONTENT_LENGTH`, and `CONTENT_MD5` are extracted without a
+prefix and stored under their normalized forms (`content-type`, etc.).
+
+**Body parsing**
+
+| Condition                          | Result                                           |
+|------------------------------------|--------------------------------------------------|
+| Method is `GET` or `HEAD`          | `parsedBody` is always empty                     |
+| Content-Type contains `application/json` | JSON-decoded from `php://input` (or `$rawBody`) |
+| Content-Type is form-encoded / multipart | `$_POST` passed through directly             |
+| No matching content-type           | `$_POST` used if non-empty                       |
+
+**Method override** (POST-only)
+
+HTML forms can only send `GET` and `POST`. Two override conventions are
+supported, in priority order:
+
+1. `X-Http-Method-Override` request header — intended for AJAX clients.
+2. `_method` hidden field in the request body — intended for HTML `<form>`.
+
+The override value is uppercased and applied only when the raw method is
+`POST`.
 
 ---
 
@@ -170,7 +226,7 @@ $kernel = KernelBuilder::create()
     ->build();
 
 // In your entry point (public/index.php):
-$request  = Request::fromGlobals();   // (planned — currently fromArray for testing)
+$request  = Request::fromGlobals();
 $response = $kernel->handle($request);
 $response->send();
 ```

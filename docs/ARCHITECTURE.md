@@ -12,7 +12,7 @@
 - Http (request/response, headers, content negotiation)
   - First v2 primitives in place:
     - immutable `Response` value object with helpers (`text`, `json`, `noContent`, `withHeader`, `withStatus`)
-    - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `path`, `isMethod`, `attribute`, `withAttribute`, `withAttributes`)
+    - immutable `Request` value object with normalized method/headers and helpers (`query`, `input`, `header`, `cookie`, `path`, `isMethod`, `isJson`, `isSecure`, `attribute`, `withAttribute`, `withAttributes`); `fromGlobals()` production factory with superglobal parsing, header extraction, body negotiation, and method override
     - middleware contracts and execution pipeline (`MiddlewareInterface`, `MiddlewarePipeline`)
 - Routing (attributes, repository, resolver, middleware)
   - Seed primitive in place: immutable `Route` value object (`method`, `path`, `handler`, `constraints`) with normalized definition helpers
@@ -28,6 +28,16 @@
 - Added immutable `ApplicationConfig` with typed `environment` and `debug` fields.
 - Default behavior is secure by default: unknown or missing environment falls back to `production`.
 - Debug defaults to off for production-like environments and on for development/testing unless explicitly overridden.
+
+## Implemented Slice: Request::fromGlobals() superglobal bootstrap (Phase 1)
+- Added `Request::fromGlobals()` as the production entry point for building an immutable `Request` from PHP superglobals (`$_SERVER`, `$_GET`, `$_POST`, `$_COOKIE`, `php://input`). All superglobal arrays are injectable as parameters for deterministic, no-mock unit testing.
+- Added `cookies` property to `Request` and a `cookie()` accessor. All `withAttribute` / `withAttributes` wither methods preserve `cookies` through immutable copies.
+- Header extraction strips the PHP `HTTP_` prefix, converts underscores to hyphens, and lowercases all names. `CONTENT_TYPE`, `CONTENT_LENGTH`, and `CONTENT_MD5` are extracted without the prefix.
+- URI constructed from `HTTPS`, `HTTP_HOST` / `SERVER_NAME`, and `REQUEST_URI`; absolute REQUEST_URIs (reverse-proxy scenario) are passed through unchanged.
+- Body parsing: GET/HEAD always produce an empty `parsedBody`; `application/json` is JSON-decoded from `php://input`; form content types use `$_POST`.
+- Method override applied only for POST: `X-Http-Method-Override` header (highest priority), then `_method` field in parsed body. Override value is uppercased.
+- Added `isJson()` and `isSecure()` convenience helpers.
+- Added 35 new tests in `RequestTest` covering: URI construction (HTTP/HTTPS, off, fallback, minimal), header extraction (HTTP_ prefix, unprefixed, underscores, case-insensitivity, empty-string skipping), body parsing (JSON with/without charset, empty body, form, multipart, GET/HEAD ignored), method override (field, header, priority, non-POST ignored), cookies, query population, absolute URI pass-through, DELETE/PATCH with JSON body.
 
 ## Implemented Slice: Http Response object (Phase 1 seed)
 - Added immutable `Http\Response` value object (`status`, `body`, `headers`).
