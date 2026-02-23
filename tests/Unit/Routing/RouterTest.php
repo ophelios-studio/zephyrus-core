@@ -238,4 +238,108 @@ final class RouterTest extends TestCase
             ->middlewareGroup('b', ['a'])
             ->get('/loop', 'LoopController@index', middlewares: ['a']);
     }
+
+    // -----------------------------------------------------------------------
+    // group() — route name propagation
+    // -----------------------------------------------------------------------
+
+    public function testGroupPreservesRouteNameDefinedInsideGroup(): void
+    {
+        $router = (new Router())->group('/api/v1', static fn (Router $r): Router => $r
+            ->get('/health', 'HealthController@show')->name('health.show'));
+
+        $route = $router->routes()->findByName('health.show');
+
+        self::assertNotNull($route);
+        self::assertSame('/api/v1/health', $route->path);
+        self::assertSame('GET', $route->method);
+    }
+
+    public function testGroupPreservesMultipleNamesDefinedInsideGroup(): void
+    {
+        $router = (new Router())->group('/api', static fn (Router $r): Router => $r
+            ->get('/users', 'UserController@index')->name('users.index')
+            ->get('/users/{id}', 'UserController@show', ['id' => '\d+'])->name('users.show'));
+
+        self::assertNotNull($router->routes()->findByName('users.index'));
+        self::assertSame('/api/users', $router->routes()->findByName('users.index')->path);
+
+        self::assertNotNull($router->routes()->findByName('users.show'));
+        self::assertSame('/api/users/{id}', $router->routes()->findByName('users.show')->path);
+    }
+
+    public function testGroupLeavesUnnamedRoutesWithNullName(): void
+    {
+        $router = (new Router())->group('/api', static fn (Router $r): Router => $r
+            ->get('/ping', 'PingController@ping'));
+
+        $route = $router->routes()->all()[0];
+
+        self::assertNull($route->name);
+    }
+
+    public function testGroupWithNamePrefixPrependsToNamedRoutes(): void
+    {
+        $router = (new Router())->group(
+            '/api/v1',
+            static fn (Router $r): Router => $r
+                ->get('/users', 'UserController@index')->name('users.index')
+                ->get('/posts', 'PostController@index')->name('posts.index'),
+            namePrefix: 'api.',
+        );
+
+        self::assertNotNull($router->routes()->findByName('api.users.index'));
+        self::assertSame('/api/v1/users', $router->routes()->findByName('api.users.index')->path);
+
+        self::assertNotNull($router->routes()->findByName('api.posts.index'));
+        self::assertSame('/api/v1/posts', $router->routes()->findByName('api.posts.index')->path);
+    }
+
+    public function testGroupWithNamePrefixDoesNotNameUnnamedRoutes(): void
+    {
+        $router = (new Router())->group(
+            '/api',
+            static fn (Router $r): Router => $r->get('/ping', 'PingController@ping'),
+            namePrefix: 'api.',
+        );
+
+        $route = $router->routes()->all()[0];
+
+        self::assertNull($route->name);
+    }
+
+    public function testGroupWithNamePrefixAndSharedMiddlewaresCombineCorrectly(): void
+    {
+        $router = (new Router())->group(
+            '/admin',
+            static fn (Router $r): Router => $r
+                ->get('/dashboard', 'DashboardController@index')->name('dashboard')
+                ->get('/settings', 'SettingsController@index', middlewares: ['audit']),
+            middlewares: ['auth'],
+            namePrefix: 'admin.',
+        );
+
+        $routes = $router->routes()->all();
+
+        self::assertCount(2, $routes);
+
+        // Named route gets prefixed name and shared middleware
+        $dashboard = $router->routes()->findByName('admin.dashboard');
+        self::assertNotNull($dashboard);
+        self::assertSame(['auth'], $dashboard->middlewares);
+
+        // Unnamed route stays unnamed, merged middlewares apply
+        self::assertNull($routes[1]->name);
+        self::assertSame(['auth', 'audit'], $routes[1]->middlewares);
+    }
+
+    public function testAddAcceptsExplicitNameParameter(): void
+    {
+        $router = (new Router())->add('GET', '/ping', 'PingController@ping', name: 'ping');
+
+        $route = $router->routes()->findByName('ping');
+
+        self::assertNotNull($route);
+        self::assertSame('/ping', $route->path);
+    }
 }
