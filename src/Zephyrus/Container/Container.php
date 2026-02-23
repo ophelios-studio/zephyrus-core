@@ -232,14 +232,8 @@ final class Container implements ContainerInterface
             );
         }
 
-        try {
-            $reflector = new ReflectionClass($className);
-        } catch (ReflectionException $e) {
-            throw new ContainerException(
-                "Failed to reflect class [{$className}]: {$e->getMessage()}",
-                previous: $e,
-            );
-        }
+        // class_exists() above already guarantees this won't throw.
+        $reflector = new ReflectionClass($className);
 
         if ($reflector->isAbstract()) {
             throw new ContainerException(

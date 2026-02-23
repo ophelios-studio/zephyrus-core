@@ -52,6 +52,16 @@ final class CircularB
     public function __construct(public readonly CircularA $a) {}
 }
 
+/**
+ * Has a non-public constructor with a typed dependency.
+ * When auto-wired, ReflectionClass::newInstanceArgs() throws ReflectionException
+ * because the constructor is not publicly accessible from outside the class.
+ */
+final class ProtectedConstructorService
+{
+    protected function __construct(public readonly SimpleService $dep) {}
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -230,6 +240,17 @@ final class ContainerTest extends TestCase
         $this->expectExceptionMessageMatches('/Cannot auto-wire abstract class/');
 
         $this->container->get(AbstractService::class);
+    }
+
+    public function testAutoWireThrowsContainerExceptionWhenInstantiationFails(): void
+    {
+        // ProtectedConstructorService has a protected constructor with a dependency.
+        // newInstanceArgs() raises ReflectionException for non-public constructors
+        // when called from outside the class; the container wraps it in ContainerException.
+        $this->expectException(ContainerException::class);
+        $this->expectExceptionMessageMatches('/Failed to construct/');
+
+        $this->container->get(ProtectedConstructorService::class);
     }
 
     // ------------------------------------------------------------------
