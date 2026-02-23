@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
 
@@ -138,5 +139,27 @@ final class RouteCollectionTest extends TestCase
         $match = $collection->match('GET', '/tags/c++');
 
         self::assertSame('c++', $match->parameter('name'));
+    }
+
+    public function testMatchAllowsHeadRequestsAgainstGetRoutes(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $match = $collection->match('HEAD', '/health');
+
+        self::assertSame('GET', $match->route->method);
+        self::assertSame('/health', $match->route->path);
+    }
+
+    public function testMatchThrowsRouteSignatureExceptionForInvalidConstraintPattern(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9+']));
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Invalid route constraint pattern for parameter "id" on route "/users/{id}"');
+
+        $collection->match('GET', '/users/42');
     }
 }
