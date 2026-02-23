@@ -35,8 +35,13 @@ final class RouteAttributeReader
         }
 
         $routes = [];
+        $seenRouteNames = [];
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+            if ($method->getDeclaringClass()->getName() !== $className) {
+                continue;
+            }
+
             $attributes = $method->getAttributes(RouteAttribute::class);
 
             foreach ($attributes as $attributeRef) {
@@ -44,6 +49,14 @@ final class RouteAttributeReader
                 $attr = $attributeRef->newInstance();
                 $handler = sprintf('%s@%s', $className, $method->getName());
                 $name = $attr->name !== '' ? $attr->name : null;
+
+                if ($name !== null) {
+                    if (isset($seenRouteNames[$name])) {
+                        throw RouteAttributeException::duplicateRouteName($className, $name);
+                    }
+
+                    $seenRouteNames[$name] = true;
+                }
 
                 $routes[] = Route::define(
                     method: $attr->method,

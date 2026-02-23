@@ -39,6 +39,27 @@ class RepeatableController
     public function health(): void {}
 }
 
+class ParentAttributedController
+{
+    #[RouteAttribute('/parent', 'GET', name: 'parent.route')]
+    public function parentRoute(): void {}
+}
+
+class ChildAttributedController extends ParentAttributedController
+{
+    #[RouteAttribute('/child', 'GET', name: 'child.route')]
+    public function childRoute(): void {}
+}
+
+class DuplicateRouteNameController
+{
+    #[RouteAttribute('/users', 'GET', name: 'users.index')]
+    public function index(): void {}
+
+    #[RouteAttribute('/people', 'GET', name: 'users.index')]
+    public function people(): void {}
+}
+
 // ---------------------------------------------------------------------------
 
 final class RouteAttributeReaderTest extends TestCase
@@ -145,6 +166,23 @@ final class RouteAttributeReaderTest extends TestCase
         $handlers = array_map(fn ($r) => $r->handler, $routes);
 
         self::assertNotContains(SimpleController::class . '@notPublic', $handlers);
+    }
+
+    public function testOnlyMethodsDeclaredOnGivenClassAreRead(): void
+    {
+        $routes = $this->reader->read(ChildAttributedController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/child', $routes[0]->path);
+        self::assertSame(ChildAttributedController::class . '@childRoute', $routes[0]->handler);
+    }
+
+    public function testDuplicateRouteNamesThrowException(): void
+    {
+        $this->expectException(RouteAttributeException::class);
+        $this->expectExceptionMessage('Duplicate route name "users.index" discovered while reading attributes on class');
+
+        $this->reader->read(DuplicateRouteNameController::class);
     }
 
     public function testUnresolvableClassThrowsException(): void
