@@ -71,6 +71,23 @@ final class PlainHandlerController
     {
         return Response::json(['active' => $active]);
     }
+
+    public function withRequestUnion(Request|string $payload): Response
+    {
+        return Response::text($payload instanceof Request ? 'request' : $payload);
+    }
+}
+
+final class NonInstantiableController
+{
+    public function __construct(string $required)
+    {
+    }
+
+    public function act(): Response
+    {
+        return Response::text('never');
+    }
 }
 
 /**
@@ -302,6 +319,18 @@ final class HandlerResolverTest extends TestCase
         self::assertStringContainsString('"active":true', $response->body);
     }
 
+    public function testRequestInjectionWinsForRequestUnionType(): void
+    {
+        $match = $this->makeMatch('GET', '/payload/{payload}', PlainHandlerController::class . '@withRequestUnion');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/payload/value')->withAttribute('payload', 'value'),
+        );
+
+        self::assertSame('request', $response->body);
+    }
+
     // -- Controller subclass --------------------------------------------------
 
     public function testExtendedControllerIndexReturnsJson(): void
@@ -358,6 +387,16 @@ final class HandlerResolverTest extends TestCase
         self::assertSame(1, $factoryCallCount);
     }
 
+    public function testUnresolvableClassThrowsWrappedException(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/Cannot instantiate handler class/');
+
+        $match = $this->makeMatch('GET', '/act', NonInstantiableController::class . '@act');
+
+        $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
+    }
+
     // -- Error cases ----------------------------------------------------------
 
     public function testInvalidHandlerFormatThrows(): void
@@ -367,6 +406,15 @@ final class HandlerResolverTest extends TestCase
 
         $match = $this->makeMatch('GET', '/', 'NoAtSign');
 
+        $this->resolver->resolve($match, Request::fromArray('GET', '/'));
+    }
+
+    public function testInvalidHandlerFormatThrowsWhenClassOrMethodIsMissing(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/not a valid ClassName@method/');
+
+        $match = $this->makeMatch('GET', '/', '@methodOnly');
         $this->resolver->resolve($match, Request::fromArray('GET', '/'));
     }
 
