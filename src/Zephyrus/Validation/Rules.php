@@ -219,5 +219,38 @@ final class Rules
         );
     }
 
+    /**
+     * Validates a DNS hostname (labels 1-63 chars, full host <= 253 chars).
+     */
+    public static function hostname(string $message = 'Must be a valid hostname.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                $host = strtolower(trim($v));
+                if ($host === '' || strlen($host) > 253 || str_starts_with($host, '.') || str_ends_with($host, '.')) {
+                    return false;
+                }
+
+                $labels = explode('.', $host);
+                foreach ($labels as $label) {
+                    if ($label === '' || strlen($label) > 63) {
+                        return false;
+                    }
+
+                    if (preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/', $label) !== 1) {
+                        return false;
+                    }
+                }
+
+                return true;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

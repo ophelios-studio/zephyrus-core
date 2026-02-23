@@ -383,6 +383,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Keeps existing `Rules::ip()` for dual-stack acceptance while enabling explicit API contracts where only one family is allowed.
 - Added unit coverage for pass/fail/default-message paths across both new rules.
 
+## Implemented Slice: Validation hostname rule
+- Added `Validation\Rules::hostname()` for DNS hostname validation (label boundaries, character set, and host-length constraints).
+- Supports common hostname forms including multi-label service names and punycode ASCII labels.
+- Added unit coverage for valid/invalid/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

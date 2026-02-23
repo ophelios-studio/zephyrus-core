@@ -455,4 +455,30 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid IPv6 address.', Rules::ipv6()->errorMessage());
     }
+
+    // ---- hostname ----
+
+    public function testHostnamePassesValidHostnames(): void
+    {
+        self::assertTrue(Rules::hostname()->test('example.com'));
+        self::assertTrue(Rules::hostname()->test('api.internal-service.local'));
+        self::assertTrue(Rules::hostname()->test('xn--bcher-kva.example'));
+    }
+
+    public function testHostnameFailsInvalidHostnames(): void
+    {
+        self::assertFalse(Rules::hostname()->test(''));
+        self::assertFalse(Rules::hostname()->test('.example.com'));
+        self::assertFalse(Rules::hostname()->test('example.com.'));
+        self::assertFalse(Rules::hostname()->test('-bad.example'));
+        self::assertFalse(Rules::hostname()->test('bad-.example'));
+        self::assertFalse(Rules::hostname()->test('exa_mple.com'));
+        self::assertFalse(Rules::hostname()->test('exa mple.com'));
+        self::assertFalse(Rules::hostname()->test(null));
+    }
+
+    public function testHostnameDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid hostname.', Rules::hostname()->errorMessage());
+    }
 }
