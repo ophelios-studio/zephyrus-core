@@ -331,6 +331,10 @@ $router->group('/api/v1', fn ($r) => $r
 - Added fragment-normalization edge case coverage where fragment is only `"#"` (URL remains unchanged, no trailing hash).
 - Result: signing-path precondition behavior is now fully asserted across both temporary-signing entry points.
 
+## Implemented Slice: Validation utility-class contract assertion
+- Added explicit unit coverage that `Validation\Rules` keeps a private constructor as a static utility class contract.
+- Prevents accidental public instantiation regressions while preserving the static factory-only API surface.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
