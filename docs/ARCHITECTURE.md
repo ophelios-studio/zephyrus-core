@@ -333,6 +333,7 @@ $router->group('/api/v1', fn ($r) => $r
 
 ## Implemented Slice: Validation utility-class contract assertion
 - Added explicit unit coverage that `Validation\Rules` keeps a private constructor as a static utility class contract.
+- Constructor path is now executed through reflection in tests to enforce non-instantiable utility semantics.
 - Prevents accidental public instantiation regressions while preserving the static factory-only API surface.
 
 ## Implemented Slice: RouteCache filesystem failure-path hardening
