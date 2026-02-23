@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Data;
 
-final class PaginationRequest
+final class PaginationRequest implements \JsonSerializable
 {
     public function __construct(
         public readonly int $page,
@@ -64,5 +64,42 @@ final class PaginationRequest
     public function withPerPage(int $perPage): self
     {
         return new self(page: $this->page, perPage: $perPage);
+    }
+
+    public function next(): self
+    {
+        return new self(page: $this->page + 1, perPage: $this->perPage);
+    }
+
+    public function previous(): self
+    {
+        return new self(page: max(1, $this->page - 1), perPage: $this->perPage);
+    }
+
+    /**
+     * @return array{page: int, per_page: int}
+     */
+    public function toArray(): array
+    {
+        return [
+            'page' => $this->page,
+            'per_page' => $this->perPage,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     */
+    public static function fromQuery(array $query, int $defaultPerPage = 25, int $maxPerPage = 100): self
+    {
+        return self::fromArrayWithBounds($query, $defaultPerPage, $maxPerPage);
+    }
+
+    /**
+     * @return array{page: int, per_page: int}
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }

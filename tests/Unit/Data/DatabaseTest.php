@@ -323,6 +323,26 @@ final class DatabaseTest extends TestCase
         self::assertSame('GAMMA', $mappedWith->items[0]['name']);
     }
 
+    public function testPaginateResultFromQueryBuildsBoundedRequest(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['alpha', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['beta', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['gamma', 'c@example.com']);
+
+        $page = $this->db->paginateResultFromQuery(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            ['page' => 2, 'per_page' => 999],
+            defaultPerPage: 25,
+            maxPerPage: 2,
+        );
+
+        self::assertSame(2, $page->page);
+        self::assertSame(2, $page->perPage);
+        self::assertSame(1, $page->itemCount());
+        self::assertSame('gamma', strtolower((string) $page->firstItem()['name']));
+    }
+
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void
     {
         $this->expectException(DatabaseException::class);

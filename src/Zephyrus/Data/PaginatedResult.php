@@ -103,6 +103,31 @@ final class PaginatedResult implements \JsonSerializable
         );
     }
 
+    public function isFirstPage(): bool
+    {
+        return $this->page <= 1;
+    }
+
+    public function isLastPage(): bool
+    {
+        return $this->page >= $this->totalPages;
+    }
+
+    public function nextPageNumber(): ?int
+    {
+        return $this->hasNext ? $this->page + 1 : null;
+    }
+
+    public function previousPageNumber(): ?int
+    {
+        return $this->hasPrevious ? max(1, $this->page - 1) : null;
+    }
+
+    public function toPaginationRequest(): PaginationRequest
+    {
+        return new PaginationRequest(page: $this->page, perPage: $this->perPage);
+    }
+
     /**
      * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
