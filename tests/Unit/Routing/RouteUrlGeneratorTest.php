@@ -322,4 +322,33 @@ final class RouteUrlGeneratorTest extends TestCase
             now: 1_700_000_000,
         );
     }
+
+    public function testGenerateTemporarySignedUntilThrowsWhenSignerIsMissing(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', name: 'downloads.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Cannot generate signed URL without a RouteSignature instance');
+
+        $generator->generateTemporarySignedUntil(
+            routeName: 'downloads.show',
+            expiresAt: 1_700_000_120,
+            parameters: ['id' => 42],
+        );
+    }
+
+    public function testGenerateIgnoresEmptyFragmentAfterHashNormalization(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/docs/{slug}', 'DocsController@show', name: 'docs.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $url = $generator->generate('docs.show', ['slug' => 'routing'], fragment: '#');
+
+        self::assertSame('/docs/routing', $url);
+    }
 }

@@ -326,6 +326,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Added `RouteCacheTest::testSaveThrowsOnUnencodableRoutePayload` to cover invalid UTF-8 route payload handling.
 - Result: cache-encoding failures now consistently surface as framework-typed route-cache exceptions instead of raw JSON exceptions.
 
+## Implemented Slice: RouteUrlGenerator edge-path coverage hardening
+- Added explicit coverage for `generateTemporarySignedUntil()` failure path when no `RouteSignature` is configured.
+- Added fragment-normalization edge case coverage where fragment is only `"#"` (URL remains unchanged, no trailing hash).
+- Result: signing-path precondition behavior is now fully asserted across both temporary-signing entry points.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
