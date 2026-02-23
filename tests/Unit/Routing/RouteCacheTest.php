@@ -104,6 +104,41 @@ final class RouteCacheTest extends TestCase
         self::assertTrue($cache->has());
     }
 
+    public function testWarmIfStaleReturnsTrueAndWritesWhenCacheIsMissing(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertTrue($cache->warmIfStale($routes, 300, time()));
+        self::assertTrue($cache->has());
+    }
+
+    public function testWarmIfStaleReturnsFalseWhenCacheIsFreshWithinWindow(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $meta = $cache->warm($routes);
+
+        self::assertFalse($cache->warmIfStale($routes, 300, $meta['generated_at'] + 5));
+    }
+
+    public function testWarmIfStaleThrowsOnNegativeMaxAge(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache max age must be zero or greater');
+
+        $cache->warmIfStale($routes, -1, time());
+    }
+
     public function testGeneratedAtReturnsTimestampFromMetadata(): void
     {
         $routes = new RouteCollection();
