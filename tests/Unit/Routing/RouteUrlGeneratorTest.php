@@ -110,6 +110,30 @@ final class RouteUrlGeneratorTest extends TestCase
         self::assertSame('https://example.com/health', $url);
     }
 
+    public function testGenerateAppendsEncodedFragmentWhenProvided(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/docs/{slug}', 'DocsController@show', name: 'docs.show'));
+
+        $generator = new RouteUrlGenerator($routes, 'https://example.com');
+
+        $url = $generator->generate('docs.show', ['slug' => 'routing'], fragment: 'section 1');
+
+        self::assertSame('https://example.com/docs/routing#section%201', $url);
+    }
+
+    public function testGenerateNormalizesFragmentPrefixHash(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/docs/{slug}', 'DocsController@show', name: 'docs.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $url = $generator->generate('docs.show', ['slug' => 'routing'], fragment: '#intro');
+
+        self::assertSame('/docs/routing#intro', $url);
+    }
+
     public function testGenerateSignedUsesInjectedSignature(): void
     {
         $routes = new RouteCollection();
@@ -134,6 +158,20 @@ final class RouteUrlGeneratorTest extends TestCase
         $this->expectExceptionMessage('Cannot generate signed URL without a RouteSignature instance');
 
         $generator->generateSigned('users.show', ['id' => 42]);
+    }
+
+    public function testGenerateSignedPreservesFragmentInSignedUrl(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, 'https://example.com', $signature);
+
+        $signedUrl = $generator->generateSigned('users.show', ['id' => 42], fragment: 'details');
+
+        self::assertStringContainsString('#details', $signedUrl);
+        self::assertTrue($signature->verify($signedUrl));
     }
 
     public function testGenerateThrowsWhenUnexpectedRouteParameterProvided(): void
@@ -221,5 +259,25 @@ final class RouteUrlGeneratorTest extends TestCase
         $this->expectExceptionMessage('Temporary signed URL TTL must be greater than zero seconds');
 
         $generator->generateTemporarySigned('downloads.show', 0, ['id' => 42]);
+    }
+
+    public function testGenerateTemporarySignedPreservesFragment(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', name: 'downloads.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, 'https://example.com', $signature);
+
+        $signedUrl = $generator->generateTemporarySigned(
+            routeName: 'downloads.show',
+            ttlSeconds: 60,
+            parameters: ['id' => 42],
+            fragment: 'modal',
+            now: 1_700_000_000,
+        );
+
+        self::assertStringContainsString('#modal', $signedUrl);
+        self::assertTrue($signature->verifyAt($signedUrl, now: 1_700_000_020));
     }
 }
