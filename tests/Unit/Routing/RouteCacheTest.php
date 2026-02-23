@@ -144,6 +144,72 @@ final class RouteCacheTest extends TestCase
         self::assertNull($cache->age(time()));
     }
 
+    public function testExpiresAtReturnsNullWhenMetadataMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->expiresAt(60));
+    }
+
+    public function testExpiresAtReturnsComputedTimestamp(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        self::assertSame($generatedAt + 90, $cache->expiresAt(90));
+    }
+
+    public function testExpiresAtThrowsOnNegativeMaxAge(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache max age must be zero or greater');
+
+        $cache->expiresAt(-1);
+    }
+
+    public function testIsExpiredReturnsTrueWhenMetadataMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertTrue($cache->isExpired(60));
+    }
+
+    public function testIsExpiredReturnsFalseAtExpiryBoundary(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        self::assertFalse($cache->isExpired(60, $generatedAt + 60));
+    }
+
+    public function testIsExpiredReturnsTrueAfterExpiryBoundary(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        self::assertTrue($cache->isExpired(60, $generatedAt + 61));
+    }
+
     public function testHasReturnsTrueAfterSave(): void
     {
         $routes = new RouteCollection();

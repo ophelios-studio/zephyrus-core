@@ -108,18 +108,40 @@ final class RouteCache
         return $currentTime - $generatedAt;
     }
 
-    public function isFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
+    public function expiresAt(int $maxAgeSeconds): ?int
     {
         if ($maxAgeSeconds < 0) {
             throw new RouteCacheException('Route cache max age must be zero or greater');
         }
 
-        $age = $this->age($now);
-        if ($age === null) {
-            return false;
+        $generatedAt = $this->generatedAt();
+        if ($generatedAt === null) {
+            return null;
         }
 
-        if ($age > $maxAgeSeconds) {
+        return $generatedAt + $maxAgeSeconds;
+    }
+
+    public function isExpired(int $maxAgeSeconds, ?int $now = null): bool
+    {
+        $expiresAt = $this->expiresAt($maxAgeSeconds);
+        if ($expiresAt === null) {
+            return true;
+        }
+
+        $currentTime = $now ?? time();
+        $generatedAt = $this->generatedAt();
+
+        if ($generatedAt !== null && $generatedAt > $currentTime) {
+            return true;
+        }
+
+        return $currentTime > $expiresAt;
+    }
+
+    public function isFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
+    {
+        if ($this->isExpired($maxAgeSeconds, $now)) {
             return false;
         }
 
