@@ -232,8 +232,39 @@ final class RouteCollection
         return $histogram;
     }
 
+    public function staticRouteCount(): int
+    {
+        $count = 0;
+
+        foreach ($this->routes as $route) {
+            if (!str_contains($route->path, '{')) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    public function parameterizedRouteCount(): int
+    {
+        return $this->count() - $this->staticRouteCount();
+    }
+
+    public function constrainedRouteCount(): int
+    {
+        $count = 0;
+
+        foreach ($this->routes as $route) {
+            if ($route->constraints !== []) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
     /**
-     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>, controllers: array<string, int>, controller_count: int}
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>, controllers: array<string, int>, controller_count: int, static_routes: int, parameterized_routes: int, constrained_routes: int}
      */
     public function summary(): array
     {
@@ -255,6 +286,9 @@ final class RouteCollection
             'constrained_parameters' => $this->constrainedParameterHistogram(),
             'controllers' => $controllers,
             'controller_count' => count($controllers),
+            'static_routes' => $this->staticRouteCount(),
+            'parameterized_routes' => $this->parameterizedRouteCount(),
+            'constrained_routes' => $this->constrainedRouteCount(),
         ];
     }
 

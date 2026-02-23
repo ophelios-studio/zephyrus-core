@@ -440,6 +440,18 @@ final class RouteCollectionTest extends TestCase
         ], $collection->controllerHistogram());
     }
 
+    public function testRouteComplexityCountsStaticParameterizedAndConstrainedRoutes(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('POST', '/users/{id}', 'UserController@update', ['id' => '\\d+']));
+
+        self::assertSame(1, $collection->staticRouteCount());
+        self::assertSame(2, $collection->parameterizedRouteCount());
+        self::assertSame(1, $collection->constrainedRouteCount());
+    }
+
     public function testSummaryReturnsRouteRegistryMetrics(): void
     {
         $collection = new RouteCollection();
@@ -478,6 +490,9 @@ final class RouteCollectionTest extends TestCase
                 'UserController' => 2,
             ],
             'controller_count' => 2,
+            'static_routes' => 1,
+            'parameterized_routes' => 2,
+            'constrained_routes' => 2,
         ], $collection->summary());
     }
 }
