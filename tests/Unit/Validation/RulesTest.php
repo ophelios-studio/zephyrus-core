@@ -550,4 +550,26 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid port number.', Rules::port()->errorMessage());
     }
+
+    // ---- host ----
+
+    public function testHostPassesHostnameAndIp(): void
+    {
+        self::assertTrue(Rules::host()->test('example.com'));
+        self::assertTrue(Rules::host()->test('192.168.1.1'));
+        self::assertTrue(Rules::host()->test('2001:db8::1'));
+    }
+
+    public function testHostFailsInvalidValues(): void
+    {
+        self::assertFalse(Rules::host()->test(''));
+        self::assertFalse(Rules::host()->test('not a host'));
+        self::assertFalse(Rules::host()->test('bad..host'));
+        self::assertFalse(Rules::host()->test(null));
+    }
+
+    public function testHostDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid host.', Rules::host()->errorMessage());
+    }
 }

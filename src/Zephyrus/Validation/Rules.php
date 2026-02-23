@@ -318,5 +318,16 @@ final class Rules
         );
     }
 
+    /**
+     * Validates either a hostname or an IP address.
+     */
+    public static function host(string $message = 'Must be a valid host.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => self::hostname()->test($v) || self::ip()->test($v),
+            $message,
+        );
+    }
+
     private function __construct() {}
 }
