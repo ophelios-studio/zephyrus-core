@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing\Exception;
 
 use ReflectionException;
+use Throwable;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 final class HandlerResolverException extends ZephyrusRuntimeException
@@ -19,7 +20,7 @@ final class HandlerResolverException extends ZephyrusRuntimeException
         );
     }
 
-    public static function unresolvableClass(string $className, ReflectionException $previous): self
+    public static function unresolvableClass(string $className, Throwable $previous): self
     {
         return new self(
             sprintf('Cannot instantiate handler class "%s": %s', $className, $previous->getMessage()),

@@ -10,6 +10,7 @@ use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionType;
 use ReflectionUnionType;
+use Throwable;
 use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -56,7 +57,11 @@ final class HandlerResolver
     {
         [$class, $method] = $this->parseHandler($match->route->handler);
 
-        $controller = ($this->factory)($class);
+        try {
+            $controller = ($this->factory)($class);
+        } catch (Throwable $e) {
+            throw HandlerResolverException::unresolvableClass($class, $e);
+        }
 
         // before() hook — short-circuit if a Response is returned.
         if ($controller instanceof ControllerLifecycleInterface) {
@@ -91,6 +96,10 @@ final class HandlerResolver
         }
 
         [$class, $method] = explode('@', $handler, 2);
+
+        if ($class === '' || $method === '') {
+            throw HandlerResolverException::invalidHandlerFormat($handler);
+        }
 
         return [$class, $method];
     }
