@@ -52,7 +52,22 @@ final class UserBroker extends Broker
 
     public function firstIdOr(int $default): int
     {
-        return (int) $this->selectValue('SELECT id FROM users ORDER BY id LIMIT 1', default: $default);
+        return $this->selectInt('SELECT id FROM users ORDER BY id LIMIT 1', default: $default);
+    }
+
+    public function firstEmailOr(?string $default = null): ?string
+    {
+        return $this->selectString('SELECT email FROM users ORDER BY id LIMIT 1', default: $default);
+    }
+
+    public function averageIdOr(float $default = 0.0): float
+    {
+        return $this->selectFloat('SELECT AVG(id) FROM users', default: $default);
+    }
+
+    public function hasAnyUsers(): bool
+    {
+        return $this->selectBool('SELECT EXISTS(SELECT 1 FROM users)');
     }
 
     public function insert(string $name, string $email): int
@@ -176,6 +191,20 @@ final class BrokerTest extends TestCase
     public function testSelectValueUsesDefaultWhenNoRows(): void
     {
         self::assertSame(123, $this->broker->firstIdOr(123));
+    }
+
+    public function testTypedScalarHelpersSupportStringFloatAndBool(): void
+    {
+        self::assertSame('fallback@example.com', $this->broker->firstEmailOr('fallback@example.com'));
+        self::assertSame(0.0, $this->broker->averageIdOr(0.0));
+        self::assertFalse($this->broker->hasAnyUsers());
+
+        $this->broker->insert('Lara', 'lara@example.com');
+        $this->broker->insert('Milo', 'milo@example.com');
+
+        self::assertSame('lara@example.com', $this->broker->firstEmailOr());
+        self::assertGreaterThan(0.0, $this->broker->averageIdOr());
+        self::assertTrue($this->broker->hasAnyUsers());
     }
 
     public function testExistsReturnsFalseWhenNoMatchingRow(): void

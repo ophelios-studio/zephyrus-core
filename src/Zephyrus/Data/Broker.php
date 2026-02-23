@@ -87,6 +87,46 @@ abstract class Broker
     }
 
     /**
+     * Execute a scalar query and return the value cast to int.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function selectInt(string $sql, array $params = [], int $default = 0): int
+    {
+        return $this->db->selectInt($sql, $params, $default);
+    }
+
+    /**
+     * Execute a scalar query and return the value cast to string or null.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function selectString(string $sql, array $params = [], ?string $default = null): ?string
+    {
+        return $this->db->selectString($sql, $params, $default);
+    }
+
+    /**
+     * Execute a scalar query and return the value cast to bool.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function selectBool(string $sql, array $params = [], bool $default = false): bool
+    {
+        return $this->db->selectBool($sql, $params, $default);
+    }
+
+    /**
+     * Execute a scalar query and return the value cast to float.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function selectFloat(string $sql, array $params = [], float $default = 0.0): float
+    {
+        return $this->db->selectFloat($sql, $params, $default);
+    }
+
+    /**
      * Execute a scalar aggregate query (e.g. COUNT, SUM) and return the
      * first column of the first row cast to int.
      *
@@ -95,7 +135,7 @@ abstract class Broker
      */
     protected function selectCount(string $sql, array $params = []): int
     {
-        return $this->db->selectInt($sql, $params, 0);
+        return $this->selectInt($sql, $params, 0);
     }
 
     /**

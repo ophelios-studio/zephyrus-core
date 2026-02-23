@@ -153,6 +153,16 @@ final class Database
     }
 
     /**
+     * Execute a scalar query and return the value cast to float.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function selectFloat(string $sql, array $params = [], float $default = 0.0): float
+    {
+        return (float) $this->selectValue($sql, $params, $default);
+    }
+
+    /**
      * Execute a write query and return affected row count.
      *
      * @param array<int|string, mixed> $params
