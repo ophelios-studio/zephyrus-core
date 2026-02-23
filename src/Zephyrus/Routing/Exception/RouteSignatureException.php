@@ -27,4 +27,9 @@ final class RouteSignatureException extends ZephyrusRuntimeException
     {
         return new self('Temporary signature TTL must be greater than zero seconds');
     }
+
+    public static function invalidExpiryInstant(): self
+    {
+        return new self('Temporary signature expiry instant must be in the future');
+    }
 }

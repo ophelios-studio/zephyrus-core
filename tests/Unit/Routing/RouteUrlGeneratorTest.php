@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
@@ -279,5 +280,46 @@ final class RouteUrlGeneratorTest extends TestCase
 
         self::assertStringContainsString('#modal', $signedUrl);
         self::assertTrue($signature->verifyAt($signedUrl, now: 1_700_000_020));
+    }
+
+    public function testGenerateTemporarySignedUntilBuildsVerifiableUrlAtAbsoluteExpiry(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', name: 'downloads.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, 'https://example.com', $signature);
+
+        $signedUrl = $generator->generateTemporarySignedUntil(
+            routeName: 'downloads.show',
+            expiresAt: 1_700_000_120,
+            parameters: ['id' => 42],
+            query: ['disposition' => 'inline'],
+            fragment: 'details',
+            now: 1_700_000_000,
+        );
+
+        self::assertStringContainsString('_exp=1700000120', $signedUrl);
+        self::assertStringContainsString('#details', $signedUrl);
+        self::assertTrue($signature->verifyAt($signedUrl, now: 1_700_000_119));
+    }
+
+    public function testGenerateTemporarySignedUntilThrowsWhenExpiryIsNotInFuture(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', name: 'downloads.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, 'https://example.com', $signature);
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Temporary signature expiry instant must be in the future');
+
+        $generator->generateTemporarySignedUntil(
+            routeName: 'downloads.show',
+            expiresAt: 1_700_000_000,
+            parameters: ['id' => 42],
+            now: 1_700_000_000,
+        );
     }
 }
