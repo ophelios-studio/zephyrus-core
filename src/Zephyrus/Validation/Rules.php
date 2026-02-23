@@ -353,6 +353,25 @@ final class Rules
     }
 
     /**
+     * Validates a JSON-encoded string.
+     */
+    public static function json(string $message = 'Must be valid JSON.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                json_decode($v);
+
+                return json_last_error() === JSON_ERROR_NONE;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */

@@ -420,6 +420,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Reuses existing `port()` rule for each endpoint and enforces `start <= end`.
 - Added unit coverage for valid ranges, missing delimiter, invalid endpoints, reversed ranges, and default message path.
 
+## Implemented Slice: Validation JSON-string rule
+- Added `Validation\Rules::json()` for validating JSON-encoded string inputs.
+- Accepts object/array/scalar JSON payloads (including `null`) and rejects empty/non-string/invalid JSON input.
+- Added unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
