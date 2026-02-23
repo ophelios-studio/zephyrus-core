@@ -86,7 +86,7 @@ final class RouteCacheTest extends TestCase
         $payload = [
             'meta' => [
                 'version' => 1,
-                'routes_hash' => 'invalid-hash',
+                'routes_hash' => str_repeat('a', 64),
             ],
             'routes' => [
                 [
@@ -146,5 +146,83 @@ final class RouteCacheTest extends TestCase
         @unlink($cacheFile);
         @rmdir(dirname($cacheFile));
         @rmdir($cacheDirectory);
+    }
+
+    public function testLoadThrowsOnInvalidMetadataHashFormat(): void
+    {
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => 'not-a-sha256',
+            ],
+            'routes' => [],
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload contains invalid metadata hash format');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenConstraintMapContainsNonStringValues(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/users/{id}',
+            'handler' => 'UserController@show',
+            'constraints' => ['id' => 123],
+            'middlewares' => [],
+            'name' => null,
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid constraints map');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenMiddlewaresContainNonStringValues(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/users',
+            'handler' => 'UserController@index',
+            'constraints' => [],
+            'middlewares' => ['auth', 100],
+            'name' => 'users.index',
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid middlewares list');
+
+        $cache->load();
     }
 }
