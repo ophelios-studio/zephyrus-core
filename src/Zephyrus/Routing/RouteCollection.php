@@ -63,6 +63,32 @@ final class RouteCollection
     /**
      * @return array<int, string>
      */
+    public function methods(): array
+    {
+        $methods = array_values(array_unique(array_map(
+            static fn (Route $route): string => $route->method,
+            $this->routes,
+        )));
+
+        sort($methods);
+
+        return $methods;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function paths(): array
+    {
+        return array_map(
+            static fn (Route $route): string => $route->path,
+            $this->routes,
+        );
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public function names(): array
     {
         $names = [];
@@ -74,6 +100,37 @@ final class RouteCollection
         }
 
         return $names;
+    }
+
+    /**
+     * @return array<string, Route>
+     */
+    public function namedRoutes(): array
+    {
+        $this->assertNoDuplicateRouteNames();
+
+        $named = [];
+
+        foreach ($this->routes as $route) {
+            if ($route->name !== null) {
+                $named[$route->name] = $route;
+            }
+        }
+
+        return $named;
+    }
+
+    /**
+     * @return array<int, Route>
+     */
+    public function routesByMethod(string $method): array
+    {
+        $normalized = strtoupper($method);
+
+        return array_values(array_filter(
+            $this->routes,
+            static fn (Route $route): bool => $route->method === $normalized,
+        ));
     }
 
     /**
