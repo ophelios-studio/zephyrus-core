@@ -55,6 +55,73 @@ final class RouteCollection
         return null;
     }
 
+    public function hasNamed(string $name): bool
+    {
+        return $this->findByName($name) !== null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function names(): array
+    {
+        $names = [];
+
+        foreach ($this->routes as $route) {
+            if ($route->name !== null) {
+                $names[] = $route->name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function duplicateRouteNames(): array
+    {
+        $counts = [];
+
+        foreach ($this->names() as $name) {
+            $counts[$name] = ($counts[$name] ?? 0) + 1;
+        }
+
+        $duplicates = [];
+
+        foreach ($counts as $name => $count) {
+            if ($count > 1) {
+                $duplicates[] = $name;
+            }
+        }
+
+        sort($duplicates);
+
+        return $duplicates;
+    }
+
+    public function assertNoDuplicateRouteNames(): void
+    {
+        $duplicates = $this->duplicateRouteNames();
+
+        if ($duplicates !== []) {
+            throw new RouteSignatureException(sprintf(
+                'Duplicate route names detected: %s',
+                implode(', ', $duplicates),
+            ));
+        }
+    }
+
+    public function count(): int
+    {
+        return count($this->routes);
+    }
+
+    public function isEmpty(): bool
+    {
+        return $this->routes === [];
+    }
+
     /**
      * @return array<int, Route>
      */

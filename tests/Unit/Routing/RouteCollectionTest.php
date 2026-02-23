@@ -218,4 +218,64 @@ final class RouteCollectionTest extends TestCase
         self::assertSame('/', $match->route->path);
         self::assertSame([], $match->parameters);
     }
+
+    public function testCollectionCountAndIsEmptyReflectRouteMembership(): void
+    {
+        $collection = new RouteCollection();
+
+        self::assertTrue($collection->isEmpty());
+        self::assertSame(0, $collection->count());
+
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        self::assertFalse($collection->isEmpty());
+        self::assertSame(1, $collection->count());
+    }
+
+    public function testNamesAndHasNamedExposeNamedRouteState(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store', name: 'users.store'));
+        $collection->add(Route::define('GET', '/anonymous', 'AnonymousController@index'));
+
+        self::assertSame(['health.show', 'users.store'], $collection->names());
+        self::assertTrue($collection->hasNamed('health.show'));
+        self::assertFalse($collection->hasNamed('missing.name'));
+    }
+
+    public function testDuplicateRouteNamesReturnsSortedUniqueDuplicates(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a', 'AController@show', name: 'dup.alpha'));
+        $collection->add(Route::define('GET', '/b', 'BController@show', name: 'dup.beta'));
+        $collection->add(Route::define('GET', '/c', 'CController@show', name: 'dup.alpha'));
+        $collection->add(Route::define('GET', '/d', 'DController@show', name: 'dup.beta'));
+        $collection->add(Route::define('GET', '/e', 'EController@show', name: 'dup.alpha'));
+
+        self::assertSame(['dup.alpha', 'dup.beta'], $collection->duplicateRouteNames());
+    }
+
+    public function testAssertNoDuplicateRouteNamesThrowsWhenDuplicatesExist(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a', 'AController@show', name: 'users.show'));
+        $collection->add(Route::define('GET', '/b', 'BController@show', name: 'users.show'));
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Duplicate route names detected: users.show');
+
+        $collection->assertNoDuplicateRouteNames();
+    }
+
+    public function testAssertNoDuplicateRouteNamesSucceedsWhenNamesUnique(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a', 'AController@show', name: 'users.show'));
+        $collection->add(Route::define('GET', '/b', 'BController@show', name: 'users.index'));
+
+        $collection->assertNoDuplicateRouteNames();
+
+        self::assertTrue(true);
+    }
 }

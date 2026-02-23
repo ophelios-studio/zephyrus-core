@@ -355,6 +355,12 @@ final class RouteCache
             ));
         }
 
+        try {
+            $collection->assertNoDuplicateRouteNames();
+        } catch (\Zephyrus\Routing\Exception\RouteSignatureException $exception) {
+            throw new RouteCacheException($exception->getMessage(), previous: $exception);
+        }
+
         return $collection;
     }
 
