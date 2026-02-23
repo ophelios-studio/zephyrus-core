@@ -368,6 +368,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Returns `null` when metadata is unavailable/invalid (mirrors `generatedAt()` and `metadata()` semantics).
 - Added unit coverage for both missing-metadata and post-save route-count cases.
 
+## Implemented Slice: RouteCache metadata hash accessor
+- Added `RouteCache::routesHash(): ?string` to expose the currently cached route-payload digest from validated metadata.
+- Returns `null` when metadata is unavailable/invalid, matching the existing nullable metadata accessor pattern.
+- Added unit coverage for both missing-metadata and post-save hash-read cases (SHA-256 format asserted).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

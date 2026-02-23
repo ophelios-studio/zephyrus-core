@@ -105,6 +105,13 @@ final class RouteCache
         return $meta['route_count'] ?? null;
     }
 
+    public function routesHash(): ?string
+    {
+        $meta = $this->metadata();
+
+        return $meta['routes_hash'] ?? null;
+    }
+
     public function age(?int $now = null): ?int
     {
         $generatedAt = $this->generatedAt();
