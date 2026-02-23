@@ -646,6 +646,40 @@ final class Rules
     }
 
     /**
+     * Validates an HTTP header name token (RFC 7230 token charset).
+     */
+    public static function httpHeaderName(string $message = 'Must be a valid HTTP header name.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[!#$%&\'\*+\-.\^_`\|~0-9A-Za-z]+$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates an HTTP header value (printable visible ASCII + spaces/tabs).
+     */
+    public static function httpHeaderValue(string $message = 'Must be a valid HTTP header value.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[\x09\x20-\x7E]*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates JWT compact serialization (header.payload.signature).
+     */
+    public static function jwt(string $message = 'Must be a valid JWT token format.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v)
+                && preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */
