@@ -198,6 +198,28 @@ final class Database
     }
 
     /**
+     * Execute a sorted SELECT query.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function selectSorted(string $sql, SortRequest $sort, array $params = []): array
+    {
+        return $this->select($sql . $sort->toSql(), $params);
+    }
+
+    /**
+     * Execute a sorted paginated SELECT query.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, array $params = []): array
+    {
+        return $this->selectPageWith($sql . $sort->toSql(), $pagination, $params);
+    }
+
+    /**
      * Execute coordinated count + paginated data queries.
      *
      * @param array<int|string, mixed> $params
@@ -218,6 +240,34 @@ final class Database
     {
         $total = $this->count($countSql, $params);
         $items = $this->selectPageWith($dataSql, $pagination, $params);
+        $totalPages = max(1, (int) ceil($total / $pagination->perPage));
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $pagination->page,
+            'per_page' => $pagination->perPage,
+            'total_pages' => $totalPages,
+            'has_previous' => $pagination->page > 1,
+            'has_next' => $pagination->page < $totalPages,
+        ];
+    }
+
+    /**
+     * Execute coordinated count + sorted paginated data queries.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    public function paginateSortedWith(
+        string $dataSql,
+        string $countSql,
+        SortRequest $sort,
+        PaginationRequest $pagination,
+        array $params = [],
+    ): array {
+        $total = $this->count($countSql, $params);
+        $items = $this->selectPageSorted($dataSql, $sort, $pagination, $params);
         $totalPages = max(1, (int) ceil($total / $pagination->perPage));
 
         return [
@@ -305,6 +355,23 @@ final class Database
         $pagination = PaginationRequest::fromQuery($query, $defaultPerPage, $maxPerPage);
 
         return $this->paginateResultWith($dataSql, $countSql, $pagination, $params);
+    }
+
+    /**
+     * Execute coordinated count + sorted paginated data queries and return typed envelope.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function paginateSortedResultWith(
+        string $dataSql,
+        string $countSql,
+        SortRequest $sort,
+        PaginationRequest $pagination,
+        array $params = [],
+    ): PaginatedResult {
+        return PaginatedResult::fromArray(
+            $this->paginateSortedWith($dataSql, $countSql, $sort, $pagination, $params),
+        );
     }
 
     /**

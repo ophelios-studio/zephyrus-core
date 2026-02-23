@@ -10,6 +10,7 @@ use Zephyrus\Data\Broker;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\PaginatedResult;
 use Zephyrus\Data\PaginationRequest;
+use Zephyrus\Data\SortRequest;
 
 // ---------------------------------------------------------------------------
 // Minimal concrete stub — exposes protected helpers as public for testing.
@@ -155,6 +156,31 @@ final class UserBroker extends Broker
             $query,
             defaultPerPage: 25,
             maxPerPage: 2,
+        );
+    }
+
+    public function listSortedByNameDesc(): array
+    {
+        return $this->selectSorted('SELECT * FROM users', new SortRequest('name', 'DESC'));
+    }
+
+    public function paginateSortedByName(PaginationRequest $pagination): array
+    {
+        return $this->paginateSortedWith(
+            'SELECT * FROM users',
+            'SELECT COUNT(*) FROM users',
+            new SortRequest('name', 'ASC'),
+            $pagination,
+        );
+    }
+
+    public function paginateSortedResultByName(PaginationRequest $pagination): PaginatedResult
+    {
+        return $this->paginateSortedResultWith(
+            'SELECT * FROM users',
+            'SELECT COUNT(*) FROM users',
+            new SortRequest('name', 'ASC'),
+            $pagination,
         );
     }
 
@@ -401,6 +427,25 @@ final class BrokerTest extends TestCase
         self::assertSame(2, $page->perPage);
         self::assertSame(1, $page->itemCount());
         self::assertSame('c@example.com', $page->firstItem()['email']);
+    }
+
+    public function testSortedBrokerHelpersApplyOrderingAndPagination(): void
+    {
+        $this->broker->insert('charlie', 'c@example.com');
+        $this->broker->insert('alice', 'a@example.com');
+        $this->broker->insert('bravo', 'b@example.com');
+
+        $sorted = $this->broker->listSortedByNameDesc();
+        self::assertSame('charlie', $sorted[0]['name']);
+        self::assertSame('bravo', $sorted[1]['name']);
+        self::assertSame('alice', $sorted[2]['name']);
+
+        $page = $this->broker->paginateSortedByName(new PaginationRequest(1, 2));
+        self::assertSame('alice', $page['items'][0]['name']);
+        self::assertSame('bravo', $page['items'][1]['name']);
+
+        $typed = $this->broker->paginateSortedResultByName(new PaginationRequest(2, 2));
+        self::assertSame('charlie', $typed->firstItem()['name']);
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
