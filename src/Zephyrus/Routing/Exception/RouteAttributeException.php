@@ -17,4 +17,13 @@ final class RouteAttributeException extends ZephyrusRuntimeException
             $previous,
         );
     }
+
+    public static function duplicateRouteName(string $className, string $routeName): self
+    {
+        return new self(sprintf(
+            'Duplicate route name "%s" discovered while reading attributes on class "%s".',
+            $routeName,
+            $className,
+        ));
+    }
 }
