@@ -319,6 +319,13 @@ $router->group('/api/v1', fn ($r) => $r
 - `SessionConfigTest::testAcceptsValidSameSiteValues` now uses `#[DataProvider('sameSiteProvider')]`.
 - This removes the last PHPUnit 11 test-runner deprecation and keeps the suite compatible with PHPUnit 12's metadata model.
 
+## Implemented Slice: RouteCache hardening on payload/hash encoding paths
+- Hardened `Routing\RouteCache` around JSON encoding edge cases where invalid byte sequences can make route payload hashing fail.
+- `save()` now catches hash-computation `JsonException` and rethrows a typed `RouteCacheException('Unable to encode route cache payload')`.
+- `load()` now catches hash-validation `JsonException` and rethrows a typed `RouteCacheException('Unable to validate route cache payload hash')`.
+- Added `RouteCacheTest::testSaveThrowsOnUnencodableRoutePayload` to cover invalid UTF-8 route payload handling.
+- Result: cache-encoding failures now consistently surface as framework-typed route-cache exceptions instead of raw JSON exceptions.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
