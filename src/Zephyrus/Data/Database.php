@@ -228,6 +228,18 @@ final class Database
     }
 
     /**
+     * Execute coordinated count + paginated data queries and return an object envelope.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
+    {
+        return PaginatedResult::fromArray(
+            $this->paginate($dataSql, $countSql, $page, $perPage, $params),
+        );
+    }
+
+    /**
      * Execute a write query and return affected row count.
      *
      * @param array<int|string, mixed> $params

@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
+use Zephyrus\Data\PaginatedResult;
 
 final class DatabaseTest extends TestCase
 {
@@ -251,6 +252,29 @@ final class DatabaseTest extends TestCase
         self::assertFalse($page['has_next']);
         self::assertCount(1, $page['items']);
         self::assertSame('C', $page['items'][0]['name']);
+    }
+
+    public function testPaginateResultReturnsTypedEnvelope(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['A', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['B', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['C', 'c@example.com']);
+
+        $page = $this->db->paginateResult(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            2,
+            2,
+        );
+
+        self::assertInstanceOf(PaginatedResult::class, $page);
+        self::assertSame(3, $page->total);
+        self::assertSame(2, $page->page);
+        self::assertSame(2, $page->perPage);
+        self::assertSame(2, $page->totalPages);
+        self::assertTrue($page->hasPrevious);
+        self::assertFalse($page->hasNext);
+        self::assertSame(1, $page->itemCount());
     }
 
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void

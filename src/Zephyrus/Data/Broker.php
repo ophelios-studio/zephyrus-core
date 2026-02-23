@@ -161,6 +161,16 @@ abstract class Broker
     }
 
     /**
+     * Execute coordinated count + paginated data queries and return object envelope.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
+    {
+        return $this->db->paginateResult($dataSql, $countSql, $page, $perPage, $params);
+    }
+
+    /**
      * Execute an INSERT, UPDATE, or DELETE statement and return the number
      * of affected rows.
      *
