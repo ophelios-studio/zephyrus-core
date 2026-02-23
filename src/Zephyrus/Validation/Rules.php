@@ -416,6 +416,22 @@ final class Rules
     }
 
     /**
+     * Validates semantic version strings (SemVer 2.0 core + optional prerelease/build).
+     */
+    public static function semver(string $message = 'Must be a valid semantic version.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match(
+                '/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
+                . '(?:-((?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*))*))?'
+                . '(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/',
+                $v,
+            ) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */
