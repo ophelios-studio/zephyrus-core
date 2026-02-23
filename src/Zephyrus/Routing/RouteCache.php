@@ -45,6 +45,14 @@ final class RouteCache
             throw new RouteCacheException('Unable to encode route cache payload');
         }
 
+        $directory = dirname($this->cacheFile);
+        if ($directory !== '' && $directory !== '.' && !is_dir($directory)) {
+            $created = @mkdir($directory, 0777, true);
+            if ($created === false && !is_dir($directory)) {
+                throw new RouteCacheException(sprintf('Unable to create route cache directory: %s', $directory));
+            }
+        }
+
         $result = @file_put_contents($this->cacheFile, $json);
 
         if ($result === false) {
@@ -81,6 +89,10 @@ final class RouteCache
         $meta = $decoded['meta'] ?? null;
         if ($meta !== null && (!is_array($meta) || !isset($meta['routes_hash']) || !is_string($meta['routes_hash']))) {
             throw new RouteCacheException('Route cache payload contains invalid metadata');
+        }
+
+        if ($meta !== null && (!array_key_exists('version', $meta) || !is_int($meta['version']) || $meta['version'] !== 1)) {
+            throw new RouteCacheException('Route cache payload contains unsupported metadata version');
         }
 
         $routesPayload = $decoded['routes'];

@@ -109,4 +109,42 @@ final class RouteCacheTest extends TestCase
 
         $cache->load();
     }
+
+    public function testLoadThrowsOnUnsupportedMetadataVersion(): void
+    {
+        $payload = [
+            'meta' => [
+                'version' => 2,
+                'routes_hash' => hash('sha256', json_encode([], JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => [],
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload contains unsupported metadata version');
+
+        $cache->load();
+    }
+
+    public function testSaveCreatesMissingCacheDirectory(): void
+    {
+        $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);
+        $cacheFile = $cacheDirectory . '/routes/cache.json';
+
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($cacheFile);
+        $cache->save($routes);
+
+        self::assertFileExists($cacheFile);
+
+        @unlink($cacheFile);
+        @rmdir(dirname($cacheFile));
+        @rmdir($cacheDirectory);
+    }
 }
