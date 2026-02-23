@@ -54,6 +54,31 @@ final class RouteCacheTest extends TestCase
         self::assertFalse($cache->has());
     }
 
+    public function testMetadataReturnsNullWhenCacheFileMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->metadata());
+    }
+
+    public function testMetadataReturnsExpectedFieldsAfterSave(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $meta = $cache->metadata();
+
+        self::assertNotNull($meta);
+        self::assertSame(1, $meta['version']);
+        self::assertSame(1, $meta['route_count']);
+        self::assertArrayHasKey('routes_hash', $meta);
+        self::assertArrayHasKey('generated_at', $meta);
+        self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $meta['routes_hash']);
+    }
+
     public function testHasReturnsTrueAfterSave(): void
     {
         $routes = new RouteCollection();
@@ -235,6 +260,74 @@ final class RouteCacheTest extends TestCase
         $routes->add(Route::define('GET', '/health', 'HealthController@show'));
 
         self::assertFalse($cache->isFresh($routes));
+    }
+
+    public function testIsFreshWithinReturnsTrueWhenFreshAndWithinAgeWindow(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $meta = $cache->metadata();
+        self::assertNotNull($meta);
+
+        self::assertTrue($cache->isFreshWithin($routes, 60, $meta['generated_at'] + 30));
+    }
+
+    public function testIsFreshWithinReturnsFalseWhenCacheIsTooOld(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $meta = $cache->metadata();
+        self::assertNotNull($meta);
+
+        self::assertFalse($cache->isFreshWithin($routes, 60, $meta['generated_at'] + 61));
+    }
+
+    public function testIsFreshWithinReturnsFalseWhenGeneratedAtIsInFuture(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => null,
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+                'route_count' => 1,
+                'generated_at' => time() + 300,
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+        $currentRoutes = new RouteCollection();
+        $currentRoutes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        self::assertFalse($cache->isFreshWithin($currentRoutes, 60, time()));
+    }
+
+    public function testIsFreshWithinThrowsOnNegativeMaxAge(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache max age must be zero or greater');
+
+        $cache->isFreshWithin(new RouteCollection(), -1);
     }
 
     public function testSaveCreatesMissingCacheDirectory(): void
