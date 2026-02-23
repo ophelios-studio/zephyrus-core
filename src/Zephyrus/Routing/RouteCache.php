@@ -150,24 +150,18 @@ final class RouteCache
 
     public function ensureFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): void
     {
-        if ($maxAgeSeconds < 0) {
-            throw new RouteCacheException('Route cache max age must be zero or greater');
-        }
+        $state = $this->inspect($routes, $maxAgeSeconds, $now);
 
-        if (!$this->has()) {
-            throw new RouteCacheException('Route cache file is missing');
-        }
+        $message = match ($state['reason']) {
+            'missing-file' => 'Route cache file is missing',
+            'invalid-metadata' => 'Route cache metadata is missing or invalid',
+            'expired' => 'Route cache is expired',
+            'stale-routes' => 'Route cache does not match current routes',
+            default => null,
+        };
 
-        if ($this->metadata() === null) {
-            throw new RouteCacheException('Route cache metadata is missing or invalid');
-        }
-
-        if ($this->isExpired($maxAgeSeconds, $now)) {
-            throw new RouteCacheException('Route cache is expired');
-        }
-
-        if (!$this->isFresh($routes)) {
-            throw new RouteCacheException('Route cache does not match current routes');
+        if ($message !== null) {
+            throw new RouteCacheException($message);
         }
     }
 
@@ -191,74 +185,7 @@ final class RouteCache
             throw new RouteCacheException('Route cache max age must be zero or greater');
         }
 
-        if (!$this->has()) {
-            return [
-                'exists' => false,
-                'metadata_valid' => false,
-                'fresh' => false,
-                'expired' => true,
-                'reason' => 'missing-file',
-                'age' => null,
-                'expires_at' => null,
-                'generated_at' => null,
-            ];
-        }
-
-        $meta = $this->metadata();
-        if ($meta === null) {
-            return [
-                'exists' => true,
-                'metadata_valid' => false,
-                'fresh' => false,
-                'expired' => true,
-                'reason' => 'invalid-metadata',
-                'age' => null,
-                'expires_at' => null,
-                'generated_at' => null,
-            ];
-        }
-
-        $age = $this->age($now);
-        $expiresAt = $this->expiresAt($maxAgeSeconds);
-        $expired = $this->isExpired($maxAgeSeconds, $now);
-
-        if ($expired) {
-            return [
-                'exists' => true,
-                'metadata_valid' => true,
-                'fresh' => false,
-                'expired' => true,
-                'reason' => 'expired',
-                'age' => $age,
-                'expires_at' => $expiresAt,
-                'generated_at' => $meta['generated_at'],
-            ];
-        }
-
-        $fresh = $this->isFresh($routes);
-        if (!$fresh) {
-            return [
-                'exists' => true,
-                'metadata_valid' => true,
-                'fresh' => false,
-                'expired' => false,
-                'reason' => 'stale-routes',
-                'age' => $age,
-                'expires_at' => $expiresAt,
-                'generated_at' => $meta['generated_at'],
-            ];
-        }
-
-        return [
-            'exists' => true,
-            'metadata_valid' => true,
-            'fresh' => true,
-            'expired' => false,
-            'reason' => 'fresh',
-            'age' => $age,
-            'expires_at' => $expiresAt,
-            'generated_at' => $meta['generated_at'],
-        ];
+        return $this->evaluateState($routes, $maxAgeSeconds, $now);
     }
 
     public function save(RouteCollection $routes): void
@@ -425,6 +352,90 @@ final class RouteCache
         }
 
         return $collection;
+    }
+
+    /**
+     * @return array{
+     *   exists: bool,
+     *   metadata_valid: bool,
+     *   fresh: bool,
+     *   expired: bool,
+     *   reason: string,
+     *   age: ?int,
+     *   expires_at: ?int,
+     *   generated_at: ?int
+     * }
+     */
+    private function evaluateState(RouteCollection $routes, int $maxAgeSeconds, ?int $now): array
+    {
+        if (!$this->has()) {
+            return [
+                'exists' => false,
+                'metadata_valid' => false,
+                'fresh' => false,
+                'expired' => true,
+                'reason' => 'missing-file',
+                'age' => null,
+                'expires_at' => null,
+                'generated_at' => null,
+            ];
+        }
+
+        $meta = $this->metadata();
+        if ($meta === null) {
+            return [
+                'exists' => true,
+                'metadata_valid' => false,
+                'fresh' => false,
+                'expired' => true,
+                'reason' => 'invalid-metadata',
+                'age' => null,
+                'expires_at' => null,
+                'generated_at' => null,
+            ];
+        }
+
+        $age = $this->age($now);
+        $expiresAt = $this->expiresAt($maxAgeSeconds);
+        $expired = $this->isExpired($maxAgeSeconds, $now);
+
+        if ($expired) {
+            return [
+                'exists' => true,
+                'metadata_valid' => true,
+                'fresh' => false,
+                'expired' => true,
+                'reason' => 'expired',
+                'age' => $age,
+                'expires_at' => $expiresAt,
+                'generated_at' => $meta['generated_at'],
+            ];
+        }
+
+        $fresh = $this->isFresh($routes);
+        if (!$fresh) {
+            return [
+                'exists' => true,
+                'metadata_valid' => true,
+                'fresh' => false,
+                'expired' => false,
+                'reason' => 'stale-routes',
+                'age' => $age,
+                'expires_at' => $expiresAt,
+                'generated_at' => $meta['generated_at'],
+            ];
+        }
+
+        return [
+            'exists' => true,
+            'metadata_valid' => true,
+            'fresh' => true,
+            'expired' => false,
+            'reason' => 'fresh',
+            'age' => $age,
+            'expires_at' => $expiresAt,
+            'generated_at' => $meta['generated_at'],
+        ];
     }
 
     /**
