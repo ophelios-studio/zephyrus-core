@@ -70,6 +70,21 @@ final class UserBroker extends Broker
         return $this->selectBool('SELECT EXISTS(SELECT 1 FROM users)');
     }
 
+    public function listPage(int $page, int $perPage): array
+    {
+        return $this->selectPage('SELECT * FROM users ORDER BY id', $page, $perPage);
+    }
+
+    public function paginateUsers(int $page, int $perPage): array
+    {
+        return $this->paginate(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $page,
+            $perPage,
+        );
+    }
+
     public function insert(string $name, string $email): int
     {
         return (int) $this->insertRowGetId(
@@ -217,6 +232,36 @@ final class BrokerTest extends TestCase
         $this->broker->insert('Zoe', 'zoe@example.com');
 
         self::assertTrue($this->broker->existsByEmail('zoe@example.com'));
+    }
+
+    public function testSelectPageReturnsWindowedRows(): void
+    {
+        $this->broker->insert('A', 'a@example.com');
+        $this->broker->insert('B', 'b@example.com');
+        $this->broker->insert('C', 'c@example.com');
+
+        $rows = $this->broker->listPage(2, 1);
+
+        self::assertCount(1, $rows);
+        self::assertSame('B', $rows[0]['name']);
+    }
+
+    public function testPaginateReturnsMetadataAndItems(): void
+    {
+        $this->broker->insert('A', 'a@example.com');
+        $this->broker->insert('B', 'b@example.com');
+        $this->broker->insert('C', 'c@example.com');
+
+        $page = $this->broker->paginateUsers(2, 2);
+
+        self::assertSame(3, $page['total']);
+        self::assertSame(2, $page['page']);
+        self::assertSame(2, $page['per_page']);
+        self::assertSame(2, $page['total_pages']);
+        self::assertTrue($page['has_previous']);
+        self::assertFalse($page['has_next']);
+        self::assertCount(1, $page['items']);
+        self::assertSame('C', $page['items'][0]['name']);
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────

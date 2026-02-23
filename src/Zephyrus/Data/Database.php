@@ -163,6 +163,71 @@ final class Database
     }
 
     /**
+     * Execute a count-style scalar query and return an int.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function count(string $sql, array $params = []): int
+    {
+        return $this->selectInt($sql, $params, 0);
+    }
+
+    /**
+     * Execute a paginated SELECT query by applying LIMIT/OFFSET.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function selectPage(string $sql, int $page, int $perPage, array $params = []): array
+    {
+        if ($page < 1) {
+            throw DatabaseException::queryFailed($sql, 'Page must be >= 1');
+        }
+
+        if ($perPage < 1) {
+            throw DatabaseException::queryFailed($sql, 'Per-page must be >= 1');
+        }
+
+        $offset = ($page - 1) * $perPage;
+
+        return $this->select(
+            $sql . sprintf(' LIMIT %d OFFSET %d', $perPage, $offset),
+            $params,
+        );
+    }
+
+    /**
+     * Execute coordinated count + paginated data queries.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    public function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
+    {
+        if ($page < 1) {
+            throw DatabaseException::queryFailed($dataSql, 'Page must be >= 1');
+        }
+
+        if ($perPage < 1) {
+            throw DatabaseException::queryFailed($dataSql, 'Per-page must be >= 1');
+        }
+
+        $total = $this->count($countSql, $params);
+        $items = $this->selectPage($dataSql, $page, $perPage, $params);
+        $totalPages = max(1, (int) ceil($total / $perPage));
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages,
+            'has_previous' => $page > 1,
+            'has_next' => $page < $totalPages,
+        ];
+    }
+
+    /**
      * Execute a write query and return affected row count.
      *
      * @param array<int|string, mixed> $params

@@ -210,6 +210,65 @@ final class DatabaseTest extends TestCase
         self::assertSame(1, $deleted);
     }
 
+    public function testCountReturnsScalarCount(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['A', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['B', 'b@example.com']);
+
+        self::assertSame(2, $this->db->count('SELECT COUNT(*) FROM users'));
+    }
+
+    public function testSelectPageReturnsLimitedWindow(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['A', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['B', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['C', 'c@example.com']);
+
+        $rows = $this->db->selectPage('SELECT * FROM users ORDER BY id', 2, 1);
+
+        self::assertCount(1, $rows);
+        self::assertSame('B', $rows[0]['name']);
+    }
+
+    public function testPaginateReturnsExpectedEnvelope(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['A', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['B', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['C', 'c@example.com']);
+
+        $page = $this->db->paginate(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            2,
+            2,
+        );
+
+        self::assertSame(3, $page['total']);
+        self::assertSame(2, $page['page']);
+        self::assertSame(2, $page['per_page']);
+        self::assertSame(2, $page['total_pages']);
+        self::assertTrue($page['has_previous']);
+        self::assertFalse($page['has_next']);
+        self::assertCount(1, $page['items']);
+        self::assertSame('C', $page['items'][0]['name']);
+    }
+
+    public function testSelectPageThrowsOnInvalidPaginationArguments(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Page must be >= 1');
+
+        $this->db->selectPage('SELECT * FROM users', 0, 10);
+    }
+
+    public function testPaginateThrowsOnInvalidPerPageArgument(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Per-page must be >= 1');
+
+        $this->db->paginate('SELECT * FROM users', 'SELECT COUNT(*) FROM users', 1, 0);
+    }
+
     public function testExecuteReturnsAffectedRows(): void
     {
         $affected = $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Dan', 'dan@example.com']);

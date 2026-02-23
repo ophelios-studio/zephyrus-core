@@ -135,7 +135,29 @@ abstract class Broker
      */
     protected function selectCount(string $sql, array $params = []): int
     {
-        return $this->selectInt($sql, $params, 0);
+        return $this->db->count($sql, $params);
+    }
+
+    /**
+     * Execute a paginated SELECT query by applying LIMIT/OFFSET.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    protected function selectPage(string $sql, int $page, int $perPage, array $params = []): array
+    {
+        return $this->db->selectPage($sql, $page, $perPage, $params);
+    }
+
+    /**
+     * Execute coordinated count + paginated data queries.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    protected function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
+    {
+        return $this->db->paginate($dataSql, $countSql, $page, $perPage, $params);
     }
 
     /**
