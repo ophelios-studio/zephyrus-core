@@ -346,6 +346,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Added unit coverage to assert the configured path is returned exactly.
 - Improves debuggability in kernel/runtime status reporting without changing cache read/write semantics.
 
+## Implemented Slice: RouteCache warm-up convenience API
+- Added `RouteCache::warm(RouteCollection): array` convenience method to save routes and return generated metadata in one call.
+- Warm-up now supports orchestration code that needs immediate cache metadata (`routes_hash`, `route_count`, `generated_at`) without a second explicit metadata read step.
+- Added unit coverage validating that warm-up returns complete metadata and materializes the cache file.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

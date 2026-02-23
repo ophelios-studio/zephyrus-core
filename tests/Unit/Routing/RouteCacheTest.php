@@ -88,6 +88,22 @@ final class RouteCacheTest extends TestCase
         self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $meta['routes_hash']);
     }
 
+    public function testWarmReturnsGeneratedMetadataAfterSavingRoutes(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $meta = $cache->warm($routes);
+
+        self::assertSame(1, $meta['version']);
+        self::assertSame(1, $meta['route_count']);
+        self::assertArrayHasKey('routes_hash', $meta);
+        self::assertArrayHasKey('generated_at', $meta);
+        self::assertTrue($cache->has());
+    }
+
     public function testGeneratedAtReturnsTimestampFromMetadata(): void
     {
         $routes = new RouteCollection();
