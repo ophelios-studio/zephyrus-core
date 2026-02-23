@@ -487,6 +487,17 @@ final class Rules
     }
 
     /**
+     * Validates ULID strings (26 Crockford Base32 chars).
+     */
+    public static function ulid(string $message = 'Must be a valid ULID.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */
