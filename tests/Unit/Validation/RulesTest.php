@@ -414,4 +414,45 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid IP address.', Rules::ip()->errorMessage());
     }
+
+    // ---- ipv4 ----
+
+    public function testIpv4Passes(): void
+    {
+        self::assertTrue(Rules::ipv4()->test('192.168.1.1'));
+        self::assertTrue(Rules::ipv4()->test('127.0.0.1'));
+    }
+
+    public function testIpv4Fails(): void
+    {
+        self::assertFalse(Rules::ipv4()->test('::1'));
+        self::assertFalse(Rules::ipv4()->test('2001:db8::1'));
+        self::assertFalse(Rules::ipv4()->test('999.999.999.999'));
+        self::assertFalse(Rules::ipv4()->test(null));
+    }
+
+    public function testIpv4DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid IPv4 address.', Rules::ipv4()->errorMessage());
+    }
+
+    // ---- ipv6 ----
+
+    public function testIpv6Passes(): void
+    {
+        self::assertTrue(Rules::ipv6()->test('::1'));
+        self::assertTrue(Rules::ipv6()->test('2001:db8::1'));
+    }
+
+    public function testIpv6Fails(): void
+    {
+        self::assertFalse(Rules::ipv6()->test('192.168.1.1'));
+        self::assertFalse(Rules::ipv6()->test('not-an-ip'));
+        self::assertFalse(Rules::ipv6()->test(null));
+    }
+
+    public function testIpv6DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid IPv6 address.', Rules::ipv6()->errorMessage());
+    }
 }

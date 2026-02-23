@@ -197,5 +197,27 @@ final class Rules
         );
     }
 
+    /**
+     * Validates a valid IPv4 address.
+     */
+    public static function ipv4(string $message = 'Must be a valid IPv4 address.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false,
+            $message,
+        );
+    }
+
+    /**
+     * Validates a valid IPv6 address.
+     */
+    public static function ipv6(string $message = 'Must be a valid IPv6 address.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false,
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

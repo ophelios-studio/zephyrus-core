@@ -378,6 +378,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Returns `null` when metadata is unavailable/invalid, aligned with existing nullable metadata accessors.
 - Added unit coverage for missing-metadata and post-save version-read scenarios.
 
+## Implemented Slice: Validation IP rule granularity (IPv4 / IPv6)
+- Added `Validation\Rules::ipv4()` and `Validation\Rules::ipv6()` for address-family-specific validation.
+- Keeps existing `Rules::ip()` for dual-stack acceptance while enabling explicit API contracts where only one family is allowed.
+- Added unit coverage for pass/fail/default-message paths across both new rules.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
