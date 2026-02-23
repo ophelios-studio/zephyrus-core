@@ -592,6 +592,67 @@ final class Rules
     }
 
     /**
+     * Validates a URL query string without the leading '?'.
+     */
+    public static function queryString(string $message = 'Must be a valid query string.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                if ($v === '') {
+                    return true;
+                }
+
+                if (str_starts_with($v, '?') || str_contains($v, '#') || str_contains($v, ' ')) {
+                    return false;
+                }
+
+                parse_str($v, $parsed);
+
+                return $parsed !== [];
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates a percent-encoded URL fragment/component.
+     */
+    public static function percentEncoded(string $message = 'Must be a valid percent-encoded string.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                return preg_match('/^(?:%[0-9A-Fa-f]{2}|[A-Za-z0-9\-._~])*$/', $v) === 1;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates an HTTP status code (100-599).
+     */
+    public static function httpStatusCode(string $message = 'Must be a valid HTTP status code.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (is_string($v) && ctype_digit($v)) {
+                    $v = (int) $v;
+                }
+
+                return is_int($v) && $v >= 100 && $v <= 599;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates an HTTP method token.
      */
     public static function httpMethod(string $message = 'Must be a valid HTTP method.'): Rule
