@@ -279,7 +279,23 @@ final class Router
     }
 
     /**
-     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>}
+     * @return array<int, string>
+     */
+    public function routeUniqueMiddlewares(): array
+    {
+        return $this->routes->uniqueMiddlewares();
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public function routePathsByMethod(): array
+    {
+        return $this->routes->pathsByMethod();
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>}
      */
     public function routeSummary(): array
     {

@@ -367,6 +367,11 @@ final class RouterTest extends TestCase
             'POST' => 1,
         ], $router->routeMethodHistogram());
         self::assertSame([], $router->routeMiddlewareHistogram());
+        self::assertSame([], $router->routeUniqueMiddlewares());
+        self::assertSame([
+            'GET' => ['/health', '/anonymous'],
+            'POST' => ['/users'],
+        ], $router->routePathsByMethod());
         self::assertSame([
             'total' => 3,
             'named' => 2,
@@ -377,6 +382,11 @@ final class RouterTest extends TestCase
                 'POST' => 1,
             ],
             'middlewares' => [],
+            'middleware_count' => 0,
+            'paths_by_method' => [
+                'GET' => ['/health', '/anonymous'],
+                'POST' => ['/users'],
+            ],
         ], $router->routeSummary());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
@@ -436,6 +446,11 @@ final class RouterTest extends TestCase
             'audit' => 1,
             'auth' => 2,
         ], $router->routeMiddlewareHistogram());
+        self::assertSame(['audit', 'auth'], $router->routeUniqueMiddlewares());
+        self::assertSame([
+            'GET' => ['/health'],
+            'POST' => ['/users'],
+        ], $router->routePathsByMethod());
 
         self::assertSame([
             'total' => 2,
@@ -449,6 +464,11 @@ final class RouterTest extends TestCase
             'middlewares' => [
                 'audit' => 1,
                 'auth' => 2,
+            ],
+            'middleware_count' => 2,
+            'paths_by_method' => [
+                'GET' => ['/health'],
+                'POST' => ['/users'],
             ],
         ], $router->routeSummary());
     }
