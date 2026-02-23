@@ -23,7 +23,7 @@ final readonly class RouteSignature
     public function signTemporary(string $url, int $ttlSeconds, ?int $now = null): string
     {
         if ($ttlSeconds <= 0) {
-            throw new RouteSignatureException('Temporary signature TTL must be greater than zero seconds');
+            throw RouteSignatureException::invalidTtl();
         }
 
         [$payload] = $this->split($url);
@@ -42,35 +42,50 @@ final readonly class RouteSignature
 
     public function verifyAt(string $url, ?int $now = null): bool
     {
-        [$payload, $signature, $expiry] = $this->split($url);
-
-        if ($signature === '') {
-            return false;
-        }
-
-        if ($expiry !== null) {
-            if (!$this->isValidExpiry($expiry)) {
-                return false;
-            }
-
-            if (($now ?? time()) > (int) $expiry) {
-                return false;
-            }
-        }
-
-        return hash_equals($this->compute($payload), $signature);
+        return $this->validationFailure($url, $now) === null;
     }
 
     public function assertValid(string $url): void
     {
-        if (!$this->verify($url)) {
-            throw new RouteSignatureException('Invalid route signature');
+        $this->assertValidAt($url);
+    }
+
+    public function assertValidAt(string $url, ?int $now = null): void
+    {
+        $failure = $this->validationFailure($url, $now);
+        if ($failure !== null) {
+            throw $failure;
         }
     }
 
     private function compute(string $payload): string
     {
         return hash_hmac('sha256', $payload, $this->secret);
+    }
+
+    private function validationFailure(string $url, ?int $now = null): ?RouteSignatureException
+    {
+        [$payload, $signature, $expiry] = $this->split($url);
+
+        if ($signature === '') {
+            return RouteSignatureException::invalidSignature();
+        }
+
+        if ($expiry !== null) {
+            if (!$this->isValidExpiry($expiry)) {
+                return RouteSignatureException::malformedExpiry();
+            }
+
+            if (($now ?? time()) > (int) $expiry) {
+                return RouteSignatureException::expiredSignature();
+            }
+        }
+
+        if (!hash_equals($this->compute($payload), $signature)) {
+            return RouteSignatureException::invalidSignature();
+        }
+
+        return null;
     }
 
     /**
