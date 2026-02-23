@@ -11,6 +11,12 @@ final class RouteCache
 {
     private const METADATA_VERSION = 1;
 
+    private const REASON_MISSING_FILE = 'missing-file';
+    private const REASON_INVALID_METADATA = 'invalid-metadata';
+    private const REASON_EXPIRED = 'expired';
+    private const REASON_STALE_ROUTES = 'stale-routes';
+    private const REASON_FRESH = 'fresh';
+
     public function __construct(private string $cacheFile)
     {
     }
@@ -151,18 +157,16 @@ final class RouteCache
     public function ensureFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): void
     {
         $state = $this->inspect($routes, $maxAgeSeconds, $now);
-
-        $message = match ($state['reason']) {
-            'missing-file' => 'Route cache file is missing',
-            'invalid-metadata' => 'Route cache metadata is missing or invalid',
-            'expired' => 'Route cache is expired',
-            'stale-routes' => 'Route cache does not match current routes',
-            default => null,
-        };
+        $message = $this->reasonToExceptionMessage($state['reason']);
 
         if ($message !== null) {
             throw new RouteCacheException($message);
         }
+    }
+
+    public function canUseWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
+    {
+        return $this->inspect($routes, $maxAgeSeconds, $now)['reason'] === self::REASON_FRESH;
     }
 
     /**
@@ -374,7 +378,7 @@ final class RouteCache
                 'metadata_valid' => false,
                 'fresh' => false,
                 'expired' => true,
-                'reason' => 'missing-file',
+                'reason' => self::REASON_MISSING_FILE,
                 'age' => null,
                 'expires_at' => null,
                 'generated_at' => null,
@@ -388,7 +392,7 @@ final class RouteCache
                 'metadata_valid' => false,
                 'fresh' => false,
                 'expired' => true,
-                'reason' => 'invalid-metadata',
+                'reason' => self::REASON_INVALID_METADATA,
                 'age' => null,
                 'expires_at' => null,
                 'generated_at' => null,
@@ -405,7 +409,7 @@ final class RouteCache
                 'metadata_valid' => true,
                 'fresh' => false,
                 'expired' => true,
-                'reason' => 'expired',
+                'reason' => self::REASON_EXPIRED,
                 'age' => $age,
                 'expires_at' => $expiresAt,
                 'generated_at' => $meta['generated_at'],
@@ -419,7 +423,7 @@ final class RouteCache
                 'metadata_valid' => true,
                 'fresh' => false,
                 'expired' => false,
-                'reason' => 'stale-routes',
+                'reason' => self::REASON_STALE_ROUTES,
                 'age' => $age,
                 'expires_at' => $expiresAt,
                 'generated_at' => $meta['generated_at'],
@@ -431,11 +435,22 @@ final class RouteCache
             'metadata_valid' => true,
             'fresh' => true,
             'expired' => false,
-            'reason' => 'fresh',
+            'reason' => self::REASON_FRESH,
             'age' => $age,
             'expires_at' => $expiresAt,
             'generated_at' => $meta['generated_at'],
         ];
+    }
+
+    private function reasonToExceptionMessage(string $reason): ?string
+    {
+        return match ($reason) {
+            self::REASON_MISSING_FILE => 'Route cache file is missing',
+            self::REASON_INVALID_METADATA => 'Route cache metadata is missing or invalid',
+            self::REASON_EXPIRED => 'Route cache is expired',
+            self::REASON_STALE_ROUTES => 'Route cache does not match current routes',
+            default => null,
+        };
     }
 
     /**

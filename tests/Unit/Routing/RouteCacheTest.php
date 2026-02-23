@@ -706,6 +706,39 @@ final class RouteCacheTest extends TestCase
         $cache->inspect(new RouteCollection(), -1);
     }
 
+    public function testCanUseWithinReturnsTrueForFreshCache(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        self::assertTrue($cache->canUseWithin($routes, 60, $generatedAt + 10));
+    }
+
+    public function testCanUseWithinReturnsFalseForStaleOrExpiredCache(): void
+    {
+        $cachedRoutes = new RouteCollection();
+        $cachedRoutes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $currentRoutes = new RouteCollection();
+        $currentRoutes->add(Route::define('GET', '/health', 'HealthController@show'));
+        $currentRoutes->add(Route::define('GET', '/status', 'HealthController@status'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($cachedRoutes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        self::assertFalse($cache->canUseWithin($currentRoutes, 60, $generatedAt + 10));
+        self::assertFalse($cache->canUseWithin($cachedRoutes, 60, $generatedAt + 61));
+    }
+
     public function testSaveCreatesMissingCacheDirectory(): void
     {
         $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);
