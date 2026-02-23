@@ -148,12 +148,41 @@ final class RouteCollection
     }
 
     /**
-     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>}
+     * @return array<string, array<int, string>>
+     */
+    public function pathsByMethod(): array
+    {
+        $grouped = [];
+
+        foreach ($this->routes as $route) {
+            $grouped[$route->method] ??= [];
+            $grouped[$route->method][] = $route->path;
+        }
+
+        ksort($grouped);
+
+        return $grouped;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function uniqueMiddlewares(): array
+    {
+        $unique = array_keys($this->middlewareHistogram());
+        sort($unique);
+
+        return $unique;
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>}
      */
     public function summary(): array
     {
         $total = $this->count();
         $named = count($this->names());
+        $middlewares = $this->middlewareHistogram();
 
         return [
             'total' => $total,
@@ -161,7 +190,9 @@ final class RouteCollection
             'unnamed' => $total - $named,
             'duplicate_names' => count($this->duplicateRouteNames()),
             'methods' => $this->methodHistogram(),
-            'middlewares' => $this->middlewareHistogram(),
+            'middlewares' => $middlewares,
+            'middleware_count' => count($middlewares),
+            'paths_by_method' => $this->pathsByMethod(),
         ];
     }
 

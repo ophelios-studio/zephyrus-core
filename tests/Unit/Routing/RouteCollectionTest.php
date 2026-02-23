@@ -377,6 +377,28 @@ final class RouteCollectionTest extends TestCase
         ], $collection->middlewareHistogram());
     }
 
+    public function testUniqueMiddlewaresReturnsSortedNames(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show', middlewares: ['auth']));
+        $collection->add(Route::define('POST', '/users', 'UserController@store', middlewares: ['audit', 'auth']));
+
+        self::assertSame(['audit', 'auth'], $collection->uniqueMiddlewares());
+    }
+
+    public function testPathsByMethodGroupsPathsByHttpMethod(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        self::assertSame([
+            'GET' => ['/health', '/users'],
+            'POST' => ['/users'],
+        ], $collection->pathsByMethod());
+    }
+
     public function testSummaryReturnsRouteRegistryMetrics(): void
     {
         $collection = new RouteCollection();
@@ -396,6 +418,11 @@ final class RouteCollectionTest extends TestCase
             'middlewares' => [
                 'audit' => 2,
                 'auth' => 2,
+            ],
+            'middleware_count' => 2,
+            'paths_by_method' => [
+                'GET' => ['/health', '/users'],
+                'POST' => ['/users'],
             ],
         ], $collection->summary());
     }
