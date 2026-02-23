@@ -47,6 +47,49 @@ final class RouteCacheTest extends TestCase
         self::assertSame('POST', $loaded->all()[1]->method);
     }
 
+    public function testHasReturnsFalseWhenCacheFileMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertFalse($cache->has());
+    }
+
+    public function testHasReturnsTrueAfterSave(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        self::assertTrue($cache->has());
+    }
+
+    public function testClearRemovesExistingCacheFile(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        self::assertFileExists($this->cacheFile);
+
+        $cache->clear();
+
+        self::assertFileDoesNotExist($this->cacheFile);
+        self::assertFalse($cache->has());
+    }
+
+    public function testClearIsNoOpWhenCacheFileMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $cache->clear();
+
+        self::assertFalse($cache->has());
+    }
+
     public function testLoadThrowsWhenCacheFileMissing(): void
     {
         $cache = new RouteCache($this->cacheFile);
@@ -128,6 +171,52 @@ final class RouteCacheTest extends TestCase
         $this->expectExceptionMessage('Route cache payload contains unsupported metadata version');
 
         $cache->load();
+    }
+
+    public function testIsFreshReturnsTrueWhenCacheMatchesRoutes(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        self::assertTrue($cache->isFresh($routes));
+    }
+
+    public function testIsFreshReturnsFalseWhenRouteSetChanges(): void
+    {
+        $cachedRoutes = new RouteCollection();
+        $cachedRoutes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $currentRoutes = new RouteCollection();
+        $currentRoutes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+        $currentRoutes->add(Route::define('GET', '/status', 'HealthController@status', name: 'health.status'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($cachedRoutes);
+
+        self::assertFalse($cache->isFresh($currentRoutes));
+    }
+
+    public function testIsFreshReturnsFalseWhenCacheMetadataMissing(): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertFalse($cache->isFresh(new RouteCollection()));
+    }
+
+    public function testIsFreshReturnsFalseWhenCachePayloadInvalid(): void
+    {
+        file_put_contents($this->cacheFile, '{broken-json}');
+
+        $cache = new RouteCache($this->cacheFile);
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        self::assertFalse($cache->isFresh($routes));
     }
 
     public function testSaveCreatesMissingCacheDirectory(): void
