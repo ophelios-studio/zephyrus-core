@@ -342,4 +342,41 @@ final class RouterTest extends TestCase
         self::assertNotNull($route);
         self::assertSame('/ping', $route->path);
     }
+
+    // -----------------------------------------------------------------------
+    // joinPath edge cases (both/left/right empty)
+    // -----------------------------------------------------------------------
+
+    public function testGroupJoinPathBothSegmentsEmpty(): void
+    {
+        // prefix '/' and path '/' both trim to '' → joined path must be '/'
+        $router = (new Router())->group('/', static fn (Router $r): Router => $r
+            ->get('/', 'RootController@index'));
+
+        $route = $router->routes()->all()[0];
+
+        self::assertSame('/', $route->path);
+    }
+
+    public function testGroupJoinPathPrefixOnlyEmpty(): void
+    {
+        // prefix '/' trims to '' but path '/health' has content → '/health'
+        $router = (new Router())->group('/', static fn (Router $r): Router => $r
+            ->get('/health', 'HealthController@show'));
+
+        $route = $router->routes()->all()[0];
+
+        self::assertSame('/health', $route->path);
+    }
+
+    public function testGroupJoinPathSuffixOnlyEmpty(): void
+    {
+        // prefix '/admin' has content but path '/' trims to '' → '/admin'
+        $router = (new Router())->group('/admin', static fn (Router $r): Router => $r
+            ->get('/', 'AdminController@index'));
+
+        $route = $router->routes()->all()[0];
+
+        self::assertSame('/admin', $route->path);
+    }
 }

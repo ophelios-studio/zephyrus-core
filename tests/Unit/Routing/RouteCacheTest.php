@@ -225,4 +225,120 @@ final class RouteCacheTest extends TestCase
 
         $cache->load();
     }
+
+    public function testLoadThrowsWhenDecodedPayloadIsNotArray(): void
+    {
+        file_put_contents($this->cacheFile, 'null');
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload must decode to an array');
+
+        $cache->load();
+    }
+
+    public function testLoadSucceedsWithAbsentMeta(): void
+    {
+        // A cache file with no 'meta' key — all meta checks are skipped.
+        $payload = ['routes' => []];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+        $collection = $cache->load();
+
+        self::assertCount(0, $collection->all());
+    }
+
+    public function testLoadThrowsWhenMetaRoutesHashIsNotString(): void
+    {
+        $payload = [
+            'meta' => ['version' => 1, 'routes_hash' => 999],
+            'routes' => [],
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload contains invalid metadata');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenRouteEntryIsNotArray(): void
+    {
+        $routes = ['not-an-array-entry'];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry must be an object-like array');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenRouteEntryMissingRequiredKey(): void
+    {
+        $routes = [['method' => 'GET', 'path' => '/health']]; // missing 'handler'
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry missing valid "handler"');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenOptionalFieldsAreInvalid(): void
+    {
+        // name is not null and not a string
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => 42,
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid optional fields');
+
+        $cache->load();
+    }
 }

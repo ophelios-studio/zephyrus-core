@@ -76,6 +76,21 @@ final class PlainHandlerController
     {
         return Response::text($payload instanceof Request ? 'request' : $payload);
     }
+
+    public function withUnionStrict(int|float $val): Response
+    {
+        return Response::json(['val' => $val]);
+    }
+
+    public function withStringCoerce(string $label): Response
+    {
+        return Response::text($label);
+    }
+
+    public function withDateTimeParam(\DateTimeInterface $dt): Response
+    {
+        return Response::text($dt->format('Y'));
+    }
 }
 
 final class NonInstantiableController
@@ -515,6 +530,155 @@ final class HandlerResolverTest extends TestCase
         self::assertSame(401, $response->status);
         self::assertSame('halted', $response->body);
         self::assertArrayNotHasKey('X-After', $response->headers);
+    }
+
+    // -- toFloat paths --------------------------------------------------------
+
+    public function testFloatNativeIntAttributeIsCoerced(): void
+    {
+        $match = $this->makeMatch('GET', '/scores/{score}', PlainHandlerController::class . '@withFloatParam', ['score' => 5]);
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/scores/5')->withAttribute('score', 5),
+        );
+
+        self::assertStringContainsString('"score":5', $response->body);
+    }
+
+    public function testFloatInvalidAttributeThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/expected float/');
+
+        $match = $this->makeMatch('GET', '/scores/{score}', PlainHandlerController::class . '@withFloatParam');
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/scores/abc')->withAttribute('score', 'abc'),
+        );
+    }
+
+    // -- toBool paths ---------------------------------------------------------
+
+    public function testBoolIntOneAttributeIsTrue(): void
+    {
+        $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/flags/1')->withAttribute('active', 1),
+        );
+
+        self::assertStringContainsString('"active":true', $response->body);
+    }
+
+    public function testBoolIntZeroAttributeIsFalse(): void
+    {
+        $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/flags/0')->withAttribute('active', 0),
+        );
+
+        self::assertStringContainsString('"active":false', $response->body);
+    }
+
+    // -- toString paths -------------------------------------------------------
+
+    public function testStringIntAttributeIsCoerced(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{label}', PlainHandlerController::class . '@withStringCoerce');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/42')->withAttribute('label', 42),
+        );
+
+        self::assertSame('42', $response->body);
+    }
+
+    public function testStringFloatAttributeIsCoerced(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{label}', PlainHandlerController::class . '@withStringCoerce');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/3.14')->withAttribute('label', 3.14),
+        );
+
+        self::assertSame('3.14', $response->body);
+    }
+
+    public function testStringBoolAttributeIsCoerced(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{label}', PlainHandlerController::class . '@withStringCoerce');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/1')->withAttribute('label', true),
+        );
+
+        self::assertSame('1', $response->body);
+    }
+
+    public function testStringArrayAttributeThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/expected string/');
+
+        $match = $this->makeMatch('GET', '/items/{label}', PlainHandlerController::class . '@withStringCoerce');
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/x')->withAttribute('label', ['a', 'b']),
+        );
+    }
+
+    // -- union type all-fail → describeType -----------------------------------
+
+    public function testUnionTypeAllCastsFailThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/expected int\|float/');
+
+        $match = $this->makeMatch('GET', '/vals/{val}', PlainHandlerController::class . '@withUnionStrict');
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/vals/abc')->withAttribute('val', 'abc'),
+        );
+    }
+
+    // -- class type → default passthrough in castToNamedType ------------------
+
+    public function testClassTypeAttributePassesThroughUntouched(): void
+    {
+        $now = new \DateTime('2025-01-01');
+        $match = $this->makeMatch('GET', '/dt', PlainHandlerController::class . '@withDateTimeParam');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/dt')->withAttribute('dt', $now),
+        );
+
+        self::assertSame('2025', $response->body);
+    }
+
+    // -- null for non-nullable named type -------------------------------------
+
+    public function testNullForNonNullableNamedTypeThrows(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/expected int/');
+
+        $match = $this->makeMatch('GET', '/items/{id}', PlainHandlerController::class . '@withIntParam');
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/null')->withAttribute('id', null),
+        );
     }
 
     // -- RouteDispatcher integration ------------------------------------------
