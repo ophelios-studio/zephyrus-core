@@ -9,6 +9,11 @@ use Zephyrus\Controller\Controller;
 use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Validation\ErrorBag;
+use Zephyrus\Validation\FieldValidator;
+use Zephyrus\Validation\FormValidator;
+use Zephyrus\Validation\Rules;
+use Zephyrus\Validation\ValidationException;
 
 // ---------------------------------------------------------------------------
 // Fixture — minimal concrete subclass
@@ -86,6 +91,15 @@ final class HeaderDecoratingController extends Controller
     public function act(): Response
     {
         return $this->json(['data' => 'value']);
+    }
+}
+
+/** Exposes validate() via public proxy for testing */
+final class ValidatingController extends Controller
+{
+    public function runValidate(FormValidator $form, array $data): ErrorBag
+    {
+        return $this->validate($form, $data);
     }
 }
 
@@ -262,5 +276,49 @@ final class ControllerTest extends TestCase
         self::assertNotNull($early);
         self::assertSame(403, $early->status);
         self::assertSame('blocked', $early->body);
+    }
+
+    // ---- validate() helper --------------------------------------------------
+
+    public function testValidateHelperReturnsEmptyBagOnSuccess(): void
+    {
+        $controller = new ValidatingController();
+        $form = new FormValidator([
+            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+        ]);
+
+        $bag = $controller->runValidate($form, ['email' => 'alice@example.com']);
+
+        self::assertInstanceOf(ErrorBag::class, $bag);
+        self::assertFalse($bag->hasErrors());
+    }
+
+    public function testValidateHelperThrowsValidationExceptionOnFailure(): void
+    {
+        $controller = new ValidatingController();
+        $form = new FormValidator([
+            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+            'name'  => FieldValidator::withRules(Rules::required()),
+        ]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Validation failed.');
+
+        $controller->runValidate($form, ['email' => 'not-an-email', 'name' => '']);
+    }
+
+    public function testValidateHelperExceptionCarriesErrors(): void
+    {
+        $controller = new ValidatingController();
+        $form = new FormValidator([
+            'age' => FieldValidator::withRules(Rules::required(), Rules::integer()),
+        ]);
+
+        try {
+            $controller->runValidate($form, ['age' => 'abc']);
+            self::fail('Expected ValidationException.');
+        } catch (ValidationException $e) {
+            self::assertTrue($e->errors()->hasErrorsFor('age'));
+        }
     }
 }

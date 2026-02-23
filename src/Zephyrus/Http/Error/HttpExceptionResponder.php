@@ -9,6 +9,7 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Validation\ValidationException;
 
 final class HttpExceptionResponder
 {
@@ -28,10 +29,34 @@ final class HttpExceptionResponder
             );
         }
 
+        if ($exception instanceof ValidationException) {
+            return $this->formatValidation($exception, $request);
+        }
+
         return $this->format(
             payload: new HttpErrorPayload(500, 'Internal Server Error'),
             request: $request,
         );
+    }
+
+    private function formatValidation(ValidationException $exception, ?Request $request): Response
+    {
+        $errors = $exception->errors()->toArray();
+
+        if ($this->prefersProblemJson($request)) {
+            return Response::json([
+                'type'   => 'about:blank',
+                'title'  => 'Unprocessable Entity',
+                'status' => 422,
+                'errors' => $errors,
+            ], 422)->withHeader('Content-Type', 'application/problem+json; charset=utf-8');
+        }
+
+        if ($this->prefersJson($request)) {
+            return Response::json(['errors' => $errors], 422);
+        }
+
+        return Response::text('Unprocessable Entity', 422);
     }
 
     private function format(HttpErrorPayload $payload, ?Request $request): Response

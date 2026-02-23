@@ -6,6 +6,9 @@ namespace Zephyrus\Controller;
 
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Validation\ErrorBag;
+use Zephyrus\Validation\FormValidator;
+use Zephyrus\Validation\ValidationException;
 
 /**
  * Optional base class for route controllers.
@@ -129,5 +132,29 @@ abstract class Controller implements ControllerLifecycleInterface
     protected function respond(array $payload, int $status): Response
     {
         return Response::json($payload, $status);
+    }
+
+    /**
+     * Validates $data against the given FormValidator.
+     *
+     * Returns an empty ErrorBag on success, or throws ValidationException
+     * when any field fails — so callers can let the exception propagate to
+     * HttpExceptionResponder for an automatic 422 response.
+     *
+     * ```php
+     * public function store(Request $request): Response
+     * {
+     *     $this->validate($this->storeForm(), $request->all());
+     *     // … proceed with valid data
+     * }
+     * ```
+     *
+     * @param array<string, mixed> $data
+     *
+     * @throws ValidationException
+     */
+    protected function validate(FormValidator $form, array $data): ErrorBag
+    {
+        return $form->validateOrFail($data);
     }
 }
