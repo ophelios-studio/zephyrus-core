@@ -335,6 +335,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Added explicit unit coverage that `Validation\Rules` keeps a private constructor as a static utility class contract.
 - Prevents accidental public instantiation regressions while preserving the static factory-only API surface.
 
+## Implemented Slice: RouteCache filesystem failure-path hardening
+- Added explicit tests for RouteCache write-path operational failures:
+  - directory creation failure when cache path parent cannot be created (`/dev/null/...`)
+  - file write failure when cache target is a directory path
+- Result: filesystem edge failures are now asserted as typed `RouteCacheException` paths instead of silent environmental assumptions.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

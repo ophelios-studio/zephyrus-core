@@ -743,4 +743,38 @@ final class RouteCacheTest extends TestCase
 
         $cache->load();
     }
+
+    public function testSaveThrowsWhenCacheDirectoryCannotBeCreated(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache('/dev/null/zephyrus-routes.json');
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Unable to create route cache directory');
+
+        $cache->save($routes);
+    }
+
+    public function testSaveThrowsWhenCacheFileCannotBeWritten(): void
+    {
+        $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);
+        mkdir($cacheDirectory, 0777, true);
+
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        // Intentionally point cache file path to a directory, so file_put_contents fails.
+        $cache = new RouteCache($cacheDirectory);
+
+        try {
+            $this->expectException(RouteCacheException::class);
+            $this->expectExceptionMessage('Unable to write route cache file');
+
+            $cache->save($routes);
+        } finally {
+            @rmdir($cacheDirectory);
+        }
+    }
 }
