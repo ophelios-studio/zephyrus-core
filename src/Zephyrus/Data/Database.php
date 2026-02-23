@@ -98,12 +98,6 @@ final class Database
 
         try {
             $result = $work($this);
-
-            if ($ownTransaction) {
-                $this->pdo->commit();
-            }
-
-            return $result;
         } catch (\Throwable $e) {
             if ($ownTransaction && $this->pdo->inTransaction()) {
                 try {
@@ -117,6 +111,28 @@ final class Database
 
             throw $e;
         }
+
+        if ($ownTransaction) {
+            try {
+                $this->pdo->commit();
+            } catch (PDOException $commitEx) {
+                if ($this->pdo->inTransaction()) {
+                    try {
+                        $this->pdo->rollBack();
+                    } catch (PDOException $rollbackEx) {
+                        throw DatabaseException::transactionFailed(sprintf(
+                            'commit: %s; rollback after commit failure: %s',
+                            $commitEx->getMessage(),
+                            $rollbackEx->getMessage(),
+                        ));
+                    }
+                }
+
+                throw DatabaseException::transactionFailed("commit: {$commitEx->getMessage()}");
+            }
+        }
+
+        return $result;
     }
 
     /**

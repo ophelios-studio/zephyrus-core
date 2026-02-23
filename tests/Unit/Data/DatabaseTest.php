@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Data;
 
 use PDO;
+use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Database;
@@ -145,5 +146,129 @@ final class DatabaseTest extends TestCase
     {
         $value = $this->db->transaction(fn (): string => 'hello');
         self::assertSame('hello', $value);
+    }
+
+    public function testTransactionWrapsBeginFailureAsDatabaseException(): void
+    {
+        $pdo = new class ('sqlite::memory:') extends PDO {
+            public function beginTransaction(): bool
+            {
+                throw new PDOException('begin failed');
+            }
+        };
+
+        $db = new Database($pdo);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Transaction failed: begin: begin failed');
+
+        $db->transaction(fn (): string => 'ok');
+    }
+
+    public function testTransactionWrapsCommitFailureAsDatabaseException(): void
+    {
+        $pdo = new class ('sqlite::memory:') extends PDO {
+            private bool $inTransaction = false;
+
+            public function beginTransaction(): bool
+            {
+                $this->inTransaction = true;
+
+                return true;
+            }
+
+            public function inTransaction(): bool
+            {
+                return $this->inTransaction;
+            }
+
+            public function commit(): bool
+            {
+                throw new PDOException('commit failed');
+            }
+
+            public function rollBack(): bool
+            {
+                $this->inTransaction = false;
+
+                return true;
+            }
+        };
+
+        $db = new Database($pdo);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Transaction failed: commit: commit failed');
+
+        $db->transaction(fn (): string => 'ok');
+    }
+
+    public function testTransactionReportsRollbackFailureAfterCommitFailure(): void
+    {
+        $pdo = new class ('sqlite::memory:') extends PDO {
+            private bool $inTransaction = false;
+
+            public function beginTransaction(): bool
+            {
+                $this->inTransaction = true;
+
+                return true;
+            }
+
+            public function inTransaction(): bool
+            {
+                return $this->inTransaction;
+            }
+
+            public function commit(): bool
+            {
+                throw new PDOException('commit failed hard');
+            }
+
+            public function rollBack(): bool
+            {
+                throw new PDOException('rollback also failed');
+            }
+        };
+
+        $db = new Database($pdo);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Transaction failed: commit: commit failed hard; rollback after commit failure: rollback also failed');
+
+        $db->transaction(fn (): string => 'ok');
+    }
+
+    public function testTransactionReportsRollbackFailureAfterWorkException(): void
+    {
+        $pdo = new class ('sqlite::memory:') extends PDO {
+            private bool $inTransaction = false;
+
+            public function beginTransaction(): bool
+            {
+                $this->inTransaction = true;
+
+                return true;
+            }
+
+            public function inTransaction(): bool
+            {
+                return $this->inTransaction;
+            }
+
+            public function rollBack(): bool
+            {
+                throw new PDOException('rollback after work failed');
+            }
+        };
+
+        $db = new Database($pdo);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Transaction failed: rollback after error: rollback after work failed');
+
+        $db->transaction(function (): void {
+            throw new \RuntimeException('work failed');
+        });
     }
 }
