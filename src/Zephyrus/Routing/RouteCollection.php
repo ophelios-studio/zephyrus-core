@@ -77,6 +77,11 @@ final class RouteCollection
 
             if (!$this->routeAcceptsMethod($route, $method)) {
                 $allowedMethods[] = $route->method;
+
+                if ($route->method === 'GET') {
+                    $allowedMethods[] = 'HEAD';
+                }
+
                 continue;
             }
 

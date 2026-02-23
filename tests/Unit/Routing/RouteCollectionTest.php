@@ -74,7 +74,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('POST', '/users', 'UserController@store'));
 
         $this->expectException(MethodNotAllowedException::class);
-        $this->expectExceptionMessage('Method not allowed for /users. Allowed: GET, POST');
+        $this->expectExceptionMessage('Method not allowed for /users. Allowed: GET, HEAD, POST');
 
         $collection->match('DELETE', '/users');
     }
@@ -150,6 +150,19 @@ final class RouteCollectionTest extends TestCase
 
         self::assertSame('GET', $match->route->method);
         self::assertSame('/health', $match->route->path);
+    }
+
+    public function testMethodNotAllowedIncludesHeadWhenGetRouteExists(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        try {
+            $collection->match('DELETE', '/health');
+            self::fail('Expected MethodNotAllowedException to be thrown');
+        } catch (MethodNotAllowedException $exception) {
+            self::assertSame(['GET', 'HEAD'], $exception->allowedMethods);
+        }
     }
 
     public function testMatchThrowsRouteSignatureExceptionForInvalidConstraintPattern(): void
