@@ -254,6 +254,41 @@ final class Database
     }
 
     /**
+     * Execute paginated query and map each returned item through a transformer.
+     *
+     * @param array<int|string, mixed> $params
+     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     */
+    public function paginateResultMapped(
+        string $dataSql,
+        string $countSql,
+        int $page,
+        int $perPage,
+        callable $mapper,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->paginateResult($dataSql, $countSql, $page, $perPage, $params)
+            ->mapItems($mapper);
+    }
+
+    /**
+     * Execute paginated query with PaginationRequest and map each returned item.
+     *
+     * @param array<int|string, mixed> $params
+     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     */
+    public function paginateResultMappedWith(
+        string $dataSql,
+        string $countSql,
+        PaginationRequest $pagination,
+        callable $mapper,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->paginateResultWith($dataSql, $countSql, $pagination, $params)
+            ->mapItems($mapper);
+    }
+
+    /**
      * Execute a write query and return affected row count.
      *
      * @param array<int|string, mixed> $params

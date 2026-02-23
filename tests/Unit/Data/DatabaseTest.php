@@ -298,6 +298,31 @@ final class DatabaseTest extends TestCase
         self::assertSame(1, $typed->itemCount());
     }
 
+    public function testMappedPaginateResultHelpersTransformItems(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['alpha', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['beta', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['gamma', 'c@example.com']);
+
+        $mapped = $this->db->paginateResultMapped(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            1,
+            2,
+            static fn (array $row): array => [...$row, 'name' => strtoupper((string) $row['name'])],
+        );
+        self::assertSame('ALPHA', $mapped->items[0]['name']);
+        self::assertSame('BETA', $mapped->items[1]['name']);
+
+        $mappedWith = $this->db->paginateResultMappedWith(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            new PaginationRequest(2, 2),
+            static fn (array $row): array => [...$row, 'name' => strtoupper((string) $row['name'])],
+        );
+        self::assertSame('GAMMA', $mappedWith->items[0]['name']);
+    }
+
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void
     {
         $this->expectException(DatabaseException::class);

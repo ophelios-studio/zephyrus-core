@@ -9,7 +9,7 @@ namespace Zephyrus\Data;
  *
  * @template T of array<string, mixed>
  */
-final class PaginatedResult
+final class PaginatedResult implements \JsonSerializable
 {
     /**
      * @param array<int, array<string, mixed>> $items
@@ -65,5 +65,49 @@ final class PaginatedResult
     public function itemCount(): int
     {
         return count($this->items);
+    }
+
+    /**
+     * @return null|array<string, mixed>
+     */
+    public function firstItem(): ?array
+    {
+        return $this->items[0] ?? null;
+    }
+
+    /**
+     * @return null|array<string, mixed>
+     */
+    public function lastItem(): ?array
+    {
+        if ($this->items === []) {
+            return null;
+        }
+
+        return $this->items[count($this->items) - 1];
+    }
+
+    /**
+     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     */
+    public function mapItems(callable $mapper): self
+    {
+        return new self(
+            items: array_map($mapper, $this->items),
+            total: $this->total,
+            page: $this->page,
+            perPage: $this->perPage,
+            totalPages: $this->totalPages,
+            hasPrevious: $this->hasPrevious,
+            hasNext: $this->hasNext,
+        );
+    }
+
+    /**
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }

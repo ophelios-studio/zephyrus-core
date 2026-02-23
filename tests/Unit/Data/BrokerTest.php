@@ -120,6 +120,33 @@ final class UserBroker extends Broker
         );
     }
 
+    public function paginateUsersNamesMapped(int $page, int $perPage): PaginatedResult
+    {
+        return $this->paginateResultMapped(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $page,
+            $perPage,
+            static fn (array $row): array => [
+                ...$row,
+                'name' => strtoupper((string) $row['name']),
+            ],
+        );
+    }
+
+    public function paginateUsersNamesMappedWith(PaginationRequest $pagination): PaginatedResult
+    {
+        return $this->paginateResultMappedWith(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $pagination,
+            static fn (array $row): array => [
+                ...$row,
+                'name' => strtoupper((string) $row['name']),
+            ],
+        );
+    }
+
     public function insert(string $name, string $email): int
     {
         return (int) $this->insertRowGetId(
@@ -335,6 +362,20 @@ final class BrokerTest extends TestCase
         $typed = $this->broker->paginateUsersResultWith($pagination);
         self::assertInstanceOf(PaginatedResult::class, $typed);
         self::assertSame(1, $typed->itemCount());
+    }
+
+    public function testMappedPaginationHelpersTransformItems(): void
+    {
+        $this->broker->insert('alpha', 'a@example.com');
+        $this->broker->insert('beta', 'b@example.com');
+        $this->broker->insert('gamma', 'c@example.com');
+
+        $mapped = $this->broker->paginateUsersNamesMapped(1, 2);
+        self::assertSame('ALPHA', $mapped->items[0]['name']);
+        self::assertSame('BETA', $mapped->items[1]['name']);
+
+        $mappedWith = $this->broker->paginateUsersNamesMappedWith(new PaginationRequest(2, 2));
+        self::assertSame('GAMMA', $mappedWith->items[0]['name']);
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
