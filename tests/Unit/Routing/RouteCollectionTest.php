@@ -119,4 +119,24 @@ final class RouteCollectionTest extends TestCase
         self::assertNotNull($route);
         self::assertSame('/users', $route->path);
     }
+
+    public function testMatchTreatsEncodedSlashAsPartOfSingleSegment(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/files/{path}', 'FileController@show', ['path' => '.+']));
+
+        $match = $collection->match('GET', '/files/a%2Fb');
+
+        self::assertSame('a/b', $match->parameter('path'));
+    }
+
+    public function testMatchKeepsPlusCharacterLiteralInPathSegments(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/tags/{name}', 'TagController@show', ['name' => '[a-z+]+' ]));
+
+        $match = $collection->match('GET', '/tags/c++');
+
+        self::assertSame('c++', $match->parameter('name'));
+    }
 }
