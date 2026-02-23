@@ -15,6 +15,11 @@ final class RouteCache
     {
     }
 
+    public function filePath(): string
+    {
+        return $this->cacheFile;
+    }
+
     public function has(): bool
     {
         return is_file($this->cacheFile);

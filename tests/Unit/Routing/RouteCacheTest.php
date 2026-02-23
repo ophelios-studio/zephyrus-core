@@ -47,6 +47,13 @@ final class RouteCacheTest extends TestCase
         self::assertSame('POST', $loaded->all()[1]->method);
     }
 
+    public function testFilePathReturnsConfiguredCacheLocation(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertSame($this->cacheFile, $cache->filePath());
+    }
+
     public function testHasReturnsFalseWhenCacheFileMissing(): void
     {
         $cache = new RouteCache($this->cacheFile);

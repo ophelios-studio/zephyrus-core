@@ -341,6 +341,11 @@ $router->group('/api/v1', fn ($r) => $r
   - file write failure when cache target is a directory path
 - Result: filesystem edge failures are now asserted as typed `RouteCacheException` paths instead of silent environmental assumptions.
 
+## Implemented Slice: RouteCache cache-path observability helper
+- Added `RouteCache::filePath(): string` to expose the resolved cache file location for diagnostics and tooling.
+- Added unit coverage to assert the configured path is returned exactly.
+- Improves debuggability in kernel/runtime status reporting without changing cache read/write semantics.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
