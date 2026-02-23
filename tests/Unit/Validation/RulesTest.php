@@ -11,10 +11,17 @@ final class RulesTest extends TestCase
 {
     public function testRulesConstructorIsPrivateUtilityClassContract(): void
     {
-        $constructor = (new \ReflectionClass(Rules::class))->getConstructor();
+        $reflection = new \ReflectionClass(Rules::class);
+        $constructor = $reflection->getConstructor();
 
         self::assertNotNull($constructor);
         self::assertTrue($constructor->isPrivate());
+
+        $instance = $reflection->newInstanceWithoutConstructor();
+        $constructor->setAccessible(true);
+        $constructor->invoke($instance);
+
+        self::assertInstanceOf(Rules::class, $instance);
     }
 
     // ---- required ----
