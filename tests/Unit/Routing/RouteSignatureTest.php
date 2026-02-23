@@ -39,4 +39,44 @@ final class RouteSignatureTest extends TestCase
 
         $signer->assertValid('https://example.com/users/42');
     }
+
+    public function testSignCanonicalizesQueryOrderingBeforeSigning(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->sign('https://example.com/users/42?b=2&a=1');
+
+        self::assertStringStartsWith('https://example.com/users/42?a=1&b=2&_sig=', $signed);
+        self::assertTrue($signer->verify($signed));
+    }
+
+    public function testSignReplacesExistingSignatureParameter(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->sign('https://example.com/users/42?a=1&_sig=old-signature');
+
+        self::assertSame(1, substr_count($signed, '_sig='));
+        self::assertTrue($signer->verify($signed));
+    }
+
+    public function testSignPreservesFragmentAfterSignature(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->sign('https://example.com/users/42?expand=roles#section-2');
+
+        self::assertStringContainsString('#section-2', $signed);
+        self::assertTrue($signer->verify($signed));
+    }
+
+    public function testSignAndVerifySupportsRelativeUrls(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->sign('/users/42?expand=roles');
+
+        self::assertStringStartsWith('/users/42?expand=roles&_sig=', $signed);
+        self::assertTrue($signer->verify($signed));
+    }
 }
