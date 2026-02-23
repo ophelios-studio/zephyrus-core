@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Router;
 
 // ---------------------------------------------------------------------------
@@ -341,6 +342,44 @@ final class RouterTest extends TestCase
 
         self::assertNotNull($route);
         self::assertSame('/ping', $route->path);
+    }
+
+    public function testRouterIntrospectionHelpersMirrorCollectionState(): void
+    {
+        $router = (new Router())
+            ->get('/health', 'HealthController@show')->name('health.show')
+            ->post('/users', 'UserController@store')->name('users.store')
+            ->get('/anonymous', 'AnonymousController@index');
+
+        self::assertFalse($router->isEmpty());
+        self::assertSame(3, $router->count());
+        self::assertTrue($router->hasRouteNamed('health.show'));
+        self::assertFalse($router->hasRouteNamed('missing.name'));
+        self::assertSame(['health.show', 'users.store'], $router->routeNames());
+        self::assertSame([], $router->duplicateRouteNames());
+    }
+
+    public function testRouterAssertNoDuplicateRouteNamesThrowsWhenDuplicatesExist(): void
+    {
+        $router = (new Router())
+            ->get('/a', 'AController@show')->name('users.show')
+            ->get('/b', 'BController@show')->name('users.show');
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Duplicate route names detected: users.show');
+
+        $router->assertNoDuplicateRouteNames();
+    }
+
+    public function testRouterAssertNoDuplicateRouteNamesReturnsSelfWhenValid(): void
+    {
+        $router = (new Router())
+            ->get('/a', 'AController@show')->name('users.show')
+            ->get('/b', 'BController@show')->name('users.index');
+
+        $result = $router->assertNoDuplicateRouteNames();
+
+        self::assertSame($router, $result);
     }
 
     // -----------------------------------------------------------------------
