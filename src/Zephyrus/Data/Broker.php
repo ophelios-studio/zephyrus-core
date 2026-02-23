@@ -203,6 +203,39 @@ abstract class Broker
     }
 
     /**
+     * Execute paginated query and map each item through a transformer.
+     *
+     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateResultMapped(
+        string $dataSql,
+        string $countSql,
+        int $page,
+        int $perPage,
+        callable $mapper,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->db->paginateResultMapped($dataSql, $countSql, $page, $perPage, $mapper, $params);
+    }
+
+    /**
+     * Execute paginated query using PaginationRequest and map each item.
+     *
+     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateResultMappedWith(
+        string $dataSql,
+        string $countSql,
+        PaginationRequest $pagination,
+        callable $mapper,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->db->paginateResultMappedWith($dataSql, $countSql, $pagination, $mapper, $params);
+    }
+
+    /**
      * Execute an INSERT, UPDATE, or DELETE statement and return the number
      * of affected rows.
      *

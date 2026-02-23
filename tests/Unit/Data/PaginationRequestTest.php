@@ -37,6 +37,44 @@ final class PaginationRequestTest extends TestCase
         self::assertSame(25, $request->perPage);
     }
 
+    public function testFromArrayWithBoundsClampsPerPageToMax(): void
+    {
+        $request = PaginationRequest::fromArrayWithBounds([
+            'page' => 2,
+            'per_page' => 999,
+        ], defaultPerPage: 25, maxPerPage: 100);
+
+        self::assertSame(2, $request->page);
+        self::assertSame(100, $request->perPage);
+    }
+
+    public function testFromArrayWithBoundsClampsPerPageToMinimumOne(): void
+    {
+        $request = PaginationRequest::fromArrayWithBounds([
+            'page' => 1,
+            'per_page' => 0,
+        ], defaultPerPage: 25, maxPerPage: 100);
+
+        self::assertSame(1, $request->perPage);
+    }
+
+    public function testWithPageAndWithPerPageReturnNewInstances(): void
+    {
+        $request = new PaginationRequest(page: 2, perPage: 25);
+
+        $changedPage = $request->withPage(3);
+        $changedPerPage = $request->withPerPage(50);
+
+        self::assertSame(2, $request->page);
+        self::assertSame(25, $request->perPage);
+
+        self::assertSame(3, $changedPage->page);
+        self::assertSame(25, $changedPage->perPage);
+
+        self::assertSame(2, $changedPerPage->page);
+        self::assertSame(50, $changedPerPage->perPage);
+    }
+
     public function testConstructThrowsWhenPageIsInvalid(): void
     {
         $this->expectException(DatabaseException::class);
@@ -51,5 +89,21 @@ final class PaginationRequestTest extends TestCase
         $this->expectExceptionMessage('Per-page must be >= 1');
 
         new PaginationRequest(page: 1, perPage: 0);
+    }
+
+    public function testFromArrayWithBoundsThrowsWhenDefaultPerPageInvalid(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default per-page must be >= 1');
+
+        PaginationRequest::fromArrayWithBounds([], defaultPerPage: 0, maxPerPage: 10);
+    }
+
+    public function testFromArrayWithBoundsThrowsWhenMaxPerPageInvalid(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Max per-page must be >= 1');
+
+        PaginationRequest::fromArrayWithBounds([], defaultPerPage: 10, maxPerPage: 0);
     }
 }

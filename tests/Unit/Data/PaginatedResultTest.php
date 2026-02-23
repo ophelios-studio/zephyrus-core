@@ -63,5 +63,66 @@ final class PaginatedResultTest extends TestCase
 
         self::assertTrue($result->isEmpty());
         self::assertSame(0, $result->itemCount());
+        self::assertNull($result->firstItem());
+        self::assertNull($result->lastItem());
+    }
+
+    public function testFirstAndLastItemForNonEmptyResult(): void
+    {
+        $result = new PaginatedResult(
+            items: [
+                ['id' => 1, 'name' => 'Alice'],
+                ['id' => 2, 'name' => 'Bob'],
+            ],
+            total: 2,
+            page: 1,
+            perPage: 10,
+            totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
+        );
+
+        self::assertSame('Alice', $result->firstItem()['name']);
+        self::assertSame('Bob', $result->lastItem()['name']);
+    }
+
+    public function testMapItemsReturnsTransformedResult(): void
+    {
+        $result = new PaginatedResult(
+            items: [
+                ['id' => 1, 'name' => 'alpha'],
+                ['id' => 2, 'name' => 'beta'],
+            ],
+            total: 2,
+            page: 1,
+            perPage: 10,
+            totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
+        );
+
+        $mapped = $result->mapItems(static fn (array $row): array => [
+            ...$row,
+            'name' => strtoupper((string) $row['name']),
+        ]);
+
+        self::assertSame('ALPHA', $mapped->items[0]['name']);
+        self::assertSame('BETA', $mapped->items[1]['name']);
+        self::assertSame(2, $mapped->total);
+    }
+
+    public function testJsonSerializeMatchesArrayEnvelope(): void
+    {
+        $result = new PaginatedResult(
+            items: [['id' => 10, 'name' => 'X']],
+            total: 1,
+            page: 1,
+            perPage: 10,
+            totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
+        );
+
+        self::assertSame($result->toArray(), $result->jsonSerialize());
     }
 }
