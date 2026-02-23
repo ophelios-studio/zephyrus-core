@@ -171,6 +171,96 @@ final class RouteCache
         }
     }
 
+    /**
+     * Inspect cache state for diagnostics.
+     *
+     * @return array{
+     *   exists: bool,
+     *   metadata_valid: bool,
+     *   fresh: bool,
+     *   expired: bool,
+     *   reason: string,
+     *   age: ?int,
+     *   expires_at: ?int,
+     *   generated_at: ?int
+     * }
+     */
+    public function inspect(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): array
+    {
+        if ($maxAgeSeconds < 0) {
+            throw new RouteCacheException('Route cache max age must be zero or greater');
+        }
+
+        if (!$this->has()) {
+            return [
+                'exists' => false,
+                'metadata_valid' => false,
+                'fresh' => false,
+                'expired' => true,
+                'reason' => 'missing-file',
+                'age' => null,
+                'expires_at' => null,
+                'generated_at' => null,
+            ];
+        }
+
+        $meta = $this->metadata();
+        if ($meta === null) {
+            return [
+                'exists' => true,
+                'metadata_valid' => false,
+                'fresh' => false,
+                'expired' => true,
+                'reason' => 'invalid-metadata',
+                'age' => null,
+                'expires_at' => null,
+                'generated_at' => null,
+            ];
+        }
+
+        $age = $this->age($now);
+        $expiresAt = $this->expiresAt($maxAgeSeconds);
+        $expired = $this->isExpired($maxAgeSeconds, $now);
+
+        if ($expired) {
+            return [
+                'exists' => true,
+                'metadata_valid' => true,
+                'fresh' => false,
+                'expired' => true,
+                'reason' => 'expired',
+                'age' => $age,
+                'expires_at' => $expiresAt,
+                'generated_at' => $meta['generated_at'],
+            ];
+        }
+
+        $fresh = $this->isFresh($routes);
+        if (!$fresh) {
+            return [
+                'exists' => true,
+                'metadata_valid' => true,
+                'fresh' => false,
+                'expired' => false,
+                'reason' => 'stale-routes',
+                'age' => $age,
+                'expires_at' => $expiresAt,
+                'generated_at' => $meta['generated_at'],
+            ];
+        }
+
+        return [
+            'exists' => true,
+            'metadata_valid' => true,
+            'fresh' => true,
+            'expired' => false,
+            'reason' => 'fresh',
+            'age' => $age,
+            'expires_at' => $expiresAt,
+            'generated_at' => $meta['generated_at'],
+        ];
+    }
+
     public function save(RouteCollection $routes): void
     {
         $routesPayload = $this->routesToPayload($routes->all());
