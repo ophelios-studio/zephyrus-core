@@ -372,6 +372,8 @@ final class RouterTest extends TestCase
             'GET' => ['/health', '/anonymous'],
             'POST' => ['/users'],
         ], $router->routePathsByMethod());
+        self::assertSame([], $router->routeParameterHistogram());
+        self::assertSame([], $router->routeConstrainedParameterHistogram());
         self::assertSame([
             'total' => 3,
             'named' => 2,
@@ -387,6 +389,8 @@ final class RouterTest extends TestCase
                 'GET' => ['/health', '/anonymous'],
                 'POST' => ['/users'],
             ],
+            'parameters' => [],
+            'constrained_parameters' => [],
         ], $router->routeSummary());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
@@ -440,7 +444,7 @@ final class RouterTest extends TestCase
     {
         $router = (new Router())
             ->get('/health', 'HealthController@show', middlewares: ['auth'])
-            ->post('/users', 'UserController@store', middlewares: ['auth', 'audit']);
+            ->post('/users/{id}', 'UserController@store', ['id' => '\\d+'], ['auth', 'audit']);
 
         self::assertSame([
             'audit' => 1,
@@ -449,8 +453,14 @@ final class RouterTest extends TestCase
         self::assertSame(['audit', 'auth'], $router->routeUniqueMiddlewares());
         self::assertSame([
             'GET' => ['/health'],
-            'POST' => ['/users'],
+            'POST' => ['/users/{id}'],
         ], $router->routePathsByMethod());
+        self::assertSame([
+            'id' => 1,
+        ], $router->routeParameterHistogram());
+        self::assertSame([
+            'id' => 1,
+        ], $router->routeConstrainedParameterHistogram());
 
         self::assertSame([
             'total' => 2,
@@ -468,7 +478,13 @@ final class RouterTest extends TestCase
             'middleware_count' => 2,
             'paths_by_method' => [
                 'GET' => ['/health'],
-                'POST' => ['/users'],
+                'POST' => ['/users/{id}'],
+            ],
+            'parameters' => [
+                'id' => 1,
+            ],
+            'constrained_parameters' => [
+                'id' => 1,
             ],
         ], $router->routeSummary());
     }

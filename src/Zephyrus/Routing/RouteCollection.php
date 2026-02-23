@@ -176,7 +176,47 @@ final class RouteCollection
     }
 
     /**
-     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>}
+     * @return array<string, int>
+     */
+    public function parameterHistogram(): array
+    {
+        $histogram = [];
+
+        foreach ($this->routes as $route) {
+            preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $route->path, $matches);
+
+            foreach ($matches[1] ?? [] as $parameter) {
+                $name = (string) $parameter;
+                $histogram[$name] = ($histogram[$name] ?? 0) + 1;
+            }
+        }
+
+        ksort($histogram);
+
+        return $histogram;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function constrainedParameterHistogram(): array
+    {
+        $histogram = [];
+
+        foreach ($this->routes as $route) {
+            foreach (array_keys($route->constraints) as $parameter) {
+                $name = (string) $parameter;
+                $histogram[$name] = ($histogram[$name] ?? 0) + 1;
+            }
+        }
+
+        ksort($histogram);
+
+        return $histogram;
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>}
      */
     public function summary(): array
     {
@@ -193,6 +233,8 @@ final class RouteCollection
             'middlewares' => $middlewares,
             'middleware_count' => count($middlewares),
             'paths_by_method' => $this->pathsByMethod(),
+            'parameters' => $this->parameterHistogram(),
+            'constrained_parameters' => $this->constrainedParameterHistogram(),
         ];
     }
 
