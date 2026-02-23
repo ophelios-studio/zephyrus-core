@@ -409,6 +409,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Composes existing `hostname()` and `ip()` rules for a single expressive API contract in config and request validation.
 - Added unit coverage for hostname pass, IPv4/IPv6 pass, invalid input failures, and default message path.
 
+## Implemented Slice: Validation host:port endpoint rule
+- Added `Validation\Rules::hostPort()` for endpoint values combining host and TCP/UDP port.
+- Supports hostname/IPv4 in `host:port` form and IPv6 in `[ipv6]:port` form.
+- Composes existing `host()`, `ipv6()`, and `port()` validation primitives.
+- Added unit coverage for valid endpoints and malformed/invalid edge cases.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

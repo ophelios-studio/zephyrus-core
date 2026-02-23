@@ -329,5 +329,38 @@ final class Rules
         );
     }
 
+    /**
+     * Validates a host:port endpoint.
+     * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
+     */
+    public static function hostPort(string $message = 'Must be a valid host:port endpoint.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                if (str_starts_with($v, '[')) {
+                    if (!preg_match('/^\[(.+)]:(\d+)$/', $v, $matches)) {
+                        return false;
+                    }
+
+                    return self::ipv6()->test($matches[1]) && self::port()->test($matches[2]);
+                }
+
+                $parts = explode(':', $v);
+                if (count($parts) !== 2) {
+                    return false;
+                }
+
+                [$host, $port] = $parts;
+
+                return self::host()->test($host) && self::port()->test($port);
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

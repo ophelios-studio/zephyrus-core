@@ -572,4 +572,29 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid host.', Rules::host()->errorMessage());
     }
+
+    // ---- hostPort ----
+
+    public function testHostPortPassesValidEndpoints(): void
+    {
+        self::assertTrue(Rules::hostPort()->test('example.com:443'));
+        self::assertTrue(Rules::hostPort()->test('192.168.1.10:8080'));
+        self::assertTrue(Rules::hostPort()->test('[2001:db8::1]:443'));
+    }
+
+    public function testHostPortFailsInvalidEndpoints(): void
+    {
+        self::assertFalse(Rules::hostPort()->test('example.com'));
+        self::assertFalse(Rules::hostPort()->test('example.com:0'));
+        self::assertFalse(Rules::hostPort()->test('example.com:70000'));
+        self::assertFalse(Rules::hostPort()->test('bad..host:443'));
+        self::assertFalse(Rules::hostPort()->test('2001:db8::1:443')); // IPv6 must be bracketed
+        self::assertFalse(Rules::hostPort()->test('[2001:db8::1]443'));
+        self::assertFalse(Rules::hostPort()->test(null));
+    }
+
+    public function testHostPortDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid host:port endpoint.', Rules::hostPort()->errorMessage());
+    }
 }
