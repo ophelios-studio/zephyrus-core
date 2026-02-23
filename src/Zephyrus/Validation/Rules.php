@@ -330,6 +330,29 @@ final class Rules
     }
 
     /**
+     * Validates an inclusive port range expressed as "start-end".
+     */
+    public static function portRange(string $message = 'Must be a valid port range.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || !str_contains($v, '-')) {
+                    return false;
+                }
+
+                [$start, $end] = explode('-', $v, 2);
+
+                if (!self::port()->test($start) || !self::port()->test($end)) {
+                    return false;
+                }
+
+                return (int) $start <= (int) $end;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */

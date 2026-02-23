@@ -415,6 +415,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Composes existing `host()`, `ipv6()`, and `port()` validation primitives.
 - Added unit coverage for valid endpoints and malformed/invalid edge cases.
 
+## Implemented Slice: Validation port-range rule
+- Added `Validation\Rules::portRange()` for inclusive port-range strings in `start-end` format.
+- Reuses existing `port()` rule for each endpoint and enforces `start <= end`.
+- Added unit coverage for valid ranges, missing delimiter, invalid endpoints, reversed ranges, and default message path.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
