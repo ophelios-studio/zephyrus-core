@@ -30,6 +30,23 @@ final class UserBroker extends Broker
         return $this->selectCount('SELECT COUNT(*) FROM users');
     }
 
+    public function findEmailById(int $id): ?string
+    {
+        $value = $this->selectValue('SELECT email FROM users WHERE id = ?', [$id]);
+
+        return $value === null ? null : (string) $value;
+    }
+
+    public function countNamed(string $name): int
+    {
+        return $this->selectCount('SELECT COUNT(*) FROM users WHERE name = ?', [$name]);
+    }
+
+    public function firstIdOr(int $default): int
+    {
+        return (int) $this->selectValue('SELECT id FROM users ORDER BY id LIMIT 1', default: $default);
+    }
+
     public function insert(string $name, string $email): int
     {
         $this->execute(
@@ -125,6 +142,34 @@ final class BrokerTest extends TestCase
         $this->broker->insert('Dave', 'dave@example.com');
         $this->broker->insert('Eve', 'eve@example.com');
         self::assertSame(2, $this->broker->count());
+    }
+
+    public function testSelectCountSupportsParameterizedQuery(): void
+    {
+        $this->broker->insert('Eve', 'eve1@example.com');
+        $this->broker->insert('Eve', 'eve2@example.com');
+        $this->broker->insert('Alice', 'alice@example.com');
+
+        self::assertSame(2, $this->broker->countNamed('Eve'));
+    }
+
+    // ── selectValue ──────────────────────────────────────────────────────────
+
+    public function testSelectValueReturnsScalarValueFromFirstColumn(): void
+    {
+        $id = $this->broker->insert('Mona', 'mona@example.com');
+
+        self::assertSame('mona@example.com', $this->broker->findEmailById($id));
+    }
+
+    public function testSelectValueReturnsNullWhenNoRowsAndNoDefault(): void
+    {
+        self::assertNull($this->broker->findEmailById(999));
+    }
+
+    public function testSelectValueUsesDefaultWhenNoRows(): void
+    {
+        self::assertSame(123, $this->broker->firstIdOr(123));
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
