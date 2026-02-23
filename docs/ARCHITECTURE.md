@@ -450,6 +450,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Enforces ULID alphabet restrictions and fixed-length shape.
 - Added unit coverage for valid/invalid/default-message scenarios.
 
+## Implemented Slice: Validation SHA-256 digest rule
+- Added `Validation\Rules::sha256()` for lowercase hex SHA-256 digests.
+- Enforces exact 64-character lowercase hexadecimal shape.
+- Added unit coverage for valid/invalid/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

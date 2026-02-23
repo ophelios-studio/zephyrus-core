@@ -567,6 +567,17 @@ final class Rules
     }
 
     /**
+     * Validates a lowercase hex-encoded SHA-256 digest.
+     */
+    public static function sha256(string $message = 'Must be a valid SHA-256 hash.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-f0-9]{64}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */

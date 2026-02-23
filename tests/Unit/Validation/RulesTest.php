@@ -901,6 +901,26 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid ULID.', Rules::ulid()->errorMessage());
     }
 
+    // ---- sha256 ----
+
+    public function testSha256Passes(): void
+    {
+        self::assertTrue(Rules::sha256()->test('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'));
+    }
+
+    public function testSha256Fails(): void
+    {
+        self::assertFalse(Rules::sha256()->test(''));
+        self::assertFalse(Rules::sha256()->test('E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'));
+        self::assertFalse(Rules::sha256()->test('abc'));
+        self::assertFalse(Rules::sha256()->test(null));
+    }
+
+    public function testSha256DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid SHA-256 hash.', Rules::sha256()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
