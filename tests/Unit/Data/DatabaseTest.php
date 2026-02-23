@@ -13,6 +13,7 @@ use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Data\PaginatedResult;
 use Zephyrus\Data\PaginationRequest;
+use Zephyrus\Data\SortRequest;
 
 final class DatabaseTest extends TestCase
 {
@@ -341,6 +342,32 @@ final class DatabaseTest extends TestCase
         self::assertSame(2, $page->perPage);
         self::assertSame(1, $page->itemCount());
         self::assertSame('gamma', strtolower((string) $page->firstItem()['name']));
+    }
+
+    public function testSortedDatabaseHelpersApplyOrderingAndPagination(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['charlie', 'c@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['alice', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['bravo', 'b@example.com']);
+
+        $sort = new SortRequest('name', 'ASC');
+
+        $sorted = $this->db->selectSorted('SELECT * FROM users', $sort);
+        self::assertSame('alice', $sorted[0]['name']);
+        self::assertSame('bravo', $sorted[1]['name']);
+        self::assertSame('charlie', $sorted[2]['name']);
+
+        $page = $this->db->selectPageSorted('SELECT * FROM users', $sort, new PaginationRequest(2, 2));
+        self::assertCount(1, $page);
+        self::assertSame('charlie', $page[0]['name']);
+
+        $typed = $this->db->paginateSortedResultWith(
+            'SELECT * FROM users',
+            'SELECT COUNT(*) FROM users',
+            $sort,
+            new PaginationRequest(1, 2),
+        );
+        self::assertSame('alice', $typed->firstItem()['name']);
     }
 
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void

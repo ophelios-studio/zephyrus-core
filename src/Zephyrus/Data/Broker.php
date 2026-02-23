@@ -161,6 +161,28 @@ abstract class Broker
     }
 
     /**
+     * Execute a sorted SELECT query.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    protected function selectSorted(string $sql, SortRequest $sort, array $params = []): array
+    {
+        return $this->db->selectSorted($sql, $sort, $params);
+    }
+
+    /**
+     * Execute a sorted paginated SELECT query.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    protected function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, array $params = []): array
+    {
+        return $this->db->selectPageSorted($sql, $sort, $pagination, $params);
+    }
+
+    /**
      * Execute coordinated count + paginated data queries.
      *
      * @param array<int|string, mixed> $params
@@ -180,6 +202,22 @@ abstract class Broker
     protected function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
     {
         return $this->db->paginateWith($dataSql, $countSql, $pagination, $params);
+    }
+
+    /**
+     * Execute coordinated count + sorted paginated data queries.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    protected function paginateSortedWith(
+        string $dataSql,
+        string $countSql,
+        SortRequest $sort,
+        PaginationRequest $pagination,
+        array $params = [],
+    ): array {
+        return $this->db->paginateSortedWith($dataSql, $countSql, $sort, $pagination, $params);
     }
 
     /**
@@ -257,6 +295,21 @@ abstract class Broker
             $maxPerPage,
             $params,
         );
+    }
+
+    /**
+     * Execute coordinated count + sorted paginated data queries and return typed envelope.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateSortedResultWith(
+        string $dataSql,
+        string $countSql,
+        SortRequest $sort,
+        PaginationRequest $pagination,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->db->paginateSortedResultWith($dataSql, $countSql, $sort, $pagination, $params);
     }
 
     /**
