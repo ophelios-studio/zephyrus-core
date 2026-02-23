@@ -163,6 +163,17 @@ final class DatabaseTest extends TestCase
         self::assertGreaterThan(0, (int) $id);
     }
 
+    public function testInTransactionReflectsActiveTransactionState(): void
+    {
+        self::assertFalse($this->db->inTransaction());
+
+        $this->db->transaction(function (Database $db): void {
+            self::assertTrue($db->inTransaction());
+        });
+
+        self::assertFalse($this->db->inTransaction());
+    }
+
     // ── transaction() ────────────────────────────────────────────────────────
 
     public function testTransactionCommitsOnSuccess(): void

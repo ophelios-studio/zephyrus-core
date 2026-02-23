@@ -153,6 +153,14 @@ final class Database
     }
 
     /**
+     * Report whether the underlying connection currently has an active transaction.
+     */
+    public function inTransaction(): bool
+    {
+        return $this->pdo->inTransaction();
+    }
+
+    /**
      * Expose the underlying PDO for advanced callers (e.g. schema migrations).
      * Prefer the typed helpers for normal query work.
      */

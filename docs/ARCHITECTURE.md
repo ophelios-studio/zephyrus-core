@@ -358,6 +358,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Includes explicit guard for negative max-age input using typed `RouteCacheException`.
 - Added unit coverage for: missing-cache warm, fresh-cache no-op, and negative-age failure path.
 
+## Implemented Slice: Database transaction-state observability helper
+- Added `Data\Database::inTransaction(): bool` to expose live transaction state from the underlying PDO connection.
+- Enables service-layer and broker diagnostics to assert transactional context without reaching into raw PDO.
+- Added unit coverage ensuring state transitions are correct before, during, and after `Database::transaction()` execution.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
