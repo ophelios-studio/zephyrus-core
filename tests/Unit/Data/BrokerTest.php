@@ -8,6 +8,7 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Broker;
 use Zephyrus\Data\Database;
+use Zephyrus\Data\PaginatedResult;
 
 // ---------------------------------------------------------------------------
 // Minimal concrete stub — exposes protected helpers as public for testing.
@@ -78,6 +79,16 @@ final class UserBroker extends Broker
     public function paginateUsers(int $page, int $perPage): array
     {
         return $this->paginate(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $page,
+            $perPage,
+        );
+    }
+
+    public function paginateUsersResult(int $page, int $perPage): PaginatedResult
+    {
+        return $this->paginateResult(
             'SELECT * FROM users ORDER BY id',
             'SELECT COUNT(*) FROM users',
             $page,
@@ -262,6 +273,24 @@ final class BrokerTest extends TestCase
         self::assertFalse($page['has_next']);
         self::assertCount(1, $page['items']);
         self::assertSame('C', $page['items'][0]['name']);
+    }
+
+    public function testPaginateResultReturnsObjectEnvelope(): void
+    {
+        $this->broker->insert('A', 'a@example.com');
+        $this->broker->insert('B', 'b@example.com');
+        $this->broker->insert('C', 'c@example.com');
+
+        $page = $this->broker->paginateUsersResult(2, 2);
+
+        self::assertInstanceOf(PaginatedResult::class, $page);
+        self::assertSame(3, $page->total);
+        self::assertSame(2, $page->page);
+        self::assertSame(2, $page->perPage);
+        self::assertSame(2, $page->totalPages);
+        self::assertTrue($page->hasPrevious);
+        self::assertFalse($page->hasNext);
+        self::assertSame(1, $page->itemCount());
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
