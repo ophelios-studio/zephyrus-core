@@ -789,6 +789,28 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid semantic version.', Rules::semver()->errorMessage());
     }
 
+    // ---- ulid ----
+
+    public function testUlidPasses(): void
+    {
+        self::assertTrue(Rules::ulid()->test('01ARZ3NDEKTSV4RRFFQ69G5FAV'));
+        self::assertTrue(Rules::ulid()->test('7ZZZZZZZZZZZZZZZZZZZZZZZZZ'));
+    }
+
+    public function testUlidFails(): void
+    {
+        self::assertFalse(Rules::ulid()->test(''));
+        self::assertFalse(Rules::ulid()->test('01ARZ3NDEKTSV4RRFFQ69G5FA')); // too short
+        self::assertFalse(Rules::ulid()->test('01ARZ3NDEKTSV4RRFFQ69G5FAVX')); // too long
+        self::assertFalse(Rules::ulid()->test('01ARZ3NDEKTSV4RRFFQ69G5FAI')); // I not allowed
+        self::assertFalse(Rules::ulid()->test(null));
+    }
+
+    public function testUlidDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid ULID.', Rules::ulid()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void

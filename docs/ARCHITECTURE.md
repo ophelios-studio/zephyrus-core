@@ -445,6 +445,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Supports core `MAJOR.MINOR.PATCH` plus optional pre-release and build metadata segments.
 - Added unit coverage for valid/invalid/default-message scenarios.
 
+## Implemented Slice: Validation ULID rule
+- Added `Validation\Rules::ulid()` for 26-character Crockford Base32 ULID identifiers.
+- Enforces ULID alphabet restrictions and fixed-length shape.
+- Added unit coverage for valid/invalid/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
