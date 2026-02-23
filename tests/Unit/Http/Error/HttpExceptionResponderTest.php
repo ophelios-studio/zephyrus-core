@@ -60,4 +60,21 @@ final class HttpExceptionResponderTest extends TestCase
         self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
+
+    public function testFormatsErrorAsProblemJsonWhenRequestAcceptsProblemJson(): void
+    {
+        $responder = new HttpExceptionResponder();
+
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/missing',
+            headers: ['Accept' => 'application/problem+json'],
+        );
+
+        $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
+
+        self::assertSame(404, $response->status);
+        self::assertSame('application/problem+json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('{"type":"about:blank","title":"Not Found","status":404}', $response->body);
+    }
 }
