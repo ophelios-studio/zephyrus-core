@@ -573,6 +573,31 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid host.', Rules::host()->errorMessage());
     }
 
+    // ---- portRange ----
+
+    public function testPortRangePasses(): void
+    {
+        self::assertTrue(Rules::portRange()->test('1-65535'));
+        self::assertTrue(Rules::portRange()->test('80-443'));
+        self::assertTrue(Rules::portRange()->test('8080-8080'));
+    }
+
+    public function testPortRangeFails(): void
+    {
+        self::assertFalse(Rules::portRange()->test(''));
+        self::assertFalse(Rules::portRange()->test('80'));
+        self::assertFalse(Rules::portRange()->test('0-80'));
+        self::assertFalse(Rules::portRange()->test('80-70000'));
+        self::assertFalse(Rules::portRange()->test('443-80'));
+        self::assertFalse(Rules::portRange()->test('abc-def'));
+        self::assertFalse(Rules::portRange()->test(null));
+    }
+
+    public function testPortRangeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid port range.', Rules::portRange()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
