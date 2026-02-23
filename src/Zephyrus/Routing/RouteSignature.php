@@ -40,9 +40,9 @@ final readonly class RouteSignature
         return $this->verifyAt($url);
     }
 
-    public function verifyAt(string $url, ?int $now = null): bool
+    public function verifyAt(string $url, ?int $now = null, int $clockSkewSeconds = 0): bool
     {
-        return $this->validationFailure($url, $now) === null;
+        return $this->validationFailure($url, $now, $clockSkewSeconds) === null;
     }
 
     public function assertValid(string $url): void
@@ -50,9 +50,9 @@ final readonly class RouteSignature
         $this->assertValidAt($url);
     }
 
-    public function assertValidAt(string $url, ?int $now = null): void
+    public function assertValidAt(string $url, ?int $now = null, int $clockSkewSeconds = 0): void
     {
-        $failure = $this->validationFailure($url, $now);
+        $failure = $this->validationFailure($url, $now, $clockSkewSeconds);
         if ($failure !== null) {
             throw $failure;
         }
@@ -63,7 +63,7 @@ final readonly class RouteSignature
         return hash_hmac('sha256', $payload, $this->secret);
     }
 
-    private function validationFailure(string $url, ?int $now = null): ?RouteSignatureException
+    private function validationFailure(string $url, ?int $now = null, int $clockSkewSeconds = 0): ?RouteSignatureException
     {
         [$payload, $signature, $expiry] = $this->split($url);
 
@@ -71,12 +71,14 @@ final readonly class RouteSignature
             return RouteSignatureException::invalidSignature();
         }
 
+        $skew = max(0, $clockSkewSeconds);
+
         if ($expiry !== null) {
             if (!$this->isValidExpiry($expiry)) {
                 return RouteSignatureException::malformedExpiry();
             }
 
-            if (($now ?? time()) > (int) $expiry) {
+            if (($now ?? time()) > ((int) $expiry + $skew)) {
                 return RouteSignatureException::expiredSignature();
             }
         }
