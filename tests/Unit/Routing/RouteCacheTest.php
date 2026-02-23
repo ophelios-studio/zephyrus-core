@@ -208,6 +208,24 @@ final class RouteCacheTest extends TestCase
         self::assertFalse($cache->isFresh(new RouteCollection()));
     }
 
+    public function testIsFreshReturnsFalseWhenRouteCountMetadataIsMissing(): void
+    {
+        $routes = [];
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertFalse($cache->isFresh(new RouteCollection()));
+    }
+
     public function testIsFreshReturnsFalseWhenCachePayloadInvalid(): void
     {
         file_put_contents($this->cacheFile, '{broken-json}');
@@ -266,6 +284,79 @@ final class RouteCacheTest extends TestCase
 
         $this->expectException(RouteCacheException::class);
         $this->expectExceptionMessage('Route cache payload contains invalid metadata hash format');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenMetadataRouteCountIsInvalid(): void
+    {
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode([], JSON_THROW_ON_ERROR)),
+                'route_count' => '1',
+            ],
+            'routes' => [],
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload contains invalid metadata route count');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenMetadataRouteCountDoesNotMatchPayload(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => null,
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+                'route_count' => 99,
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload metadata route count mismatch');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenMetadataGeneratedAtIsInvalid(): void
+    {
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode([], JSON_THROW_ON_ERROR)),
+                'route_count' => 0,
+                'generated_at' => 'now',
+            ],
+            'routes' => [],
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload contains invalid metadata generation timestamp');
 
         $cache->load();
     }
