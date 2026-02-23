@@ -372,6 +372,17 @@ final class Rules
     }
 
     /**
+     * Validates a URL slug (lowercase letters, numbers, single hyphen separators).
+     */
+    public static function slug(string $message = 'Must be a valid slug.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */

@@ -622,6 +622,31 @@ final class RulesTest extends TestCase
         self::assertSame('Must be valid JSON.', Rules::json()->errorMessage());
     }
 
+    // ---- slug ----
+
+    public function testSlugPasses(): void
+    {
+        self::assertTrue(Rules::slug()->test('zephyrus2'));
+        self::assertTrue(Rules::slug()->test('hello-world'));
+        self::assertTrue(Rules::slug()->test('api-v1-endpoint'));
+    }
+
+    public function testSlugFails(): void
+    {
+        self::assertFalse(Rules::slug()->test(''));
+        self::assertFalse(Rules::slug()->test('Hello-World'));
+        self::assertFalse(Rules::slug()->test('-leading'));
+        self::assertFalse(Rules::slug()->test('trailing-'));
+        self::assertFalse(Rules::slug()->test('double--dash'));
+        self::assertFalse(Rules::slug()->test('with_underscore'));
+        self::assertFalse(Rules::slug()->test(null));
+    }
+
+    public function testSlugDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid slug.', Rules::slug()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
