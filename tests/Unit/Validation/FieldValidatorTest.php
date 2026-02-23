@@ -100,4 +100,80 @@ final class FieldValidatorTest extends TestCase
         self::assertSame([], $v->validate('hello'));
         self::assertSame(['Must be at least 3 characters.'], $v->validate('ab'));
     }
+
+    // ---- optional() ----
+
+    public function testOptionalSkipsRulesOnNull(): void
+    {
+        $v = FieldValidator::optional(Rules::email());
+        self::assertSame([], $v->validate(null));
+    }
+
+    public function testOptionalSkipsRulesOnEmptyString(): void
+    {
+        $v = FieldValidator::optional(Rules::email());
+        self::assertSame([], $v->validate(''));
+    }
+
+    public function testOptionalValidatesWhenValuePresent(): void
+    {
+        $v = FieldValidator::optional(Rules::email());
+        self::assertSame([], $v->validate('user@example.com'));
+        self::assertSame(['Must be a valid email address.'], $v->validate('not-an-email'));
+    }
+
+    public function testOptionalWithMultipleRulesSkipsAllOnAbsent(): void
+    {
+        $v = FieldValidator::optional(Rules::minLength(5), Rules::maxLength(20));
+        self::assertSame([], $v->validate(null));
+        self::assertSame([], $v->validate(''));
+    }
+
+    public function testOptionalWithMultipleRulesAppliesAllWhenPresent(): void
+    {
+        $v = FieldValidator::optional(Rules::minLength(5), Rules::maxLength(10));
+        // fails minLength
+        self::assertSame(['Must be at least 5 characters.'], $v->validate('hi'));
+        // passes all
+        self::assertSame([], $v->validate('hello'));
+    }
+
+    public function testOptionalNoRulesAlwaysPasses(): void
+    {
+        $v = FieldValidator::optional();
+        self::assertSame([], $v->validate(null));
+        self::assertSame([], $v->validate(''));
+        self::assertSame([], $v->validate('anything'));
+    }
+
+    public function testIsOptionalReturnsTrueForOptional(): void
+    {
+        $v = FieldValidator::optional(Rules::email());
+        self::assertTrue($v->isOptional());
+    }
+
+    public function testIsOptionalReturnsFalseForWithRules(): void
+    {
+        $v = FieldValidator::withRules(Rules::email());
+        self::assertFalse($v->isOptional());
+    }
+
+    public function testAddRulePreservesOptionalFlag(): void
+    {
+        $v1 = FieldValidator::optional(Rules::email());
+        $v2 = $v1->addRule(Rules::minLength(5));
+
+        self::assertTrue($v2->isOptional());
+        self::assertCount(2, $v2->rules());
+        // still skips on null
+        self::assertSame([], $v2->validate(null));
+    }
+
+    public function testAddRulePreservesRequiredFlag(): void
+    {
+        $v1 = FieldValidator::withRules(Rules::required());
+        $v2 = $v1->addRule(Rules::email());
+
+        self::assertFalse($v2->isOptional());
+    }
 }
