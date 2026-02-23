@@ -9,6 +9,14 @@ use Zephyrus\Validation\Rules;
 
 final class RulesTest extends TestCase
 {
+    public function testRulesConstructorIsPrivateUtilityClassContract(): void
+    {
+        $constructor = (new \ReflectionClass(Rules::class))->getConstructor();
+
+        self::assertNotNull($constructor);
+        self::assertTrue($constructor->isPrivate());
+    }
+
     // ---- required ----
 
     public function testRequiredPassesNonEmpty(): void
