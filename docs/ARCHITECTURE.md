@@ -373,6 +373,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Returns `null` when metadata is unavailable/invalid, matching the existing nullable metadata accessor pattern.
 - Added unit coverage for both missing-metadata and post-save hash-read cases (SHA-256 format asserted).
 
+## Implemented Slice: RouteCache metadata-version accessor
+- Added `RouteCache::metadataVersion(): ?int` to expose the validated cache metadata schema version.
+- Returns `null` when metadata is unavailable/invalid, aligned with existing nullable metadata accessors.
+- Added unit coverage for missing-metadata and post-save version-read scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
