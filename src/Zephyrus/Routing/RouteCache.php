@@ -95,6 +95,10 @@ final class RouteCache
             throw new RouteCacheException('Route cache payload contains unsupported metadata version');
         }
 
+        if ($meta !== null && !preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash'])) {
+            throw new RouteCacheException('Route cache payload contains invalid metadata hash format');
+        }
+
         $routesPayload = $decoded['routes'];
         if ($meta !== null) {
             $actualHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
@@ -124,6 +128,9 @@ final class RouteCache
                 throw new RouteCacheException('Route cache entry contains invalid optional fields');
             }
 
+            $this->assertValidConstraints($constraints);
+            $this->assertValidMiddlewares($middlewares);
+
             $collection->add(Route::define(
                 method: $entry['method'],
                 path: $entry['path'],
@@ -135,5 +142,29 @@ final class RouteCache
         }
 
         return $collection;
+    }
+
+    /**
+     * @param array<mixed> $constraints
+     */
+    private function assertValidConstraints(array $constraints): void
+    {
+        foreach ($constraints as $parameter => $pattern) {
+            if (!is_string($parameter) || !is_string($pattern)) {
+                throw new RouteCacheException('Route cache entry contains invalid constraints map');
+            }
+        }
+    }
+
+    /**
+     * @param array<mixed> $middlewares
+     */
+    private function assertValidMiddlewares(array $middlewares): void
+    {
+        foreach ($middlewares as $middleware) {
+            if (!is_string($middleware)) {
+                throw new RouteCacheException('Route cache entry contains invalid middlewares list');
+            }
+        }
     }
 }
