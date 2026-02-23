@@ -435,6 +435,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Supports `#RGB` and `#RRGGBB` forms (case-insensitive hex digits).
 - Added unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation Base64 rule
+- Added `Validation\Rules::base64()` for strict Base64-encoded string validation.
+- Uses strict decode mode and round-trip encode checks to reject malformed or non-canonical inputs.
+- Added unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

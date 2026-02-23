@@ -669,6 +669,27 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid hex color.', Rules::hexColor()->errorMessage());
     }
 
+    // ---- base64 ----
+
+    public function testBase64Passes(): void
+    {
+        self::assertTrue(Rules::base64()->test('aGVsbG8='));
+        self::assertTrue(Rules::base64()->test('eyJrZXkiOiJ2YWx1ZSJ9'));
+    }
+
+    public function testBase64Fails(): void
+    {
+        self::assertFalse(Rules::base64()->test(''));
+        self::assertFalse(Rules::base64()->test('not-base64'));
+        self::assertFalse(Rules::base64()->test('aGVsbG8'));
+        self::assertFalse(Rules::base64()->test(null));
+    }
+
+    public function testBase64DefaultMessage(): void
+    {
+        self::assertSame('Must be valid Base64.', Rules::base64()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void

@@ -394,6 +394,28 @@ final class Rules
     }
 
     /**
+     * Validates a Base64-encoded string.
+     */
+    public static function base64(string $message = 'Must be valid Base64.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                $decoded = base64_decode($v, true);
+                if ($decoded === false) {
+                    return false;
+                }
+
+                return base64_encode($decoded) === $v;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */
