@@ -481,4 +481,29 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid hostname.', Rules::hostname()->errorMessage());
     }
+
+    // ---- cidr ----
+
+    public function testCidrPassesIpv4AndIpv6Ranges(): void
+    {
+        self::assertTrue(Rules::cidr()->test('10.0.0.0/8'));
+        self::assertTrue(Rules::cidr()->test('192.168.1.0/24'));
+        self::assertTrue(Rules::cidr()->test('2001:db8::/32'));
+        self::assertTrue(Rules::cidr()->test('::1/128'));
+    }
+
+    public function testCidrFailsInvalidRanges(): void
+    {
+        self::assertFalse(Rules::cidr()->test('10.0.0.0'));
+        self::assertFalse(Rules::cidr()->test('10.0.0.0/-1'));
+        self::assertFalse(Rules::cidr()->test('10.0.0.0/33'));
+        self::assertFalse(Rules::cidr()->test('2001:db8::/129'));
+        self::assertFalse(Rules::cidr()->test('not-an-ip/24'));
+        self::assertFalse(Rules::cidr()->test(null));
+    }
+
+    public function testCidrDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid CIDR block.', Rules::cidr()->errorMessage());
+    }
 }
