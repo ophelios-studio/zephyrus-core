@@ -512,6 +512,16 @@ final class RouteCacheTest extends TestCase
         $cache->isFreshWithin(new RouteCollection(), -1);
     }
 
+    public function testEnsureFreshWithinThrowsOnNegativeMaxAge(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache max age must be zero or greater');
+
+        $cache->ensureFreshWithin(new RouteCollection(), -1);
+    }
+
     public function testEnsureFreshWithinSucceedsForFreshCacheWithinWindow(): void
     {
         $routes = new RouteCollection();
