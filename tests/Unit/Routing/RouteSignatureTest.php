@@ -165,4 +165,28 @@ final class RouteSignatureTest extends TestCase
 
         $signer->assertValidAt($tampered, now: 1_700_000_001);
     }
+
+    public function testVerifyAtAllowsClockSkewGraceWindow(): void
+    {
+        $signer = new RouteSignature('top-secret');
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 10, now: 1_700_000_000);
+
+        self::assertTrue($signer->verifyAt($signed, now: 1_700_000_015, clockSkewSeconds: 5));
+    }
+
+    public function testVerifyAtFailsAfterClockSkewGraceWindow(): void
+    {
+        $signer = new RouteSignature('top-secret');
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 10, now: 1_700_000_000);
+
+        self::assertFalse($signer->verifyAt($signed, now: 1_700_000_016, clockSkewSeconds: 5));
+    }
+
+    public function testVerifyAtTreatsNegativeClockSkewAsZero(): void
+    {
+        $signer = new RouteSignature('top-secret');
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 10, now: 1_700_000_000);
+
+        self::assertFalse($signer->verifyAt($signed, now: 1_700_000_011, clockSkewSeconds: -5));
+    }
 }
