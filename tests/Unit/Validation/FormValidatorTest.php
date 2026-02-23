@@ -309,4 +309,68 @@ final class FormValidatorTest extends TestCase
             self::assertSame('Must be a valid email address.', $e->errors()->firstFor('email'));
         }
     }
+
+    // ---- optional fields in FormValidator ----
+
+    public function testOptionalFieldAbsentFromPayloadProducesNoError(): void
+    {
+        $form = new FormValidator([
+            'name'    => FieldValidator::withRules(Rules::required()),
+            'website' => FieldValidator::optional(Rules::url()),
+        ]);
+
+        // website omitted entirely → no error
+        $bag = $form->validate(['name' => 'Alice']);
+        self::assertFalse($bag->hasErrors());
+    }
+
+    public function testOptionalFieldEmptyStringProducesNoError(): void
+    {
+        $form = new FormValidator([
+            'name'    => FieldValidator::withRules(Rules::required()),
+            'website' => FieldValidator::optional(Rules::url()),
+        ]);
+
+        // website present as empty string → skipped
+        $bag = $form->validate(['name' => 'Alice', 'website' => '']);
+        self::assertFalse($bag->hasErrors());
+    }
+
+    public function testOptionalFieldWithValidValuePassesRules(): void
+    {
+        $form = new FormValidator([
+            'website' => FieldValidator::optional(Rules::url()),
+        ]);
+
+        $bag = $form->validate(['website' => 'https://example.com']);
+        self::assertFalse($bag->hasErrors());
+    }
+
+    public function testOptionalFieldWithInvalidValueFailsRules(): void
+    {
+        $form = new FormValidator([
+            'website' => FieldValidator::optional(Rules::url()),
+        ]);
+
+        $bag = $form->validate(['website' => 'not-a-url']);
+        self::assertTrue($bag->hasErrorsFor('website'));
+    }
+
+    public function testOptionalNestedFieldSkippedWhenAbsent(): void
+    {
+        $profileValidator = (new FormValidator())
+            ->withField('bio', FieldValidator::optional(Rules::maxLength(200)));
+
+        $form = (new FormValidator())
+            ->withField('name', FieldValidator::withRules(Rules::required()))
+            ->withNested('profile', $profileValidator);
+
+        // bio absent → no error
+        $bag = $form->validate(['name' => 'Alice', 'profile' => []]);
+        self::assertFalse($bag->hasErrors());
+
+        // bio too long → error
+        $bag = $form->validate(['name' => 'Alice', 'profile' => ['bio' => str_repeat('x', 201)]]);
+        self::assertTrue($bag->hasErrorsFor('profile.bio'));
+    }
 }
