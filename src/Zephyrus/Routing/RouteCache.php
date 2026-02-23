@@ -112,6 +112,13 @@ final class RouteCache
         return $meta['routes_hash'] ?? null;
     }
 
+    public function metadataVersion(): ?int
+    {
+        $meta = $this->metadata();
+
+        return $meta['version'] ?? null;
+    }
+
     public function age(?int $now = null): ?int
     {
         $generatedAt = $this->generatedAt();
