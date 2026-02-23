@@ -690,6 +690,30 @@ final class RulesTest extends TestCase
         self::assertSame('Must be valid Base64.', Rules::base64()->errorMessage());
     }
 
+    // ---- semver ----
+
+    public function testSemverPasses(): void
+    {
+        self::assertTrue(Rules::semver()->test('1.0.0'));
+        self::assertTrue(Rules::semver()->test('2.3.4-beta.1'));
+        self::assertTrue(Rules::semver()->test('10.20.30+build.7'));
+        self::assertTrue(Rules::semver()->test('1.2.3-rc.1+sha.abcdef'));
+    }
+
+    public function testSemverFails(): void
+    {
+        self::assertFalse(Rules::semver()->test('1.0'));
+        self::assertFalse(Rules::semver()->test('01.2.3'));
+        self::assertFalse(Rules::semver()->test('1.2.3-'));
+        self::assertFalse(Rules::semver()->test('v1.2.3'));
+        self::assertFalse(Rules::semver()->test(null));
+    }
+
+    public function testSemverDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid semantic version.', Rules::semver()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void

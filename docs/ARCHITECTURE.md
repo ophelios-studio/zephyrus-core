@@ -440,6 +440,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Uses strict decode mode and round-trip encode checks to reject malformed or non-canonical inputs.
 - Added unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation semantic-version rule
+- Added `Validation\Rules::semver()` for SemVer 2.0 compliant version strings.
+- Supports core `MAJOR.MINOR.PATCH` plus optional pre-release and build metadata segments.
+- Added unit coverage for valid/invalid/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
