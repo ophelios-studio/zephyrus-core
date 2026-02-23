@@ -399,12 +399,40 @@ final class RouteCollectionTest extends TestCase
         ], $collection->pathsByMethod());
     }
 
+    public function testParameterHistogramAggregatesPathParameterUsage(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('GET', '/teams/{team}/users/{id}', 'TeamUserController@show'));
+        $collection->add(Route::define('POST', '/teams/{team}/users', 'TeamUserController@store'));
+
+        self::assertSame([
+            'id' => 2,
+            'team' => 2,
+        ], $collection->parameterHistogram());
+    }
+
+    public function testConstrainedParameterHistogramCountsConstraintUsage(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+']));
+        $collection->add(Route::define('GET', '/teams/{team}/users/{id}', 'TeamUserController@show', [
+            'team' => '[a-z]+',
+            'id' => '\\d+',
+        ]));
+
+        self::assertSame([
+            'id' => 2,
+            'team' => 1,
+        ], $collection->constrainedParameterHistogram());
+    }
+
     public function testSummaryReturnsRouteRegistryMetrics(): void
     {
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/health', 'HealthController@show', middlewares: ['auth'], name: 'health.show'));
-        $collection->add(Route::define('POST', '/users', 'UserController@store', middlewares: ['auth', 'audit'], name: 'users.store'));
-        $collection->add(Route::define('GET', '/users', 'UserController@index', middlewares: ['audit']));
+        $collection->add(Route::define('POST', '/users/{id}', 'UserController@store', ['id' => '\\d+'], ['auth', 'audit'], 'users.store'));
+        $collection->add(Route::define('GET', '/users/{id}/posts/{postId}', 'UserController@posts', ['postId' => '\\d+'], ['audit']));
 
         self::assertSame([
             'total' => 3,
@@ -421,8 +449,16 @@ final class RouteCollectionTest extends TestCase
             ],
             'middleware_count' => 2,
             'paths_by_method' => [
-                'GET' => ['/health', '/users'],
-                'POST' => ['/users'],
+                'GET' => ['/health', '/users/{id}/posts/{postId}'],
+                'POST' => ['/users/{id}'],
+            ],
+            'parameters' => [
+                'id' => 2,
+                'postId' => 1,
+            ],
+            'constrained_parameters' => [
+                'id' => 1,
+                'postId' => 1,
             ],
         ], $collection->summary());
     }
