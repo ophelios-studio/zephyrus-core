@@ -1028,6 +1028,71 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid language tag.', Rules::languageTag()->errorMessage());
     }
 
+    // ---- httpHeaderName ----
+
+    public function testHttpHeaderNamePasses(): void
+    {
+        self::assertTrue(Rules::httpHeaderName()->test('Content-Type'));
+        self::assertTrue(Rules::httpHeaderName()->test('X-Trace_Id'));
+        self::assertTrue(Rules::httpHeaderName()->test('ETag'));
+    }
+
+    public function testHttpHeaderNameFails(): void
+    {
+        self::assertFalse(Rules::httpHeaderName()->test('Content Type'));
+        self::assertFalse(Rules::httpHeaderName()->test(':authority'));
+        self::assertFalse(Rules::httpHeaderName()->test(''));
+        self::assertFalse(Rules::httpHeaderName()->test(null));
+    }
+
+    public function testHttpHeaderNameDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP header name.', Rules::httpHeaderName()->errorMessage());
+    }
+
+    // ---- httpHeaderValue ----
+
+    public function testHttpHeaderValuePasses(): void
+    {
+        self::assertTrue(Rules::httpHeaderValue()->test('application/json; charset=utf-8'));
+        self::assertTrue(Rules::httpHeaderValue()->test('max-age=3600'));
+        self::assertTrue(Rules::httpHeaderValue()->test('token\tvalue'));
+    }
+
+    public function testHttpHeaderValueFails(): void
+    {
+        self::assertFalse(Rules::httpHeaderValue()->test("bad\nvalue"));
+        self::assertFalse(Rules::httpHeaderValue()->test("bad\rvalue"));
+        self::assertFalse(Rules::httpHeaderValue()->test(null));
+    }
+
+    public function testHttpHeaderValueDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP header value.', Rules::httpHeaderValue()->errorMessage());
+    }
+
+    // ---- jwt ----
+
+    public function testJwtPassesCompactSerializationShape(): void
+    {
+        self::assertTrue(Rules::jwt()->test('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature'));
+        self::assertTrue(Rules::jwt()->test('a.b.'));
+    }
+
+    public function testJwtFailsInvalidShapes(): void
+    {
+        self::assertFalse(Rules::jwt()->test('singlepart'));
+        self::assertFalse(Rules::jwt()->test('a.b'));
+        self::assertFalse(Rules::jwt()->test('a.b.c.d'));
+        self::assertFalse(Rules::jwt()->test('a.b.c+'));
+        self::assertFalse(Rules::jwt()->test(null));
+    }
+
+    public function testJwtDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid JWT token format.', Rules::jwt()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
