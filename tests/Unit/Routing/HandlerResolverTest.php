@@ -56,6 +56,21 @@ final class PlainHandlerController
     {
         return Response::json(['path' => $request->path(), 'id' => $id]);
     }
+
+    public function withNullable(?int $id): Response
+    {
+        return Response::json(['id' => $id]);
+    }
+
+    public function withUnion(int|string $key): Response
+    {
+        return Response::json(['key' => $key]);
+    }
+
+    public function withBool(bool $active): Response
+    {
+        return Response::json(['active' => $active]);
+    }
 }
 
 /**
@@ -251,6 +266,42 @@ final class HandlerResolverTest extends TestCase
         self::assertStringContainsString('"id":7', $response->body);
     }
 
+    public function testInjectsNullForNullableAttribute(): void
+    {
+        $match = $this->makeMatch('GET', '/users/{id}', PlainHandlerController::class . '@withNullable');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/users/null')->withAttribute('id', null),
+        );
+
+        self::assertStringContainsString('"id":null', $response->body);
+    }
+
+    public function testInjectsUnionTypeFromStringAttribute(): void
+    {
+        $match = $this->makeMatch('GET', '/keys/{key}', PlainHandlerController::class . '@withUnion');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/keys/abc')->withAttribute('key', 'abc'),
+        );
+
+        self::assertStringContainsString('"key":"abc"', $response->body);
+    }
+
+    public function testInjectsBoolFromStringAttribute(): void
+    {
+        $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/flags/true')->withAttribute('active', 'true'),
+        );
+
+        self::assertStringContainsString('"active":true', $response->body);
+    }
+
     // -- Controller subclass --------------------------------------------------
 
     public function testExtendedControllerIndexReturnsJson(): void
@@ -338,6 +389,19 @@ final class HandlerResolverTest extends TestCase
 
         // Request has no 'missing' attribute and method has no default → must throw.
         $this->resolver->resolve($match, Request::fromArray('GET', '/'));
+    }
+
+    public function testInvalidScalarValueThrowsExplicitTypeError(): void
+    {
+        $this->expectException(HandlerResolverException::class);
+        $this->expectExceptionMessageMatches('/expected bool, got string/');
+
+        $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/flags/not-bool')->withAttribute('active', 'not-bool'),
+        );
     }
 
     // -- Lifecycle hooks (before / after) -------------------------------------

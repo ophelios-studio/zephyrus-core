@@ -8,6 +8,8 @@ use Closure;
 use ReflectionException;
 use ReflectionMethod;
 use ReflectionNamedType;
+use ReflectionType;
+use ReflectionUnionType;
 use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -111,17 +113,16 @@ final class HandlerResolver
             $name = $param->getName();
 
             // Type-hinted as Request → inject the current request.
-            if ($type instanceof ReflectionNamedType && $type->getName() === Request::class) {
+            if ($this->acceptsRequestType($type)) {
                 $args[] = $request;
                 continue;
             }
 
             // Named attribute from the route (e.g. path parameter or any
             // value previously hydrated into request attributes).
-            $attrValue = $request->attribute($name);
-
-            if ($attrValue !== null) {
-                $args[] = $this->castToType($attrValue, $type);
+            if (array_key_exists($name, $request->attributes)) {
+                $attrValue = $request->attributes[$name];
+                $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
                 continue;
             }
 
@@ -137,21 +138,150 @@ final class HandlerResolver
         return $reflection->invoke($controller, ...$args);
     }
 
-    /**
-     * Casts a route attribute string to the declared parameter type when the
-     * type is a known scalar; returns the original value for mixed/untyped.
-     */
-    private function castToType(mixed $value, ?ReflectionNamedType $type): mixed
+    private function acceptsRequestType(?ReflectionType $type): bool
     {
+        if ($type instanceof ReflectionNamedType) {
+            return $type->getName() === Request::class;
+        }
+
+        if ($type instanceof ReflectionUnionType) {
+            foreach ($type->getTypes() as $candidate) {
+                if ($candidate instanceof ReflectionNamedType && $candidate->getName() === Request::class) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function castToType(
+        mixed $value,
+        ?ReflectionType $type,
+        string $class,
+        string $method,
+        string $parameter,
+    ): mixed {
         if ($type === null) {
             return $value;
         }
 
-        return match ($type->getName()) {
-            'int'   => (int) $value,
-            'float' => (float) $value,
-            'bool'  => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+        if ($type instanceof ReflectionUnionType) {
+            foreach ($type->getTypes() as $candidate) {
+                try {
+                    return $this->castToNamedType($value, $candidate, $class, $method, $parameter);
+                } catch (HandlerResolverException) {
+                    continue;
+                }
+            }
+
+            throw HandlerResolverException::invalidParameterValue(
+                $class,
+                $method,
+                $parameter,
+                $this->describeType($type),
+                $value,
+            );
+        }
+
+        return $this->castToNamedType($value, $type, $class, $method, $parameter);
+    }
+
+    private function castToNamedType(
+        mixed $value,
+        ReflectionNamedType $type,
+        string $class,
+        string $method,
+        string $parameter,
+    ): mixed {
+        $typeName = $type->getName();
+
+        if ($value === null) {
+            if ($type->allowsNull()) {
+                return null;
+            }
+
+            throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, $typeName, $value);
+        }
+
+        return match ($typeName) {
+            'int' => $this->toInt($value, $class, $method, $parameter),
+            'float' => $this->toFloat($value, $class, $method, $parameter),
+            'bool' => $this->toBool($value, $class, $method, $parameter),
+            'string' => $this->toString($value, $class, $method, $parameter),
             default => $value,
         };
+    }
+
+    private function toInt(mixed $value, string $class, string $method, string $parameter): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && preg_match('/^-?\d+$/', $value) === 1) {
+            return (int) $value;
+        }
+
+        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'int', $value);
+    }
+
+    private function toFloat(mixed $value, string $class, string $method, string $parameter): float
+    {
+        if (is_float($value) || is_int($value)) {
+            return (float) $value;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            return (float) $value;
+        }
+
+        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'float', $value);
+    }
+
+    private function toBool(mixed $value, string $class, string $method, string $parameter): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value) && ($value === 0 || $value === 1)) {
+            return $value === 1;
+        }
+
+        if (is_string($value)) {
+            $parsed = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'bool', $value);
+    }
+
+    private function toString(mixed $value, string $class, string $method, string $parameter): string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value) || is_bool($value)) {
+            return (string) $value;
+        }
+
+        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'string', $value);
+    }
+
+    private function describeType(ReflectionType $type): string
+    {
+        if ($type instanceof ReflectionNamedType) {
+            return $type->getName();
+        }
+
+        if ($type instanceof ReflectionUnionType) {
+            return implode('|', array_map(static fn (ReflectionNamedType $candidate): string => $candidate->getName(), $type->getTypes()));
+        }
+
+        return 'mixed';
     }
 }

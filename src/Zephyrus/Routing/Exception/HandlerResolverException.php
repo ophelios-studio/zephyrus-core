@@ -48,4 +48,23 @@ final class HandlerResolverException extends ZephyrusRuntimeException
             ),
         );
     }
+
+    public static function invalidParameterValue(
+        string $className,
+        string $method,
+        string $parameter,
+        string $expectedType,
+        mixed $actualValue,
+    ): self {
+        $actualType = get_debug_type($actualValue);
+
+        return new self(sprintf(
+            'Cannot resolve parameter "$%s" for "%s::%s": expected %s, got %s.',
+            $parameter,
+            $className,
+            $method,
+            $expectedType,
+            $actualType,
+        ));
+    }
 }
