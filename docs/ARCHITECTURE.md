@@ -266,6 +266,54 @@
 - Total test suite: **495 tests, 942 assertions**, line coverage TBD (run with `XDEBUG_MODE=coverage`).
 - Security module: `SecureHeadersConfig`, `SecureHeadersMiddleware`, `ForceHttpsMiddleware`, `CsrfTokenManagerInterface`, `CsrfMiddleware`.
 
+## Implemented Slice: Route Name Propagation Through Groups (Phase 10)
+
+### Problem fixed
+Previously `Router::group()` silently discarded route names. Any route named via `->name()` or `#[Route(name:)]` inside a group registrar had its name lost when routes were merged back into the outer collection.
+
+### Changes
+
+#### `Router::add()` — optional `name` parameter
+- Added `?string $name = null` as a named optional parameter.
+- Forwards the name to `Route::define()` so internal paths that re-add routes can carry names through.
+- Public API: callers may now pass an explicit `name:` to `add()` if they want to bypass the `->name()` chaining pattern.
+
+#### `Router::group()` — name propagation + `namePrefix`
+- Added `?string $namePrefix = null` optional named parameter.
+- For each route merged from the scoped registrar, its `$route->name` is now forwarded to `add()`:
+  - Named route + no prefix → name preserved verbatim.
+  - Named route + prefix → `$namePrefix . $routeName` (e.g. `'api.' . 'users.index'` = `'api.users.index'`).
+  - Unnamed route + prefix → name stays `null` (the prefix is never applied to unnamed routes).
+
+### Usage examples
+
+```php
+// Preserve names through a group
+$router->group('/api/v1', fn ($r) => $r
+    ->get('/users', 'UserController@index')->name('users.index'));
+// findByName('users.index') → '/api/v1/users'
+
+// Auto-prefix all named routes in a group
+$router->group('/api/v1', fn ($r) => $r
+    ->get('/users', 'UserController@index')->name('users.index')
+    ->get('/posts', 'PostController@index')->name('posts.index'),
+    namePrefix: 'api.',
+);
+// findByName('api.users.index') + findByName('api.posts.index')
+```
+
+### Tests added (7 new)
+- `testGroupPreservesRouteNameDefinedInsideGroup` — single named route preserved after prefix join.
+- `testGroupPreservesMultipleNamesDefinedInsideGroup` — multiple named routes preserved.
+- `testGroupLeavesUnnamedRoutesWithNullName` — unnamed routes stay null.
+- `testGroupWithNamePrefixPrependsToNamedRoutes` — prefix is prepended.
+- `testGroupWithNamePrefixDoesNotNameUnnamedRoutes` — prefix not applied to null names.
+- `testGroupWithNamePrefixAndSharedMiddlewaresCombineCorrectly` — prefix + shared middlewares work together.
+- `testAddAcceptsExplicitNameParameter` — `add()` now accepts `name:` directly.
+
+### Totals after this slice
+- Total test suite: **621 tests, 1131 assertions**, all green.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

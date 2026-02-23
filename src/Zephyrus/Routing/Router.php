@@ -53,10 +53,11 @@ final class Router
         string $handler,
         array $constraints = [],
         array $middlewares = [],
+        ?string $name = null,
     ): self {
         return new self(
             $this->routes->withRoute(
-                Route::define($method, $path, $handler, $constraints, $this->expandMiddlewares($middlewares)),
+                Route::define($method, $path, $handler, $constraints, $this->expandMiddlewares($middlewares), $name),
             ),
             $this->attributeReader,
             $this->middlewareGroups,
@@ -69,23 +70,49 @@ final class Router
     }
 
     /**
+     * Groups routes under a common URL prefix, shared middlewares, and an
+     * optional name prefix.
+     *
+     * Route names defined inside the group (via ->name() or #[Route(name:)])
+     * are preserved and, when $namePrefix is supplied, are prepended with that
+     * prefix so the caller can build a tidy name hierarchy:
+     *
+     *   $router->group('/api/v1', fn($r) => $r
+     *       ->get('/users', 'UserController@index')->name('users.index'),
+     *       namePrefix: 'api.',
+     *   );
+     *   // findable as 'api.users.index'
+     *
+     * Unnamed routes inside the group stay unnamed even when $namePrefix is set.
+     *
      * @param callable(self): self $registrar
      * @param array<int, string> $middlewares
      */
-    public function group(string $prefix, callable $registrar, array $middlewares = []): self
-    {
+    public function group(
+        string $prefix,
+        callable $registrar,
+        array $middlewares = [],
+        ?string $namePrefix = null,
+    ): self {
         $scoped = new self(null, $this->attributeReader, $this->middlewareGroups);
         $scopedResult = $registrar($scoped);
 
         $router = $this;
 
         foreach ($scopedResult->routes()->all() as $route) {
+            $routeName = $route->name;
+
+            if ($namePrefix !== null && $routeName !== null) {
+                $routeName = $namePrefix . $routeName;
+            }
+
             $router = $router->add(
                 method: $route->method,
                 path: $this->joinPath($prefix, $route->path),
                 handler: $route->handler,
                 constraints: $route->constraints,
                 middlewares: array_values(array_unique([...$middlewares, ...$route->middlewares])),
+                name: $routeName,
             );
         }
 
