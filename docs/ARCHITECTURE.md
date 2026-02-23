@@ -430,6 +430,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Enforces a strict shape suitable for route segments and identifiers (no leading/trailing hyphen, no repeated separators).
 - Added unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation hex-color rule
+- Added `Validation\Rules::hexColor()` for CSS-style hex color values.
+- Supports `#RGB` and `#RRGGBB` forms (case-insensitive hex digits).
+- Added unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

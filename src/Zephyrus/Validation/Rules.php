@@ -383,6 +383,17 @@ final class Rules
     }
 
     /**
+     * Validates a hex color string (#RGB or #RRGGBB).
+     */
+    public static function hexColor(string $message = 'Must be a valid hex color.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */
