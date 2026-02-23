@@ -255,6 +255,22 @@ final class Router
     }
 
     /**
+     * @return array<int, string>
+     */
+    public function routeHandlers(): array
+    {
+        return $this->routes->handlers();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function routeMethodHistogram(): array
+    {
+        return $this->routes->methodHistogram();
+    }
+
+    /**
      * @return array<string, Route>
      */
     public function namedRoutes(): array

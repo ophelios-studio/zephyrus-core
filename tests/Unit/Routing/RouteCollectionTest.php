@@ -336,4 +336,31 @@ final class RouteCollectionTest extends TestCase
         self::assertSame('/health', $getRoutes[0]->path);
         self::assertSame('/users', $getRoutes[1]->path);
     }
+
+    public function testHandlersReturnsRegisteredHandlersInOrder(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+
+        self::assertSame([
+            'HealthController@show',
+            'UserController@store',
+        ], $collection->handlers());
+    }
+
+    public function testMethodHistogramAggregatesCountsByMethod(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+        $collection->add(Route::define('DELETE', '/users/{id}', 'UserController@delete'));
+
+        self::assertSame([
+            'DELETE' => 1,
+            'GET' => 2,
+            'POST' => 1,
+        ], $collection->methodHistogram());
+    }
 }
