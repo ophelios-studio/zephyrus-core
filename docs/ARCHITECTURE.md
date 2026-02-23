@@ -404,6 +404,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects zero, negatives, out-of-range values, and non-numeric inputs.
 - Added unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation host rule (hostname or IP)
+- Added `Validation\Rules::host()` to validate endpoint host values that can be either DNS hostnames or literal IPs.
+- Composes existing `hostname()` and `ip()` rules for a single expressive API contract in config and request validation.
+- Added unit coverage for hostname pass, IPv4/IPv6 pass, invalid input failures, and default message path.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
