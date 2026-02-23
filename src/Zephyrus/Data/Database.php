@@ -180,18 +180,19 @@ final class Database
      */
     public function selectPage(string $sql, int $page, int $perPage, array $params = []): array
     {
-        if ($page < 1) {
-            throw DatabaseException::queryFailed($sql, 'Page must be >= 1');
-        }
+        return $this->selectPageWith($sql, new PaginationRequest($page, $perPage), $params);
+    }
 
-        if ($perPage < 1) {
-            throw DatabaseException::queryFailed($sql, 'Per-page must be >= 1');
-        }
-
-        $offset = ($page - 1) * $perPage;
-
+    /**
+     * Execute a paginated SELECT query using a PaginationRequest.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function selectPageWith(string $sql, PaginationRequest $pagination, array $params = []): array
+    {
         return $this->select(
-            $sql . sprintf(' LIMIT %d OFFSET %d', $perPage, $offset),
+            $sql . sprintf(' LIMIT %d OFFSET %d', $pagination->limit(), $pagination->offset()),
             $params,
         );
     }
@@ -204,26 +205,29 @@ final class Database
      */
     public function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
     {
-        if ($page < 1) {
-            throw DatabaseException::queryFailed($dataSql, 'Page must be >= 1');
-        }
+        return $this->paginateWith($dataSql, $countSql, new PaginationRequest($page, $perPage), $params);
+    }
 
-        if ($perPage < 1) {
-            throw DatabaseException::queryFailed($dataSql, 'Per-page must be >= 1');
-        }
-
+    /**
+     * Execute coordinated count + paginated data queries with PaginationRequest.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    public function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
+    {
         $total = $this->count($countSql, $params);
-        $items = $this->selectPage($dataSql, $page, $perPage, $params);
-        $totalPages = max(1, (int) ceil($total / $perPage));
+        $items = $this->selectPageWith($dataSql, $pagination, $params);
+        $totalPages = max(1, (int) ceil($total / $pagination->perPage));
 
         return [
             'items' => $items,
             'total' => $total,
-            'page' => $page,
-            'per_page' => $perPage,
+            'page' => $pagination->page,
+            'per_page' => $pagination->perPage,
             'total_pages' => $totalPages,
-            'has_previous' => $page > 1,
-            'has_next' => $page < $totalPages,
+            'has_previous' => $pagination->page > 1,
+            'has_next' => $pagination->page < $totalPages,
         ];
     }
 
@@ -234,8 +238,18 @@ final class Database
      */
     public function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
     {
+        return $this->paginateResultWith($dataSql, $countSql, new PaginationRequest($page, $perPage), $params);
+    }
+
+    /**
+     * Execute coordinated count + paginated data queries and return typed envelope.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): PaginatedResult
+    {
         return PaginatedResult::fromArray(
-            $this->paginate($dataSql, $countSql, $page, $perPage, $params),
+            $this->paginateWith($dataSql, $countSql, $pagination, $params),
         );
     }
 
