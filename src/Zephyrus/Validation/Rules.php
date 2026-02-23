@@ -295,5 +295,28 @@ final class Rules
         );
     }
 
+    /**
+     * Validates a TCP/UDP port number (1..65535).
+     */
+    public static function port(string $message = 'Must be a valid port number.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (is_int($v)) {
+                    return $v >= 1 && $v <= 65535;
+                }
+
+                if (!is_string($v) || $v === '' || !ctype_digit($v)) {
+                    return false;
+                }
+
+                $port = (int) $v;
+
+                return $port >= 1 && $port <= 65535;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }
