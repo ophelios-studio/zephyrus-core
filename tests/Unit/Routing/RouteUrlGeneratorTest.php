@@ -174,4 +174,52 @@ final class RouteUrlGeneratorTest extends TestCase
 
         $generator->generate('users.show', ['id' => '42']);
     }
+
+    public function testGenerateTemporarySignedBuildsVerifiableExpiringUrl(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', ['id' => '\\d+'], name: 'downloads.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, 'https://example.com', $signature);
+
+        $signedUrl = $generator->generateTemporarySigned(
+            routeName: 'downloads.show',
+            ttlSeconds: 120,
+            parameters: ['id' => 42],
+            query: ['disposition' => 'inline'],
+            now: 1_700_000_000,
+        );
+
+        self::assertStringContainsString('_exp=1700000120', $signedUrl);
+        self::assertTrue($signature->verifyAt($signedUrl, now: 1_700_000_060));
+        self::assertFalse($signature->verifyAt($signedUrl, now: 1_700_000_121));
+    }
+
+    public function testGenerateTemporarySignedThrowsWhenSignerIsMissing(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', name: 'downloads.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Cannot generate signed URL without a RouteSignature instance');
+
+        $generator->generateTemporarySigned('downloads.show', 60, ['id' => 42]);
+    }
+
+    public function testGenerateTemporarySignedThrowsWhenTtlIsNotPositive(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/downloads/{id}', 'DownloadController@show', name: 'downloads.show'));
+
+        $signature = new \Zephyrus\Routing\RouteSignature('secret-key');
+        $generator = new RouteUrlGenerator($routes, signature: $signature);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Temporary signed URL TTL must be greater than zero seconds');
+
+        $generator->generateTemporarySigned('downloads.show', 0, ['id' => 42]);
+    }
 }
