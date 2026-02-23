@@ -60,18 +60,56 @@ final class RouteCache
         return hash_equals($meta['routes_hash'], $this->computeRoutesHash($routes->all()));
     }
 
+    /**
+     * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}|null
+     */
+    public function metadata(): ?array
+    {
+        if (!$this->has()) {
+            return null;
+        }
+
+        try {
+            $decoded = $this->readPayload();
+        } catch (RouteCacheException) {
+            return null;
+        }
+
+        $meta = $decoded['meta'] ?? null;
+
+        return $this->isValidMetaForFreshness($meta) ? $meta : null;
+    }
+
+    public function isFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
+    {
+        if ($maxAgeSeconds < 0) {
+            throw new RouteCacheException('Route cache max age must be zero or greater');
+        }
+
+        $meta = $this->metadata();
+        if ($meta === null) {
+            return false;
+        }
+
+        $currentTime = $now ?? time();
+
+        if ($meta['generated_at'] > $currentTime) {
+            return false;
+        }
+
+        if (($currentTime - $meta['generated_at']) > $maxAgeSeconds) {
+            return false;
+        }
+
+        return $this->isFresh($routes);
+    }
+
     public function save(RouteCollection $routes): void
     {
         $routesPayload = $this->routesToPayload($routes->all());
-        $routesHash = $this->computePayloadHash($routesPayload);
 
         $payload = [
-            'meta' => [
-                'version' => self::METADATA_VERSION,
-                'routes_hash' => $routesHash,
-                'route_count' => count($routesPayload),
-                'generated_at' => time(),
-            ],
+            'meta' => $this->buildMetadata($routesPayload),
             'routes' => $routesPayload,
         ];
 
@@ -219,6 +257,20 @@ final class RouteCache
     private function computeRoutesHash(array $routes): string
     {
         return $this->computePayloadHash($this->routesToPayload($routes));
+    }
+
+    /**
+     * @param array<int, array{method: string, path: string, handler: string, constraints: array<string, string>, middlewares: array<int, string>, name: ?string}> $routesPayload
+     * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}
+     */
+    private function buildMetadata(array $routesPayload): array
+    {
+        return [
+            'version' => self::METADATA_VERSION,
+            'routes_hash' => $this->computePayloadHash($routesPayload),
+            'route_count' => count($routesPayload),
+            'generated_at' => time(),
+        ];
     }
 
     /**
