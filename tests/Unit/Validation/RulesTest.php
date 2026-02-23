@@ -647,6 +647,28 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid slug.', Rules::slug()->errorMessage());
     }
 
+    // ---- hexColor ----
+
+    public function testHexColorPasses(): void
+    {
+        self::assertTrue(Rules::hexColor()->test('#fff'));
+        self::assertTrue(Rules::hexColor()->test('#1A2b3C'));
+    }
+
+    public function testHexColorFails(): void
+    {
+        self::assertFalse(Rules::hexColor()->test('fff'));
+        self::assertFalse(Rules::hexColor()->test('#ff'));
+        self::assertFalse(Rules::hexColor()->test('#ffff'));
+        self::assertFalse(Rules::hexColor()->test('#gggggg'));
+        self::assertFalse(Rules::hexColor()->test(null));
+    }
+
+    public function testHexColorDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid hex color.', Rules::hexColor()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
