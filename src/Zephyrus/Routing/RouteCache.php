@@ -9,33 +9,68 @@ use Zephyrus\Routing\Exception\RouteCacheException;
 
 final class RouteCache
 {
+    private const METADATA_VERSION = 1;
+
     public function __construct(private string $cacheFile)
     {
     }
 
-    public function save(RouteCollection $routes): void
+    public function has(): bool
     {
-        $routesPayload = array_map(
-            static fn (Route $route): array => [
-                'method' => $route->method,
-                'path' => $route->path,
-                'handler' => $route->handler,
-                'constraints' => $route->constraints,
-                'middlewares' => $route->middlewares,
-                'name' => $route->name,
-            ],
-            $routes->all(),
-        );
+        return is_file($this->cacheFile);
+    }
+
+    public function clear(): void
+    {
+        if (!$this->has()) {
+            return;
+        }
+
+        if (@unlink($this->cacheFile) === false && is_file($this->cacheFile)) {
+            throw new RouteCacheException(sprintf('Unable to delete route cache file: %s', $this->cacheFile));
+        }
+    }
+
+    public function isFresh(RouteCollection $routes): bool
+    {
+        if (!$this->has()) {
+            return false;
+        }
 
         try {
-            $routesHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
-        } catch (JsonException $exception) {
-            throw new RouteCacheException('Unable to encode route cache payload', previous: $exception);
+            $decoded = $this->readPayload();
+        } catch (RouteCacheException) {
+            return false;
         }
+
+        if (!isset($decoded['routes']) || !is_array($decoded['routes'])) {
+            return false;
+        }
+
+        $meta = $decoded['meta'] ?? null;
+        if (!is_array($meta) || !isset($meta['version'], $meta['routes_hash'])) {
+            return false;
+        }
+
+        if (!is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION) {
+            return false;
+        }
+
+        if (!is_string($meta['routes_hash']) || preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash']) !== 1) {
+            return false;
+        }
+
+        return hash_equals($meta['routes_hash'], $this->computeRoutesHash($routes->all()));
+    }
+
+    public function save(RouteCollection $routes): void
+    {
+        $routesPayload = $this->routesToPayload($routes->all());
+        $routesHash = $this->computeRoutesHash($routes->all());
 
         $payload = [
             'meta' => [
-                'version' => 1,
+                'version' => self::METADATA_VERSION,
                 'routes_hash' => $routesHash,
             ],
             'routes' => $routesPayload,
@@ -72,21 +107,7 @@ final class RouteCache
             throw new RouteCacheException(sprintf('Route cache file does not exist: %s', $this->cacheFile));
         }
 
-        $contents = @file_get_contents($this->cacheFile);
-
-        if ($contents === false) {
-            throw new RouteCacheException(sprintf('Unable to read route cache file: %s', $this->cacheFile));
-        }
-
-        try {
-            $decoded = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
-            throw new RouteCacheException('Unable to decode route cache payload', previous: $exception);
-        }
-
-        if (!is_array($decoded)) {
-            throw new RouteCacheException('Route cache payload must decode to an array');
-        }
+        $decoded = $this->readPayload();
 
         if (!isset($decoded['routes']) || !is_array($decoded['routes'])) {
             throw new RouteCacheException('Route cache payload missing routes section');
@@ -97,7 +118,7 @@ final class RouteCache
             throw new RouteCacheException('Route cache payload contains invalid metadata');
         }
 
-        if ($meta !== null && (!array_key_exists('version', $meta) || !is_int($meta['version']) || $meta['version'] !== 1)) {
+        if ($meta !== null && (!array_key_exists('version', $meta) || !is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION)) {
             throw new RouteCacheException('Route cache payload contains unsupported metadata version');
         }
 
@@ -108,8 +129,8 @@ final class RouteCache
         $routesPayload = $decoded['routes'];
         if ($meta !== null) {
             try {
-                $actualHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
-            } catch (JsonException $exception) {
+                $actualHash = $this->computePayloadHash($routesPayload);
+            } catch (RouteCacheException $exception) {
                 throw new RouteCacheException('Unable to validate route cache payload hash', previous: $exception);
             }
 
@@ -160,6 +181,69 @@ final class RouteCache
         }
 
         return $collection;
+    }
+
+    /**
+     * @param array<int, Route> $routes
+     * @return array<int, array{method: string, path: string, handler: string, constraints: array<string, string>, middlewares: array<int, string>, name: ?string}>
+     */
+    private function routesToPayload(array $routes): array
+    {
+        return array_map(
+            static fn (Route $route): array => [
+                'method' => $route->method,
+                'path' => $route->path,
+                'handler' => $route->handler,
+                'constraints' => $route->constraints,
+                'middlewares' => $route->middlewares,
+                'name' => $route->name,
+            ],
+            $routes,
+        );
+    }
+
+    /**
+     * @param array<int, Route> $routes
+     */
+    private function computeRoutesHash(array $routes): string
+    {
+        return $this->computePayloadHash($this->routesToPayload($routes));
+    }
+
+    /**
+     * @param array<mixed> $payload
+     */
+    private function computePayloadHash(array $payload): string
+    {
+        try {
+            return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+        } catch (JsonException $exception) {
+            throw new RouteCacheException('Unable to encode route cache payload', previous: $exception);
+        }
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    private function readPayload(): array
+    {
+        $contents = @file_get_contents($this->cacheFile);
+
+        if ($contents === false) {
+            throw new RouteCacheException(sprintf('Unable to read route cache file: %s', $this->cacheFile));
+        }
+
+        try {
+            $decoded = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            throw new RouteCacheException('Unable to decode route cache payload', previous: $exception);
+        }
+
+        if (!is_array($decoded)) {
+            throw new RouteCacheException('Route cache payload must decode to an array');
+        }
+
+        return $decoded;
     }
 
     /**
