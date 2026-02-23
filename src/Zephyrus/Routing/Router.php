@@ -311,7 +311,15 @@ final class Router
     }
 
     /**
-     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>}
+     * @return array<string, int>
+     */
+    public function routeControllerHistogram(): array
+    {
+        return $this->routes->controllerHistogram();
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>, controllers: array<string, int>, controller_count: int}
      */
     public function routeSummary(): array
     {

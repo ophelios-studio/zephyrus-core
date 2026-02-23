@@ -427,6 +427,19 @@ final class RouteCollectionTest extends TestCase
         ], $collection->constrainedParameterHistogram());
     }
 
+    public function testControllerHistogramCountsRoutesPerController(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('POST', '/teams', 'TeamController@store'));
+
+        self::assertSame([
+            'TeamController' => 1,
+            'UserController' => 2,
+        ], $collection->controllerHistogram());
+    }
+
     public function testSummaryReturnsRouteRegistryMetrics(): void
     {
         $collection = new RouteCollection();
@@ -460,6 +473,11 @@ final class RouteCollectionTest extends TestCase
                 'id' => 1,
                 'postId' => 1,
             ],
+            'controllers' => [
+                'HealthController' => 1,
+                'UserController' => 2,
+            ],
+            'controller_count' => 2,
         ], $collection->summary());
     }
 }

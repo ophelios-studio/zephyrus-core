@@ -375,6 +375,11 @@ final class RouterTest extends TestCase
         self::assertSame([], $router->routeParameterHistogram());
         self::assertSame([], $router->routeConstrainedParameterHistogram());
         self::assertSame([
+            'AnonymousController' => 1,
+            'HealthController' => 1,
+            'UserController' => 1,
+        ], $router->routeControllerHistogram());
+        self::assertSame([
             'total' => 3,
             'named' => 2,
             'unnamed' => 1,
@@ -391,6 +396,12 @@ final class RouterTest extends TestCase
             ],
             'parameters' => [],
             'constrained_parameters' => [],
+            'controllers' => [
+                'AnonymousController' => 1,
+                'HealthController' => 1,
+                'UserController' => 1,
+            ],
+            'controller_count' => 3,
         ], $router->routeSummary());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
@@ -461,6 +472,10 @@ final class RouterTest extends TestCase
         self::assertSame([
             'id' => 1,
         ], $router->routeConstrainedParameterHistogram());
+        self::assertSame([
+            'HealthController' => 1,
+            'UserController' => 1,
+        ], $router->routeControllerHistogram());
 
         self::assertSame([
             'total' => 2,
@@ -486,6 +501,11 @@ final class RouterTest extends TestCase
             'constrained_parameters' => [
                 'id' => 1,
             ],
+            'controllers' => [
+                'HealthController' => 1,
+                'UserController' => 1,
+            ],
+            'controller_count' => 2,
         ], $router->routeSummary());
     }
 
