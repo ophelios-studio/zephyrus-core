@@ -284,5 +284,16 @@ final class Rules
         );
     }
 
+    /**
+     * Validates a MAC address in common formats (e.g. 00:1A:2B:3C:4D:5E).
+     */
+    public static function macAddress(string $message = 'Must be a valid MAC address.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_MAC) !== false,
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

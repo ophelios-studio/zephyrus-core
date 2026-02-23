@@ -393,6 +393,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Supports both IPv4 and IPv6 CIDR ranges with proper prefix bounds (`0..32` for IPv4, `0..128` for IPv6).
 - Added unit coverage for valid ranges, malformed inputs, and out-of-range prefixes.
 
+## Implemented Slice: Validation MAC address rule
+- Added `Validation\Rules::macAddress()` to validate hardware address strings using PHP's MAC validation filter.
+- Supports common colon-separated and hyphen-separated MAC formats.
+- Added unit coverage for pass/fail/default-message paths.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
