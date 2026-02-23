@@ -921,6 +921,91 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid SHA-256 hash.', Rules::sha256()->errorMessage());
     }
 
+    // ---- httpMethod ----
+
+    public function testHttpMethodPassesCommonMethods(): void
+    {
+        self::assertTrue(Rules::httpMethod()->test('GET'));
+        self::assertTrue(Rules::httpMethod()->test('post'));
+        self::assertTrue(Rules::httpMethod()->test('PATCH'));
+    }
+
+    public function testHttpMethodFailsInvalidValues(): void
+    {
+        self::assertFalse(Rules::httpMethod()->test('FETCH'));
+        self::assertFalse(Rules::httpMethod()->test(''));
+        self::assertFalse(Rules::httpMethod()->test(null));
+    }
+
+    public function testHttpMethodDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP method.', Rules::httpMethod()->errorMessage());
+    }
+
+    // ---- mimeType ----
+
+    public function testMimeTypePasses(): void
+    {
+        self::assertTrue(Rules::mimeType()->test('application/json'));
+        self::assertTrue(Rules::mimeType()->test('text/plain'));
+        self::assertTrue(Rules::mimeType()->test('application/vnd.api+json'));
+    }
+
+    public function testMimeTypeFails(): void
+    {
+        self::assertFalse(Rules::mimeType()->test('application'));
+        self::assertFalse(Rules::mimeType()->test('application/'));
+        self::assertFalse(Rules::mimeType()->test('/json'));
+        self::assertFalse(Rules::mimeType()->test(null));
+    }
+
+    public function testMimeTypeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid MIME type.', Rules::mimeType()->errorMessage());
+    }
+
+    // ---- bearerToken ----
+
+    public function testBearerTokenPasses(): void
+    {
+        self::assertTrue(Rules::bearerToken()->test('abc.DEF-123_~+/=='));
+        self::assertTrue(Rules::bearerToken()->test('token123'));
+    }
+
+    public function testBearerTokenFails(): void
+    {
+        self::assertFalse(Rules::bearerToken()->test('token with spaces'));
+        self::assertFalse(Rules::bearerToken()->test('token*bad'));
+        self::assertFalse(Rules::bearerToken()->test(null));
+    }
+
+    public function testBearerTokenDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid bearer token.', Rules::bearerToken()->errorMessage());
+    }
+
+    // ---- languageTag ----
+
+    public function testLanguageTagPasses(): void
+    {
+        self::assertTrue(Rules::languageTag()->test('en'));
+        self::assertTrue(Rules::languageTag()->test('en-CA'));
+        self::assertTrue(Rules::languageTag()->test('zh-Hant-TW'));
+    }
+
+    public function testLanguageTagFails(): void
+    {
+        self::assertFalse(Rules::languageTag()->test('english'));
+        self::assertFalse(Rules::languageTag()->test('en_CA'));
+        self::assertFalse(Rules::languageTag()->test('')); 
+        self::assertFalse(Rules::languageTag()->test(null));
+    }
+
+    public function testLanguageTagDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid language tag.', Rules::languageTag()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void

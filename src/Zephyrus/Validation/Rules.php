@@ -578,6 +578,60 @@ final class Rules
     }
 
     /**
+     * Validates an HTTP method token.
+     */
+    public static function httpMethod(string $message = 'Must be a valid HTTP method.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                $method = strtoupper($v);
+
+                return in_array($method, [
+                    'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT',
+                ], true);
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates a MIME type such as "application/json".
+     */
+    public static function mimeType(string $message = 'Must be a valid MIME type.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates a Bearer token value (without the "Bearer " prefix).
+     */
+    public static function bearerToken(string $message = 'Must be a valid bearer token.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9\-._~+\/]+=*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates an IETF BCP-47 language tag (basic form).
+     */
+    public static function languageTag(string $message = 'Must be a valid language tag.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a host:port endpoint.
      * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
      */
