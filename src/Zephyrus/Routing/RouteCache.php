@@ -80,24 +80,41 @@ final class RouteCache
         return $this->isValidMetaForFreshness($meta) ? $meta : null;
     }
 
+    public function generatedAt(): ?int
+    {
+        $meta = $this->metadata();
+
+        return $meta['generated_at'] ?? null;
+    }
+
+    public function age(?int $now = null): ?int
+    {
+        $generatedAt = $this->generatedAt();
+        if ($generatedAt === null) {
+            return null;
+        }
+
+        $currentTime = $now ?? time();
+
+        if ($generatedAt > $currentTime) {
+            return null;
+        }
+
+        return $currentTime - $generatedAt;
+    }
+
     public function isFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
         if ($maxAgeSeconds < 0) {
             throw new RouteCacheException('Route cache max age must be zero or greater');
         }
 
-        $meta = $this->metadata();
-        if ($meta === null) {
+        $age = $this->age($now);
+        if ($age === null) {
             return false;
         }
 
-        $currentTime = $now ?? time();
-
-        if ($meta['generated_at'] > $currentTime) {
-            return false;
-        }
-
-        if (($currentTime - $meta['generated_at']) > $maxAgeSeconds) {
+        if ($age > $maxAgeSeconds) {
             return false;
         }
 

@@ -59,6 +59,8 @@ final class RouteCacheTest extends TestCase
         $cache = new RouteCache($this->cacheFile);
 
         self::assertNull($cache->metadata());
+        self::assertNull($cache->generatedAt());
+        self::assertNull($cache->age());
     }
 
     public function testMetadataReturnsExpectedFieldsAfterSave(): void
@@ -77,6 +79,62 @@ final class RouteCacheTest extends TestCase
         self::assertArrayHasKey('routes_hash', $meta);
         self::assertArrayHasKey('generated_at', $meta);
         self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $meta['routes_hash']);
+    }
+
+    public function testGeneratedAtReturnsTimestampFromMetadata(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+
+        self::assertIsInt($generatedAt);
+        self::assertGreaterThan(0, $generatedAt);
+    }
+
+    public function testAgeReturnsElapsedSecondsWhenMetadataIsUsable(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        self::assertSame(10, $cache->age($generatedAt + 10));
+    }
+
+    public function testAgeReturnsNullWhenGeneratedAtIsInFuture(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => null,
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+                'route_count' => 1,
+                'generated_at' => time() + 600,
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->age(time()));
     }
 
     public function testHasReturnsTrueAfterSave(): void
