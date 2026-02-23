@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
+use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
@@ -138,6 +139,32 @@ final class KernelBuilder
         $clone->controllerFactory = $factory;
 
         return $clone;
+    }
+
+    /**
+     * Wires a DI container as the controller factory.
+     *
+     * This is a convenience wrapper around withControllerFactory() for the
+     * common case of resolving controllers from a ContainerInterface (e.g.
+     * the built-in Container with auto-wiring).
+     *
+     * ```php
+     * $container = new Container();
+     * $container->singleton(UserRepository::class, fn ($c) => new UserRepository($c->get(Database::class)));
+     *
+     * $kernel = KernelBuilder::create()
+     *     ->withRouter($router)
+     *     ->withContainer($container)
+     *     ->build();
+     * ```
+     *
+     * Controllers are resolved via ContainerInterface::get(), so auto-wiring
+     * and explicit bindings both work.  For singleton controllers the same
+     * instance is reused across requests.
+     */
+    public function withContainer(ContainerInterface $container): self
+    {
+        return $this->withControllerFactory(static fn (string $class): object => $container->get($class));
     }
 
     /**

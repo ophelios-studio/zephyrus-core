@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Container\Container;
 use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\MiddlewareInterface;
@@ -57,6 +58,36 @@ final class KernelBuilderTest extends TestCase
         $modified = $builder->withControllerFactory(static fn (string $class): object => new $class());
 
         self::assertNotSame($builder, $modified);
+    }
+
+    public function testWithContainerReturnsNewInstance(): void
+    {
+        $builder = KernelBuilder::create();
+        $modified = $builder->withContainer(new Container());
+
+        self::assertNotSame($builder, $modified);
+    }
+
+    public function testWithContainerResolvesControllerViaGet(): void
+    {
+        $container = new Container();
+        $calls = 0;
+        $container->bind(KernelBuilderFixtureController::class, function () use (&$calls): KernelBuilderFixtureController {
+            $calls++;
+
+            return new KernelBuilderFixtureController();
+        });
+
+        $router = (new Router())->get('/ping', KernelBuilderFixtureController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withContainer($container)
+            ->build();
+
+        $kernel->handle(Request::fromArray('GET', '/ping'));
+
+        self::assertSame(1, $calls);
     }
 
     // -- Build returns HttpKernel ---------------------------------------------
