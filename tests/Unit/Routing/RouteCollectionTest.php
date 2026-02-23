@@ -162,4 +162,20 @@ final class RouteCollectionTest extends TestCase
 
         $collection->match('GET', '/users/42');
     }
+
+    public function testWithLastRouteNameOnEmptyCollectionReturnsUnchanged(): void
+    {
+        $collection = new RouteCollection();
+        $result = $collection->withLastRouteName('orphan');
+
+        self::assertSame([], $result->all());
+    }
+
+    public function testFindByNameReturnsNullWhenNameNotFound(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show', name: 'health'));
+
+        self::assertNull($collection->findByName('nonexistent'));
+    }
 }

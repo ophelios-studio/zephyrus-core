@@ -79,4 +79,14 @@ final class RouteSignatureTest extends TestCase
         self::assertStringStartsWith('/users/42?expand=roles&_sig=', $signed);
         self::assertTrue($signer->verify($signed));
     }
+
+    public function testSignAndVerifyWithExplicitPort(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->sign('https://example.com:8080/users/42?expand=roles');
+
+        self::assertStringStartsWith('https://example.com:8080/users/42?', $signed);
+        self::assertTrue($signer->verify($signed));
+    }
 }
