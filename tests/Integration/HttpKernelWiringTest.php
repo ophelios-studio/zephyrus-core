@@ -416,6 +416,35 @@ final class HttpKernelWiringTest extends TestCase
         self::assertSame('ok', $users->headers['X-Auth']);
     }
 
+    public function testMiddlewareGroupAliasAppliesToGroupedRoutes(): void
+    {
+        $router = (new Router())
+            ->middlewareGroup('web', ['session', 'csrf'])
+            ->group('/app', function (Router $r): Router {
+                return $r
+                    ->get('/home', WiringPingController::class . '@ping', middlewares: ['web'])
+                    ->get('/profile', WiringPingController::class . '@ping', middlewares: ['web', 'auth']);
+            });
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->registerMiddleware('session', new WiringHeaderMiddleware('X-Session', 'on'))
+            ->registerMiddleware('csrf', new WiringHeaderMiddleware('X-Csrf', 'ok'))
+            ->registerMiddleware('auth', new WiringHeaderMiddleware('X-Auth', 'ok'))
+            ->build();
+
+        $home = $kernel->handle(Request::fromArray('GET', '/app/home'));
+        $profile = $kernel->handle(Request::fromArray('GET', '/app/profile'));
+
+        self::assertSame('on', $home->headers['X-Session']);
+        self::assertSame('ok', $home->headers['X-Csrf']);
+        self::assertArrayNotHasKey('X-Auth', $home->headers);
+
+        self::assertSame('on', $profile->headers['X-Session']);
+        self::assertSame('ok', $profile->headers['X-Csrf']);
+        self::assertSame('ok', $profile->headers['X-Auth']);
+    }
+
     // -- Controller lifecycle hooks -------------------------------------------
 
     public function testBeforeHookShortCircuitsUnauthorizedRequest(): void
