@@ -95,7 +95,7 @@ abstract class Broker
      */
     protected function selectCount(string $sql, array $params = []): int
     {
-        return (int) $this->selectValue($sql, $params, 0);
+        return $this->db->selectInt($sql, $params, 0);
     }
 
     /**
@@ -108,6 +108,46 @@ abstract class Broker
     protected function execute(string $sql, array $params = []): int
     {
         return $this->db->execute($sql, $params);
+    }
+
+    /**
+     * Execute an INSERT and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function insertRow(string $sql, array $params = []): int
+    {
+        return $this->db->insert($sql, $params);
+    }
+
+    /**
+     * Execute an INSERT and return the generated identifier.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function insertRowGetId(string $sql, array $params = []): string|false
+    {
+        return $this->db->insertGetId($sql, $params);
+    }
+
+    /**
+     * Execute an UPDATE and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function updateRows(string $sql, array $params = []): int
+    {
+        return $this->db->update($sql, $params);
+    }
+
+    /**
+     * Execute a DELETE and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function deleteRows(string $sql, array $params = []): int
+    {
+        return $this->db->delete($sql, $params);
     }
 
     /**

@@ -187,6 +187,27 @@ final class DatabaseTest extends TestCase
         self::assertSame('fallback', $this->db->selectValue('SELECT name FROM users WHERE id = ?', [999], 'fallback'));
     }
 
+    public function testTypedScalarHelpersReturnExpectedCasts(): void
+    {
+        $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Dan', 'dan@example.com']);
+
+        self::assertSame(1, $this->db->selectInt('SELECT COUNT(*) FROM users'));
+        self::assertSame('Dan', $this->db->selectString('SELECT name FROM users WHERE email = ?', ['dan@example.com']));
+        self::assertTrue($this->db->selectBool('SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)', ['dan@example.com']));
+    }
+
+    public function testInsertUpdateDeleteHelpersWorkAsConvenienceAliases(): void
+    {
+        $id = $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Eva', 'eva@example.com']);
+        self::assertNotFalse($id);
+
+        $updated = $this->db->update('UPDATE users SET name = ? WHERE id = ?', ['Evelyn', (int) $id]);
+        self::assertSame(1, $updated);
+
+        $deleted = $this->db->delete('DELETE FROM users WHERE id = ?', [(int) $id]);
+        self::assertSame(1, $deleted);
+    }
+
     public function testExecuteReturnsAffectedRows(): void
     {
         $affected = $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Dan', 'dan@example.com']);

@@ -57,17 +57,15 @@ final class UserBroker extends Broker
 
     public function insert(string $name, string $email): int
     {
-        $this->execute(
+        return (int) $this->insertRowGetId(
             'INSERT INTO users (name, email) VALUES (?, ?)',
             [$name, $email],
         );
-
-        return (int) $this->lastInsertId();
     }
 
     public function update(int $id, string $name): int
     {
-        return $this->execute(
+        return $this->updateRows(
             'UPDATE users SET name = ? WHERE id = ?',
             [$name, $id],
         );
@@ -75,7 +73,7 @@ final class UserBroker extends Broker
 
     public function delete(int $id): int
     {
-        return $this->execute('DELETE FROM users WHERE id = ?', [$id]);
+        return $this->deleteRows('DELETE FROM users WHERE id = ?', [$id]);
     }
 
     public function transactionalInsert(string $name, string $email): int
