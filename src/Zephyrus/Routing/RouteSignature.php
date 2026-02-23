@@ -29,9 +29,10 @@ final readonly class RouteSignature
         [$payload] = $this->split($url);
         $expiresAt = ($now ?? time()) + $ttlSeconds;
         $payloadWithExpiry = $this->appendQueryParameter($payload, '_exp', (string) $expiresAt);
-        $signature = $this->compute($payloadWithExpiry);
+        [$canonicalPayloadWithExpiry] = $this->split($payloadWithExpiry);
+        $signature = $this->compute($canonicalPayloadWithExpiry);
 
-        return $this->appendSignature($payloadWithExpiry, $signature, $this->extractFragment($url));
+        return $this->appendSignature($canonicalPayloadWithExpiry, $signature, $this->extractFragment($url));
     }
 
     public function verify(string $url): bool
