@@ -366,6 +366,18 @@ final class RouterTest extends TestCase
             'GET' => 2,
             'POST' => 1,
         ], $router->routeMethodHistogram());
+        self::assertSame([], $router->routeMiddlewareHistogram());
+        self::assertSame([
+            'total' => 3,
+            'named' => 2,
+            'unnamed' => 1,
+            'duplicate_names' => 0,
+            'methods' => [
+                'GET' => 2,
+                'POST' => 1,
+            ],
+            'middlewares' => [],
+        ], $router->routeSummary());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
 
@@ -412,6 +424,33 @@ final class RouterTest extends TestCase
         $result = $router->assertNoDuplicateRouteNames();
 
         self::assertSame($router, $result);
+    }
+
+    public function testRouteMiddlewareHistogramAndSummaryReflectMiddlewareUsage(): void
+    {
+        $router = (new Router())
+            ->get('/health', 'HealthController@show', middlewares: ['auth'])
+            ->post('/users', 'UserController@store', middlewares: ['auth', 'audit']);
+
+        self::assertSame([
+            'audit' => 1,
+            'auth' => 2,
+        ], $router->routeMiddlewareHistogram());
+
+        self::assertSame([
+            'total' => 2,
+            'named' => 0,
+            'unnamed' => 2,
+            'duplicate_names' => 0,
+            'methods' => [
+                'GET' => 1,
+                'POST' => 1,
+            ],
+            'middlewares' => [
+                'audit' => 1,
+                'auth' => 2,
+            ],
+        ], $router->routeSummary());
     }
 
     // -----------------------------------------------------------------------

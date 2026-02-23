@@ -363,4 +363,40 @@ final class RouteCollectionTest extends TestCase
             'POST' => 1,
         ], $collection->methodHistogram());
     }
+
+    public function testMiddlewareHistogramAggregatesUsageAcrossRoutes(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show', middlewares: ['auth']));
+        $collection->add(Route::define('GET', '/users', 'UserController@index', middlewares: ['auth', 'audit']));
+        $collection->add(Route::define('POST', '/users', 'UserController@store', middlewares: ['audit']));
+
+        self::assertSame([
+            'audit' => 2,
+            'auth' => 2,
+        ], $collection->middlewareHistogram());
+    }
+
+    public function testSummaryReturnsRouteRegistryMetrics(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show', middlewares: ['auth'], name: 'health.show'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store', middlewares: ['auth', 'audit'], name: 'users.store'));
+        $collection->add(Route::define('GET', '/users', 'UserController@index', middlewares: ['audit']));
+
+        self::assertSame([
+            'total' => 3,
+            'named' => 2,
+            'unnamed' => 1,
+            'duplicate_names' => 0,
+            'methods' => [
+                'GET' => 2,
+                'POST' => 1,
+            ],
+            'middlewares' => [
+                'audit' => 2,
+                'auth' => 2,
+            ],
+        ], $collection->summary());
+    }
 }

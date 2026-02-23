@@ -130,6 +130,42 @@ final class RouteCollection
     }
 
     /**
+     * @return array<string, int>
+     */
+    public function middlewareHistogram(): array
+    {
+        $histogram = [];
+
+        foreach ($this->routes as $route) {
+            foreach ($route->middlewares as $middleware) {
+                $histogram[$middleware] = ($histogram[$middleware] ?? 0) + 1;
+            }
+        }
+
+        ksort($histogram);
+
+        return $histogram;
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>}
+     */
+    public function summary(): array
+    {
+        $total = $this->count();
+        $named = count($this->names());
+
+        return [
+            'total' => $total,
+            'named' => $named,
+            'unnamed' => $total - $named,
+            'duplicate_names' => count($this->duplicateRouteNames()),
+            'methods' => $this->methodHistogram(),
+            'middlewares' => $this->middlewareHistogram(),
+        ];
+    }
+
+    /**
      * @return array<string, Route>
      */
     public function namedRoutes(): array
