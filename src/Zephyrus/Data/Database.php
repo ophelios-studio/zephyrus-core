@@ -83,6 +83,64 @@ final class Database
     }
 
     /**
+     * Execute a SELECT and return all rows as associative arrays.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function select(string $sql, array $params = []): array
+    {
+        return $this->query($sql, $params)->fetchAll();
+    }
+
+    /**
+     * Execute a query and return the first row or null when no rows match.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<string, mixed>|null
+     */
+    public function selectOne(string $sql, array $params = []): ?array
+    {
+        $row = $this->query($sql, $params)->fetch();
+
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Execute a scalar query and return the first column of the first row.
+     *
+     * Returns $default when no row is returned.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function selectValue(string $sql, array $params = [], mixed $default = null): mixed
+    {
+        $value = $this->query($sql, $params)->fetchColumn();
+
+        return $value === false ? $default : $value;
+    }
+
+    /**
+     * Execute a write query and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function execute(string $sql, array $params = []): int
+    {
+        return $this->query($sql, $params)->rowCount();
+    }
+
+    /**
+     * Execute an existence check query and return true when first column is truthy.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function exists(string $sql, array $params = []): bool
+    {
+        return (bool) $this->selectValue($sql, $params, false);
+    }
+
+    /**
      * Run $work inside a database transaction.
      *
      * Commits if $work returns without throwing, rolls back otherwise.

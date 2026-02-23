@@ -58,7 +58,7 @@ abstract class Broker
      */
     protected function select(string $sql, array $params = []): array
     {
-        return $this->db->query($sql, $params)->fetchAll();
+        return $this->db->select($sql, $params);
     }
 
     /**
@@ -70,9 +70,7 @@ abstract class Broker
      */
     protected function selectOne(string $sql, array $params = []): ?array
     {
-        $row = $this->db->query($sql, $params)->fetch();
-
-        return $row === false ? null : $row;
+        return $this->db->selectOne($sql, $params);
     }
 
     /**
@@ -85,9 +83,7 @@ abstract class Broker
      */
     protected function selectValue(string $sql, array $params = [], mixed $default = null): mixed
     {
-        $value = $this->db->query($sql, $params)->fetchColumn();
-
-        return $value === false ? $default : $value;
+        return $this->db->selectValue($sql, $params, $default);
     }
 
     /**
@@ -111,7 +107,17 @@ abstract class Broker
      */
     protected function execute(string $sql, array $params = []): int
     {
-        return $this->db->query($sql, $params)->rowCount();
+        return $this->db->execute($sql, $params);
+    }
+
+    /**
+     * Execute an existence query and return true when at least one row matches.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function exists(string $sql, array $params = []): bool
+    {
+        return $this->db->exists($sql, $params);
     }
 
     /**

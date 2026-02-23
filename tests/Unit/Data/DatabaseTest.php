@@ -153,6 +153,59 @@ final class DatabaseTest extends TestCase
         $this->db->query('INVALID SQL STATEMENT');
     }
 
+    // ── convenience read/write helpers ──────────────────────────────────────
+
+    public function testSelectReturnsAllRows(): void
+    {
+        $this->db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Alice', 'alice@example.com']);
+        $this->db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Bob', 'bob@example.com']);
+
+        $rows = $this->db->select('SELECT * FROM users ORDER BY id');
+
+        self::assertCount(2, $rows);
+        self::assertSame('Alice', $rows[0]['name']);
+        self::assertSame('Bob', $rows[1]['name']);
+    }
+
+    public function testSelectOneReturnsNullWhenNoRows(): void
+    {
+        self::assertNull($this->db->selectOne('SELECT * FROM users WHERE id = ?', [999]));
+    }
+
+    public function testSelectOneReturnsFirstRow(): void
+    {
+        $this->db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Cara', 'cara@example.com']);
+
+        $row = $this->db->selectOne('SELECT * FROM users WHERE name = ?', ['Cara']);
+
+        self::assertNotNull($row);
+        self::assertSame('cara@example.com', $row['email']);
+    }
+
+    public function testSelectValueReturnsDefaultWhenNoRows(): void
+    {
+        self::assertSame('fallback', $this->db->selectValue('SELECT name FROM users WHERE id = ?', [999], 'fallback'));
+    }
+
+    public function testExecuteReturnsAffectedRows(): void
+    {
+        $affected = $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Dan', 'dan@example.com']);
+
+        self::assertSame(1, $affected);
+    }
+
+    public function testExistsReturnsFalseWhenQueryReturnsNoMatch(): void
+    {
+        self::assertFalse($this->db->exists('SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)', ['none@example.com']));
+    }
+
+    public function testExistsReturnsTrueWhenQueryHasMatch(): void
+    {
+        $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Eli', 'eli@example.com']);
+
+        self::assertTrue($this->db->exists('SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)', ['eli@example.com']));
+    }
+
     // ── lastInsertId() ───────────────────────────────────────────────────────
 
     public function testLastInsertIdAfterInsert(): void

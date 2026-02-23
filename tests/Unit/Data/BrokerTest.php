@@ -42,6 +42,14 @@ final class UserBroker extends Broker
         return $this->selectCount('SELECT COUNT(*) FROM users WHERE name = ?', [$name]);
     }
 
+    public function existsByEmail(string $email): bool
+    {
+        return $this->exists(
+            'SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)',
+            [$email],
+        );
+    }
+
     public function firstIdOr(int $default): int
     {
         return (int) $this->selectValue('SELECT id FROM users ORDER BY id LIMIT 1', default: $default);
@@ -170,6 +178,18 @@ final class BrokerTest extends TestCase
     public function testSelectValueUsesDefaultWhenNoRows(): void
     {
         self::assertSame(123, $this->broker->firstIdOr(123));
+    }
+
+    public function testExistsReturnsFalseWhenNoMatchingRow(): void
+    {
+        self::assertFalse($this->broker->existsByEmail('nope@example.com'));
+    }
+
+    public function testExistsReturnsTrueWhenMatchingRowExists(): void
+    {
+        $this->broker->insert('Zoe', 'zoe@example.com');
+
+        self::assertTrue($this->broker->existsByEmail('zoe@example.com'));
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
