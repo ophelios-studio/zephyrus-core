@@ -943,6 +943,72 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid HTTP path.', Rules::httpPath()->errorMessage());
     }
 
+    // ---- queryString ----
+
+    public function testQueryStringPasses(): void
+    {
+        self::assertTrue(Rules::queryString()->test('a=1&b=2'));
+        self::assertTrue(Rules::queryString()->test('flag=true'));
+        self::assertTrue(Rules::queryString()->test('')); // empty query is valid
+    }
+
+    public function testQueryStringFails(): void
+    {
+        self::assertFalse(Rules::queryString()->test('?a=1'));
+        self::assertFalse(Rules::queryString()->test('a=1#frag'));
+        self::assertFalse(Rules::queryString()->test('a = 1'));
+        self::assertFalse(Rules::queryString()->test(null));
+    }
+
+    public function testQueryStringDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid query string.', Rules::queryString()->errorMessage());
+    }
+
+    // ---- percentEncoded ----
+
+    public function testPercentEncodedPasses(): void
+    {
+        self::assertTrue(Rules::percentEncoded()->test('hello%20world'));
+        self::assertTrue(Rules::percentEncoded()->test('abc-_.~'));
+        self::assertTrue(Rules::percentEncoded()->test('%2Fapi%2Fv1'));
+    }
+
+    public function testPercentEncodedFails(): void
+    {
+        self::assertFalse(Rules::percentEncoded()->test('%ZZ'));
+        self::assertFalse(Rules::percentEncoded()->test('bad space'));
+        self::assertFalse(Rules::percentEncoded()->test('')); 
+        self::assertFalse(Rules::percentEncoded()->test(null));
+    }
+
+    public function testPercentEncodedDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid percent-encoded string.', Rules::percentEncoded()->errorMessage());
+    }
+
+    // ---- httpStatusCode ----
+
+    public function testHttpStatusCodePasses(): void
+    {
+        self::assertTrue(Rules::httpStatusCode()->test(200));
+        self::assertTrue(Rules::httpStatusCode()->test('404'));
+        self::assertTrue(Rules::httpStatusCode()->test(599));
+    }
+
+    public function testHttpStatusCodeFails(): void
+    {
+        self::assertFalse(Rules::httpStatusCode()->test(99));
+        self::assertFalse(Rules::httpStatusCode()->test(600));
+        self::assertFalse(Rules::httpStatusCode()->test('20a'));
+        self::assertFalse(Rules::httpStatusCode()->test(null));
+    }
+
+    public function testHttpStatusCodeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP status code.', Rules::httpStatusCode()->errorMessage());
+    }
+
     // ---- httpMethod ----
 
     public function testHttpMethodPassesCommonMethods(): void
