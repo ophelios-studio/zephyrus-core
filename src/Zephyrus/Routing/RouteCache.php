@@ -312,6 +312,27 @@ final class RouteCache
         return $meta;
     }
 
+    /**
+     * Warm the cache only when stale.
+     *
+     * Returns true when a new cache write happened, false when the existing
+     * cache was already fresh within the requested max age window.
+     */
+    public function warmIfStale(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
+    {
+        if ($maxAgeSeconds < 0) {
+            throw new RouteCacheException('Route cache max age must be zero or greater');
+        }
+
+        if ($this->isFreshWithin($routes, $maxAgeSeconds, $now)) {
+            return false;
+        }
+
+        $this->warm($routes);
+
+        return true;
+    }
+
     public function load(): RouteCollection
     {
         if (!is_file($this->cacheFile)) {

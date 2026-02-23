@@ -352,6 +352,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Warm-up now supports orchestration code that needs immediate cache metadata (`routes_hash`, `route_count`, `generated_at`) without a second explicit metadata read step.
 - Added unit coverage validating that warm-up returns complete metadata and materializes the cache file.
 
+## Implemented Slice: RouteCache stale-aware warm-up orchestration
+- Added `RouteCache::warmIfStale(RouteCollection, int $maxAgeSeconds, ?int $now = null): bool`.
+- It writes cache only when stale, and returns whether a new write occurred (`true` when warmed, `false` when current cache is already fresh).
+- Includes explicit guard for negative max-age input using typed `RouteCacheException`.
+- Added unit coverage for: missing-cache warm, fresh-cache no-op, and negative-age failure path.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
