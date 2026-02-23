@@ -598,6 +598,30 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid port range.', Rules::portRange()->errorMessage());
     }
 
+    // ---- json ----
+
+    public function testJsonPasses(): void
+    {
+        self::assertTrue(Rules::json()->test('{"name":"zephyrus","ok":true}'));
+        self::assertTrue(Rules::json()->test('[1,2,3]'));
+        self::assertTrue(Rules::json()->test('"string"'));
+        self::assertTrue(Rules::json()->test('null'));
+    }
+
+    public function testJsonFails(): void
+    {
+        self::assertFalse(Rules::json()->test(''));
+        self::assertFalse(Rules::json()->test('{invalid}'));
+        self::assertFalse(Rules::json()->test('{"missing":}'));
+        self::assertFalse(Rules::json()->test(null));
+        self::assertFalse(Rules::json()->test(123));
+    }
+
+    public function testJsonDefaultMessage(): void
+    {
+        self::assertSame('Must be valid JSON.', Rules::json()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
