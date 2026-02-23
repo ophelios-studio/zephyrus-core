@@ -527,4 +527,27 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid MAC address.', Rules::macAddress()->errorMessage());
     }
+
+    // ---- port ----
+
+    public function testPortPasses(): void
+    {
+        self::assertTrue(Rules::port()->test(80));
+        self::assertTrue(Rules::port()->test('443'));
+        self::assertTrue(Rules::port()->test(65535));
+    }
+
+    public function testPortFails(): void
+    {
+        self::assertFalse(Rules::port()->test(0));
+        self::assertFalse(Rules::port()->test(65536));
+        self::assertFalse(Rules::port()->test('-1'));
+        self::assertFalse(Rules::port()->test('abc'));
+        self::assertFalse(Rules::port()->test(null));
+    }
+
+    public function testPortDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid port number.', Rules::port()->errorMessage());
+    }
 }

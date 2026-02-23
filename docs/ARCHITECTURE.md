@@ -398,6 +398,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Supports common colon-separated and hyphen-separated MAC formats.
 - Added unit coverage for pass/fail/default-message paths.
 
+## Implemented Slice: Validation port-number rule
+- Added `Validation\Rules::port()` for TCP/UDP port validation.
+- Accepts integer and digit-string inputs in the valid range `1..65535`.
+- Rejects zero, negatives, out-of-range values, and non-numeric inputs.
+- Added unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
