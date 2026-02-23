@@ -178,4 +178,31 @@ final class RouteCollectionTest extends TestCase
 
         self::assertNull($collection->findByName('nonexistent'));
     }
+
+    /**
+     * Segment-count mismatch between route and path triggers the early null
+     * return in extractParameters (L105).
+     */
+    public function testMatchSkipsRouteWhenSegmentCountsDiffer(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        $this->expectException(RouteNotFoundException::class);
+        $this->expectExceptionMessage('No route matched GET /users/extra');
+
+        $collection->match('GET', '/users/extra');
+    }
+
+    /** Root path '/' produces an empty segments array (L143). */
+    public function testMatchRootPathReturnsEmptyParameters(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+
+        $match = $collection->match('GET', '/');
+
+        self::assertSame('/', $match->route->path);
+        self::assertSame([], $match->parameters);
+    }
 }

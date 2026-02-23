@@ -89,4 +89,18 @@ final class RouteSignatureTest extends TestCase
         self::assertStringStartsWith('https://example.com:8080/users/42?', $signed);
         self::assertTrue($signer->verify($signed));
     }
+
+    /**
+     * A pure query-string URL (no path, no scheme, no host) exercises the
+     * elseif branch in buildBaseUrl (L90-91).
+     */
+    public function testSignAndVerifyPureQueryStringUrl(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->sign('?foo=bar');
+
+        self::assertStringContainsString('_sig=', $signed);
+        self::assertTrue($signer->verify($signed));
+    }
 }
