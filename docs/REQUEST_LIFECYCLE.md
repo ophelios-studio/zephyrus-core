@@ -45,7 +45,9 @@ $_SERVER / $_GET / $_POST / $_COOKIE / php://input
          ├─ RouteNotFoundException     → 404 Not Found
          ├─ MethodNotAllowedException  → 405 Method Not Allowed (Allow header set)
          └─ anything else             → 500 Internal Server Error
-               └─ content negotiated: JSON when Accept includes application/json
+               └─ content negotiated: RFC7807 problem JSON when Accept includes
+                  application/problem+json; legacy JSON envelope for
+                  application/json
         │
         ▼
   (immutable Response value object)

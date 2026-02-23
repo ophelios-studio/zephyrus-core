@@ -36,11 +36,28 @@ final class HttpExceptionResponder
 
     private function format(HttpErrorPayload $payload, ?Request $request): Response
     {
+        if ($this->prefersProblemJson($request)) {
+            return Response::json([
+                'type' => 'about:blank',
+                'title' => $payload->message,
+                'status' => $payload->status,
+            ], $payload->status)->withHeader('Content-Type', 'application/problem+json; charset=utf-8');
+        }
+
         if ($this->prefersJson($request)) {
             return Response::json($payload->toArray(), $payload->status);
         }
 
         return Response::text($payload->message, $payload->status);
+    }
+
+    private function prefersProblemJson(?Request $request): bool
+    {
+        if ($request === null) {
+            return false;
+        }
+
+        return str_contains(strtolower($request->header('accept', '')), 'application/problem+json');
     }
 
     private function prefersJson(?Request $request): bool
@@ -49,9 +66,6 @@ final class HttpExceptionResponder
             return false;
         }
 
-        $accept = strtolower($request->header('accept', ''));
-
-        return str_contains($accept, 'application/json')
-            || str_contains($accept, 'application/problem+json');
+        return str_contains(strtolower($request->header('accept', '')), 'application/json');
     }
 }
