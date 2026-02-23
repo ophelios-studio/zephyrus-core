@@ -121,6 +121,38 @@ final class Database
     }
 
     /**
+     * Execute a scalar query and return the value cast to int.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function selectInt(string $sql, array $params = [], int $default = 0): int
+    {
+        return (int) $this->selectValue($sql, $params, $default);
+    }
+
+    /**
+     * Execute a scalar query and return the value cast to string (or null).
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function selectString(string $sql, array $params = [], ?string $default = null): ?string
+    {
+        $value = $this->selectValue($sql, $params, $default);
+
+        return $value === null ? null : (string) $value;
+    }
+
+    /**
+     * Execute a scalar query and return the value cast to bool.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function selectBool(string $sql, array $params = [], bool $default = false): bool
+    {
+        return (bool) $this->selectValue($sql, $params, $default);
+    }
+
+    /**
      * Execute a write query and return affected row count.
      *
      * @param array<int|string, mixed> $params
@@ -131,13 +163,55 @@ final class Database
     }
 
     /**
+     * Execute an INSERT and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function insert(string $sql, array $params = []): int
+    {
+        return $this->execute($sql, $params);
+    }
+
+    /**
+     * Execute an INSERT and return the last inserted ID.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function insertGetId(string $sql, array $params = []): string|false
+    {
+        $this->insert($sql, $params);
+
+        return $this->lastInsertId();
+    }
+
+    /**
+     * Execute an UPDATE and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function update(string $sql, array $params = []): int
+    {
+        return $this->execute($sql, $params);
+    }
+
+    /**
+     * Execute a DELETE and return affected row count.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    public function delete(string $sql, array $params = []): int
+    {
+        return $this->execute($sql, $params);
+    }
+
+    /**
      * Execute an existence check query and return true when first column is truthy.
      *
      * @param array<int|string, mixed> $params
      */
     public function exists(string $sql, array $params = []): bool
     {
-        return (bool) $this->selectValue($sql, $params, false);
+        return $this->selectBool($sql, $params, false);
     }
 
     /**
