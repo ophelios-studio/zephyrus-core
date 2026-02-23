@@ -425,6 +425,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Accepts object/array/scalar JSON payloads (including `null`) and rejects empty/non-string/invalid JSON input.
 - Added unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation slug rule
+- Added `Validation\Rules::slug()` for URL/content slugs using lowercase alphanumerics with single hyphen separators.
+- Enforces a strict shape suitable for route segments and identifiers (no leading/trailing hyphen, no repeated separators).
+- Added unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
