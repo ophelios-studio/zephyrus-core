@@ -182,6 +182,23 @@ final class RouteCache
         }
     }
 
+    /**
+     * Save the given routes and return the generated cache metadata.
+     *
+     * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}
+     */
+    public function warm(RouteCollection $routes): array
+    {
+        $this->save($routes);
+
+        $meta = $this->metadata();
+        if ($meta === null) {
+            throw new RouteCacheException('Route cache metadata unavailable after save');
+        }
+
+        return $meta;
+    }
+
     public function load(): RouteCollection
     {
         if (!is_file($this->cacheFile)) {
