@@ -103,4 +103,43 @@ final class RouteSignatureTest extends TestCase
         self::assertStringContainsString('_sig=', $signed);
         self::assertTrue($signer->verify($signed));
     }
+
+    public function testSignTemporaryAddsExpiryAndVerifiesBeforeExpiry(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 60, now: 1_700_000_000);
+
+        self::assertStringContainsString('_exp=1700000060', $signed);
+        self::assertTrue($signer->verifyAt($signed, now: 1_700_000_030));
+    }
+
+    public function testVerifyAtFailsWhenTemporarySignatureExpires(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 10, now: 1_700_000_000);
+
+        self::assertFalse($signer->verifyAt($signed, now: 1_700_000_011));
+    }
+
+    public function testVerifyAtFailsWhenExpiryFieldIsMalformed(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 60, now: 1_700_000_000);
+        $tampered = str_replace('_exp=1700000060', '_exp=not-a-timestamp', $signed);
+
+        self::assertFalse($signer->verifyAt($tampered, now: 1_700_000_001));
+    }
+
+    public function testSignTemporaryThrowsWhenTtlIsNotPositive(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Temporary signature TTL must be greater than zero seconds');
+
+        $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 0, now: 1_700_000_000);
+    }
 }
