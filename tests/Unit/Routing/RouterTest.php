@@ -355,8 +355,19 @@ final class RouterTest extends TestCase
         self::assertSame(3, $router->count());
         self::assertTrue($router->hasRouteNamed('health.show'));
         self::assertFalse($router->hasRouteNamed('missing.name'));
+        self::assertSame(['GET', 'POST'], $router->routeMethods());
+        self::assertSame(['/health', '/users', '/anonymous'], $router->routePaths());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
+
+        $named = $router->namedRoutes();
+        self::assertArrayHasKey('health.show', $named);
+        self::assertSame('/health', $named['health.show']->path);
+
+        $getRoutes = $router->routesByMethod('get');
+        self::assertCount(2, $getRoutes);
+        self::assertSame('/health', $getRoutes[0]->path);
+        self::assertSame('/anonymous', $getRoutes[1]->path);
     }
 
     public function testRouterAssertNoDuplicateRouteNamesThrowsWhenDuplicatesExist(): void
@@ -369,6 +380,18 @@ final class RouterTest extends TestCase
         $this->expectExceptionMessage('Duplicate route names detected: users.show');
 
         $router->assertNoDuplicateRouteNames();
+    }
+
+    public function testRouterNamedRoutesThrowsWhenDuplicatesExist(): void
+    {
+        $router = (new Router())
+            ->get('/a', 'AController@show')->name('users.show')
+            ->get('/b', 'BController@show')->name('users.show');
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Duplicate route names detected: users.show');
+
+        $router->namedRoutes();
     }
 
     public function testRouterAssertNoDuplicateRouteNamesReturnsSelfWhenValid(): void

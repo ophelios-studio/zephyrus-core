@@ -278,4 +278,62 @@ final class RouteCollectionTest extends TestCase
 
         self::assertTrue(true);
     }
+
+    public function testMethodsReturnsSortedUniqueMethods(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        self::assertSame(['GET', 'POST'], $collection->methods());
+    }
+
+    public function testPathsReturnsRegisteredPathsInOrder(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+
+        self::assertSame(['/health', '/users'], $collection->paths());
+    }
+
+    public function testNamedRoutesReturnsNameIndexedMap(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store', name: 'users.store'));
+
+        $named = $collection->namedRoutes();
+
+        self::assertArrayHasKey('health.show', $named);
+        self::assertArrayHasKey('users.store', $named);
+        self::assertSame('/health', $named['health.show']->path);
+    }
+
+    public function testNamedRoutesThrowsOnDuplicates(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a', 'AController@show', name: 'dup'));
+        $collection->add(Route::define('GET', '/b', 'BController@show', name: 'dup'));
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Duplicate route names detected: dup');
+
+        $collection->namedRoutes();
+    }
+
+    public function testRoutesByMethodFiltersCaseInsensitively(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/health', 'HealthController@show'));
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        $getRoutes = $collection->routesByMethod('get');
+
+        self::assertCount(2, $getRoutes);
+        self::assertSame('/health', $getRoutes[0]->path);
+        self::assertSame('/users', $getRoutes[1]->path);
+    }
 }

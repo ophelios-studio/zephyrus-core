@@ -233,9 +233,41 @@ final class Router
     /**
      * @return array<int, string>
      */
+    public function routeMethods(): array
+    {
+        return $this->routes->methods();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function routePaths(): array
+    {
+        return $this->routes->paths();
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public function routeNames(): array
     {
         return $this->routes->names();
+    }
+
+    /**
+     * @return array<string, Route>
+     */
+    public function namedRoutes(): array
+    {
+        return $this->routes->namedRoutes();
+    }
+
+    /**
+     * @return array<int, Route>
+     */
+    public function routesByMethod(string $method): array
+    {
+        return $this->routes->routesByMethod($method);
     }
 
     /**
