@@ -12,6 +12,7 @@ use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Data\PaginatedResult;
+use Zephyrus\Data\PaginationRequest;
 
 final class DatabaseTest extends TestCase
 {
@@ -275,6 +276,26 @@ final class DatabaseTest extends TestCase
         self::assertTrue($page->hasPrevious);
         self::assertFalse($page->hasNext);
         self::assertSame(1, $page->itemCount());
+    }
+
+    public function testPaginationRequestBasedHelpersReturnExpectedData(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['A', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['B', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['C', 'c@example.com']);
+
+        $pagination = new PaginationRequest(page: 2, perPage: 2);
+
+        $rows = $this->db->selectPageWith('SELECT * FROM users ORDER BY id', $pagination);
+        self::assertCount(1, $rows);
+        self::assertSame('C', $rows[0]['name']);
+
+        $page = $this->db->paginateWith('SELECT * FROM users ORDER BY id', 'SELECT COUNT(*) FROM users', $pagination);
+        self::assertSame(3, $page['total']);
+        self::assertSame(2, $page['page']);
+
+        $typed = $this->db->paginateResultWith('SELECT * FROM users ORDER BY id', 'SELECT COUNT(*) FROM users', $pagination);
+        self::assertSame(1, $typed->itemCount());
     }
 
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void

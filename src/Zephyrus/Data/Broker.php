@@ -150,6 +150,17 @@ abstract class Broker
     }
 
     /**
+     * Execute a paginated SELECT query using a PaginationRequest.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    protected function selectPageWith(string $sql, PaginationRequest $pagination, array $params = []): array
+    {
+        return $this->db->selectPageWith($sql, $pagination, $params);
+    }
+
+    /**
      * Execute coordinated count + paginated data queries.
      *
      * @param array<int|string, mixed> $params
@@ -161,6 +172,17 @@ abstract class Broker
     }
 
     /**
+     * Execute coordinated count + paginated data queries with PaginationRequest.
+     *
+     * @param array<int|string, mixed> $params
+     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    protected function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
+    {
+        return $this->db->paginateWith($dataSql, $countSql, $pagination, $params);
+    }
+
+    /**
      * Execute coordinated count + paginated data queries and return object envelope.
      *
      * @param array<int|string, mixed> $params
@@ -168,6 +190,16 @@ abstract class Broker
     protected function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
     {
         return $this->db->paginateResult($dataSql, $countSql, $page, $perPage, $params);
+    }
+
+    /**
+     * Execute coordinated count + paginated data queries and return object envelope.
+     *
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): PaginatedResult
+    {
+        return $this->db->paginateResultWith($dataSql, $countSql, $pagination, $params);
     }
 
     /**

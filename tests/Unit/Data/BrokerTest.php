@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Broker;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\PaginatedResult;
+use Zephyrus\Data\PaginationRequest;
 
 // ---------------------------------------------------------------------------
 // Minimal concrete stub — exposes protected helpers as public for testing.
@@ -93,6 +94,29 @@ final class UserBroker extends Broker
             'SELECT COUNT(*) FROM users',
             $page,
             $perPage,
+        );
+    }
+
+    public function listPageWith(PaginationRequest $pagination): array
+    {
+        return $this->selectPageWith('SELECT * FROM users ORDER BY id', $pagination);
+    }
+
+    public function paginateUsersWith(PaginationRequest $pagination): array
+    {
+        return $this->paginateWith(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $pagination,
+        );
+    }
+
+    public function paginateUsersResultWith(PaginationRequest $pagination): PaginatedResult
+    {
+        return $this->paginateResultWith(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $pagination,
         );
     }
 
@@ -291,6 +315,26 @@ final class BrokerTest extends TestCase
         self::assertTrue($page->hasPrevious);
         self::assertFalse($page->hasNext);
         self::assertSame(1, $page->itemCount());
+    }
+
+    public function testPaginationRequestBasedBrokerHelpersWork(): void
+    {
+        $this->broker->insert('A', 'a@example.com');
+        $this->broker->insert('B', 'b@example.com');
+        $this->broker->insert('C', 'c@example.com');
+
+        $pagination = new PaginationRequest(page: 2, perPage: 2);
+
+        $rows = $this->broker->listPageWith($pagination);
+        self::assertCount(1, $rows);
+        self::assertSame('C', $rows[0]['name']);
+
+        $page = $this->broker->paginateUsersWith($pagination);
+        self::assertSame(3, $page['total']);
+
+        $typed = $this->broker->paginateUsersResultWith($pagination);
+        self::assertInstanceOf(PaginatedResult::class, $typed);
+        self::assertSame(1, $typed->itemCount());
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
