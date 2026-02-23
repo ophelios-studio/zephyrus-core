@@ -379,6 +379,9 @@ final class RouterTest extends TestCase
             'HealthController' => 1,
             'UserController' => 1,
         ], $router->routeControllerHistogram());
+        self::assertSame(3, $router->staticRouteCount());
+        self::assertSame(0, $router->parameterizedRouteCount());
+        self::assertSame(0, $router->constrainedRouteCount());
         self::assertSame([
             'total' => 3,
             'named' => 2,
@@ -402,6 +405,9 @@ final class RouterTest extends TestCase
                 'UserController' => 1,
             ],
             'controller_count' => 3,
+            'static_routes' => 3,
+            'parameterized_routes' => 0,
+            'constrained_routes' => 0,
         ], $router->routeSummary());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
@@ -476,6 +482,9 @@ final class RouterTest extends TestCase
             'HealthController' => 1,
             'UserController' => 1,
         ], $router->routeControllerHistogram());
+        self::assertSame(1, $router->staticRouteCount());
+        self::assertSame(1, $router->parameterizedRouteCount());
+        self::assertSame(1, $router->constrainedRouteCount());
 
         self::assertSame([
             'total' => 2,
@@ -506,6 +515,9 @@ final class RouterTest extends TestCase
                 'UserController' => 1,
             ],
             'controller_count' => 2,
+            'static_routes' => 1,
+            'parameterized_routes' => 1,
+            'constrained_routes' => 1,
         ], $router->routeSummary());
     }
 
