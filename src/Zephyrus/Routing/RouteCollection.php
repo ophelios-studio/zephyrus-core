@@ -216,13 +216,31 @@ final class RouteCollection
     }
 
     /**
-     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>}
+     * @return array<string, int>
+     */
+    public function controllerHistogram(): array
+    {
+        $histogram = [];
+
+        foreach ($this->routes as $route) {
+            [$controller] = explode('@', $route->handler, 2);
+            $histogram[$controller] = ($histogram[$controller] ?? 0) + 1;
+        }
+
+        ksort($histogram);
+
+        return $histogram;
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>, middleware_count: int, paths_by_method: array<string, array<int, string>>, parameters: array<string, int>, constrained_parameters: array<string, int>, controllers: array<string, int>, controller_count: int}
      */
     public function summary(): array
     {
         $total = $this->count();
         $named = count($this->names());
         $middlewares = $this->middlewareHistogram();
+        $controllers = $this->controllerHistogram();
 
         return [
             'total' => $total,
@@ -235,6 +253,8 @@ final class RouteCollection
             'paths_by_method' => $this->pathsByMethod(),
             'parameters' => $this->parameterHistogram(),
             'constrained_parameters' => $this->constrainedParameterHistogram(),
+            'controllers' => $controllers,
+            'controller_count' => count($controllers),
         ];
     }
 
