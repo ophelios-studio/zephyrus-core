@@ -142,15 +142,17 @@ final class RouteCollection
             return [];
         }
 
-        return explode('/', ltrim($normalized, '/'));
+        return array_map(
+            static fn (string $segment): string => rawurldecode($segment),
+            explode('/', ltrim($normalized, '/')),
+        );
     }
 
     private function normalizePath(string $path): string
     {
         $parsedPath = (string) parse_url($path, PHP_URL_PATH);
-        $decodedPath = rawurldecode($parsedPath);
 
-        $normalized = '/' . trim($decodedPath, '/');
+        $normalized = '/' . trim($parsedPath, '/');
 
         return $normalized === '/' ? '/' : $normalized;
     }
