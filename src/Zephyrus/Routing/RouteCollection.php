@@ -6,6 +6,7 @@ namespace Zephyrus\Routing;
 
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final class RouteCollection
 {
@@ -74,7 +75,7 @@ final class RouteCollection
                 continue;
             }
 
-            if (!$route->matchesMethod($method)) {
+            if (!$this->routeAcceptsMethod($route, $method)) {
                 $allowedMethods[] = $route->method;
                 continue;
             }
@@ -112,10 +113,10 @@ final class RouteCollection
             if ($this->isParameterSegment($segment)) {
                 $name = substr($segment, 1, -1);
                 $pattern = $route->constraints[$name] ?? '[^/]+';
+                $regex = $this->compileConstraintRegex($route, $name, $pattern);
 
-                $regex = '/^(?:' . str_replace('/', '\\/', $pattern) . ')$/';
-
-                if (!preg_match($regex, $candidate)) {
+                $matched = @preg_match($regex, $candidate);
+                if ($matched !== 1) {
                     return null;
                 }
 
@@ -155,6 +156,33 @@ final class RouteCollection
         $normalized = '/' . trim($parsedPath, '/');
 
         return $normalized === '/' ? '/' : $normalized;
+    }
+
+    private function routeAcceptsMethod(Route $route, string $method): bool
+    {
+        $normalizedMethod = strtoupper($method);
+
+        if ($route->matchesMethod($normalizedMethod)) {
+            return true;
+        }
+
+        return $normalizedMethod === 'HEAD' && $route->method === 'GET';
+    }
+
+    private function compileConstraintRegex(Route $route, string $parameterName, string $pattern): string
+    {
+        $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~';
+
+        if (@preg_match($regex, '') === false) {
+            throw new RouteSignatureException(sprintf(
+                'Invalid route constraint pattern for parameter "%s" on route "%s": %s',
+                $parameterName,
+                $route->path,
+                $pattern,
+            ));
+        }
+
+        return $regex;
     }
 
     private function isParameterSegment(string $segment): bool
