@@ -1153,6 +1153,47 @@ final class RouteCacheTest extends TestCase
         $cache->load();
     }
 
+    public function testLoadThrowsWhenDuplicateRouteNamesExist(): void
+    {
+        $routes = [
+            [
+                'method' => 'GET',
+                'path' => '/users/1',
+                'handler' => 'UserController@showOne',
+                'constraints' => [],
+                'middlewares' => [],
+                'name' => 'users.show',
+            ],
+            [
+                'method' => 'GET',
+                'path' => '/users/2',
+                'handler' => 'UserController@showTwo',
+                'constraints' => [],
+                'middlewares' => [],
+                'name' => 'users.show',
+            ],
+        ];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+                'route_count' => 2,
+                'generated_at' => time(),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Duplicate route names detected: users.show');
+
+        $cache->load();
+    }
+
     public function testSaveThrowsWhenCacheDirectoryCannotBeCreated(): void
     {
         $routes = new RouteCollection();
