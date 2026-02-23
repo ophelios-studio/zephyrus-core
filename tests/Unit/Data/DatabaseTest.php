@@ -190,10 +190,12 @@ final class DatabaseTest extends TestCase
     public function testTypedScalarHelpersReturnExpectedCasts(): void
     {
         $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Dan', 'dan@example.com']);
+        $this->db->execute('INSERT INTO users (name, email) VALUES (?, ?)', ['Eve', 'eve@example.com']);
 
-        self::assertSame(1, $this->db->selectInt('SELECT COUNT(*) FROM users'));
+        self::assertSame(2, $this->db->selectInt('SELECT COUNT(*) FROM users'));
         self::assertSame('Dan', $this->db->selectString('SELECT name FROM users WHERE email = ?', ['dan@example.com']));
         self::assertTrue($this->db->selectBool('SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)', ['dan@example.com']));
+        self::assertSame(1.5, $this->db->selectFloat('SELECT AVG(id) FROM users'));
     }
 
     public function testInsertUpdateDeleteHelpersWorkAsConvenienceAliases(): void
