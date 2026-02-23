@@ -341,4 +341,120 @@ final class RouteCacheTest extends TestCase
 
         $cache->load();
     }
+
+    public function testLoadThrowsWhenMethodFormatIsInvalid(): void
+    {
+        $routes = [[
+            'method' => 'Get',
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => 'health.show',
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid HTTP method format');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenPathIsInvalid(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => 'health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => 'health.show',
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid route path');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenHandlerFormatIsInvalid(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/health',
+            'handler' => 'HealthController',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => 'health.show',
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid handler format');
+
+        $cache->load();
+    }
+
+    public function testLoadThrowsWhenRouteNameIsBlankString(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => '   ',
+        ]];
+
+        $payload = [
+            'meta' => [
+                'version' => 1,
+                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            ],
+            'routes' => $routes,
+        ];
+
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid route name');
+
+        $cache->load();
+    }
 }

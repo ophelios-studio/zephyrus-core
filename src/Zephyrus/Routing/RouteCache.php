@@ -120,6 +120,12 @@ final class RouteCache
                 }
             }
 
+            $this->assertValidMethodPathAndHandler(
+                $entry['method'],
+                $entry['path'],
+                $entry['handler'],
+            );
+
             $constraints = $entry['constraints'] ?? [];
             $middlewares = $entry['middlewares'] ?? [];
             $name = $entry['name'] ?? null;
@@ -130,6 +136,7 @@ final class RouteCache
 
             $this->assertValidConstraints($constraints);
             $this->assertValidMiddlewares($middlewares);
+            $this->assertValidRouteName($name);
 
             $collection->add(Route::define(
                 method: $entry['method'],
@@ -165,6 +172,28 @@ final class RouteCache
             if (!is_string($middleware)) {
                 throw new RouteCacheException('Route cache entry contains invalid middlewares list');
             }
+        }
+    }
+
+    private function assertValidMethodPathAndHandler(string $method, string $path, string $handler): void
+    {
+        if (preg_match('/^[A-Z]+$/', $method) !== 1) {
+            throw new RouteCacheException('Route cache entry contains invalid HTTP method format');
+        }
+
+        if ($path === '' || !str_starts_with($path, '/')) {
+            throw new RouteCacheException('Route cache entry contains invalid route path');
+        }
+
+        if ($handler === '' || !str_contains($handler, '@')) {
+            throw new RouteCacheException('Route cache entry contains invalid handler format');
+        }
+    }
+
+    private function assertValidRouteName(?string $name): void
+    {
+        if ($name !== null && trim($name) === '') {
+            throw new RouteCacheException('Route cache entry contains invalid route name');
         }
     }
 }
