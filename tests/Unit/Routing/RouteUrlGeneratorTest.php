@@ -135,4 +135,43 @@ final class RouteUrlGeneratorTest extends TestCase
 
         $generator->generateSigned('users.show', ['id' => 42]);
     }
+
+    public function testGenerateThrowsWhenUnexpectedRouteParameterProvided(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Unexpected route parameter "slug" for route "users.show"');
+
+        $generator->generate('users.show', ['id' => 42, 'slug' => 'alice']);
+    }
+
+    public function testGenerateThrowsWhenParameterDoesNotSatisfyConstraint(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+'], name: 'users.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Route parameter "id" value "abc" does not satisfy constraint "\\d+" for route "users.show"');
+
+        $generator->generate('users.show', ['id' => 'abc']);
+    }
+
+    public function testGenerateThrowsWhenConstraintPatternIsInvalid(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9+'], name: 'users.show'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Invalid constraint pattern "[0-9+" for parameter "id" on route "users.show"');
+
+        $generator->generate('users.show', ['id' => '42']);
+    }
 }
