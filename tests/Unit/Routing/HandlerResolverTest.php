@@ -91,6 +91,12 @@ final class PlainHandlerController
     {
         return Response::text($dt->format('Y'));
     }
+
+    /** No type annotation — castToType must return the raw value (L175). */
+    public function withUntypedParam($value): Response
+    {
+        return Response::text((string) $value);
+    }
 }
 
 final class NonInstantiableController
@@ -702,6 +708,48 @@ final class HandlerResolverTest extends TestCase
 
         self::assertSame(200, $response->status);
         self::assertStringContainsString('"id":99', $response->body);
+    }
+
+    // -- castToType null-type passthrough (L175) --------------------------------
+
+    public function testUntypedParamWithAttributePassesThroughRawValue(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{value}', PlainHandlerController::class . '@withUntypedParam');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/hello')->withAttribute('value', 'hello'),
+        );
+
+        self::assertSame('hello', $response->body);
+    }
+
+    // -- toInt native-int passthrough (L228) ------------------------------------
+
+    public function testIntParamWithNativeIntAttributeDoesNotCoerce(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{id}', PlainHandlerController::class . '@withIntParam');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/7')->withAttribute('id', 7),
+        );
+
+        self::assertStringContainsString('"id":7', $response->body);
+    }
+
+    // -- toBool native-bool passthrough (L254) ----------------------------------
+
+    public function testBoolParamWithNativeBoolAttributeDoesNotCoerce(): void
+    {
+        $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/flags/1')->withAttribute('active', true),
+        );
+
+        self::assertStringContainsString('"active":true', $response->body);
     }
 
     // -------------------------------------------------------------------------
