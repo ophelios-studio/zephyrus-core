@@ -506,4 +506,25 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid CIDR block.', Rules::cidr()->errorMessage());
     }
+
+    // ---- macAddress ----
+
+    public function testMacAddressPasses(): void
+    {
+        self::assertTrue(Rules::macAddress()->test('00:1A:2B:3C:4D:5E'));
+        self::assertTrue(Rules::macAddress()->test('00-1A-2B-3C-4D-5E'));
+    }
+
+    public function testMacAddressFails(): void
+    {
+        self::assertFalse(Rules::macAddress()->test('00:1A:2B:3C:4D'));
+        self::assertFalse(Rules::macAddress()->test('ZZ:ZZ:ZZ:ZZ:ZZ:ZZ'));
+        self::assertFalse(Rules::macAddress()->test('not-a-mac'));
+        self::assertFalse(Rules::macAddress()->test(null));
+    }
+
+    public function testMacAddressDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid MAC address.', Rules::macAddress()->errorMessage());
+    }
 }
