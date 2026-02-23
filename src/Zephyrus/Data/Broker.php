@@ -76,6 +76,21 @@ abstract class Broker
     }
 
     /**
+     * Execute a scalar query and return the first column of the first row.
+     *
+     * Returns $default when the query yields no rows.
+     *
+     * @param array<int|string, mixed> $params
+     * @throws DatabaseException on query failure.
+     */
+    protected function selectValue(string $sql, array $params = [], mixed $default = null): mixed
+    {
+        $value = $this->db->query($sql, $params)->fetchColumn();
+
+        return $value === false ? $default : $value;
+    }
+
+    /**
      * Execute a scalar aggregate query (e.g. COUNT, SUM) and return the
      * first column of the first row cast to int.
      *
@@ -84,9 +99,7 @@ abstract class Broker
      */
     protected function selectCount(string $sql, array $params = []): int
     {
-        $value = $this->db->query($sql, $params)->fetchColumn();
-
-        return (int) $value;
+        return (int) $this->selectValue($sql, $params, 0);
     }
 
     /**
