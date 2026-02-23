@@ -189,4 +189,33 @@ final class RouteSignatureTest extends TestCase
 
         self::assertFalse($signer->verifyAt($signed, now: 1_700_000_011, clockSkewSeconds: -5));
     }
+
+    public function testSignTemporaryUntilBuildsVerifiableSignatureAtAbsoluteExpiry(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $signed = $signer->signTemporaryUntil(
+            'https://example.com/downloads/42?disposition=inline',
+            expiresAt: 1_700_000_120,
+            now: 1_700_000_000,
+        );
+
+        self::assertStringContainsString('_exp=1700000120', $signed);
+        self::assertTrue($signer->verifyAt($signed, now: 1_700_000_119));
+        self::assertFalse($signer->verifyAt($signed, now: 1_700_000_121));
+    }
+
+    public function testSignTemporaryUntilThrowsWhenExpiryIsNotInFuture(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('Temporary signature expiry instant must be in the future');
+
+        $signer->signTemporaryUntil(
+            'https://example.com/downloads/42',
+            expiresAt: 1_700_000_000,
+            now: 1_700_000_000,
+        );
+    }
 }

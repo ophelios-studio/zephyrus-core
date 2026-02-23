@@ -161,6 +161,25 @@ final readonly class RouteUrlGenerator
         );
     }
 
+    /**
+     * @param array<string, scalar> $parameters
+     * @param array<string, scalar|array<scalar>> $query
+     */
+    public function generateTemporarySignedUntil(
+        string $routeName,
+        int $expiresAt,
+        array $parameters = [],
+        array $query = [],
+        ?string $fragment = null,
+        ?int $now = null,
+    ): string {
+        return $this->requireSignature()->signTemporaryUntil(
+            $this->generate($routeName, $parameters, $query, $fragment),
+            expiresAt: $expiresAt,
+            now: $now,
+        );
+    }
+
     private function appendFragment(string $url, ?string $fragment): string
     {
         if ($fragment === null || $fragment === '') {

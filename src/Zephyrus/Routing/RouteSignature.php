@@ -26,8 +26,19 @@ final readonly class RouteSignature
             throw RouteSignatureException::invalidTtl();
         }
 
+        $currentTime = $now ?? time();
+
+        return $this->signTemporaryUntil($url, expiresAt: $currentTime + $ttlSeconds, now: $currentTime);
+    }
+
+    public function signTemporaryUntil(string $url, int $expiresAt, ?int $now = null): string
+    {
+        $currentTime = $now ?? time();
+        if ($expiresAt <= $currentTime) {
+            throw RouteSignatureException::invalidExpiryInstant();
+        }
+
         [$payload] = $this->split($url);
-        $expiresAt = ($now ?? time()) + $ttlSeconds;
         $payloadWithExpiry = $this->appendQueryParameter($payload, '_exp', (string) $expiresAt);
         [$canonicalPayloadWithExpiry] = $this->split($payloadWithExpiry);
         $signature = $this->compute($canonicalPayloadWithExpiry);
