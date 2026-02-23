@@ -363,6 +363,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Enables service-layer and broker diagnostics to assert transactional context without reaching into raw PDO.
 - Added unit coverage ensuring state transitions are correct before, during, and after `Database::transaction()` execution.
 
+## Implemented Slice: RouteCache metadata route-count accessor
+- Added `RouteCache::routeCount(): ?int` to expose cached route cardinality from validated metadata.
+- Returns `null` when metadata is unavailable/invalid (mirrors `generatedAt()` and `metadata()` semantics).
+- Added unit coverage for both missing-metadata and post-save route-count cases.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

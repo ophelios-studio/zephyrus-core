@@ -98,6 +98,13 @@ final class RouteCache
         return $meta['generated_at'] ?? null;
     }
 
+    public function routeCount(): ?int
+    {
+        $meta = $this->metadata();
+
+        return $meta['route_count'] ?? null;
+    }
+
     public function age(?int $now = null): ?int
     {
         $generatedAt = $this->generatedAt();

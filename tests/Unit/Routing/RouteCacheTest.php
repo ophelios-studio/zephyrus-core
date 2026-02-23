@@ -153,6 +153,25 @@ final class RouteCacheTest extends TestCase
         self::assertGreaterThan(0, $generatedAt);
     }
 
+    public function testRouteCountReturnsNullWhenMetadataMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->routeCount());
+    }
+
+    public function testRouteCountReturnsMetadataRouteCountAfterSave(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+        $routes->add(Route::define('GET', '/status', 'HealthController@status'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        self::assertSame(2, $cache->routeCount());
+    }
+
     public function testAgeReturnsElapsedSecondsWhenMetadataIsUsable(): void
     {
         $routes = new RouteCollection();
