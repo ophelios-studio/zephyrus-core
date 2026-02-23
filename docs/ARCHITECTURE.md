@@ -455,6 +455,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Enforces exact 64-character lowercase hexadecimal shape.
 - Added unit coverage for valid/invalid/default-message scenarios.
 
+## Implemented Slice: Validation HTTP-path rule
+- Added `Validation\Rules::httpPath()` for request-path-like values.
+- Requires a non-empty string starting with `/` and rejects whitespace-containing paths.
+- Added unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
