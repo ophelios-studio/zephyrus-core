@@ -31,9 +31,13 @@ final class Database
      * Build a Database instance by opening a MySQL/MariaDB connection described
      * by the given DatabaseConfig.
      *
+     * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
+     *        Optional PDO factory for tests/advanced callers. Receives
+     *        ($dsn, $username, $password, $options) and must return a PDO.
+     *
      * @throws DatabaseException on PDO connection failure.
      */
-    public static function fromConfig(DatabaseConfig $config): self
+    public static function fromConfig(DatabaseConfig $config, ?callable $pdoFactory = null): self
     {
         $dsn = sprintf(
             'mysql:host=%s;port=%d;dbname=%s;charset=%s',
@@ -43,12 +47,17 @@ final class Database
             $config->charset,
         );
 
+        $options = [
+            PDO::ATTR_PERSISTENT => false,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$config->charset}",
+        ];
+
+        $factory = $pdoFactory ?? static fn (string $dsn, string $username, string $password, array $options): PDO
+            => new PDO($dsn, $username, $password, $options);
+
         try {
-            $pdo = new PDO($dsn, $config->username, $config->password, [
-                PDO::ATTR_PERSISTENT => false,
-                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$config->charset}",
-            ]);
-        } catch (PDOException $e) {
+            $pdo = $factory($dsn, $config->username, $config->password, $options);
+        } catch (\Throwable $e) {
             throw DatabaseException::connectionFailed($dsn, $e->getMessage());
         }
 

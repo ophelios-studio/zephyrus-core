@@ -8,6 +8,7 @@ use PDO;
 use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
 
@@ -22,7 +23,81 @@ final class DatabaseTest extends TestCase
         $this->db->query('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL)');
     }
 
-    // ── construction & pdo() ─────────────────────────────────────────────────
+    // ── construction & fromConfig() & pdo() ──────────────────────────────────
+
+    public function testFromConfigUsesFactoryWithExpectedDsnAndOptions(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'host' => 'db.internal',
+            'port' => 3307,
+            'database' => 'zephyrus',
+            'username' => 'app',
+            'password' => 'secret',
+            'charset' => 'utf8mb4',
+        ]);
+
+        $captured = [];
+
+        $database = Database::fromConfig(
+            $config,
+            function (string $dsn, string $username, string $password, array $options) use (&$captured): PDO {
+                $captured = [
+                    'dsn' => $dsn,
+                    'username' => $username,
+                    'password' => $password,
+                    'options' => $options,
+                ];
+
+                return new PDO('sqlite::memory:');
+            },
+        );
+
+        self::assertSame('mysql:host=db.internal;port=3307;dbname=zephyrus;charset=utf8mb4', $captured['dsn']);
+        self::assertSame('app', $captured['username']);
+        self::assertSame('secret', $captured['password']);
+        self::assertArrayHasKey(PDO::ATTR_PERSISTENT, $captured['options']);
+        self::assertFalse($captured['options'][PDO::ATTR_PERSISTENT]);
+        self::assertArrayHasKey(PDO::MYSQL_ATTR_INIT_COMMAND, $captured['options']);
+        self::assertSame('SET NAMES utf8mb4', $captured['options'][PDO::MYSQL_ATTR_INIT_COMMAND]);
+        self::assertInstanceOf(Database::class, $database);
+    }
+
+    public function testFromConfigWrapsFactoryFailureAsDatabaseException(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Database connection failed for DSN [mysql:host=localhost;port=3306;dbname=zephyrus;charset=utf8mb4]: factory boom');
+
+        Database::fromConfig(
+            $config,
+            function (): PDO {
+                throw new \RuntimeException('factory boom');
+            },
+        );
+    }
+
+    public function testFromConfigWrapsPdoExceptionAsDatabaseException(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Database connection failed for DSN [mysql:host=localhost;port=3306;dbname=zephyrus;charset=utf8mb4]: pdo boom');
+
+        Database::fromConfig(
+            $config,
+            function (): PDO {
+                throw new PDOException('pdo boom');
+            },
+        );
+    }
+
 
     public function testPdoAccessorReturnsPdo(): void
     {
