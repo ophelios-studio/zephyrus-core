@@ -172,6 +172,35 @@ abstract class Broker
     }
 
     /**
+     * Execute a filtered SELECT query using FilterRequest column mapping.
+     *
+     * @param array<string, string> $columnMap
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    protected function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, array $params = []): array
+    {
+        return $this->db->selectFiltered($sql, $filter, $columnMap, $params);
+    }
+
+    /**
+     * Execute a filtered + sorted SELECT query.
+     *
+     * @param array<string, string> $columnMap
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    protected function selectFilteredSorted(
+        string $sql,
+        FilterRequest $filter,
+        array $columnMap,
+        SortRequest $sort,
+        array $params = [],
+    ): array {
+        return $this->db->selectFilteredSorted($sql, $filter, $columnMap, $sort, $params);
+    }
+
+    /**
      * Execute a sorted paginated SELECT query.
      *
      * @param array<int|string, mixed> $params
@@ -310,6 +339,32 @@ abstract class Broker
         array $params = [],
     ): PaginatedResult {
         return $this->db->paginateSortedResultWith($dataSql, $countSql, $sort, $pagination, $params);
+    }
+
+    /**
+     * Execute filtered + sorted pagination using shared WHERE bindings.
+     *
+     * @param array<string, string> $columnMap
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateFilteredSortedResultWith(
+        string $dataSql,
+        string $countSql,
+        FilterRequest $filter,
+        array $columnMap,
+        SortRequest $sort,
+        PaginationRequest $pagination,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->db->paginateFilteredSortedResultWith(
+            $dataSql,
+            $countSql,
+            $filter,
+            $columnMap,
+            $sort,
+            $pagination,
+            $params,
+        );
     }
 
     /**

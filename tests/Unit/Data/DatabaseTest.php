@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
+use Zephyrus\Data\FilterRequest;
 use Zephyrus\Data\PaginatedResult;
 use Zephyrus\Data\PaginationRequest;
 use Zephyrus\Data\SortRequest;
@@ -368,6 +369,51 @@ final class DatabaseTest extends TestCase
             new PaginationRequest(1, 2),
         );
         self::assertSame('alice', $typed->firstItem()['name']);
+    }
+
+    public function testFilteredAndFilteredSortedQueriesApplyWhereBindings(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['charlie', 'c@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['alice', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['bravo', 'b@example.com']);
+
+        $filter = new FilterRequest(['email' => 'a@example.com']);
+
+        $filtered = $this->db->selectFiltered(
+            'SELECT * FROM users',
+            $filter,
+            ['email' => 'email'],
+        );
+        self::assertCount(1, $filtered);
+        self::assertSame('alice', $filtered[0]['name']);
+
+        $filteredSorted = $this->db->selectFilteredSorted(
+            'SELECT * FROM users',
+            new FilterRequest(['name' => 'charlie']),
+            ['name' => 'name'],
+            new SortRequest('name', 'DESC'),
+        );
+        self::assertCount(1, $filteredSorted);
+        self::assertSame('charlie', $filteredSorted[0]['name']);
+    }
+
+    public function testPaginateFilteredSortedResultWithCombinesFilterSortAndPaging(): void
+    {
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['alpha', 'a@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['beta', 'b@example.com']);
+        $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ['alpha', 'z@example.com']);
+
+        $result = $this->db->paginateFilteredSortedResultWith(
+            'SELECT * FROM users',
+            'SELECT COUNT(*) FROM users',
+            new FilterRequest(['name' => 'alpha']),
+            ['name' => 'name'],
+            new SortRequest('email', 'ASC'),
+            new PaginationRequest(1, 1),
+        );
+
+        self::assertSame(2, $result->total);
+        self::assertSame('a@example.com', $result->firstItem()['email']);
     }
 
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void

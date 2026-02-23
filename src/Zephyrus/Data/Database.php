@@ -209,6 +209,45 @@ final class Database
     }
 
     /**
+     * Execute a filtered SELECT query using FilterRequest column mapping.
+     *
+     * @param array<string, string> $columnMap
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, array $params = []): array
+    {
+        $where = $filter->toWhereClause($columnMap);
+
+        return $this->select(
+            $sql . $where['sql'],
+            array_merge($params, $where['params']),
+        );
+    }
+
+    /**
+     * Execute a filtered + sorted SELECT query.
+     *
+     * @param array<string, string> $columnMap
+     * @param array<int|string, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function selectFilteredSorted(
+        string $sql,
+        FilterRequest $filter,
+        array $columnMap,
+        SortRequest $sort,
+        array $params = [],
+    ): array {
+        $where = $filter->toWhereClause($columnMap);
+
+        return $this->select(
+            $sql . $where['sql'] . $sort->toSql(),
+            array_merge($params, $where['params']),
+        );
+    }
+
+    /**
      * Execute a sorted paginated SELECT query.
      *
      * @param array<int|string, mixed> $params
@@ -371,6 +410,33 @@ final class Database
     ): PaginatedResult {
         return PaginatedResult::fromArray(
             $this->paginateSortedWith($dataSql, $countSql, $sort, $pagination, $params),
+        );
+    }
+
+    /**
+     * Execute filtered + sorted pagination using shared WHERE bindings.
+     *
+     * @param array<string, string> $columnMap
+     * @param array<int|string, mixed> $params
+     */
+    public function paginateFilteredSortedResultWith(
+        string $dataSql,
+        string $countSql,
+        FilterRequest $filter,
+        array $columnMap,
+        SortRequest $sort,
+        PaginationRequest $pagination,
+        array $params = [],
+    ): PaginatedResult {
+        $where = $filter->toWhereClause($columnMap);
+        $bindings = array_merge($params, $where['params']);
+
+        return $this->paginateSortedResultWith(
+            $dataSql . $where['sql'],
+            $countSql . $where['sql'],
+            $sort,
+            $pagination,
+            $bindings,
         );
     }
 

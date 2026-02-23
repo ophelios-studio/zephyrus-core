@@ -8,6 +8,7 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Broker;
 use Zephyrus\Data\Database;
+use Zephyrus\Data\FilterRequest;
 use Zephyrus\Data\PaginatedResult;
 use Zephyrus\Data\PaginationRequest;
 use Zephyrus\Data\SortRequest;
@@ -180,6 +181,23 @@ final class UserBroker extends Broker
             'SELECT * FROM users',
             'SELECT COUNT(*) FROM users',
             new SortRequest('name', 'ASC'),
+            $pagination,
+        );
+    }
+
+    public function filterByEmail(string $email): array
+    {
+        return $this->selectFiltered('SELECT * FROM users', new FilterRequest(['email' => $email]), ['email' => 'email']);
+    }
+
+    public function filterSortAndPaginateByName(string $name, PaginationRequest $pagination): PaginatedResult
+    {
+        return $this->paginateFilteredSortedResultWith(
+            'SELECT * FROM users',
+            'SELECT COUNT(*) FROM users',
+            new FilterRequest(['name' => $name]),
+            ['name' => 'name'],
+            new SortRequest('email', 'ASC'),
             $pagination,
         );
     }
@@ -446,6 +464,21 @@ final class BrokerTest extends TestCase
 
         $typed = $this->broker->paginateSortedResultByName(new PaginationRequest(2, 2));
         self::assertSame('charlie', $typed->firstItem()['name']);
+    }
+
+    public function testFilteredBrokerHelpersApplyWhereAndSortedPagination(): void
+    {
+        $this->broker->insert('alpha', 'z@example.com');
+        $this->broker->insert('alpha', 'a@example.com');
+        $this->broker->insert('beta', 'b@example.com');
+
+        $filtered = $this->broker->filterByEmail('b@example.com');
+        self::assertCount(1, $filtered);
+        self::assertSame('beta', $filtered[0]['name']);
+
+        $typed = $this->broker->filterSortAndPaginateByName('alpha', new PaginationRequest(1, 1));
+        self::assertSame(2, $typed->total);
+        self::assertSame('a@example.com', $typed->firstItem()['email']);
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
