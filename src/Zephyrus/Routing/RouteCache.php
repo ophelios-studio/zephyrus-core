@@ -48,15 +48,12 @@ final class RouteCache
         }
 
         $meta = $decoded['meta'] ?? null;
-        if (!is_array($meta) || !isset($meta['version'], $meta['routes_hash'])) {
+        if (!$this->isValidMetaForFreshness($meta)) {
             return false;
         }
 
-        if (!is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION) {
-            return false;
-        }
-
-        if (!is_string($meta['routes_hash']) || preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash']) !== 1) {
+        $routePayloadCount = count($decoded['routes']);
+        if ($meta['route_count'] !== $routePayloadCount) {
             return false;
         }
 
@@ -66,12 +63,14 @@ final class RouteCache
     public function save(RouteCollection $routes): void
     {
         $routesPayload = $this->routesToPayload($routes->all());
-        $routesHash = $this->computeRoutesHash($routes->all());
+        $routesHash = $this->computePayloadHash($routesPayload);
 
         $payload = [
             'meta' => [
                 'version' => self::METADATA_VERSION,
                 'routes_hash' => $routesHash,
+                'route_count' => count($routesPayload),
+                'generated_at' => time(),
             ],
             'routes' => $routesPayload,
         ];
@@ -126,8 +125,20 @@ final class RouteCache
             throw new RouteCacheException('Route cache payload contains invalid metadata hash format');
         }
 
+        if ($meta !== null && array_key_exists('route_count', $meta) && !is_int($meta['route_count'])) {
+            throw new RouteCacheException('Route cache payload contains invalid metadata route count');
+        }
+
+        if ($meta !== null && array_key_exists('generated_at', $meta) && !is_int($meta['generated_at'])) {
+            throw new RouteCacheException('Route cache payload contains invalid metadata generation timestamp');
+        }
+
         $routesPayload = $decoded['routes'];
         if ($meta !== null) {
+            if (array_key_exists('route_count', $meta) && $meta['route_count'] !== count($routesPayload)) {
+                throw new RouteCacheException('Route cache payload metadata route count mismatch');
+            }
+
             try {
                 $actualHash = $this->computePayloadHash($routesPayload);
             } catch (RouteCacheException $exception) {
@@ -208,6 +219,30 @@ final class RouteCache
     private function computeRoutesHash(array $routes): string
     {
         return $this->computePayloadHash($this->routesToPayload($routes));
+    }
+
+    /**
+     * @param mixed $meta
+     */
+    private function isValidMetaForFreshness(mixed $meta): bool
+    {
+        if (!is_array($meta)) {
+            return false;
+        }
+
+        if (!isset($meta['version'], $meta['routes_hash'], $meta['route_count'])) {
+            return false;
+        }
+
+        if (!is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION) {
+            return false;
+        }
+
+        if (!is_string($meta['routes_hash']) || preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash']) !== 1) {
+            return false;
+        }
+
+        return is_int($meta['route_count']) && $meta['route_count'] >= 0;
     }
 
     /**
