@@ -271,6 +271,22 @@ final class Router
     }
 
     /**
+     * @return array<string, int>
+     */
+    public function routeMiddlewareHistogram(): array
+    {
+        return $this->routes->middlewareHistogram();
+    }
+
+    /**
+     * @return array{total: int, named: int, unnamed: int, duplicate_names: int, methods: array<string, int>, middlewares: array<string, int>}
+     */
+    public function routeSummary(): array
+    {
+        return $this->routes->summary();
+    }
+
+    /**
      * @return array<string, Route>
      */
     public function namedRoutes(): array
