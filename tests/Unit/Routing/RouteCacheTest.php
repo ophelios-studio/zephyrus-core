@@ -553,6 +553,114 @@ final class RouteCacheTest extends TestCase
         $cache->ensureFreshWithin($currentRoutes, 120, $generatedAt + 10);
     }
 
+    public function testInspectReportsMissingFileState(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $state = $cache->inspect(new RouteCollection(), 60);
+
+        self::assertSame('missing-file', $state['reason']);
+        self::assertFalse($state['exists']);
+        self::assertFalse($state['metadata_valid']);
+        self::assertFalse($state['fresh']);
+        self::assertTrue($state['expired']);
+        self::assertNull($state['age']);
+        self::assertNull($state['expires_at']);
+        self::assertNull($state['generated_at']);
+    }
+
+    public function testInspectReportsInvalidMetadataState(): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+        $state = $cache->inspect(new RouteCollection(), 60);
+
+        self::assertSame('invalid-metadata', $state['reason']);
+        self::assertTrue($state['exists']);
+        self::assertFalse($state['metadata_valid']);
+        self::assertFalse($state['fresh']);
+        self::assertTrue($state['expired']);
+    }
+
+    public function testInspectReportsExpiredState(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        $state = $cache->inspect($routes, 60, $generatedAt + 61);
+
+        self::assertSame('expired', $state['reason']);
+        self::assertTrue($state['exists']);
+        self::assertTrue($state['metadata_valid']);
+        self::assertFalse($state['fresh']);
+        self::assertTrue($state['expired']);
+        self::assertSame($generatedAt, $state['generated_at']);
+    }
+
+    public function testInspectReportsStaleRoutesState(): void
+    {
+        $cachedRoutes = new RouteCollection();
+        $cachedRoutes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $currentRoutes = new RouteCollection();
+        $currentRoutes->add(Route::define('GET', '/health', 'HealthController@show'));
+        $currentRoutes->add(Route::define('GET', '/status', 'HealthController@status'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($cachedRoutes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        $state = $cache->inspect($currentRoutes, 120, $generatedAt + 10);
+
+        self::assertSame('stale-routes', $state['reason']);
+        self::assertTrue($state['exists']);
+        self::assertTrue($state['metadata_valid']);
+        self::assertFalse($state['fresh']);
+        self::assertFalse($state['expired']);
+    }
+
+    public function testInspectReportsFreshState(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        $state = $cache->inspect($routes, 120, $generatedAt + 10);
+
+        self::assertSame('fresh', $state['reason']);
+        self::assertTrue($state['exists']);
+        self::assertTrue($state['metadata_valid']);
+        self::assertTrue($state['fresh']);
+        self::assertFalse($state['expired']);
+        self::assertSame(10, $state['age']);
+        self::assertSame($generatedAt + 120, $state['expires_at']);
+        self::assertSame($generatedAt, $state['generated_at']);
+    }
+
+    public function testInspectThrowsOnNegativeMaxAge(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache max age must be zero or greater');
+
+        $cache->inspect(new RouteCollection(), -1);
+    }
+
     public function testSaveCreatesMissingCacheDirectory(): void
     {
         $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);
