@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SessionConfig;
@@ -70,7 +71,7 @@ final class SessionConfigTest extends TestCase
     // sameSite valid values
     // -------------------------------------------------------------------------
 
-    /** @dataProvider sameSiteProvider */
+    #[DataProvider('sameSiteProvider')]
     public function testAcceptsValidSameSiteValues(string $value): void
     {
         $config = SessionConfig::fromArray(['sameSite' => $value]);

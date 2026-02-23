@@ -314,6 +314,11 @@ $router->group('/api/v1', fn ($r) => $r
 ### Totals after this slice
 - Total test suite: **621 tests, 1131 assertions**, all green.
 
+## Implemented Slice: PHPUnit 12 readiness cleanup (test metadata attributes)
+- Migrated remaining PHPUnit doc-comment metadata usage to native attributes.
+- `SessionConfigTest::testAcceptsValidSameSiteValues` now uses `#[DataProvider('sameSiteProvider')]`.
+- This removes the last PHPUnit 11 test-runner deprecation and keeps the suite compatible with PHPUnit 12's metadata model.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
