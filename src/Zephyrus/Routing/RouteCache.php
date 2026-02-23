@@ -27,10 +27,16 @@ final class RouteCache
             $routes->all(),
         );
 
+        try {
+            $routesHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
+        } catch (JsonException $exception) {
+            throw new RouteCacheException('Unable to encode route cache payload', previous: $exception);
+        }
+
         $payload = [
             'meta' => [
                 'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR)),
+                'routes_hash' => $routesHash,
             ],
             'routes' => $routesPayload,
         ];
@@ -101,7 +107,12 @@ final class RouteCache
 
         $routesPayload = $decoded['routes'];
         if ($meta !== null) {
-            $actualHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
+            try {
+                $actualHash = hash('sha256', json_encode($routesPayload, JSON_THROW_ON_ERROR));
+            } catch (JsonException $exception) {
+                throw new RouteCacheException('Unable to validate route cache payload hash', previous: $exception);
+            }
+
             if (!hash_equals($meta['routes_hash'], $actualHash)) {
                 throw new RouteCacheException('Route cache payload hash mismatch');
             }

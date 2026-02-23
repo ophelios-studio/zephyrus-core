@@ -148,6 +148,19 @@ final class RouteCacheTest extends TestCase
         @rmdir($cacheDirectory);
     }
 
+    public function testSaveThrowsOnUnencodableRoutePayload(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', "/bad-\xB1", 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Unable to encode route cache payload');
+
+        $cache->save($routes);
+    }
+
     public function testLoadThrowsOnInvalidMetadataHashFormat(): void
     {
         $payload = [
