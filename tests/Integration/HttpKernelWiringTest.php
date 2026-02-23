@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Container\Container;
 use Zephyrus\Controller\Controller;
 use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\MiddlewareInterface;
@@ -517,6 +518,73 @@ final class HttpKernelWiringTest extends TestCase
         self::assertSame(200, $response->status);
         self::assertSame('yes', $response->headers['X-Combo']);
     }
+
+    // -- Container integration (withContainer) --------------------------------
+
+    public function testWithContainerAutoWiresControllerDependencies(): void
+    {
+        $container = new Container();
+        // WiringGreetingService is auto-wired (no explicit binding required).
+
+        $router = (new Router())
+            ->get('/hello', WiringContainerGreetController::class . '@greet');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withContainer($container)
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/hello'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('Hello from service', $response->body);
+    }
+
+    public function testWithContainerHonoursSingletonBinding(): void
+    {
+        $container = new Container();
+        $instances = [];
+
+        $container->singleton(WiringContainerGreetController::class, function () use (&$instances): WiringContainerGreetController {
+            $ctrl = new WiringContainerGreetController(new WiringGreetingService());
+            $instances[] = $ctrl;
+
+            return $ctrl;
+        });
+
+        $router = (new Router())
+            ->get('/hello', WiringContainerGreetController::class . '@greet');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withContainer($container)
+            ->build();
+
+        $kernel->handle(Request::fromArray('GET', '/hello'));
+        $kernel->handle(Request::fromArray('GET', '/hello'));
+
+        // Singleton: factory called only once even with two requests.
+        self::assertCount(1, $instances);
+    }
+
+    public function testWithContainerCanProvideExplicitControllerBinding(): void
+    {
+        $container = new Container();
+        $container->bind(WiringGreetController::class, fn (): WiringGreetController => new WiringGreetController('Howdy'));
+
+        $router = (new Router())
+            ->get('/greet', WiringGreetController::class . '@hello');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withContainer($container)
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/greet'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('Howdy', $response->body);
+    }
 }
 
 // ===========================================================================
@@ -728,5 +796,31 @@ final class WiringTracingMiddleware implements MiddlewareInterface
         $this->trace[] = $this->label . '-after';
 
         return $response;
+    }
+}
+
+// ===========================================================================
+// Container integration fixtures
+// ===========================================================================
+
+/** Simple service used to verify auto-wiring through the container. */
+final class WiringGreetingService
+{
+    public function greet(): string
+    {
+        return 'Hello from service';
+    }
+}
+
+/** Controller with a constructor dependency resolved by the container. */
+final class WiringContainerGreetController
+{
+    public function __construct(private readonly WiringGreetingService $service)
+    {
+    }
+
+    public function greet(): Response
+    {
+        return Response::text($this->service->greet());
     }
 }
