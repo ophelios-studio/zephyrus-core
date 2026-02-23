@@ -27,9 +27,12 @@ final readonly class RouteUrlGenerator
             throw new RouteUrlGenerationException(sprintf('Unknown route name: %s', $routeName));
         }
 
+        $placeholderNames = $this->extractPlaceholderNames($route->path);
+        $this->assertNoUnexpectedParameters($parameters, $placeholderNames, $routeName);
+
         $path = preg_replace_callback(
             '/\{([a-zA-Z0-9_]+)\}/',
-            static function (array $matches) use ($parameters, $routeName): string {
+            function (array $matches) use ($parameters, $routeName, $route): string {
                 $name = $matches[1];
 
                 if (!array_key_exists($name, $parameters)) {
@@ -40,7 +43,10 @@ final readonly class RouteUrlGenerator
                     ));
                 }
 
-                return rawurlencode((string) $parameters[$name]);
+                $value = (string) $parameters[$name];
+                $this->assertParameterMatchesConstraints($route, $routeName, $name, $value);
+
+                return rawurlencode($value);
             },
             $route->path,
         );
@@ -60,6 +66,63 @@ final readonly class RouteUrlGenerator
         }
 
         return rtrim($this->baseUrl, '/') . $url;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function extractPlaceholderNames(string $path): array
+    {
+        preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $path, $matches);
+
+        $names = $matches[1] ?? [];
+
+        return array_values(array_unique(array_map(static fn (mixed $name): string => (string) $name, $names)));
+    }
+
+    /**
+     * @param array<string, scalar> $parameters
+     * @param array<int, string> $placeholders
+     */
+    private function assertNoUnexpectedParameters(array $parameters, array $placeholders, string $routeName): void
+    {
+        foreach ($parameters as $name => $_value) {
+            if (!in_array($name, $placeholders, true)) {
+                throw new RouteUrlGenerationException(sprintf(
+                    'Unexpected route parameter "%s" for route "%s"',
+                    $name,
+                    $routeName,
+                ));
+            }
+        }
+    }
+
+    private function assertParameterMatchesConstraints(Route $route, string $routeName, string $name, string $value): void
+    {
+        $pattern = $route->constraints[$name] ?? null;
+        if ($pattern === null) {
+            return;
+        }
+
+        $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~';
+        if (@preg_match($regex, '') === false) {
+            throw new RouteUrlGenerationException(sprintf(
+                'Invalid constraint pattern "%s" for parameter "%s" on route "%s"',
+                $pattern,
+                $name,
+                $routeName,
+            ));
+        }
+
+        if (preg_match($regex, $value) !== 1) {
+            throw new RouteUrlGenerationException(sprintf(
+                'Route parameter "%s" value "%s" does not satisfy constraint "%s" for route "%s"',
+                $name,
+                $value,
+                $pattern,
+                $routeName,
+            ));
+        }
     }
 
     /**
