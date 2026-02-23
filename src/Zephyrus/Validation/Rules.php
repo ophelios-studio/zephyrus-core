@@ -220,6 +220,42 @@ final class Rules
     }
 
     /**
+     * Validates a datetime string against the given format (default Y-m-d H:i:s).
+     */
+    public static function dateTime(string $format = 'Y-m-d H:i:s', string $message = ''): Rule
+    {
+        return Rule::of(
+            function (mixed $v) use ($format): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                $dt = \DateTime::createFromFormat($format, $v);
+
+                return $dt !== false && $dt->format($format) === $v;
+            },
+            $message ?: "Must be a valid datetime in {$format} format.",
+        );
+    }
+
+    /**
+     * Validates an IANA timezone identifier.
+     */
+    public static function timezone(string $message = 'Must be a valid timezone identifier.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                return in_array($v, \DateTimeZone::listIdentifiers(), true);
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates that an array has at least $min items.
      */
     public static function countMin(int $min, string $message = ''): Rule
@@ -433,6 +469,39 @@ final class Rules
     {
         return Rule::of(
             fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates that a value is lowercase.
+     */
+    public static function lowercase(string $message = 'Must be lowercase.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && mb_strtolower($v) === $v,
+            $message,
+        );
+    }
+
+    /**
+     * Validates that a value is uppercase.
+     */
+    public static function uppercase(string $message = 'Must be uppercase.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && mb_strtoupper($v) === $v,
+            $message,
+        );
+    }
+
+    /**
+     * Validates that a value has no whitespace characters.
+     */
+    public static function noWhitespace(string $message = 'Must not contain whitespace.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^\S+$/', $v) === 1,
             $message,
         );
     }

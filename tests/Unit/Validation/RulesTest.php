@@ -270,6 +270,48 @@ final class RulesTest extends TestCase
         self::assertSame("Must contain 'token'.", Rules::contains('token')->errorMessage());
     }
 
+    // ---- lowercase / uppercase / noWhitespace ----
+
+    public function testLowercasePassesAndFails(): void
+    {
+        self::assertTrue(Rules::lowercase()->test('hello'));
+        self::assertTrue(Rules::lowercase()->test('hello123'));
+        self::assertFalse(Rules::lowercase()->test('Hello'));
+        self::assertFalse(Rules::lowercase()->test(null));
+    }
+
+    public function testLowercaseDefaultMessage(): void
+    {
+        self::assertSame('Must be lowercase.', Rules::lowercase()->errorMessage());
+    }
+
+    public function testUppercasePassesAndFails(): void
+    {
+        self::assertTrue(Rules::uppercase()->test('HELLO'));
+        self::assertTrue(Rules::uppercase()->test('ABC123'));
+        self::assertFalse(Rules::uppercase()->test('Hello'));
+        self::assertFalse(Rules::uppercase()->test(null));
+    }
+
+    public function testUppercaseDefaultMessage(): void
+    {
+        self::assertSame('Must be uppercase.', Rules::uppercase()->errorMessage());
+    }
+
+    public function testNoWhitespacePassesAndFails(): void
+    {
+        self::assertTrue(Rules::noWhitespace()->test('token123'));
+        self::assertFalse(Rules::noWhitespace()->test('token 123'));
+        self::assertFalse(Rules::noWhitespace()->test("token\n123"));
+        self::assertFalse(Rules::noWhitespace()->test(''));
+        self::assertFalse(Rules::noWhitespace()->test(null));
+    }
+
+    public function testNoWhitespaceDefaultMessage(): void
+    {
+        self::assertSame('Must not contain whitespace.', Rules::noWhitespace()->errorMessage());
+    }
+
     // ---- in ----
 
     public function testInPasses(): void
@@ -415,6 +457,54 @@ final class RulesTest extends TestCase
     public function testDateCustomFormatMessage(): void
     {
         self::assertSame('Must be a valid date in d/m/Y format.', Rules::date('d/m/Y')->errorMessage());
+    }
+
+    // ---- dateTime ----
+
+    public function testDateTimePassesDefaultFormat(): void
+    {
+        self::assertTrue(Rules::dateTime()->test('2026-02-23 17:45:00'));
+    }
+
+    public function testDateTimeFailsInvalidValues(): void
+    {
+        self::assertFalse(Rules::dateTime()->test('2026-02-23'));
+        self::assertFalse(Rules::dateTime()->test('2026-13-23 10:00:00'));
+        self::assertFalse(Rules::dateTime()->test(null));
+    }
+
+    public function testDateTimeSupportsCustomFormat(): void
+    {
+        self::assertTrue(Rules::dateTime('d/m/Y H:i')->test('23/02/2026 17:45'));
+        self::assertFalse(Rules::dateTime('d/m/Y H:i')->test('2026-02-23 17:45'));
+    }
+
+    public function testDateTimeDefaultMessage(): void
+    {
+        self::assertSame(
+            'Must be a valid datetime in Y-m-d H:i:s format.',
+            Rules::dateTime()->errorMessage(),
+        );
+    }
+
+    // ---- timezone ----
+
+    public function testTimezonePassesKnownIdentifiers(): void
+    {
+        self::assertTrue(Rules::timezone()->test('America/Toronto'));
+        self::assertTrue(Rules::timezone()->test('UTC'));
+    }
+
+    public function testTimezoneFailsInvalidValues(): void
+    {
+        self::assertFalse(Rules::timezone()->test('Mars/OlympusMons'));
+        self::assertFalse(Rules::timezone()->test(''));
+        self::assertFalse(Rules::timezone()->test(null));
+    }
+
+    public function testTimezoneDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid timezone identifier.', Rules::timezone()->errorMessage());
     }
 
     // ---- countMin / countMax ----
