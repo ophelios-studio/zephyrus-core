@@ -103,6 +103,33 @@ final class RouteCollection
     }
 
     /**
+     * @return array<int, string>
+     */
+    public function handlers(): array
+    {
+        return array_map(
+            static fn (Route $route): string => $route->handler,
+            $this->routes,
+        );
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function methodHistogram(): array
+    {
+        $histogram = [];
+
+        foreach ($this->routes as $route) {
+            $histogram[$route->method] = ($histogram[$route->method] ?? 0) + 1;
+        }
+
+        ksort($histogram);
+
+        return $histogram;
+    }
+
+    /**
      * @return array<string, Route>
      */
     public function namedRoutes(): array

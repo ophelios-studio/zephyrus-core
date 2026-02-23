@@ -357,6 +357,15 @@ final class RouterTest extends TestCase
         self::assertFalse($router->hasRouteNamed('missing.name'));
         self::assertSame(['GET', 'POST'], $router->routeMethods());
         self::assertSame(['/health', '/users', '/anonymous'], $router->routePaths());
+        self::assertSame([
+            'HealthController@show',
+            'UserController@store',
+            'AnonymousController@index',
+        ], $router->routeHandlers());
+        self::assertSame([
+            'GET' => 2,
+            'POST' => 1,
+        ], $router->routeMethodHistogram());
         self::assertSame(['health.show', 'users.store'], $router->routeNames());
         self::assertSame([], $router->duplicateRouteNames());
 
