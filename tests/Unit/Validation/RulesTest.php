@@ -195,6 +195,81 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::regex('/^\d{3}$/', 'Must be 3 digits.')->test(null));
     }
 
+    // ---- ascii / alphaNumeric / startsWith / endsWith / contains ----
+
+    public function testAsciiPasses(): void
+    {
+        self::assertTrue(Rules::ascii()->test('hello123'));
+        self::assertTrue(Rules::ascii()->test('symbols !@#'));
+    }
+
+    public function testAsciiFails(): void
+    {
+        self::assertFalse(Rules::ascii()->test('café'));
+        self::assertFalse(Rules::ascii()->test('こんにちは'));
+        self::assertFalse(Rules::ascii()->test(null));
+    }
+
+    public function testAsciiDefaultMessage(): void
+    {
+        self::assertSame('Must contain only ASCII characters.', Rules::ascii()->errorMessage());
+    }
+
+    public function testAlphaNumericPasses(): void
+    {
+        self::assertTrue(Rules::alphaNumeric()->test('abc123'));
+        self::assertTrue(Rules::alphaNumeric()->test('A1B2C3'));
+    }
+
+    public function testAlphaNumericFails(): void
+    {
+        self::assertFalse(Rules::alphaNumeric()->test('abc-123'));
+        self::assertFalse(Rules::alphaNumeric()->test('abc 123'));
+        self::assertFalse(Rules::alphaNumeric()->test(''));
+        self::assertFalse(Rules::alphaNumeric()->test(null));
+    }
+
+    public function testAlphaNumericDefaultMessage(): void
+    {
+        self::assertSame('Must contain only letters and numbers.', Rules::alphaNumeric()->errorMessage());
+    }
+
+    public function testStartsWithPassesAndFails(): void
+    {
+        self::assertTrue(Rules::startsWith('pre')->test('prefix'));
+        self::assertFalse(Rules::startsWith('pre')->test('suffix'));
+        self::assertFalse(Rules::startsWith('pre')->test(null));
+    }
+
+    public function testStartsWithDefaultMessage(): void
+    {
+        self::assertSame("Must start with 'api_'.", Rules::startsWith('api_')->errorMessage());
+    }
+
+    public function testEndsWithPassesAndFails(): void
+    {
+        self::assertTrue(Rules::endsWith('.com')->test('example.com'));
+        self::assertFalse(Rules::endsWith('.com')->test('example.org'));
+        self::assertFalse(Rules::endsWith('.com')->test(null));
+    }
+
+    public function testEndsWithDefaultMessage(): void
+    {
+        self::assertSame("Must end with '.json'.", Rules::endsWith('.json')->errorMessage());
+    }
+
+    public function testContainsPassesAndFails(): void
+    {
+        self::assertTrue(Rules::contains('needle')->test('haystack needle here'));
+        self::assertFalse(Rules::contains('needle')->test('haystack only'));
+        self::assertFalse(Rules::contains('needle')->test(null));
+    }
+
+    public function testContainsDefaultMessage(): void
+    {
+        self::assertSame("Must contain 'token'.", Rules::contains('token')->errorMessage());
+    }
+
     // ---- in ----
 
     public function testInPasses(): void

@@ -87,6 +87,61 @@ final class Rules
     }
 
     /**
+     * Validates that a string contains only ASCII characters.
+     */
+    public static function ascii(string $message = 'Must contain only ASCII characters.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[\x00-\x7F]*$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates alphanumeric strings (letters and digits only).
+     */
+    public static function alphaNumeric(string $message = 'Must contain only letters and numbers.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-zA-Z0-9]+$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates that a string starts with the provided prefix.
+     */
+    public static function startsWith(string $prefix, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && str_starts_with($v, $prefix),
+            $message ?: "Must start with '{$prefix}'.",
+        );
+    }
+
+    /**
+     * Validates that a string ends with the provided suffix.
+     */
+    public static function endsWith(string $suffix, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && str_ends_with($v, $suffix),
+            $message ?: "Must end with '{$suffix}'.",
+        );
+    }
+
+    /**
+     * Validates that a string contains the provided needle.
+     */
+    public static function contains(string $needle, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && str_contains($v, $needle),
+            $message ?: "Must contain '{$needle}'.",
+        );
+    }
+
+    /**
      * @param array<int|string, mixed> $allowed
      */
     public static function in(array $allowed, string $message = ''): Rule
