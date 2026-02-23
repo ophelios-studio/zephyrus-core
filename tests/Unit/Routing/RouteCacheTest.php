@@ -477,6 +477,82 @@ final class RouteCacheTest extends TestCase
         $cache->isFreshWithin(new RouteCollection(), -1);
     }
 
+    public function testEnsureFreshWithinSucceedsForFreshCacheWithinWindow(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        $cache->ensureFreshWithin($routes, 120, $generatedAt + 30);
+
+        self::assertTrue(true);
+    }
+
+    public function testEnsureFreshWithinThrowsWhenCacheFileMissing(): void
+    {
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache file is missing');
+
+        $cache->ensureFreshWithin(new RouteCollection(), 60);
+    }
+
+    public function testEnsureFreshWithinThrowsWhenMetadataInvalid(): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache metadata is missing or invalid');
+
+        $cache->ensureFreshWithin(new RouteCollection(), 60);
+    }
+
+    public function testEnsureFreshWithinThrowsWhenCacheExpired(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache is expired');
+
+        $cache->ensureFreshWithin($routes, 60, $generatedAt + 61);
+    }
+
+    public function testEnsureFreshWithinThrowsWhenRouteSetDiffers(): void
+    {
+        $cachedRoutes = new RouteCollection();
+        $cachedRoutes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+
+        $currentRoutes = new RouteCollection();
+        $currentRoutes->add(Route::define('GET', '/health', 'HealthController@show', name: 'health.show'));
+        $currentRoutes->add(Route::define('GET', '/status', 'HealthController@status', name: 'health.status'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($cachedRoutes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache does not match current routes');
+
+        $cache->ensureFreshWithin($currentRoutes, 120, $generatedAt + 10);
+    }
+
     public function testSaveCreatesMissingCacheDirectory(): void
     {
         $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);

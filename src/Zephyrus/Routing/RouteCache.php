@@ -148,6 +148,29 @@ final class RouteCache
         return $this->isFresh($routes);
     }
 
+    public function ensureFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): void
+    {
+        if ($maxAgeSeconds < 0) {
+            throw new RouteCacheException('Route cache max age must be zero or greater');
+        }
+
+        if (!$this->has()) {
+            throw new RouteCacheException('Route cache file is missing');
+        }
+
+        if ($this->metadata() === null) {
+            throw new RouteCacheException('Route cache metadata is missing or invalid');
+        }
+
+        if ($this->isExpired($maxAgeSeconds, $now)) {
+            throw new RouteCacheException('Route cache is expired');
+        }
+
+        if (!$this->isFresh($routes)) {
+            throw new RouteCacheException('Route cache does not match current routes');
+        }
+    }
+
     public function save(RouteCollection $routes): void
     {
         $routesPayload = $this->routesToPayload($routes->all());
