@@ -79,4 +79,50 @@ final class RouteDispatcherTest extends TestCase
 
         $dispatcher->dispatch(Request::fromArray('GET', '/users'));
     }
+
+    public function testDispatchWrapsUnexpectedResolverFailuresAsRouteMiddlewareException(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', middlewares: ['auth']));
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+            routeMiddlewareResolver: static fn (string $name): MiddlewareInterface => throw new \RuntimeException('container is down'),
+        );
+
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessage('Unable to resolve route middleware "auth": container is down');
+
+        $dispatcher->dispatch(Request::fromArray('GET', '/users'));
+    }
+
+    public function testDispatchResolvesDuplicateMiddlewareNamesOnlyOnce(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', middlewares: ['auth', 'auth', 'audit']));
+
+        $resolvedNames = [];
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+            routeMiddlewareResolver: static function (string $name) use (&$resolvedNames): MiddlewareInterface {
+                $resolvedNames[] = $name;
+
+                return new class implements MiddlewareInterface {
+                    public function process(Request $request, callable $next): Response
+                    {
+                        return $next($request);
+                    }
+                };
+            },
+        );
+
+        $dispatcher->dispatch(Request::fromArray('GET', '/users'));
+
+        self::assertSame(['auth', 'audit'], $resolvedNames);
+    }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing;
 
 use Closure;
+use Throwable;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
@@ -44,16 +45,35 @@ final readonly class RouteDispatcher
         $match = $this->routes->match($request->method, $request->path());
         $request = $request->withAttributes($match->parameters);
 
-        $routeMiddlewares = array_map(
-            fn (string $name): MiddlewareInterface => ($this->routeMiddlewareResolver)($name),
-            $match->route->middlewares,
-        );
-
+        $routeMiddlewares = $this->resolveRouteMiddlewares($match->route->middlewares);
         $pipeline = $this->pipeline->pipeMany($routeMiddlewares);
 
         return $pipeline->handle(
             $request,
             fn (Request $request): Response => ($this->resolver)($match, $request),
         );
+    }
+
+    /**
+     * @param array<int, string> $middlewareNames
+     * @return array<int, MiddlewareInterface>
+     */
+    private function resolveRouteMiddlewares(array $middlewareNames): array
+    {
+        $resolved = [];
+
+        foreach (array_values(array_unique($middlewareNames)) as $name) {
+            try {
+                $resolved[] = ($this->routeMiddlewareResolver)($name);
+            } catch (Throwable $e) {
+                if ($e instanceof RouteMiddlewareException) {
+                    throw $e;
+                }
+
+                throw RouteMiddlewareException::resolutionFailed($name, $e);
+            }
+        }
+
+        return $resolved;
     }
 }
