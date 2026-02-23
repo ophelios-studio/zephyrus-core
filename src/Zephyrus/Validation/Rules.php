@@ -578,6 +578,20 @@ final class Rules
     }
 
     /**
+     * Validates an HTTP request path starting with '/'.
+     */
+    public static function httpPath(string $message = 'Must be a valid HTTP path.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && $v !== ''
+                && str_starts_with($v, '/')
+                && !str_contains($v, ' '),
+            $message,
+        );
+    }
+
+    /**
      * Validates an HTTP method token.
      */
     public static function httpMethod(string $message = 'Must be a valid HTTP method.'): Rule

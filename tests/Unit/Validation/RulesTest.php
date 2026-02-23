@@ -921,6 +921,28 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid SHA-256 hash.', Rules::sha256()->errorMessage());
     }
 
+    // ---- httpPath ----
+
+    public function testHttpPathPasses(): void
+    {
+        self::assertTrue(Rules::httpPath()->test('/'));
+        self::assertTrue(Rules::httpPath()->test('/api/v1/users'));
+        self::assertTrue(Rules::httpPath()->test('/health?deep=1'));
+    }
+
+    public function testHttpPathFails(): void
+    {
+        self::assertFalse(Rules::httpPath()->test('api/v1/users'));
+        self::assertFalse(Rules::httpPath()->test(''));
+        self::assertFalse(Rules::httpPath()->test('/bad path'));
+        self::assertFalse(Rules::httpPath()->test(null));
+    }
+
+    public function testHttpPathDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP path.', Rules::httpPath()->errorMessage());
+    }
+
     // ---- httpMethod ----
 
     public function testHttpMethodPassesCommonMethods(): void
