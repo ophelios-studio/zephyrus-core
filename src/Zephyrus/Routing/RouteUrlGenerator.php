@@ -19,7 +19,7 @@ final readonly class RouteUrlGenerator
      * @param array<string, scalar> $parameters
      * @param array<string, scalar|array<scalar>> $query
      */
-    public function generate(string $routeName, array $parameters = [], array $query = []): string
+    public function generate(string $routeName, array $parameters = [], array $query = [], ?string $fragment = null): string
     {
         $route = $this->routes->findByName($routeName);
 
@@ -61,11 +61,11 @@ final readonly class RouteUrlGenerator
             $url = $queryString === '' ? $url : $url . '?' . $queryString;
         }
 
-        if ($this->baseUrl === null) {
-            return $url;
+        if ($this->baseUrl !== null) {
+            $url = rtrim($this->baseUrl, '/') . $url;
         }
 
-        return rtrim($this->baseUrl, '/') . $url;
+        return $this->appendFragment($url, $fragment);
     }
 
     /**
@@ -129,9 +129,13 @@ final readonly class RouteUrlGenerator
      * @param array<string, scalar> $parameters
      * @param array<string, scalar|array<scalar>> $query
      */
-    public function generateSigned(string $routeName, array $parameters = [], array $query = []): string
-    {
-        return $this->requireSignature()->sign($this->generate($routeName, $parameters, $query));
+    public function generateSigned(
+        string $routeName,
+        array $parameters = [],
+        array $query = [],
+        ?string $fragment = null,
+    ): string {
+        return $this->requireSignature()->sign($this->generate($routeName, $parameters, $query, $fragment));
     }
 
     /**
@@ -143,6 +147,7 @@ final readonly class RouteUrlGenerator
         int $ttlSeconds,
         array $parameters = [],
         array $query = [],
+        ?string $fragment = null,
         ?int $now = null,
     ): string {
         if ($ttlSeconds <= 0) {
@@ -150,10 +155,24 @@ final readonly class RouteUrlGenerator
         }
 
         return $this->requireSignature()->signTemporary(
-            $this->generate($routeName, $parameters, $query),
+            $this->generate($routeName, $parameters, $query, $fragment),
             ttlSeconds: $ttlSeconds,
             now: $now,
         );
+    }
+
+    private function appendFragment(string $url, ?string $fragment): string
+    {
+        if ($fragment === null || $fragment === '') {
+            return $url;
+        }
+
+        $normalized = ltrim($fragment, '#');
+        if ($normalized === '') {
+            return $url;
+        }
+
+        return $url . '#' . rawurlencode($normalized);
     }
 
     private function requireSignature(): RouteSignature
