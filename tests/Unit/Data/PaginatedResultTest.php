@@ -125,4 +125,40 @@ final class PaginatedResultTest extends TestCase
 
         self::assertSame($result->toArray(), $result->jsonSerialize());
     }
+
+    public function testPageNavigationHelpersExposeState(): void
+    {
+        $result = new PaginatedResult(
+            items: [['id' => 10, 'name' => 'X']],
+            total: 30,
+            page: 2,
+            perPage: 10,
+            totalPages: 3,
+            hasPrevious: true,
+            hasNext: true,
+        );
+
+        self::assertFalse($result->isFirstPage());
+        self::assertFalse($result->isLastPage());
+        self::assertSame(1, $result->previousPageNumber());
+        self::assertSame(3, $result->nextPageNumber());
+    }
+
+    public function testToPaginationRequestCreatesEquivalentRequest(): void
+    {
+        $result = new PaginatedResult(
+            items: [['id' => 10, 'name' => 'X']],
+            total: 1,
+            page: 3,
+            perPage: 15,
+            totalPages: 3,
+            hasPrevious: true,
+            hasNext: false,
+        );
+
+        $request = $result->toPaginationRequest();
+
+        self::assertSame(3, $request->page);
+        self::assertSame(15, $request->perPage);
+    }
 }

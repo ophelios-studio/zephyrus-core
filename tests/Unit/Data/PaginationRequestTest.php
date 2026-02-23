@@ -75,6 +75,31 @@ final class PaginationRequestTest extends TestCase
         self::assertSame(50, $changedPerPage->perPage);
     }
 
+    public function testNextAndPreviousHelpers(): void
+    {
+        $request = new PaginationRequest(page: 3, perPage: 10);
+
+        self::assertSame(4, $request->next()->page);
+        self::assertSame(2, $request->previous()->page);
+        self::assertSame(1, (new PaginationRequest(1, 10))->previous()->page);
+    }
+
+    public function testToArrayAndJsonSerializeShareSameEnvelope(): void
+    {
+        $request = new PaginationRequest(page: 2, perPage: 30);
+
+        self::assertSame(['page' => 2, 'per_page' => 30], $request->toArray());
+        self::assertSame($request->toArray(), $request->jsonSerialize());
+    }
+
+    public function testFromQueryUsesBoundsAndDefaults(): void
+    {
+        $request = PaginationRequest::fromQuery(['page' => 2, 'per_page' => 999], 25, 100);
+
+        self::assertSame(2, $request->page);
+        self::assertSame(100, $request->perPage);
+    }
+
     public function testConstructThrowsWhenPageIsInvalid(): void
     {
         $this->expectException(DatabaseException::class);

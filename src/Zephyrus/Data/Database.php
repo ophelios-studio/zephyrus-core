@@ -289,6 +289,25 @@ final class Database
     }
 
     /**
+     * Build pagination request from query params then execute typed pagination.
+     *
+     * @param array<string, mixed> $query
+     * @param array<int|string, mixed> $params
+     */
+    public function paginateResultFromQuery(
+        string $dataSql,
+        string $countSql,
+        array $query,
+        int $defaultPerPage = 25,
+        int $maxPerPage = 100,
+        array $params = [],
+    ): PaginatedResult {
+        $pagination = PaginationRequest::fromQuery($query, $defaultPerPage, $maxPerPage);
+
+        return $this->paginateResultWith($dataSql, $countSql, $pagination, $params);
+    }
+
+    /**
      * Execute a write query and return affected row count.
      *
      * @param array<int|string, mixed> $params

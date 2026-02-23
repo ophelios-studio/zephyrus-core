@@ -147,6 +147,17 @@ final class UserBroker extends Broker
         );
     }
 
+    public function paginateUsersFromQuery(array $query): PaginatedResult
+    {
+        return $this->paginateResultFromQuery(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $query,
+            defaultPerPage: 25,
+            maxPerPage: 2,
+        );
+    }
+
     public function insert(string $name, string $email): int
     {
         return (int) $this->insertRowGetId(
@@ -376,6 +387,20 @@ final class BrokerTest extends TestCase
 
         $mappedWith = $this->broker->paginateUsersNamesMappedWith(new PaginationRequest(2, 2));
         self::assertSame('GAMMA', $mappedWith->items[0]['name']);
+    }
+
+    public function testPaginateFromQueryBuildsBoundedPaginationRequest(): void
+    {
+        $this->broker->insert('alpha', 'a@example.com');
+        $this->broker->insert('beta', 'b@example.com');
+        $this->broker->insert('gamma', 'c@example.com');
+
+        $page = $this->broker->paginateUsersFromQuery(['page' => 2, 'per_page' => 999]);
+
+        self::assertSame(2, $page->page);
+        self::assertSame(2, $page->perPage);
+        self::assertSame(1, $page->itemCount());
+        self::assertSame('c@example.com', $page->firstItem()['email']);
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────

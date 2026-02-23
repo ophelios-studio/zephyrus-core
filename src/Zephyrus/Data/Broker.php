@@ -236,6 +236,30 @@ abstract class Broker
     }
 
     /**
+     * Build pagination request from query params then execute typed pagination.
+     *
+     * @param array<string, mixed> $query
+     * @param array<int|string, mixed> $params
+     */
+    protected function paginateResultFromQuery(
+        string $dataSql,
+        string $countSql,
+        array $query,
+        int $defaultPerPage = 25,
+        int $maxPerPage = 100,
+        array $params = [],
+    ): PaginatedResult {
+        return $this->db->paginateResultFromQuery(
+            $dataSql,
+            $countSql,
+            $query,
+            $defaultPerPage,
+            $maxPerPage,
+            $params,
+        );
+    }
+
+    /**
      * Execute an INSERT, UPDATE, or DELETE statement and return the number
      * of affected rows.
      *
