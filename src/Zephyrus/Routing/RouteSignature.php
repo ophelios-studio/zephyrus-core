@@ -20,9 +20,42 @@ final readonly class RouteSignature
         return $this->appendSignature($payload, $signature, $this->extractFragment($url));
     }
 
+    public function signTemporary(string $url, int $ttlSeconds, ?int $now = null): string
+    {
+        if ($ttlSeconds <= 0) {
+            throw new RouteSignatureException('Temporary signature TTL must be greater than zero seconds');
+        }
+
+        [$payload] = $this->split($url);
+        $expiresAt = ($now ?? time()) + $ttlSeconds;
+        $payloadWithExpiry = $this->appendQueryParameter($payload, '_exp', (string) $expiresAt);
+        $signature = $this->compute($payloadWithExpiry);
+
+        return $this->appendSignature($payloadWithExpiry, $signature, $this->extractFragment($url));
+    }
+
     public function verify(string $url): bool
     {
-        [$payload, $signature] = $this->split($url);
+        return $this->verifyAt($url);
+    }
+
+    public function verifyAt(string $url, ?int $now = null): bool
+    {
+        [$payload, $signature, $expiry] = $this->split($url);
+
+        if ($signature === '') {
+            return false;
+        }
+
+        if ($expiry !== null) {
+            if (!$this->isValidExpiry($expiry)) {
+                return false;
+            }
+
+            if (($now ?? time()) > (int) $expiry) {
+                return false;
+            }
+        }
 
         return hash_equals($this->compute($payload), $signature);
     }
@@ -40,7 +73,7 @@ final readonly class RouteSignature
     }
 
     /**
-     * @return array{0: string, 1: string}
+     * @return array{0: string, 1: string, 2: string|null}
      */
     private function split(string $url): array
     {
@@ -54,6 +87,11 @@ final readonly class RouteSignature
             $signature = $params['_sig'];
         }
 
+        $expiry = null;
+        if (isset($params['_exp']) && is_string($params['_exp'])) {
+            $expiry = $params['_exp'];
+        }
+
         unset($params['_sig']);
 
         $base = $this->buildBaseUrl($parts);
@@ -63,7 +101,7 @@ final readonly class RouteSignature
             $base .= '?' . http_build_query($params, arg_separator: '&', encoding_type: PHP_QUERY_RFC3986);
         }
 
-        return [$base, $signature];
+        return [$base, $signature, $expiry];
     }
 
     /**
@@ -103,13 +141,24 @@ final readonly class RouteSignature
 
     private function appendSignature(string $payload, string $signature, ?string $fragment): string
     {
-        $separator = str_contains($payload, '?') ? '&' : '?';
-        $signed = $payload . $separator . '_sig=' . $signature;
+        $signed = $this->appendQueryParameter($payload, '_sig', $signature);
 
         if ($fragment === null) {
             return $signed;
         }
 
         return $signed . '#' . $fragment;
+    }
+
+    private function appendQueryParameter(string $url, string $key, string $value): string
+    {
+        $separator = str_contains($url, '?') ? '&' : '?';
+
+        return $url . $separator . $key . '=' . rawurlencode($value);
+    }
+
+    private function isValidExpiry(string $expiry): bool
+    {
+        return preg_match('/^\d+$/', $expiry) === 1;
     }
 }
