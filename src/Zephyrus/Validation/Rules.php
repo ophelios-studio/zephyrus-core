@@ -252,5 +252,37 @@ final class Rules
         );
     }
 
+    /**
+     * Validates IPv4/IPv6 CIDR notation (e.g. 10.0.0.0/8, 2001:db8::/32).
+     */
+    public static function cidr(string $message = 'Must be a valid CIDR block.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || !str_contains($v, '/')) {
+                    return false;
+                }
+
+                [$ip, $prefix] = explode('/', $v, 2);
+                if ($ip === '' || $prefix === '' || !ctype_digit($prefix)) {
+                    return false;
+                }
+
+                $prefixLength = (int) $prefix;
+
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+                    return $prefixLength >= 0 && $prefixLength <= 32;
+                }
+
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+                    return $prefixLength >= 0 && $prefixLength <= 128;
+                }
+
+                return false;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

@@ -388,6 +388,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Supports common hostname forms including multi-label service names and punycode ASCII labels.
 - Added unit coverage for valid/invalid/default-message scenarios.
 
+## Implemented Slice: Validation CIDR rule
+- Added `Validation\Rules::cidr()` for network-range validation in CIDR notation.
+- Supports both IPv4 and IPv6 CIDR ranges with proper prefix bounds (`0..32` for IPv4, `0..128` for IPv6).
+- Added unit coverage for valid ranges, malformed inputs, and out-of-range prefixes.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
