@@ -225,6 +225,44 @@ final class Router
         return $this->routes;
     }
 
+    public function hasRouteNamed(string $name): bool
+    {
+        return $this->routes->hasNamed($name);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function routeNames(): array
+    {
+        return $this->routes->names();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function duplicateRouteNames(): array
+    {
+        return $this->routes->duplicateRouteNames();
+    }
+
+    public function assertNoDuplicateRouteNames(): self
+    {
+        $this->routes->assertNoDuplicateRouteNames();
+
+        return $this;
+    }
+
+    public function count(): int
+    {
+        return $this->routes->count();
+    }
+
+    public function isEmpty(): bool
+    {
+        return $this->routes->isEmpty();
+    }
+
     private function joinPath(string $prefix, string $path): string
     {
         $left = trim($prefix, '/');
