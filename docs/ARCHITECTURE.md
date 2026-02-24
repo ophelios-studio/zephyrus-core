@@ -460,6 +460,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Requires a non-empty string starting with `/` and rejects whitespace-containing paths.
 - Added unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation HTTP ETag rule
+- Added `Validation\Rules::etag()` for HTTP ETag token validation per RFC 7232.
+- Accepts strong ETags (`"abc"`) and weak ETags (`W/"abc"`); the opaque tag may be empty or any sequence of visible ASCII characters except `"`.
+- Rejects bare values (no quotes), lowercase weak prefix (`w/`), embedded quotes, and trailing whitespace.
+- Added unit coverage for strong pass, weak pass, malformed input failures, and default message path.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
