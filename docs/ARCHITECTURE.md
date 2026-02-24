@@ -562,6 +562,18 @@ $router->group('/api/v1', fn ($r) => $r
 - Added internal normalization for PHP multi-upload payload shape (`name[]`, `tmp_name[]`, etc.) with graceful skipping of malformed entries.
 - Added unit coverage for multi-file normalization and retrieval behavior.
 
+## Implemented Slice: Application locale resolution service (Phase 1)
+- Added `Localization\AcceptLanguageResolver` to parse and resolve locale from browser `Accept-Language` headers with q-value ordering and normalization (`fr_CA` -> `fr-CA`).
+- Added `Localization\LocaleResolver` as an app-facing resolver orchestrating explicit locale override + header-derived locale + default fallback.
+- Extended `Core\Application` with `transFromRequest(...)` to translate using resolved request locale while preserving existing `trans(...)` behavior.
+- Resolution semantics:
+  - explicit requested locale has highest priority
+  - regional fallback to base language when needed (`fr-CA` -> `fr`)
+  - optional per-call and app-level supported-locale allowlists
+  - default locale fallback when nothing matches
+- Extended `ApplicationBuilder` locale setup capabilities and app-level supported locale policy propagation.
+- Added broad unit and integration coverage for resolver behavior, override precedence, q-values, supported-locale filtering, and end-to-end request-driven localization.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

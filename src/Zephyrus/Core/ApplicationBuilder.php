@@ -20,6 +20,9 @@ final class ApplicationBuilder
 
     private string $defaultLocale = 'en';
 
+    /** @var string[] */
+    private array $supportedLocales = [];
+
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
         $this->kernelBuilder = $kernelBuilder ?? KernelBuilder::create();
@@ -95,6 +98,20 @@ final class ApplicationBuilder
         return $this->withLocaleLoader(new JsonLocaleLoader($basePath, $extension), $defaultLocale);
     }
 
+    /**
+     * Restrict locale resolution (in transFromRequest) to this explicit list.
+     * If not set (empty), every normalized Accept-Language candidate is accepted.
+     *
+     * @param string[] $locales
+     */
+    public function withSupportedLocales(array $locales): self
+    {
+        $clone = clone $this;
+        $clone->supportedLocales = $locales;
+
+        return $clone;
+    }
+
     public function build(): Application
     {
         $loader = $this->localeLoader ?? new class implements LocaleLoaderInterface {
@@ -105,8 +122,10 @@ final class ApplicationBuilder
         };
 
         return new Application(
-            kernel: $this->kernelBuilder->build(),
-            translator: new Translator($loader, $this->defaultLocale),
+            kernel:           $this->kernelBuilder->build(),
+            translator:       new Translator($loader, $this->defaultLocale),
+            defaultLocale:    $this->defaultLocale,
+            supportedLocales: $this->supportedLocales,
         );
     }
 }
