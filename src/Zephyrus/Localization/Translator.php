@@ -20,21 +20,39 @@ final class Translator
      */
     public function trans(string $key, array $parameters = [], ?string $locale = null): string
     {
-        $requestedLocale = $locale ?? $this->defaultLocale;
-
-        $catalog = $this->catalog($requestedLocale);
-        if (array_key_exists($key, $catalog)) {
-            return $this->interpolate($catalog[$key], $parameters);
-        }
-
-        if ($requestedLocale !== $this->defaultLocale) {
-            $fallbackCatalog = $this->catalog($this->defaultLocale);
-            if (array_key_exists($key, $fallbackCatalog)) {
-                return $this->interpolate($fallbackCatalog[$key], $parameters);
+        foreach ($this->resolveLocaleChain($locale ?? $this->defaultLocale) as $candidateLocale) {
+            $catalog = $this->catalog($candidateLocale);
+            if (array_key_exists($key, $catalog)) {
+                return $this->interpolate($catalog[$key], $parameters);
             }
         }
 
         return $this->interpolate($key, $parameters);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function resolveLocaleChain(string $requestedLocale): array
+    {
+        $chain = [$requestedLocale];
+
+        if (str_contains($requestedLocale, '-')) {
+            $chain[] = explode('-', $requestedLocale, 2)[0];
+        }
+
+        if (!in_array($this->defaultLocale, $chain, true)) {
+            $chain[] = $this->defaultLocale;
+        }
+
+        if (str_contains($this->defaultLocale, '-')) {
+            $defaultBase = explode('-', $this->defaultLocale, 2)[0];
+            if (!in_array($defaultBase, $chain, true)) {
+                $chain[] = $defaultBase;
+            }
+        }
+
+        return $chain;
     }
 
     /**
@@ -58,11 +76,60 @@ final class Translator
             return $value;
         }
 
-        $replacements = [];
-        foreach ($parameters as $name => $parameterValue) {
-            $replacements['{' . $name . '}'] = (string) $parameterValue;
+        return preg_replace_callback('/\{([a-zA-Z0-9_]+)(\|[^}]+)?\}/', function (array $matches) use ($parameters): string {
+            $name = $matches[1];
+            $pipeExpression = $matches[2] ?? '';
+
+            if (!array_key_exists($name, $parameters)) {
+                return $matches[0];
+            }
+
+            $resolved = (string) $parameters[$name];
+
+            if ($pipeExpression !== '') {
+                $resolved = $this->applyPipes($resolved, ltrim($pipeExpression, '|'));
+            }
+
+            return $resolved;
+        }, $value) ?? $value;
+    }
+
+    private function applyPipes(string $value, string $pipeExpression): string
+    {
+        $current = $value;
+
+        foreach (explode('|', $pipeExpression) as $pipeSegment) {
+            $pipeSegment = trim($pipeSegment);
+            if ($pipeSegment === '') {
+                continue;
+            }
+
+            [$pipeName, $pipeArgument] = array_pad(explode(':', $pipeSegment, 2), 2, null);
+
+            $current = match (strtolower($pipeName)) {
+                'lower' => mb_strtolower($current),
+                'upper' => mb_strtoupper($current),
+                'title' => mb_convert_case($current, MB_CASE_TITLE),
+                'trim' => trim($current),
+                'number' => $this->formatNumber($current, $pipeArgument),
+                default => $current,
+            };
         }
 
-        return strtr($value, $replacements);
+        return $current;
+    }
+
+    private function formatNumber(string $value, ?string $decimals): string
+    {
+        if (!is_numeric($value)) {
+            return $value;
+        }
+
+        $precision = (int) ($decimals ?? 0);
+        if ($precision < 0) {
+            $precision = 0;
+        }
+
+        return number_format((float) $value, $precision, '.', '');
     }
 }
