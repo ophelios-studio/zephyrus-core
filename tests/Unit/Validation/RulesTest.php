@@ -507,7 +507,7 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid timezone identifier.', Rules::timezone()->errorMessage());
     }
 
-    // ---- time24 / phoneE164 / postalCode ----
+    // ---- time24 / phoneE164 / hexColor / macAddress / cronExpression / postalCode ----
 
     public function testTime24PassesAndFails(): void
     {
@@ -536,6 +536,48 @@ final class RulesTest extends TestCase
     public function testPhoneE164DefaultMessage(): void
     {
         self::assertSame('Must be a valid E.164 phone number.', Rules::phoneE164()->errorMessage());
+    }
+
+    public function testHexColorPassesAndFails(): void
+    {
+        self::assertTrue(Rules::hexColor()->test('#fff'));
+        self::assertTrue(Rules::hexColor()->test('#FFAA00'));
+        self::assertFalse(Rules::hexColor()->test('FFAA00'));
+        self::assertFalse(Rules::hexColor()->test('#FFFF'));
+        self::assertFalse(Rules::hexColor()->test(null));
+    }
+
+    public function testHexColorDefaultMessageFromShapeRulesBlock(): void
+    {
+        self::assertSame('Must be a valid hex color.', Rules::hexColor()->errorMessage());
+    }
+
+    public function testMacAddressPassesAndFails(): void
+    {
+        self::assertTrue(Rules::macAddress()->test('00:1A:2B:3C:4D:5E'));
+        self::assertTrue(Rules::macAddress()->test('00-1A-2B-3C-4D-5E'));
+        self::assertFalse(Rules::macAddress()->test('001A2B3C4D5E'));
+        self::assertFalse(Rules::macAddress()->test('00:1A:2B:3C:4D'));
+        self::assertFalse(Rules::macAddress()->test(null));
+    }
+
+    public function testMacAddressDefaultMessageFromShapeRulesBlock(): void
+    {
+        self::assertSame('Must be a valid MAC address.', Rules::macAddress()->errorMessage());
+    }
+
+    public function testCronExpressionPassesAndFails(): void
+    {
+        self::assertTrue(Rules::cronExpression()->test('* * * * *'));
+        self::assertTrue(Rules::cronExpression()->test('*/5 0 * * 1-5'));
+        self::assertFalse(Rules::cronExpression()->test('* * * *'));
+        self::assertFalse(Rules::cronExpression()->test('* * * * * *'));
+        self::assertFalse(Rules::cronExpression()->test(null));
+    }
+
+    public function testCronExpressionDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid cron expression.', Rules::cronExpression()->errorMessage());
     }
 
     public function testPostalCodePassesAndFails(): void
@@ -1539,5 +1581,27 @@ final class RulesTest extends TestCase
     public function testHttpDateDefaultMessage(): void
     {
         self::assertSame('Must be a valid HTTP date.', Rules::httpDate()->errorMessage());
+    }
+
+    // ---- ifModifiedSince ----
+
+    public function testIfModifiedSincePassesValidHttpDate(): void
+    {
+        self::assertTrue(Rules::ifModifiedSince()->test('Mon, 23 Feb 2026 20:31:00 GMT'));
+    }
+
+    public function testIfModifiedSinceFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::ifModifiedSince()->test('Mon, 23 Feb 2026 20:31:00 UTC'));
+        self::assertFalse(Rules::ifModifiedSince()->test('2026-02-23T20:31:00Z'));
+        self::assertFalse(Rules::ifModifiedSince()->test(null));
+    }
+
+    public function testIfModifiedSinceDefaultMessage(): void
+    {
+        self::assertSame(
+            'Must be a valid If-Modified-Since header.',
+            Rules::ifModifiedSince()->errorMessage(),
+        );
     }
 }

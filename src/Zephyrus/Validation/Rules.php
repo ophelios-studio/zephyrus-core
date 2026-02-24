@@ -278,6 +278,50 @@ final class Rules
     }
 
     /**
+     * Validates hexadecimal color values (#RGB or #RRGGBB).
+     */
+    public static function hexColor(string $message = 'Must be a valid hex color.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates MAC address format.
+     */
+    public static function macAddress(string $message = 'Must be a valid MAC address.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v)
+                && preg_match('/^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates cron expressions with 5 fields.
+     */
+    public static function cronExpression(string $message = 'Must be a valid cron expression.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                $parts = preg_split('/\s+/', trim($v));
+
+                return is_array($parts)
+                    && count($parts) === 5
+                    && array_reduce($parts, static fn (bool $ok, string $part): bool => $ok && $part !== '', true);
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates simple postal/ZIP code shapes (alphanumeric + space/hyphen).
      */
     public static function postalCode(string $message = 'Must be a valid postal code.'): Rule
@@ -409,17 +453,6 @@ final class Rules
     }
 
     /**
-     * Validates a MAC address in common formats (e.g. 00:1A:2B:3C:4D:5E).
-     */
-    public static function macAddress(string $message = 'Must be a valid MAC address.'): Rule
-    {
-        return Rule::of(
-            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_MAC) !== false,
-            $message,
-        );
-    }
-
-    /**
      * Validates a TCP/UDP port number (1..65535).
      */
     public static function port(string $message = 'Must be a valid port number.'): Rule
@@ -539,17 +572,7 @@ final class Rules
         );
     }
 
-    /**
-     * Validates a hex color string (#RGB or #RRGGBB).
-     */
-    public static function hexColor(string $message = 'Must be a valid hex color.'): Rule
-    {
-        return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $v) === 1,
-            $message,
-        );
-    }
-
+    
     /**
      * Validates a Base64-encoded string.
      */
@@ -1088,6 +1111,14 @@ final class Rules
             },
             $message,
         );
+    }
+
+    /**
+     * Validates an If-Modified-Since header value.
+     */
+    public static function ifModifiedSince(string $message = 'Must be a valid If-Modified-Since header.'): Rule
+    {
+        return self::httpDate($message);
     }
 
     private function __construct() {}

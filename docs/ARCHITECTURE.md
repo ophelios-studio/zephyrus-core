@@ -484,6 +484,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects malformed dates, non-canonical timezone tokens, and non-string input.
 - Added focused unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation If-Modified-Since header rule
+- Added `Validation\Rules::ifModifiedSince()` as a dedicated precondition-header validator.
+- Reuses HTTP-date validation semantics while exposing an explicit API contract for cache-conditional request fields.
+- Added focused unit coverage for valid date pass, malformed failures, and default-message behavior.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
