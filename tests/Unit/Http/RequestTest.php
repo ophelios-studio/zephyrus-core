@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Http;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
+use Zephyrus\Uploader\UploadedFile;
 
 final class RequestTest extends TestCase
 {
@@ -105,6 +106,15 @@ final class RequestTest extends TestCase
 
         self::assertSame('fr', $updated->cookie('lang'));
         self::assertSame(7, $updated->attribute('userId'));
+    }
+
+    public function testFromArrayProvidesUploadedFileHelper(): void
+    {
+        $file = new UploadedFile('avatar', 'me.png', 'image/png', '/tmp/phpA', 123);
+        $request = Request::fromArray('POST', '/profile', files: ['avatar' => $file]);
+
+        self::assertSame($file, $request->file('avatar'));
+        self::assertNull($request->file('missing'));
     }
 
     // -------------------------------------------------------------------------
@@ -602,6 +612,55 @@ final class RequestTest extends TestCase
         self::assertSame('xyz789', $request->cookie('session_id'));
         self::assertSame('en', $request->cookie('pref_lang'));
         self::assertNull($request->cookie('nonexistent'));
+    }
+
+    public function testFromGlobalsNormalizesSingleFileUpload(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'example.com',
+                'REQUEST_URI' => '/upload',
+            ],
+            files: [
+                'avatar' => [
+                    'name' => 'my-photo.JPG',
+                    'type' => 'image/jpeg',
+                    'tmp_name' => '/tmp/php-upload',
+                    'error' => UPLOAD_ERR_OK,
+                    'size' => 1024,
+                ],
+            ],
+        );
+
+        $file = $request->file('avatar');
+
+        self::assertInstanceOf(UploadedFile::class, $file);
+        self::assertSame('my-photo.JPG', $file->originalName);
+        self::assertSame('jpg', $file->clientExtension());
+        self::assertSame('/tmp/php-upload', $file->tmpPath);
+    }
+
+    public function testFromGlobalsSkipsMultiFileUploadArrayShape(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'example.com',
+                'REQUEST_URI' => '/upload',
+            ],
+            files: [
+                'photos' => [
+                    'name' => ['a.jpg', 'b.jpg'],
+                    'type' => ['image/jpeg', 'image/jpeg'],
+                    'tmp_name' => ['/tmp/a', '/tmp/b'],
+                    'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK],
+                    'size' => [100, 200],
+                ],
+            ],
+        );
+
+        self::assertNull($request->file('photos'));
     }
 
     // -------------------------------------------------------------------------
