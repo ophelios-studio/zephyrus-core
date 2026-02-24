@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Http;
 
-use JsonException;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 
@@ -178,6 +177,38 @@ final class RequestTest extends TestCase
         self::assertTrue($request->isSecure());
     }
 
+    public function testFromGlobalsHonorsForwardedProtoAndHost(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.internal',
+                'REQUEST_URI'            => '/reports',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_HOST'  => 'public.example.com',
+            ],
+        );
+
+        self::assertSame('https://public.example.com/reports', $request->uri);
+        self::assertTrue($request->isSecure());
+    }
+
+    public function testFromGlobalsForwardedHeaderTakesPriority(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.internal',
+                'REQUEST_URI'            => '/api',
+                'HTTP_FORWARDED'         => 'for=1.2.3.4;proto=https;host=api.example.com',
+                'HTTP_X_FORWARDED_HOST'  => 'ignored.example.com',
+                'HTTP_X_FORWARDED_PROTO' => 'http',
+            ],
+        );
+
+        self::assertSame('https://api.example.com/api', $request->uri);
+    }
+
     public function testFromGlobalsHttpsKeyOf1AlsoTriggersSecure(): void
     {
         $request = Request::fromGlobals(
@@ -224,6 +255,35 @@ final class RequestTest extends TestCase
         $request = Request::fromGlobals(server: ['REQUEST_METHOD' => 'GET']);
 
         self::assertSame('http://localhost/', $request->uri);
+    }
+
+    public function testFromGlobalsIncludesNonDefaultServerPortInUri(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'SERVER_NAME'    => 'localhost',
+                'SERVER_PORT'    => '8080',
+                'REQUEST_URI'    => '/health',
+            ],
+        );
+
+        self::assertSame('http://localhost:8080/health', $request->uri);
+    }
+
+    public function testFromGlobalsOmitsDefaultHttpsPortFromUri(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'SERVER_NAME'    => 'secure.example.com',
+                'SERVER_PORT'    => '443',
+                'HTTPS'          => 'on',
+                'REQUEST_URI'    => '/health',
+            ],
+        );
+
+        self::assertSame('https://secure.example.com/health', $request->uri);
     }
 
     public function testFromGlobalsDefaultsMethodToGetWhenAbsent(): void
@@ -346,6 +406,21 @@ final class RequestTest extends TestCase
                 'CONTENT_TYPE'   => 'application/json',
             ],
             rawBody: '',
+        );
+
+        self::assertSame([], $request->parsedBody);
+    }
+
+    public function testFromGlobalsInvalidJsonBodyReturnsEmptyParsedBody(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/items',
+                'CONTENT_TYPE'   => 'application/json',
+            ],
+            rawBody: '{"title":"broken"',
         );
 
         self::assertSame([], $request->parsedBody);
@@ -477,6 +552,22 @@ final class RequestTest extends TestCase
 
         // Header wins over body field
         self::assertSame('DELETE', $request->method);
+    }
+
+    public function testFromGlobalsIgnoresUnsupportedMethodOverride(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'              => 'POST',
+                'HTTP_HOST'                   => 'example.com',
+                'REQUEST_URI'                 => '/items/1',
+                'CONTENT_TYPE'                => 'application/x-www-form-urlencoded',
+                'HTTP_X_HTTP_METHOD_OVERRIDE' => 'TRACE',
+            ],
+            post: ['_method' => 'OPTIONS'],
+        );
+
+        self::assertSame('POST', $request->method);
     }
 
     public function testFromGlobalsMethodOverrideIgnoredForNonPostRequests(): void
