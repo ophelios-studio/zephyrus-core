@@ -67,9 +67,37 @@ final class FilterRequest implements \JsonSerializable
                 continue;
             }
 
-            $paramName = 'f_' . $key;
-            $parts[] = sprintf('%s = :%s', $columnMap[$key], $paramName);
-            $params[':' . $paramName] = $value;
+            $column = $columnMap[$key];
+            $baseParamName = $this->normalizeParameterName($key);
+
+            if ($value === null) {
+                $parts[] = sprintf('%s IS NULL', $column);
+                continue;
+            }
+
+            if (is_array($value)) {
+                $listValues = array_values(array_filter($value, static fn (mixed $item): bool => !is_array($item)));
+
+                if ($listValues === []) {
+                    $parts[] = '1 = 0';
+                    continue;
+                }
+
+                $placeholders = [];
+                foreach ($listValues as $index => $item) {
+                    $paramName = sprintf('%s_%d', $baseParamName, $index);
+                    $placeholder = ':' . $paramName;
+                    $placeholders[] = $placeholder;
+                    $params[$placeholder] = $item;
+                }
+
+                $parts[] = sprintf('%s IN (%s)', $column, implode(', ', $placeholders));
+                continue;
+            }
+
+            $placeholder = ':' . $baseParamName;
+            $parts[] = sprintf('%s = %s', $column, $placeholder);
+            $params[$placeholder] = $value;
         }
 
         if ($parts === []) {
@@ -80,6 +108,18 @@ final class FilterRequest implements \JsonSerializable
             'sql' => ' WHERE ' . implode(' AND ', $parts),
             'params' => $params,
         ];
+    }
+
+    private function normalizeParameterName(string $key): string
+    {
+        $normalized = preg_replace('/[^a-zA-Z0-9_]/', '_', $key) ?? '';
+        $normalized = trim($normalized, '_');
+
+        if ($normalized === '') {
+            return 'f_filter';
+        }
+
+        return 'f_' . $normalized;
     }
 
     /** @return array<string, mixed> */

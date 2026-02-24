@@ -52,6 +52,65 @@ final class FilterRequestTest extends TestCase
         self::assertSame([':f_status' => 'active'], $where['params']);
     }
 
+    public function testToWhereClauseBuildsInClauseForArrayValues(): void
+    {
+        $filter = new FilterRequest([
+            'status' => ['active', 'pending'],
+        ]);
+
+        $where = $filter->toWhereClause([
+            'status' => 'users.status',
+        ]);
+
+        self::assertSame(' WHERE users.status IN (:f_status_0, :f_status_1)', $where['sql']);
+        self::assertSame([
+            ':f_status_0' => 'active',
+            ':f_status_1' => 'pending',
+        ], $where['params']);
+    }
+
+    public function testToWhereClauseBuildsIsNullForNullValues(): void
+    {
+        $filter = new FilterRequest([
+            'deleted_at' => null,
+        ]);
+
+        $where = $filter->toWhereClause([
+            'deleted_at' => 'users.deleted_at',
+        ]);
+
+        self::assertSame(' WHERE users.deleted_at IS NULL', $where['sql']);
+        self::assertSame([], $where['params']);
+    }
+
+    public function testToWhereClauseUsesFalseConditionForEmptyArrayList(): void
+    {
+        $filter = new FilterRequest([
+            'status' => [],
+        ]);
+
+        $where = $filter->toWhereClause([
+            'status' => 'users.status',
+        ]);
+
+        self::assertSame(' WHERE 1 = 0', $where['sql']);
+        self::assertSame([], $where['params']);
+    }
+
+    public function testToWhereClauseNormalizesParameterNamesForUnsafeKeys(): void
+    {
+        $filter = new FilterRequest([
+            'user.status' => 'active',
+        ]);
+
+        $where = $filter->toWhereClause([
+            'user.status' => 'users.status',
+        ]);
+
+        self::assertSame(' WHERE users.status = :f_user_status', $where['sql']);
+        self::assertSame([':f_user_status' => 'active'], $where['params']);
+    }
+
     public function testToWhereClauseReturnsEmptyForNoConditions(): void
     {
         $filter = new FilterRequest();
