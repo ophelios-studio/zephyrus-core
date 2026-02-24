@@ -1458,7 +1458,7 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid ISO currency code.', Rules::currencyCode()->errorMessage());
     }
 
-    // ---- cardNumber / cardCvv / nonEmptyString / inCaseInsensitive / jsonPointer ----
+    // ---- cardNumber / cardNumberLuhn / cardCvv / cardExpiry* / nonEmptyString / inCaseInsensitive / jsonPointer ----
 
     public function testCardNumberPassesAndFails(): void
     {
@@ -1488,6 +1488,50 @@ final class RulesTest extends TestCase
     public function testCardCvvDefaultMessage(): void
     {
         self::assertSame('Must be a valid card CVV.', Rules::cardCvv()->errorMessage());
+    }
+
+    public function testCardNumberLuhnPassesAndFails(): void
+    {
+        self::assertTrue(Rules::cardNumberLuhn()->test('4111111111111111'));
+        self::assertTrue(Rules::cardNumberLuhn()->test('4012 8888 8888 1881'));
+        self::assertFalse(Rules::cardNumberLuhn()->test('4111111111111112'));
+        self::assertFalse(Rules::cardNumberLuhn()->test('4111-1111'));
+        self::assertFalse(Rules::cardNumberLuhn()->test(null));
+    }
+
+    public function testCardNumberLuhnDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid card number.', Rules::cardNumberLuhn()->errorMessage());
+    }
+
+    public function testCardExpiryMmyyPassesAndFails(): void
+    {
+        self::assertTrue(Rules::cardExpiryMmyy()->test('01/30'));
+        self::assertTrue(Rules::cardExpiryMmyy()->test('12/99'));
+        self::assertFalse(Rules::cardExpiryMmyy()->test('00/30'));
+        self::assertFalse(Rules::cardExpiryMmyy()->test('13/30'));
+        self::assertFalse(Rules::cardExpiryMmyy()->test('1/30'));
+        self::assertFalse(Rules::cardExpiryMmyy()->test(null));
+    }
+
+    public function testCardExpiryMmyyDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid card expiry (MM/YY).', Rules::cardExpiryMmyy()->errorMessage());
+    }
+
+    public function testCardExpiryMmyyyyPassesAndFails(): void
+    {
+        self::assertTrue(Rules::cardExpiryMmyyyy()->test('01/2030'));
+        self::assertTrue(Rules::cardExpiryMmyyyy()->test('12/2099'));
+        self::assertFalse(Rules::cardExpiryMmyyyy()->test('00/2030'));
+        self::assertFalse(Rules::cardExpiryMmyyyy()->test('13/2030'));
+        self::assertFalse(Rules::cardExpiryMmyyyy()->test('01/30'));
+        self::assertFalse(Rules::cardExpiryMmyyyy()->test(null));
+    }
+
+    public function testCardExpiryMmyyyyDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid card expiry (MM/YYYY).', Rules::cardExpiryMmyyyy()->errorMessage());
     }
 
     public function testNonEmptyStringPassesAndFails(): void
