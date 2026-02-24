@@ -774,6 +774,52 @@ final class Rules
     }
 
     /**
+     * Validates ISO 3166-1 alpha-2 country codes.
+     */
+    public static function countryCode(string $message = 'Must be a valid ISO country code.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{2}$/', strtoupper($v)) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates ISO 4217 currency codes.
+     */
+    public static function currencyCode(string $message = 'Must be a valid ISO currency code.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{3}$/', strtoupper($v)) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates IBAN structure (basic format check).
+     */
+    public static function iban(string $message = 'Must be a valid IBAN format.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$/', strtoupper(str_replace(' ', '', $v))) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates BIC / SWIFT code format.
+     */
+    public static function bic(string $message = 'Must be a valid BIC/SWIFT code.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/', strtoupper($v)) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates latitude values in range [-90, 90].
      */
     public static function latitude(string $message = 'Must be a valid latitude.'): Rule
