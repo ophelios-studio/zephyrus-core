@@ -500,6 +500,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects wildcard/list ETag forms and malformed non-canonical date values.
 - Added focused unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation byte-range header rule
+- Added `Validation\Rules::byteRange()` for HTTP `Range` header byte-unit validation.
+- Supports canonical byte forms: `start-end`, `start-`, `-suffixLength`, and comma-separated multi-ranges.
+- Rejects non-byte units, malformed tokens, trailing separators, and reversed closed ranges.
+- Added focused unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
