@@ -1331,5 +1331,49 @@ final class Rules
         );
     }
 
+    /**
+     * Validates HTTP Range header values for byte ranges.
+     * Supports forms like `bytes=0-499`, `bytes=500-`, and `bytes=-500`.
+     */
+    public static function byteRange(string $message = 'Must be a valid byte range header.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || !str_starts_with($v, 'bytes=')) {
+                    return false;
+                }
+
+                $ranges = explode(',', substr($v, 6));
+                if ($ranges === [] || in_array('', array_map('trim', $ranges), true)) {
+                    return false;
+                }
+
+                foreach ($ranges as $range) {
+                    $range = trim($range);
+
+                    if (preg_match('/^(\d+)-(\d+)$/', $range, $m) === 1) {
+                        if ((int) $m[1] > (int) $m[2]) {
+                            return false;
+                        }
+                        continue;
+                    }
+
+                    if (preg_match('/^\d+-$/', $range) === 1) {
+                        continue;
+                    }
+
+                    if (preg_match('/^-\d+$/', $range) === 1) {
+                        continue;
+                    }
+
+                    return false;
+                }
+
+                return true;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }
