@@ -1284,4 +1284,30 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid HTTP ETag.', Rules::etag()->errorMessage());
     }
+
+    // ---- ifNoneMatch ----
+
+    public function testIfNoneMatchPassesWildcardAndEtagLists(): void
+    {
+        self::assertTrue(Rules::ifNoneMatch()->test('*'));
+        self::assertTrue(Rules::ifNoneMatch()->test('"abc"'));
+        self::assertTrue(Rules::ifNoneMatch()->test('W/"abc"'));
+        self::assertTrue(Rules::ifNoneMatch()->test('"abc", "def"'));
+        self::assertTrue(Rules::ifNoneMatch()->test('W/"abc", "def", W/"ghi"'));
+    }
+
+    public function testIfNoneMatchFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::ifNoneMatch()->test(''));
+        self::assertFalse(Rules::ifNoneMatch()->test('*, "abc"'));
+        self::assertFalse(Rules::ifNoneMatch()->test('"abc",'));
+        self::assertFalse(Rules::ifNoneMatch()->test(',"abc"'));
+        self::assertFalse(Rules::ifNoneMatch()->test('abc'));
+        self::assertFalse(Rules::ifNoneMatch()->test(null));
+    }
+
+    public function testIfNoneMatchDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid If-None-Match header.', Rules::ifNoneMatch()->errorMessage());
+    }
 }

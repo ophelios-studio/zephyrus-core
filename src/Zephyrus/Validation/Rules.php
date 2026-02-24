@@ -854,5 +854,38 @@ final class Rules
         );
     }
 
+    /**
+     * Validates an If-None-Match header value (`*` or comma-separated ETags).
+     */
+    public static function ifNoneMatch(string $message = 'Must be a valid If-None-Match header.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                if ($v === '*') {
+                    return true;
+                }
+
+                $parts = array_map('trim', explode(',', $v));
+                if ($parts === [] || in_array('', $parts, true)) {
+                    return false;
+                }
+
+                $etag = self::etag();
+                foreach ($parts as $part) {
+                    if (!$etag->test($part)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }
