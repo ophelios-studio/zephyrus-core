@@ -818,6 +818,41 @@ final class Rules
     }
 
     /**
+     * Validates locale tags in language_REGION form (e.g. en_CA).
+     */
+    public static function locale(string $message = 'Must be a valid locale (e.g. en_CA).'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[a-z]{2}_[A-Z]{2}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates UUID versions 1-5.
+     */
+    public static function uuidV1toV5(string $message = 'Must be a valid UUID v1-v5.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates UUID version 4.
+     */
+    public static function uuidV4(string $message = 'Must be a valid UUID v4.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates ISO 4217 currency codes.
      */
     public static function currencyCode(string $message = 'Must be a valid ISO currency code.'): Rule
@@ -848,6 +883,39 @@ final class Rules
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
                 && preg_match('/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/', strtoupper($v)) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates payment card number shape (12-19 digits, spaces/hyphens allowed).
+     */
+    public static function cardNumber(string $message = 'Must be a valid card number format.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                $digits = preg_replace('/[\s-]+/', '', $v);
+                if (!is_string($digits)) {
+                    return false;
+                }
+
+                return preg_match('/^\d{12,19}$/', $digits) === 1;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates CVV/CVC shape (3 or 4 digits).
+     */
+    public static function cardCvv(string $message = 'Must be a valid card CVV.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^\d{3,4}$/', $v) === 1,
             $message,
         );
     }
