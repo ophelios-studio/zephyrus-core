@@ -6,7 +6,7 @@ namespace Zephyrus\Tests\Unit\Http;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
-use Zephyrus\Uploader\UploadedFile;
+use Zephyrus\Upload\FileUpload;
 
 final class RequestTest extends TestCase
 {
@@ -108,9 +108,9 @@ final class RequestTest extends TestCase
         self::assertSame(7, $updated->attribute('userId'));
     }
 
-    public function testFromArrayProvidesUploadedFileHelper(): void
+    public function testFromArrayProvidesFileUploadHelper(): void
     {
-        $file = new UploadedFile('avatar', 'me.png', 'image/png', '/tmp/phpA', 123);
+        $file = new FileUpload('me.png', 'image/png', '/tmp/phpA', 123);
         $request = Request::fromArray('POST', '/profile', files: ['avatar' => $file]);
 
         self::assertSame($file, $request->file('avatar'));
@@ -635,9 +635,9 @@ final class RequestTest extends TestCase
 
         $file = $request->file('avatar');
 
-        self::assertInstanceOf(UploadedFile::class, $file);
+        self::assertInstanceOf(FileUpload::class, $file);
         self::assertSame('my-photo.JPG', $file->originalName);
-        self::assertSame('jpg', $file->clientExtension());
+        self::assertSame('jpg', $file->extension());
         self::assertSame('/tmp/php-upload', $file->tmpPath);
     }
 
