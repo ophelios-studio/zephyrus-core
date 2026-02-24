@@ -256,6 +256,39 @@ final class Rules
     }
 
     /**
+     * Validates 24-hour time strings (HH:MM).
+     */
+    public static function time24(string $message = 'Must be a valid 24-hour time (HH:MM).'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates E.164 phone number format.
+     */
+    public static function phoneE164(string $message = 'Must be a valid E.164 phone number.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^\+[1-9]\d{1,14}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates simple postal/ZIP code shapes (alphanumeric + space/hyphen).
+     */
+    public static function postalCode(string $message = 'Must be a valid postal code.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9][A-Za-z0-9\- ]{1,11}[A-Za-z0-9]$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates that an array has at least $min items.
      */
     public static function countMin(int $min, string $message = ''): Rule

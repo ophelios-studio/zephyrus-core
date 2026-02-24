@@ -507,6 +507,53 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid timezone identifier.', Rules::timezone()->errorMessage());
     }
 
+    // ---- time24 / phoneE164 / postalCode ----
+
+    public function testTime24PassesAndFails(): void
+    {
+        self::assertTrue(Rules::time24()->test('00:00'));
+        self::assertTrue(Rules::time24()->test('23:59'));
+        self::assertFalse(Rules::time24()->test('24:00'));
+        self::assertFalse(Rules::time24()->test('9:30'));
+        self::assertFalse(Rules::time24()->test(null));
+    }
+
+    public function testTime24DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid 24-hour time (HH:MM).', Rules::time24()->errorMessage());
+    }
+
+    public function testPhoneE164PassesAndFails(): void
+    {
+        self::assertTrue(Rules::phoneE164()->test('+14165551234'));
+        self::assertTrue(Rules::phoneE164()->test('+442071838750'));
+        self::assertFalse(Rules::phoneE164()->test('14165551234'));
+        self::assertFalse(Rules::phoneE164()->test('+0123456789'));
+        self::assertFalse(Rules::phoneE164()->test('+1(416)555-1234'));
+        self::assertFalse(Rules::phoneE164()->test(null));
+    }
+
+    public function testPhoneE164DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid E.164 phone number.', Rules::phoneE164()->errorMessage());
+    }
+
+    public function testPostalCodePassesAndFails(): void
+    {
+        self::assertTrue(Rules::postalCode()->test('H2B 1X9'));
+        self::assertTrue(Rules::postalCode()->test('90210'));
+        self::assertTrue(Rules::postalCode()->test('SW1A-1AA'));
+        self::assertFalse(Rules::postalCode()->test('A'));
+        self::assertFalse(Rules::postalCode()->test(' 90210'));
+        self::assertFalse(Rules::postalCode()->test('zip_code!'));
+        self::assertFalse(Rules::postalCode()->test(null));
+    }
+
+    public function testPostalCodeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid postal code.', Rules::postalCode()->errorMessage());
+    }
+
     // ---- countMin / countMax ----
 
     public function testCountMinPasses(): void
