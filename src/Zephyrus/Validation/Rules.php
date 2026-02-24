@@ -1213,5 +1213,13 @@ final class Rules
         return self::httpDate($message);
     }
 
+    /**
+     * Validates an If-Unmodified-Since header value.
+     */
+    public static function ifUnmodifiedSince(string $message = 'Must be a valid If-Unmodified-Since header.'): Rule
+    {
+        return self::httpDate($message);
+    }
+
     private function __construct() {}
 }

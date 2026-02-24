@@ -489,6 +489,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Reuses HTTP-date validation semantics while exposing an explicit API contract for cache-conditional request fields.
 - Added focused unit coverage for valid date pass, malformed failures, and default-message behavior.
 
+## Implemented Slice: Validation If-Unmodified-Since header rule
+- Added `Validation\Rules::ifUnmodifiedSince()` as a dedicated precondition-header validator.
+- Reuses HTTP-date validation semantics while exposing explicit API coverage for optimistic concurrency date checks.
+- Added focused unit coverage for valid date pass, malformed failures, and default-message behavior.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
