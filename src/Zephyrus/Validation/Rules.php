@@ -689,6 +689,47 @@ final class Rules
     }
 
     /**
+     * Validates a single filesystem/web path segment.
+     */
+    public static function pathSegment(string $message = 'Must be a valid path segment.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && $v !== ''
+                && !str_contains($v, '/')
+                && !str_contains($v, "\\")
+                && $v !== '.'
+                && $v !== '..'
+                && preg_match('/^[A-Za-z0-9._-]+$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates a safe filename (no directory separators or traversal markers).
+     */
+    public static function safeFilename(string $message = 'Must be a safe filename.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/', $v) === 1
+                && !str_contains($v, '..'),
+            $message,
+        );
+    }
+
+    /**
+     * Validates file extension tokens (without dot).
+     */
+    public static function fileExtension(string $message = 'Must be a valid file extension.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Za-z0-9]{1,10}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a URL query string without the leading '?'.
      */
     public static function queryString(string $message = 'Must be a valid query string.'): Rule
