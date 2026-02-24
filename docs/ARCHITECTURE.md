@@ -526,6 +526,14 @@ $router->group('/api/v1', fn ($r) => $r
   - Graceful miss behavior returning the key itself when unresolved in all catalogs.
 - Added test fixtures and unit coverage (`JsonLocaleLoaderTest`, `TranslatorTest`) validating flattening, fallback semantics, interpolation, and invalid JSON handling.
 
+## Implemented Slice: Application bootstrap localization integration (Phase 1)
+- Updated `public/index.php` bootstrap skeleton to wire localization end-to-end:
+  - Added `JsonLocaleLoader` + `Translator` startup wiring (`resources/lang`, default locale `en`).
+  - Added `LocaleMiddleware` to derive request locale from `Accept-Language` and hydrate `Request` attributes.
+  - Added `KernelBuilder::withControllerFactory(...)` usage so controllers receive shared translator dependencies.
+- Bootstrap example controllers now consume localization in request flow (`HealthController` localized `health.message` payload).
+- Added bootstrap integration fixtures and tests proving locale-aware behavior in both default (`en`) and negotiated (`fr`) paths.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
