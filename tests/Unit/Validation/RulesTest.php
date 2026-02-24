@@ -1370,4 +1370,30 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid If-None-Match header.', Rules::ifNoneMatch()->errorMessage());
     }
+
+    // ---- ifMatch ----
+
+    public function testIfMatchPassesWildcardAndEtagLists(): void
+    {
+        self::assertTrue(Rules::ifMatch()->test('*'));
+        self::assertTrue(Rules::ifMatch()->test('"abc"'));
+        self::assertTrue(Rules::ifMatch()->test('W/"abc"'));
+        self::assertTrue(Rules::ifMatch()->test('"abc", "def"'));
+        self::assertTrue(Rules::ifMatch()->test('W/"abc", "def", W/"ghi"'));
+    }
+
+    public function testIfMatchFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::ifMatch()->test(''));
+        self::assertFalse(Rules::ifMatch()->test('*, "abc"'));
+        self::assertFalse(Rules::ifMatch()->test('"abc",'));
+        self::assertFalse(Rules::ifMatch()->test(',"abc"'));
+        self::assertFalse(Rules::ifMatch()->test('abc'));
+        self::assertFalse(Rules::ifMatch()->test(null));
+    }
+
+    public function testIfMatchDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid If-Match header.', Rules::ifMatch()->errorMessage());
+    }
 }
