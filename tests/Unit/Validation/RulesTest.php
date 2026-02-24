@@ -1224,6 +1224,66 @@ final class RulesTest extends TestCase
         );
     }
 
+    // ---- countryCode / currencyCode ----
+
+    public function testCountryCodePassesAndFails(): void
+    {
+        self::assertTrue(Rules::countryCode()->test('CA'));
+        self::assertTrue(Rules::countryCode()->test('us'));
+        self::assertFalse(Rules::countryCode()->test('CAN'));
+        self::assertFalse(Rules::countryCode()->test('C1'));
+        self::assertFalse(Rules::countryCode()->test(null));
+    }
+
+    public function testCountryCodeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid ISO country code.', Rules::countryCode()->errorMessage());
+    }
+
+    public function testCurrencyCodePassesAndFails(): void
+    {
+        self::assertTrue(Rules::currencyCode()->test('CAD'));
+        self::assertTrue(Rules::currencyCode()->test('usd'));
+        self::assertFalse(Rules::currencyCode()->test('US'));
+        self::assertFalse(Rules::currencyCode()->test('US1'));
+        self::assertFalse(Rules::currencyCode()->test(null));
+    }
+
+    public function testCurrencyCodeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid ISO currency code.', Rules::currencyCode()->errorMessage());
+    }
+
+    // ---- iban / bic ----
+
+    public function testIbanPassesAndFailsBasicStructure(): void
+    {
+        self::assertTrue(Rules::iban()->test('GB82 WEST 1234 5698 7654 32'));
+        self::assertTrue(Rules::iban()->test('DE89370400440532013000'));
+        self::assertFalse(Rules::iban()->test('GB82')); // too short
+        self::assertFalse(Rules::iban()->test('ZZ!!INVALID123'));
+        self::assertFalse(Rules::iban()->test(null));
+    }
+
+    public function testIbanDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid IBAN format.', Rules::iban()->errorMessage());
+    }
+
+    public function testBicPassesAndFails(): void
+    {
+        self::assertTrue(Rules::bic()->test('DEUTDEFF'));
+        self::assertTrue(Rules::bic()->test('NEDSZAJJXXX'));
+        self::assertFalse(Rules::bic()->test('DEUTDE')); // too short
+        self::assertFalse(Rules::bic()->test('DEUTDEFF!'));
+        self::assertFalse(Rules::bic()->test(null));
+    }
+
+    public function testBicDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid BIC/SWIFT code.', Rules::bic()->errorMessage());
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
