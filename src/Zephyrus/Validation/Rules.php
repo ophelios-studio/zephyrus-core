@@ -944,6 +944,57 @@ final class Rules
     }
 
     /**
+     * Validates non-empty, non-whitespace-only strings.
+     */
+    public static function nonEmptyString(string $message = 'Must be a non-empty string.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && trim($v) !== '',
+            $message,
+        );
+    }
+
+    /**
+     * Validates membership in a case-insensitive string allowlist.
+     *
+     * @param array<int, string> $values
+     */
+    public static function inCaseInsensitive(array $values, string $message = 'Must be one of the allowed values.'): Rule
+    {
+        $normalized = array_map(static fn (string $v): string => mb_strtolower($v), $values);
+
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && in_array(mb_strtolower($v), $normalized, true),
+            $message,
+        );
+    }
+
+    /**
+     * Validates JSON Pointer format (RFC 6901 basic shape).
+     */
+    public static function jsonPointer(string $message = 'Must be a valid JSON Pointer.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                if ($v === '') {
+                    return true;
+                }
+
+                if (!str_starts_with($v, '/')) {
+                    return false;
+                }
+
+                return preg_match('/^(?:\/(?:[^~\/]|~0|~1)*)+$/', $v) === 1;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates latitude values in range [-90, 90].
      */
     public static function latitude(string $message = 'Must be a valid latitude.'): Rule
