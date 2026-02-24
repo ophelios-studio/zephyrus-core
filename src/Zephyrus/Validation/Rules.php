@@ -773,5 +773,86 @@ final class Rules
         );
     }
 
+    /**
+     * Validates latitude values in range [-90, 90].
+     */
+    public static function latitude(string $message = 'Must be a valid latitude.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (is_string($v) && is_numeric($v)) {
+                    $v = (float) $v;
+                }
+
+                return (is_float($v) || is_int($v)) && $v >= -90 && $v <= 90;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates longitude values in range [-180, 180].
+     */
+    public static function longitude(string $message = 'Must be a valid longitude.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (is_string($v) && is_numeric($v)) {
+                    $v = (float) $v;
+                }
+
+                return (is_float($v) || is_int($v)) && $v >= -180 && $v <= 180;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates Unix timestamps in seconds (non-negative integer).
+     */
+    public static function unixTimestamp(string $message = 'Must be a valid Unix timestamp.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (is_string($v) && ctype_digit($v)) {
+                    $v = (int) $v;
+                }
+
+                return is_int($v) && $v >= 0;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates epoch milliseconds (non-negative integer).
+     */
+    public static function epochMilliseconds(string $message = 'Must be a valid epoch-milliseconds value.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (is_string($v) && ctype_digit($v)) {
+                    $v = (int) $v;
+                }
+
+                return is_int($v) && $v >= 0;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates an HTTP ETag value (RFC 7232).
+     * Accepts strong ETags ("abc") and weak ETags (W/"abc").
+     * The opaque tag may be empty or any sequence of visible ASCII except '"'.
+     */
+    public static function etag(string $message = 'Must be a valid HTTP ETag.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^(?:W\/)?"[\x21\x23-\x7E]*"$/', $v) === 1,
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

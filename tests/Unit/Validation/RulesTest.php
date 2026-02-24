@@ -1159,6 +1159,71 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid JWT token format.', Rules::jwt()->errorMessage());
     }
 
+    // ---- latitude / longitude ----
+
+    public function testLatitudePassesAndFails(): void
+    {
+        self::assertTrue(Rules::latitude()->test(45.5));
+        self::assertTrue(Rules::latitude()->test('-90'));
+        self::assertTrue(Rules::latitude()->test(90));
+        self::assertFalse(Rules::latitude()->test(-90.1));
+        self::assertFalse(Rules::latitude()->test(90.1));
+        self::assertFalse(Rules::latitude()->test('north'));
+    }
+
+    public function testLatitudeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid latitude.', Rules::latitude()->errorMessage());
+    }
+
+    public function testLongitudePassesAndFails(): void
+    {
+        self::assertTrue(Rules::longitude()->test(0));
+        self::assertTrue(Rules::longitude()->test('180'));
+        self::assertTrue(Rules::longitude()->test(-180));
+        self::assertFalse(Rules::longitude()->test(180.1));
+        self::assertFalse(Rules::longitude()->test(-180.1));
+        self::assertFalse(Rules::longitude()->test('west'));
+    }
+
+    public function testLongitudeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid longitude.', Rules::longitude()->errorMessage());
+    }
+
+    // ---- unixTimestamp / epochMilliseconds ----
+
+    public function testUnixTimestampPassesAndFails(): void
+    {
+        self::assertTrue(Rules::unixTimestamp()->test(0));
+        self::assertTrue(Rules::unixTimestamp()->test('1700000000'));
+        self::assertFalse(Rules::unixTimestamp()->test(-1));
+        self::assertFalse(Rules::unixTimestamp()->test('12.34'));
+        self::assertFalse(Rules::unixTimestamp()->test('now'));
+    }
+
+    public function testUnixTimestampDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid Unix timestamp.', Rules::unixTimestamp()->errorMessage());
+    }
+
+    public function testEpochMillisecondsPassesAndFails(): void
+    {
+        self::assertTrue(Rules::epochMilliseconds()->test(1700000000000));
+        self::assertTrue(Rules::epochMilliseconds()->test('1700000000000'));
+        self::assertFalse(Rules::epochMilliseconds()->test(-1000));
+        self::assertFalse(Rules::epochMilliseconds()->test('1700ms'));
+        self::assertFalse(Rules::epochMilliseconds()->test(null));
+    }
+
+    public function testEpochMillisecondsDefaultMessage(): void
+    {
+        self::assertSame(
+            'Must be a valid epoch-milliseconds value.',
+            Rules::epochMilliseconds()->errorMessage(),
+        );
+    }
+
     // ---- hostPort ----
 
     public function testHostPortPassesValidEndpoints(): void
@@ -1182,5 +1247,41 @@ final class RulesTest extends TestCase
     public function testHostPortDefaultMessage(): void
     {
         self::assertSame('Must be a valid host:port endpoint.', Rules::hostPort()->errorMessage());
+    }
+
+    // ---- etag ----
+
+    public function testEtagPassesStrongEtags(): void
+    {
+        self::assertTrue(Rules::etag()->test('"abc"'));
+        self::assertTrue(Rules::etag()->test('"abc-def_123"'));
+        self::assertTrue(Rules::etag()->test('"v1.2.3+build"'));
+        self::assertTrue(Rules::etag()->test('""')); // empty opaque tag is valid per RFC 7232
+    }
+
+    public function testEtagPassesWeakEtags(): void
+    {
+        self::assertTrue(Rules::etag()->test('W/"abc"'));
+        self::assertTrue(Rules::etag()->test('W/""'));
+        self::assertTrue(Rules::etag()->test('W/"v1.2.3"'));
+    }
+
+    public function testEtagFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::etag()->test('abc'));           // missing quotes
+        self::assertFalse(Rules::etag()->test('"abc'));          // unclosed quote
+        self::assertFalse(Rules::etag()->test('abc"'));          // no opening quote
+        self::assertFalse(Rules::etag()->test('w/"abc"'));       // lowercase w is invalid
+        self::assertFalse(Rules::etag()->test('W/abc'));         // weak without quotes
+        self::assertFalse(Rules::etag()->test('"ab"c"'));        // quote inside opaque tag
+        self::assertFalse(Rules::etag()->test('"abc" '));        // trailing space
+        self::assertFalse(Rules::etag()->test(''));
+        self::assertFalse(Rules::etag()->test(null));
+        self::assertFalse(Rules::etag()->test(42));
+    }
+
+    public function testEtagDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP ETag.', Rules::etag()->errorMessage());
     }
 }
