@@ -466,6 +466,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects bare values (no quotes), lowercase weak prefix (`w/`), embedded quotes, and trailing whitespace.
 - Added unit coverage for strong pass, weak pass, malformed input failures, and default message path.
 
+## Implemented Slice: Validation If-None-Match header rule
+- Added `Validation\Rules::ifNoneMatch()` for conditional request header values.
+- Accepts wildcard `*` or comma-separated lists of valid ETags (strong and weak forms).
+- Rejects malformed list structure (empty items, trailing commas, invalid tokens) and non-string input.
+- Added focused unit coverage for wildcard/list pass cases, malformed failures, and default message.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
