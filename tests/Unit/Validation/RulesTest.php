@@ -1786,4 +1786,27 @@ final class RulesTest extends TestCase
             Rules::ifUnmodifiedSince()->errorMessage(),
         );
     }
+
+    // ---- ifRange ----
+
+    public function testIfRangePassesHttpDateOrSingleEtag(): void
+    {
+        self::assertTrue(Rules::ifRange()->test('Mon, 23 Feb 2026 20:31:00 GMT'));
+        self::assertTrue(Rules::ifRange()->test('"abc"'));
+        self::assertTrue(Rules::ifRange()->test('W/"abc"'));
+    }
+
+    public function testIfRangeFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::ifRange()->test(''));
+        self::assertFalse(Rules::ifRange()->test('Mon, 23 Feb 2026 20:31:00 UTC'));
+        self::assertFalse(Rules::ifRange()->test('"abc", "def"'));
+        self::assertFalse(Rules::ifRange()->test('*'));
+        self::assertFalse(Rules::ifRange()->test(null));
+    }
+
+    public function testIfRangeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid If-Range header.', Rules::ifRange()->errorMessage());
+    }
 }

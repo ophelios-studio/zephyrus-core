@@ -1279,5 +1279,16 @@ final class Rules
         return self::httpDate($message);
     }
 
+    /**
+     * Validates an If-Range header value (HTTP-date or single ETag).
+     */
+    public static function ifRange(string $message = 'Must be a valid If-Range header.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => self::httpDate()->test($v) || self::etag()->test($v),
+            $message,
+        );
+    }
+
     private function __construct() {}
 }
