@@ -1271,6 +1271,49 @@ final class RulesTest extends TestCase
         );
     }
 
+    // ---- locale / uuidV1toV5 / uuidV4 ----
+
+    public function testLocalePassesAndFails(): void
+    {
+        self::assertTrue(Rules::locale()->test('en_CA'));
+        self::assertTrue(Rules::locale()->test('fr_FR'));
+        self::assertFalse(Rules::locale()->test('en-CA'));
+        self::assertFalse(Rules::locale()->test('english_CA'));
+        self::assertFalse(Rules::locale()->test(null));
+    }
+
+    public function testLocaleDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid locale (e.g. en_CA).', Rules::locale()->errorMessage());
+    }
+
+    public function testUuidV1toV5PassesAndFails(): void
+    {
+        self::assertTrue(Rules::uuidV1toV5()->test('550e8400-e29b-41d4-a716-446655440000'));
+        self::assertTrue(Rules::uuidV1toV5()->test('6ba7b810-9dad-11d1-80b4-00c04fd430c8'));
+        self::assertFalse(Rules::uuidV1toV5()->test('550e8400-e29b-61d4-a716-446655440000'));
+        self::assertFalse(Rules::uuidV1toV5()->test('not-a-uuid'));
+        self::assertFalse(Rules::uuidV1toV5()->test(null));
+    }
+
+    public function testUuidV1toV5DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid UUID v1-v5.', Rules::uuidV1toV5()->errorMessage());
+    }
+
+    public function testUuidV4PassesAndFails(): void
+    {
+        self::assertTrue(Rules::uuidV4()->test('550e8400-e29b-41d4-a716-446655440000'));
+        self::assertFalse(Rules::uuidV4()->test('6ba7b810-9dad-11d1-80b4-00c04fd430c8'));
+        self::assertFalse(Rules::uuidV4()->test('550e8400-e29b-61d4-a716-446655440000'));
+        self::assertFalse(Rules::uuidV4()->test(null));
+    }
+
+    public function testUuidV4DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid UUID v4.', Rules::uuidV4()->errorMessage());
+    }
+
     // ---- countryCode / currencyCode ----
 
     public function testCountryCodePassesAndFails(): void
@@ -1299,6 +1342,38 @@ final class RulesTest extends TestCase
     public function testCurrencyCodeDefaultMessage(): void
     {
         self::assertSame('Must be a valid ISO currency code.', Rules::currencyCode()->errorMessage());
+    }
+
+    // ---- cardNumber / cardCvv ----
+
+    public function testCardNumberPassesAndFails(): void
+    {
+        self::assertTrue(Rules::cardNumber()->test('4111111111111111'));
+        self::assertTrue(Rules::cardNumber()->test('4111 1111 1111 1111'));
+        self::assertTrue(Rules::cardNumber()->test('4111-1111-1111-1111'));
+        self::assertFalse(Rules::cardNumber()->test('4111 1111')); // too short
+        self::assertFalse(Rules::cardNumber()->test('abcd-efgh-ijkl-mnop'));
+        self::assertFalse(Rules::cardNumber()->test(null));
+    }
+
+    public function testCardNumberDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid card number format.', Rules::cardNumber()->errorMessage());
+    }
+
+    public function testCardCvvPassesAndFails(): void
+    {
+        self::assertTrue(Rules::cardCvv()->test('123'));
+        self::assertTrue(Rules::cardCvv()->test('1234'));
+        self::assertFalse(Rules::cardCvv()->test('12'));
+        self::assertFalse(Rules::cardCvv()->test('12345'));
+        self::assertFalse(Rules::cardCvv()->test('12a'));
+        self::assertFalse(Rules::cardCvv()->test(null));
+    }
+
+    public function testCardCvvDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid card CVV.', Rules::cardCvv()->errorMessage());
     }
 
     // ---- iban / bic ----
