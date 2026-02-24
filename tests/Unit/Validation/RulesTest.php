@@ -1386,7 +1386,7 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid ISO currency code.', Rules::currencyCode()->errorMessage());
     }
 
-    // ---- cardNumber / cardCvv ----
+    // ---- cardNumber / cardCvv / nonEmptyString / inCaseInsensitive / jsonPointer ----
 
     public function testCardNumberPassesAndFails(): void
     {
@@ -1416,6 +1416,50 @@ final class RulesTest extends TestCase
     public function testCardCvvDefaultMessage(): void
     {
         self::assertSame('Must be a valid card CVV.', Rules::cardCvv()->errorMessage());
+    }
+
+    public function testNonEmptyStringPassesAndFails(): void
+    {
+        self::assertTrue(Rules::nonEmptyString()->test('hello'));
+        self::assertTrue(Rules::nonEmptyString()->test('  hello  '));
+        self::assertFalse(Rules::nonEmptyString()->test(''));
+        self::assertFalse(Rules::nonEmptyString()->test('   '));
+        self::assertFalse(Rules::nonEmptyString()->test(null));
+    }
+
+    public function testNonEmptyStringDefaultMessage(): void
+    {
+        self::assertSame('Must be a non-empty string.', Rules::nonEmptyString()->errorMessage());
+    }
+
+    public function testInCaseInsensitivePassesAndFails(): void
+    {
+        $rule = Rules::inCaseInsensitive(['GET', 'POST', 'PATCH']);
+
+        self::assertTrue($rule->test('get'));
+        self::assertTrue($rule->test('POST'));
+        self::assertFalse($rule->test('delete'));
+        self::assertFalse($rule->test(null));
+    }
+
+    public function testInCaseInsensitiveDefaultMessage(): void
+    {
+        self::assertSame('Must be one of the allowed values.', Rules::inCaseInsensitive(['a'])->errorMessage());
+    }
+
+    public function testJsonPointerPassesAndFails(): void
+    {
+        self::assertTrue(Rules::jsonPointer()->test(''));
+        self::assertTrue(Rules::jsonPointer()->test('/a/b'));
+        self::assertTrue(Rules::jsonPointer()->test('/a~1b/c~0d'));
+        self::assertFalse(Rules::jsonPointer()->test('a/b'));
+        self::assertFalse(Rules::jsonPointer()->test('/a/~2'));
+        self::assertFalse(Rules::jsonPointer()->test(null));
+    }
+
+    public function testJsonPointerDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid JSON Pointer.', Rules::jsonPointer()->errorMessage());
     }
 
     // ---- iban / bic ----
