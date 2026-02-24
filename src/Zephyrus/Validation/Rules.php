@@ -54,11 +54,36 @@ final class Rules
         );
     }
 
+    public static function integerString(string $message = 'Must be an integer string.'): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v) && preg_match('/^-?\d+$/', $v) === 1,
+            $message,
+        );
+    }
+
+    public static function decimalString(int $scale = 2, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_string($v)
+                && preg_match('/^-?\d+(?:\.\d{1,' . max(1, $scale) . '})?$/', $v) === 1,
+            $message ?: "Must be a decimal string with up to {$scale} decimal places.",
+        );
+    }
+
     public static function min(int|float $min, string $message = ''): Rule
     {
         return Rule::of(
             fn (mixed $v) => is_numeric($v) && (float) $v >= $min,
             $message ?: "Must be at least {$min}.",
+        );
+    }
+
+    public static function greaterThan(int|float $min, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_numeric($v) && (float) $v > $min,
+            $message ?: "Must be greater than {$min}.",
         );
     }
 
@@ -70,11 +95,27 @@ final class Rules
         );
     }
 
+    public static function lessThan(int|float $max, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_numeric($v) && (float) $v < $max,
+            $message ?: "Must be less than {$max}.",
+        );
+    }
+
     public static function between(int|float $min, int|float $max, string $message = ''): Rule
     {
         return Rule::of(
             fn (mixed $v) => is_numeric($v) && (float) $v >= $min && (float) $v <= $max,
             $message ?: "Must be between {$min} and {$max}.",
+        );
+    }
+
+    public static function betweenExclusive(int|float $min, int|float $max, string $message = ''): Rule
+    {
+        return Rule::of(
+            fn (mixed $v) => is_numeric($v) && (float) $v > $min && (float) $v < $max,
+            $message ?: "Must be strictly between {$min} and {$max}.",
         );
     }
 

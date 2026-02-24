@@ -139,6 +139,38 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::numeric()->test(null));
     }
 
+    public function testIntegerStringPassesAndFails(): void
+    {
+        self::assertTrue(Rules::integerString()->test('123'));
+        self::assertTrue(Rules::integerString()->test('-99'));
+        self::assertFalse(Rules::integerString()->test('12.3'));
+        self::assertFalse(Rules::integerString()->test(123));
+        self::assertFalse(Rules::integerString()->test(null));
+    }
+
+    public function testIntegerStringDefaultMessage(): void
+    {
+        self::assertSame('Must be an integer string.', Rules::integerString()->errorMessage());
+    }
+
+    public function testDecimalStringPassesAndFails(): void
+    {
+        self::assertTrue(Rules::decimalString(2)->test('123'));
+        self::assertTrue(Rules::decimalString(2)->test('123.4'));
+        self::assertTrue(Rules::decimalString(2)->test('-123.45'));
+        self::assertFalse(Rules::decimalString(2)->test('123.456'));
+        self::assertFalse(Rules::decimalString(2)->test('abc'));
+        self::assertFalse(Rules::decimalString(2)->test(123.45));
+    }
+
+    public function testDecimalStringDefaultMessage(): void
+    {
+        self::assertSame(
+            'Must be a decimal string with up to 2 decimal places.',
+            Rules::decimalString(2)->errorMessage(),
+        );
+    }
+
     // ---- min / max / between ----
 
     public function testMinPasses(): void
@@ -180,6 +212,46 @@ final class RulesTest extends TestCase
     public function testBetweenDefaultMessage(): void
     {
         self::assertSame('Must be between 1 and 10.', Rules::between(1, 10)->errorMessage());
+    }
+
+    public function testGreaterThanPassesAndFails(): void
+    {
+        self::assertTrue(Rules::greaterThan(10)->test(11));
+        self::assertFalse(Rules::greaterThan(10)->test(10));
+        self::assertFalse(Rules::greaterThan(10)->test('abc'));
+    }
+
+    public function testGreaterThanDefaultMessage(): void
+    {
+        self::assertSame('Must be greater than 10.', Rules::greaterThan(10)->errorMessage());
+    }
+
+    public function testLessThanPassesAndFails(): void
+    {
+        self::assertTrue(Rules::lessThan(10)->test(9));
+        self::assertFalse(Rules::lessThan(10)->test(10));
+        self::assertFalse(Rules::lessThan(10)->test('abc'));
+    }
+
+    public function testLessThanDefaultMessage(): void
+    {
+        self::assertSame('Must be less than 10.', Rules::lessThan(10)->errorMessage());
+    }
+
+    public function testBetweenExclusivePassesAndFails(): void
+    {
+        self::assertTrue(Rules::betweenExclusive(1, 10)->test(5));
+        self::assertFalse(Rules::betweenExclusive(1, 10)->test(1));
+        self::assertFalse(Rules::betweenExclusive(1, 10)->test(10));
+        self::assertFalse(Rules::betweenExclusive(1, 10)->test(0));
+    }
+
+    public function testBetweenExclusiveDefaultMessage(): void
+    {
+        self::assertSame(
+            'Must be strictly between 1 and 10.',
+            Rules::betweenExclusive(1, 10)->errorMessage(),
+        );
     }
 
     // ---- regex ----
