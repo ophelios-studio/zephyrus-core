@@ -1436,5 +1436,36 @@ final class Rules
         );
     }
 
+    /**
+     * Validates a Content-Range header value for byte units.
+     * Supports `bytes start-end/size` and the unsatisfied wildcard form.
+     */
+    public static function contentRange(string $message = 'Must be a valid Content-Range header.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || !str_starts_with($v, 'bytes ')) {
+                    return false;
+                }
+
+                $value = substr($v, 6);
+
+                if (preg_match('/^\*\/\d+$/', $value) === 1) {
+                    return true;
+                }
+
+                if (preg_match('/^(\d+)-(\d+)\/(\d+|\*)$/', $value, $m) !== 1) {
+                    return false;
+                }
+
+                $start = (int) $m[1];
+                $end = (int) $m[2];
+
+                return $start <= $end;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }
