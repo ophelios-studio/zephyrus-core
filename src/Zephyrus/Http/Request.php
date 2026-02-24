@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Http;
 
+use Zephyrus\Uploader\UploadedFile;
+
 final readonly class Request
 {
     /**
@@ -12,6 +14,7 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
+     * @param array<string, UploadedFile> $files
      */
     public function __construct(
         public string $method,
@@ -21,6 +24,7 @@ final readonly class Request
         public array $headers = [],
         public array $cookies = [],
         public array $attributes = [],
+        public array $files = [],
     ) {
     }
 
@@ -42,6 +46,7 @@ final readonly class Request
      * @param array<string, mixed>|null  $get
      * @param array<string, mixed>|null  $post
      * @param array<string, string>|null $cookie
+     * @param array<string, mixed>|null   $files
      * @param string|null                $rawBody  Injected for testing; defaults to php://input.
      */
     public static function fromGlobals(
@@ -49,12 +54,14 @@ final readonly class Request
         ?array $get = null,
         ?array $post = null,
         ?array $cookie = null,
+        ?array $files = null,
         ?string $rawBody = null,
     ): self {
         $server = $server ?? $_SERVER;
         $get    = $get    ?? $_GET;
         $post   = $post   ?? $_POST;
         $cookie = $cookie ?? $_COOKIE;
+        $files  = $files  ?? $_FILES;
 
         $method  = strtoupper($server['REQUEST_METHOD'] ?? 'GET');
         $headers = self::extractHeadersFromServer($server);
@@ -71,6 +78,7 @@ final readonly class Request
             headers:    $headers,
             cookies:    $cookie,
             attributes: [],
+            files:      self::normalizeUploadedFiles($files),
         );
     }
 
@@ -80,6 +88,7 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
+     * @param array<string, UploadedFile> $files
      */
     public static function fromArray(
         string $method,
@@ -89,6 +98,7 @@ final readonly class Request
         array $headers = [],
         array $cookies = [],
         array $attributes = [],
+        array $files = [],
     ): self {
         return new self(
             method:     strtoupper($method),
@@ -98,6 +108,7 @@ final readonly class Request
             headers:    self::normalizeHeaders($headers),
             cookies:    $cookies,
             attributes: $attributes,
+            files:      $files,
         );
     }
 
@@ -119,6 +130,11 @@ final readonly class Request
     public function cookie(string $name, ?string $default = null): ?string
     {
         return $this->cookies[$name] ?? $default;
+    }
+
+    public function file(string $field): ?UploadedFile
+    {
+        return $this->files[$field] ?? null;
     }
 
     public function path(): string
@@ -159,6 +175,7 @@ final readonly class Request
             headers:    $this->headers,
             cookies:    $this->cookies,
             attributes: $attributes,
+            files:      $this->files,
         );
     }
 
@@ -175,6 +192,7 @@ final readonly class Request
             headers:    $this->headers,
             cookies:    $this->cookies,
             attributes: $attributes,
+            files:      $this->files,
         );
     }
 
@@ -397,6 +415,29 @@ final readonly class Request
 
         return ($normalizedScheme === 'http' && $port === '80')
             || ($normalizedScheme === 'https' && $port === '443');
+    }
+
+    /**
+     * @param array<string, mixed> $files
+     * @return array<string, UploadedFile>
+     */
+    private static function normalizeUploadedFiles(array $files): array
+    {
+        $normalized = [];
+
+        foreach ($files as $field => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if (isset($entry['name']) && is_array($entry['name'])) {
+                continue;
+            }
+
+            $normalized[(string) $field] = UploadedFile::fromFilesArray((string) $field, $entry);
+        }
+
+        return $normalized;
     }
 
     /**

@@ -547,6 +547,14 @@ $router->group('/api/v1', fn ($r) => $r
 - Added `Uploader\UploadException` with typed failure factories for invalid shape, upload errors, directory creation failures, invalid filenames, source readability failures, and move failures.
 - Added focused unit coverage for file-array hydration, extension normalization, successful moves, auto-generated names, directory auto-creation, upload-error rejections, and filename traversal guards.
 
+## Implemented Slice: Request uploaded-files bridge (Phase 1)
+- Extended `Http\Request` with first-class uploaded-file support.
+- Added `files` payload on request construction and `file(field): ?UploadedFile` helper access.
+- Extended `Request::fromGlobals(...)` to accept and normalize `$_FILES`-style input into typed uploaded-file objects.
+- Single-file entries are hydrated; multi-file array shapes are currently skipped intentionally (safe baseline behavior).
+- `withAttribute(...)` and `withAttributes(...)` now preserve file payloads in immutable clones.
+- Added unit coverage in `RequestTest` for direct `fromArray` file access and `fromGlobals` file normalization paths.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
