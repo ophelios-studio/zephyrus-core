@@ -472,6 +472,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects malformed list structure (empty items, trailing commas, invalid tokens) and non-string input.
 - Added focused unit coverage for wildcard/list pass cases, malformed failures, and default message.
 
+## Implemented Slice: Validation If-Match header rule
+- Added `Validation\Rules::ifMatch()` for optimistic concurrency / precondition request handling.
+- Accepts wildcard `*` or comma-separated lists of valid ETags (strong and weak forms).
+- Rejects malformed list structure (empty items, trailing commas, invalid tokens) and non-string input.
+- Added focused unit coverage for wildcard/list pass cases, malformed failures, and default message.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
