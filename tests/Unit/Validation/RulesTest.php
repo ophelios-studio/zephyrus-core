@@ -1104,6 +1104,50 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid HTTP path.', Rules::httpPath()->errorMessage());
     }
 
+    // ---- pathSegment / safeFilename / fileExtension ----
+
+    public function testPathSegmentPassesAndFails(): void
+    {
+        self::assertTrue(Rules::pathSegment()->test('file-name_01.txt'));
+        self::assertFalse(Rules::pathSegment()->test('dir/file'));
+        self::assertFalse(Rules::pathSegment()->test('..'));
+        self::assertFalse(Rules::pathSegment()->test(''));
+        self::assertFalse(Rules::pathSegment()->test(null));
+    }
+
+    public function testPathSegmentDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid path segment.', Rules::pathSegment()->errorMessage());
+    }
+
+    public function testSafeFilenamePassesAndFails(): void
+    {
+        self::assertTrue(Rules::safeFilename()->test('report-2026_02.csv'));
+        self::assertFalse(Rules::safeFilename()->test('../secrets.txt'));
+        self::assertFalse(Rules::safeFilename()->test('bad/name.txt'));
+        self::assertFalse(Rules::safeFilename()->test('')); 
+        self::assertFalse(Rules::safeFilename()->test(null));
+    }
+
+    public function testSafeFilenameDefaultMessage(): void
+    {
+        self::assertSame('Must be a safe filename.', Rules::safeFilename()->errorMessage());
+    }
+
+    public function testFileExtensionPassesAndFails(): void
+    {
+        self::assertTrue(Rules::fileExtension()->test('json'));
+        self::assertTrue(Rules::fileExtension()->test('JPEG'));
+        self::assertFalse(Rules::fileExtension()->test('.json'));
+        self::assertFalse(Rules::fileExtension()->test('tar.gz'));
+        self::assertFalse(Rules::fileExtension()->test(null));
+    }
+
+    public function testFileExtensionDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid file extension.', Rules::fileExtension()->errorMessage());
+    }
+
     // ---- queryString ----
 
     public function testQueryStringPasses(): void
