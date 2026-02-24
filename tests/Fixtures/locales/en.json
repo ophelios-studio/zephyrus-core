@@ -1,7 +1,10 @@
 {
   "messages": {
     "welcome": "Welcome {name}",
-    "plain": "Hello"
+    "plain": "Hello",
+    "pipe_text": "Hello {name|upper} / {name|lower} / {name|title}",
+    "pipe_number": "Invoice total: {total|number:2}",
+    "pipe_unknown": "Value: {name|noop}"
   },
   "errors": {
     "required": "The {field} field is required"

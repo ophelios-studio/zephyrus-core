@@ -38,6 +38,47 @@ final class TranslatorTest extends TestCase
         self::assertSame('The email field is required', $translator->trans('errors.required', ['field' => 'email']));
     }
 
+    public function testFallsBackFromRegionalLocaleToLanguageLocale(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('Bonjour', $translator->trans('messages.plain', locale: 'fr-CA'));
+    }
+
+    public function testInterpolationSupportsTextPipes(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame(
+            'Hello ALICE / alice / Alice',
+            $translator->trans('messages.pipe_text', ['name' => 'alice']),
+        );
+    }
+
+    public function testInterpolationSupportsNumberPipeWithPrecision(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame(
+            'Invoice total: 12.35',
+            $translator->trans('messages.pipe_number', ['total' => 12.3456]),
+        );
+    }
+
+    public function testInterpolationLeavesUnknownParameterPlaceholderUntouched(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('Welcome {name}', $translator->trans('messages.welcome'));
+    }
+
+    public function testInterpolationIgnoresUnknownPipeName(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('Value: alice', $translator->trans('messages.pipe_unknown', ['name' => 'alice']));
+    }
+
     private function buildTranslator(): Translator
     {
         $loader = new JsonLocaleLoader(__DIR__ . '/../../Fixtures/locales');
