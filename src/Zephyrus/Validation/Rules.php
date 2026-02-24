@@ -999,5 +999,28 @@ final class Rules
         );
     }
 
+    /**
+     * Validates an HTTP-date (IMF-fixdate, e.g. Mon, 23 Feb 2026 20:31:00 GMT).
+     */
+    public static function httpDate(string $message = 'Must be a valid HTTP date.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                $date = \DateTimeImmutable::createFromFormat(
+                    'D, d M Y H:i:s \\G\\M\\T',
+                    $v,
+                    new \DateTimeZone('GMT'),
+                );
+
+                return $date !== false && $date->format('D, d M Y H:i:s \\G\\M\\T') === $v;
+            },
+            $message,
+        );
+    }
+
     private function __construct() {}
 }

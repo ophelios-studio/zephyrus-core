@@ -478,6 +478,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects malformed list structure (empty items, trailing commas, invalid tokens) and non-string input.
 - Added focused unit coverage for wildcard/list pass cases, malformed failures, and default message.
 
+## Implemented Slice: Validation HTTP-date rule
+- Added `Validation\Rules::httpDate()` for RFC 7231 IMF-fixdate validation.
+- Enforces canonical HTTP-date shape (`D, d M Y H:i:s GMT`) with GMT timezone marker.
+- Rejects malformed dates, non-canonical timezone tokens, and non-string input.
+- Added focused unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

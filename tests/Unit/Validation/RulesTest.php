@@ -1443,4 +1443,26 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid If-Match header.', Rules::ifMatch()->errorMessage());
     }
+
+    // ---- httpDate ----
+
+    public function testHttpDatePassesValidImfFixdate(): void
+    {
+        self::assertTrue(Rules::httpDate()->test('Mon, 23 Feb 2026 20:31:00 GMT'));
+        self::assertTrue(Rules::httpDate()->test('Sun, 01 Mar 2026 00:00:00 GMT'));
+    }
+
+    public function testHttpDateFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::httpDate()->test(''));
+        self::assertFalse(Rules::httpDate()->test('Mon, 23 Feb 2026 20:31:00 UTC'));
+        self::assertFalse(Rules::httpDate()->test('2026-02-23T20:31:00Z'));
+        self::assertFalse(Rules::httpDate()->test('Mon, 32 Feb 2026 20:31:00 GMT'));
+        self::assertFalse(Rules::httpDate()->test(null));
+    }
+
+    public function testHttpDateDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP date.', Rules::httpDate()->errorMessage());
+    }
 }
