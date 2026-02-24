@@ -1,0 +1,9 @@
+{
+  "messages": {
+    "welcome": "Welcome {name}",
+    "plain": "Hello"
+  },
+  "errors": {
+    "required": "The {field} field is required"
+  }
+}

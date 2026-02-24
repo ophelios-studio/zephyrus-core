@@ -512,6 +512,20 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects malformed units, reversed ranges, missing size sections, and invalid wildcard combinations.
 - Added focused unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Localization core seed (Phase 1)
+- Added `Localization\LocaleLoaderInterface` as the translation-catalog loading contract.
+- Added `Localization\JsonLocaleLoader` for locale-file loading from JSON catalogs (`<base>/<locale>.json`).
+- Loader behavior:
+  - Missing locale files return an empty catalog (safe optional locale behavior).
+  - Nested JSON objects are flattened into dot keys (`messages.welcome`).
+  - Invalid/unreadable JSON files throw typed `RuntimeException` failures.
+- Added `Localization\Translator` with core features:
+  - Locale lookup with configurable default locale.
+  - Fallback to default locale when key is missing in requested locale.
+  - Placeholder interpolation via `{name}` syntax.
+  - Graceful miss behavior returning the key itself when unresolved in all catalogs.
+- Added test fixtures and unit coverage (`JsonLocaleLoaderTest`, `TranslatorTest`) validating flattening, fallback semantics, interpolation, and invalid JSON handling.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
