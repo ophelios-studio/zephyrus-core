@@ -641,7 +641,7 @@ final class RequestTest extends TestCase
         self::assertSame('/tmp/php-upload', $file->tmpPath);
     }
 
-    public function testFromGlobalsSkipsMultiFileUploadArrayShape(): void
+    public function testFromGlobalsNormalizesMultiFileUploadArrayShape(): void
     {
         $request = Request::fromGlobals(
             server: [
@@ -660,7 +660,12 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertNull($request->file('photos'));
+        self::assertSame('/tmp/a', $request->file('photos')?->tmpPath);
+
+        $files = $request->filesOf('photos');
+        self::assertCount(2, $files);
+        self::assertSame('/tmp/a', $files[0]->tmpPath);
+        self::assertSame('/tmp/b', $files[1]->tmpPath);
     }
 
     // -------------------------------------------------------------------------
