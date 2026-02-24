@@ -534,6 +534,19 @@ $router->group('/api/v1', fn ($r) => $r
 - Bootstrap example controllers now consume localization in request flow (`HealthController` localized `health.message` payload).
 - Added bootstrap integration fixtures and tests proving locale-aware behavior in both default (`en`) and negotiated (`fr`) paths.
 
+## Implemented Slice: Uploader/FileUpload core seed (Phase 1)
+- Added `Uploader\UploadedFile` immutable value object representing a single uploaded file (field, original name, mime type, tmp path, size, error code).
+- Added `UploadedFile::fromFilesArray(field, entry)` helper to hydrate typed objects from `$_FILES`-style payloads with shape validation.
+- Added `Uploader\FileUpload` service with `save(UploadedFile, directory, targetName?)`:
+  - validates upload error state (`UPLOAD_ERR_OK` required)
+  - validates source readability
+  - creates target directory recursively when missing
+  - supports explicit target filename or secure random name generation
+  - preserves original client extension when auto-generating names
+  - rejects unsafe filenames containing path separators
+- Added `Uploader\UploadException` with typed failure factories for invalid shape, upload errors, directory creation failures, invalid filenames, source readability failures, and move failures.
+- Added focused unit coverage for file-array hydration, extension normalization, successful moves, auto-generated names, directory auto-creation, upload-error rejections, and filename traversal guards.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
