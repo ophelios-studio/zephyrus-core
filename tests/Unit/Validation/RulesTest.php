@@ -899,6 +899,53 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid host.', Rules::host()->errorMessage());
     }
 
+    // ---- privateIp / publicIp / subnetMask ----
+
+    public function testPrivateIpPassesAndFails(): void
+    {
+        self::assertTrue(Rules::privateIp()->test('10.0.0.1'));
+        self::assertTrue(Rules::privateIp()->test('192.168.1.5'));
+        self::assertFalse(Rules::privateIp()->test('8.8.8.8'));
+        self::assertFalse(Rules::privateIp()->test('256.1.1.1'));
+        self::assertFalse(Rules::privateIp()->test(null));
+    }
+
+    public function testPrivateIpDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid private IP address.', Rules::privateIp()->errorMessage());
+    }
+
+    public function testPublicIpPassesAndFails(): void
+    {
+        self::assertTrue(Rules::publicIp()->test('8.8.8.8'));
+        self::assertFalse(Rules::publicIp()->test('10.0.0.1'));
+        self::assertFalse(Rules::publicIp()->test('127.0.0.1'));
+        self::assertFalse(Rules::publicIp()->test('not-an-ip'));
+        self::assertFalse(Rules::publicIp()->test(null));
+    }
+
+    public function testPublicIpDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid public IP address.', Rules::publicIp()->errorMessage());
+    }
+
+    public function testSubnetMaskPassesAndFails(): void
+    {
+        self::assertTrue(Rules::subnetMask()->test('255.255.255.0'));
+        self::assertTrue(Rules::subnetMask()->test('255.255.0.0'));
+        self::assertTrue(Rules::subnetMask()->test('255.255.255.255'));
+        self::assertTrue(Rules::subnetMask()->test('0.0.0.0'));
+        self::assertFalse(Rules::subnetMask()->test('255.0.255.0'));
+        self::assertFalse(Rules::subnetMask()->test('255.255.255.1'));
+        self::assertFalse(Rules::subnetMask()->test('::1'));
+        self::assertFalse(Rules::subnetMask()->test(null));
+    }
+
+    public function testSubnetMaskDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid subnet mask.', Rules::subnetMask()->errorMessage());
+    }
+
     // ---- portRange ----
 
     public function testPortRangePasses(): void

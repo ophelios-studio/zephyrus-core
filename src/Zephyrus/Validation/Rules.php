@@ -528,6 +528,67 @@ final class Rules
     }
 
     /**
+     * Validates private IPv4/IPv6 addresses.
+     */
+    public static function privateIp(string $message = 'Must be a valid private IP address.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || filter_var($v, FILTER_VALIDATE_IP) === false) {
+                    return false;
+                }
+
+                return filter_var(
+                    $v,
+                    FILTER_VALIDATE_IP,
+                    FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
+                ) === false;
+            },
+            $message,
+        );
+    }
+
+    /**
+     * Validates public routable IPv4/IPv6 addresses.
+     */
+    public static function publicIp(string $message = 'Must be a valid public IP address.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && filter_var(
+                    $v,
+                    FILTER_VALIDATE_IP,
+                    FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
+                ) !== false,
+            $message,
+        );
+    }
+
+    /**
+     * Validates IPv4 subnet masks (e.g. 255.255.255.0).
+     */
+    public static function subnetMask(string $message = 'Must be a valid subnet mask.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+                    return false;
+                }
+
+                $long = ip2long($v);
+                if ($long === false) {
+                    return false;
+                }
+
+                $mask = sprintf('%032b', $long);
+
+                return preg_match('/^1*0*$/', $mask) === 1;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates an inclusive port range expressed as "start-end".
      */
     public static function portRange(string $message = 'Must be a valid port range.'): Rule
