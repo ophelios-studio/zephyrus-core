@@ -1925,4 +1925,28 @@ final class RulesTest extends TestCase
     {
         self::assertSame('Must be a valid byte range header.', Rules::byteRange()->errorMessage());
     }
+
+    // ---- contentRange ----
+
+    public function testContentRangePassesValidForms(): void
+    {
+        self::assertTrue(Rules::contentRange()->test('bytes 0-499/1234'));
+        self::assertTrue(Rules::contentRange()->test('bytes 500-999/*'));
+        self::assertTrue(Rules::contentRange()->test('bytes */1234'));
+    }
+
+    public function testContentRangeFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::contentRange()->test(''));
+        self::assertFalse(Rules::contentRange()->test('items 0-499/1234'));
+        self::assertFalse(Rules::contentRange()->test('bytes 500-0/1234'));
+        self::assertFalse(Rules::contentRange()->test('bytes */*'));
+        self::assertFalse(Rules::contentRange()->test('bytes 0-499'));
+        self::assertFalse(Rules::contentRange()->test(null));
+    }
+
+    public function testContentRangeDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid Content-Range header.', Rules::contentRange()->errorMessage());
+    }
 }

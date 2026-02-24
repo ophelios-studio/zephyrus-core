@@ -506,6 +506,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects non-byte units, malformed tokens, trailing separators, and reversed closed ranges.
 - Added focused unit coverage for pass/fail/default-message scenarios.
 
+## Implemented Slice: Validation Content-Range header rule
+- Added `Validation\Rules::contentRange()` for HTTP `Content-Range` byte-unit validation.
+- Supports both satisfiable ranges (`bytes start-end/size`) and unsatisfied form (`bytes */size`).
+- Rejects malformed units, reversed ranges, missing size sections, and invalid wildcard combinations.
+- Added focused unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
