@@ -974,12 +974,70 @@ final class Rules
     }
 
     /**
+     * Validates card number format and Luhn checksum.
+     */
+    public static function cardNumberLuhn(string $message = 'Must be a valid card number.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                $digits = preg_replace('/[\s-]+/', '', $v);
+                if (!is_string($digits) || preg_match('/^\d{12,19}$/', $digits) !== 1) {
+                    return false;
+                }
+
+                $sum = 0;
+                $alt = false;
+                for ($i = strlen($digits) - 1; $i >= 0; --$i) {
+                    $n = (int) $digits[$i];
+                    if ($alt) {
+                        $n *= 2;
+                        if ($n > 9) {
+                            $n -= 9;
+                        }
+                    }
+                    $sum += $n;
+                    $alt = !$alt;
+                }
+
+                return ($sum % 10) === 0;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates CVV/CVC shape (3 or 4 digits).
      */
     public static function cardCvv(string $message = 'Must be a valid card CVV.'): Rule
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v) && preg_match('/^\d{3,4}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates card expiry in MM/YY format.
+     */
+    public static function cardExpiryMmyy(string $message = 'Must be a valid card expiry (MM/YY).'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{2}$/', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
+     * Validates card expiry in MM/YYYY format.
+     */
+    public static function cardExpiryMmyyyy(string $message = 'Must be a valid card expiry (MM/YYYY).'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{4}$/', $v) === 1,
             $message,
         );
     }
