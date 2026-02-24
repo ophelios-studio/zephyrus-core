@@ -10,6 +10,8 @@ use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Localization\JsonLocaleLoader;
+use Zephyrus\Localization\Translator;
 use Zephyrus\Routing\Attribute\Route;
 use Zephyrus\Routing\Router;
 
@@ -34,9 +36,18 @@ final class BootstrapExampleTest extends TestCase
             ->controller(BootstrapUserController::class)
             ->controller(BootstrapArticleController::class);
 
+        $translator = new Translator(
+            new JsonLocaleLoader(__DIR__ . '/Fixtures/locales'),
+            'en'
+        );
+
         return KernelBuilder::create()
             ->withRouter($router)
             ->withMiddleware(new BootstrapRequestIdMiddleware())
+            ->withMiddleware(new BootstrapLocaleMiddleware())
+            ->withControllerFactory(static function (string $class) use ($translator): object {
+                return new $class($translator);
+            })
             ->build();
     }
 
@@ -51,6 +62,18 @@ final class BootstrapExampleTest extends TestCase
         self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
         self::assertStringContainsString('"status":"ok"', $response->body);
         self::assertStringContainsString('"framework":"zephyrus2"', $response->body);
+        self::assertStringContainsString('"message":"System healthy"', $response->body);
+    }
+
+    public function testHealthEndpointUsesLocaleFromHeaderWhenAvailable(): void
+    {
+        $kernel = $this->buildBootstrapKernel();
+        $response = $kernel->handle(Request::fromArray('GET', '/health', headers: ['Accept-Language' => 'fr-CA,fr;q=0.9']));
+
+        self::assertSame(200, $response->status);
+
+        $payload = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Système en santé', $payload['message']);
     }
 
     // -- Request-Id middleware stamps every response --------------------------
@@ -208,15 +231,27 @@ final class BootstrapExampleTest extends TestCase
 
 final class BootstrapHealthController extends Controller
 {
-    #[Route('/health', 'GET', name: 'health')]
-    public function show(): Response
+    public function __construct(private readonly Translator $translator)
     {
-        return $this->json(['status' => 'ok', 'framework' => 'zephyrus2']);
+    }
+
+    #[Route('/health', 'GET', name: 'health')]
+    public function show(Request $request): Response
+    {
+        return $this->json([
+            'status' => 'ok',
+            'framework' => 'zephyrus2',
+            'message' => $this->translator->trans('health.message', locale: (string) $request->attribute('locale', 'en')),
+        ]);
     }
 }
 
 final class BootstrapUserController extends Controller
 {
+    public function __construct(private readonly Translator $translator)
+    {
+    }
+
     public function before(Request $request): ?Response
     {
         if ($request->header('X-Api-Key') === null) {
@@ -258,6 +293,10 @@ final class BootstrapUserController extends Controller
 
 final class BootstrapArticleController extends Controller
 {
+    public function __construct(private readonly Translator $translator)
+    {
+    }
+
     #[Route('/articles', 'GET', name: 'articles.index')]
     public function index(): Response
     {
@@ -282,5 +321,16 @@ final class BootstrapRequestIdMiddleware implements MiddlewareInterface
         $response = $next($request);
 
         return $response->withHeader('X-Request-Id', bin2hex(random_bytes(8)));
+    }
+}
+
+final class BootstrapLocaleMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        $header = $request->header('Accept-Language', '');
+        $locale = str_starts_with(strtolower($header), 'fr') ? 'fr' : 'en';
+
+        return $next($request->withAttribute('locale', $locale));
     }
 }

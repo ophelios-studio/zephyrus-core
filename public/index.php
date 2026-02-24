@@ -28,6 +28,8 @@ use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Localization\JsonLocaleLoader;
+use Zephyrus\Localization\Translator;
 use Zephyrus\Routing\Attribute\Route;
 use Zephyrus\Routing\Router;
 
@@ -40,10 +42,18 @@ use Zephyrus\Routing\Router;
  */
 final class HealthController extends Controller
 {
-    #[Route('/health', 'GET', name: 'health')]
-    public function show(): Response
+    public function __construct(private readonly Translator $translator)
     {
-        return $this->json(['status' => 'ok', 'framework' => 'zephyrus2']);
+    }
+
+    #[Route('/health', 'GET', name: 'health')]
+    public function show(Request $request): Response
+    {
+        return $this->json([
+            'status' => 'ok',
+            'framework' => 'zephyrus2',
+            'message' => $this->translator->trans('health.message', locale: (string) $request->attribute('locale', 'en')),
+        ]);
     }
 }
 
@@ -56,6 +66,10 @@ final class HealthController extends Controller
  */
 final class UserController extends Controller
 {
+    public function __construct(private readonly Translator $translator)
+    {
+    }
+
     // Require before() to pass (no auth header → 401).
     public function before(Request $request): ?Response
     {
@@ -108,6 +122,10 @@ final class UserController extends Controller
  */
 final class ArticleController extends Controller
 {
+    public function __construct(private readonly Translator $translator)
+    {
+    }
+
     #[Route('/articles', 'GET', name: 'articles.index')]
     public function index(): Response
     {
@@ -139,6 +157,17 @@ final class RequestIdMiddleware implements MiddlewareInterface
     }
 }
 
+final class LocaleMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        $header = $request->header('Accept-Language', '');
+        $locale = str_starts_with(strtolower($header), 'fr') ? 'fr' : 'en';
+
+        return $next($request->withAttribute('locale', $locale));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Router — register all routes
 // ---------------------------------------------------------------------------
@@ -152,13 +181,18 @@ $router = (new Router())
 // Kernel assembly — done once at startup
 // ---------------------------------------------------------------------------
 
+$translator = new Translator(
+    new JsonLocaleLoader(dirname(__DIR__) . '/resources/lang'),
+    'en'
+);
+
 $kernel = KernelBuilder::create()
     ->withRouter($router)
     ->withMiddleware(new RequestIdMiddleware())
+    ->withMiddleware(new LocaleMiddleware())
+    ->withControllerFactory(static fn (string $class): object => new $class($translator))
     // Example: register named middleware for routes that need auth:
     // ->registerMiddleware('auth', new JwtAuthMiddleware($jwtSecret))
-    // Example: inject a DI container factory:
-    // ->withControllerFactory(fn (string $class) => $container->get($class))
     ->build();
 
 // ---------------------------------------------------------------------------
