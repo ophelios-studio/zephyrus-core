@@ -4,7 +4,15 @@
     "plain": "Hello",
     "pipe_text": "Hello {name|upper} / {name|lower} / {name|title}",
     "pipe_number": "Invoice total: {total|number:2}",
-    "pipe_unknown": "Value: {name|noop}"
+    "pipe_number_grouped": "Amount: {total|number:2:,:.}",
+    "pipe_unknown": "Value: {name|noop}",
+    "pipe_truncate": "Title: {title|truncate:8}",
+    "pipe_truncate_suffix": "Title: {title|truncate:8:...}",
+    "pipe_truncate_exact": "Tag: {tag|truncate:5}",
+    "pipe_plural": "{count} {count|plural:item:items}",
+    "pipe_plural_auto": "{count} {count|plural:duck}",
+    "pipe_default": "Hello, {name|default:Guest}!",
+    "pipe_chained_truncate_upper": "{title|truncate:5|upper}"
   },
   "errors": {
     "required": "The {field} field is required"

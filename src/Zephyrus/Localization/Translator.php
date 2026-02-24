@@ -107,29 +107,90 @@ final class Translator
             [$pipeName, $pipeArgument] = array_pad(explode(':', $pipeSegment, 2), 2, null);
 
             $current = match (strtolower($pipeName)) {
-                'lower' => mb_strtolower($current),
-                'upper' => mb_strtoupper($current),
-                'title' => mb_convert_case($current, MB_CASE_TITLE),
-                'trim' => trim($current),
-                'number' => $this->formatNumber($current, $pipeArgument),
-                default => $current,
+                'lower'    => mb_strtolower($current),
+                'upper'    => mb_strtoupper($current),
+                'title'    => mb_convert_case($current, MB_CASE_TITLE),
+                'trim'     => trim($current),
+                'ltrim'    => ltrim($current),
+                'rtrim'    => rtrim($current),
+                'number'   => $this->formatNumber($current, $pipeArgument),
+                'truncate' => $this->applyTruncate($current, $pipeArgument),
+                'plural'   => $this->applyPlural($current, $pipeArgument),
+                'default'  => ($current === '' ? ($pipeArgument ?? '') : $current),
+                default    => $current,
             };
         }
 
         return $current;
     }
 
-    private function formatNumber(string $value, ?string $decimals): string
+    /**
+     * Format a numeric value.
+     *
+     * Argument format: precision[:thousands_sep[:decimal_sep]]
+     *   number:2        → 12.35   (no thousands separator, dot decimal)
+     *   number:2:,:.    → 1,234.56
+     *   number:0:_      → 1_234
+     */
+    private function formatNumber(string $value, ?string $argument): string
     {
         if (!is_numeric($value)) {
             return $value;
         }
 
-        $precision = (int) ($decimals ?? 0);
-        if ($precision < 0) {
-            $precision = 0;
+        $parts        = $argument !== null ? explode(':', $argument, 3) : [];
+        $precision    = max(0, (int) ($parts[0] ?? 0));
+        $thousandsSep = $parts[1] ?? '';
+        $decimalSep   = $parts[2] ?? '.';
+
+        return number_format((float) $value, $precision, $decimalSep, $thousandsSep);
+    }
+
+    /**
+     * Truncate a string to at most $length multibyte characters.
+     *
+     * Argument format: length[:suffix]
+     *   truncate:10       → appends "…" when truncated
+     *   truncate:10:...   → appends "..." when truncated
+     */
+    private function applyTruncate(string $value, ?string $argument): string
+    {
+        if ($argument === null) {
+            return $value;
         }
 
-        return number_format((float) $value, $precision, '.', '');
+        $parts  = explode(':', $argument, 2);
+        $length = (int) $parts[0];
+        $suffix = $parts[1] ?? '…';
+
+        if ($length <= 0 || mb_strlen($value) <= $length) {
+            return $value;
+        }
+
+        return mb_substr($value, 0, $length) . $suffix;
+    }
+
+    /**
+     * Return the singular or plural form based on the numeric value.
+     *
+     * Argument format: singular:plural
+     *   plural:item:items   → "item" when |value| == 1, else "items"
+     *   plural:child:children
+     *
+     * When no plural form is given, an "s" is appended to the singular.
+     */
+    private function applyPlural(string $value, ?string $argument): string
+    {
+        if ($argument === null) {
+            return $value;
+        }
+
+        $parts    = explode(':', $argument, 2);
+        $singular = $parts[0];
+        $plural   = $parts[1] ?? $singular . 's';
+
+        $numeric = is_numeric($value) ? abs((float) $value) : 1.0;
+
+        return $numeric === 1.0 ? $singular : $plural;
     }
 }
