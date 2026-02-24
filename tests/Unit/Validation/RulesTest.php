@@ -1720,4 +1720,26 @@ final class RulesTest extends TestCase
             Rules::ifModifiedSince()->errorMessage(),
         );
     }
+
+    // ---- ifUnmodifiedSince ----
+
+    public function testIfUnmodifiedSincePassesValidHttpDate(): void
+    {
+        self::assertTrue(Rules::ifUnmodifiedSince()->test('Mon, 23 Feb 2026 20:31:00 GMT'));
+    }
+
+    public function testIfUnmodifiedSinceFailsMalformedValues(): void
+    {
+        self::assertFalse(Rules::ifUnmodifiedSince()->test('Mon, 23 Feb 2026 20:31:00 UTC'));
+        self::assertFalse(Rules::ifUnmodifiedSince()->test('2026-02-23T20:31:00Z'));
+        self::assertFalse(Rules::ifUnmodifiedSince()->test(null));
+    }
+
+    public function testIfUnmodifiedSinceDefaultMessage(): void
+    {
+        self::assertSame(
+            'Must be a valid If-Unmodified-Since header.',
+            Rules::ifUnmodifiedSince()->errorMessage(),
+        );
+    }
 }
