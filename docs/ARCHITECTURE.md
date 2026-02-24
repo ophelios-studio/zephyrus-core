@@ -494,6 +494,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Reuses HTTP-date validation semantics while exposing explicit API coverage for optimistic concurrency date checks.
 - Added focused unit coverage for valid date pass, malformed failures, and default-message behavior.
 
+## Implemented Slice: Validation If-Range header rule
+- Added `Validation\Rules::ifRange()` for range-request precondition validation.
+- Accepts either a single valid ETag token or a valid HTTP-date value.
+- Rejects wildcard/list ETag forms and malformed non-canonical date values.
+- Added focused unit coverage for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
