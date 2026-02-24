@@ -224,10 +224,6 @@ final readonly class Request
      */
     private static function buildUri(array $server): string
     {
-        $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
-        $scheme = $https ? 'https' : 'http';
-        $host   = (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
-
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
         // When behind a reverse proxy, REQUEST_URI may already be absolute
@@ -235,7 +231,29 @@ final readonly class Request
             return $requestUri;
         }
 
-        return $scheme . '://' . $host . $requestUri;
+        $forwardedHeader = isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null;
+        $forwarded = self::parseForwardedHeader($forwardedHeader);
+
+        $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
+        $scheme = $forwarded['proto']
+            ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null)
+            ?? ($https ? 'https' : 'http');
+
+        $host = $forwarded['host']
+            ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
+            ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
+
+        if (!str_contains($host, ':')) {
+            $port = $forwarded['port']
+                ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null)
+                ?? (isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
+
+            if ($port !== null && $port !== '' && !self::isDefaultPortForScheme($scheme, $port)) {
+                $host .= ':' . $port;
+            }
+        }
+
+        return strtolower($scheme) . '://' . $host . $requestUri;
     }
 
     /**
@@ -267,7 +285,13 @@ final readonly class Request
             if ($body === '') {
                 return [];
             }
-            $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+
+            try {
+                $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                return [];
+            }
+
             return is_array($decoded) ? $decoded : [];
         }
 
@@ -307,7 +331,72 @@ final readonly class Request
         $override = $headers['x-http-method-override']
             ?? (isset($parsedBody['_method']) ? (string) $parsedBody['_method'] : null);
 
-        return $override !== null ? strtoupper($override) : $method;
+        if ($override === null) {
+            return $method;
+        }
+
+        $candidate = strtoupper(trim($override));
+        if (!in_array($candidate, ['PUT', 'PATCH', 'DELETE'], true)) {
+            return $method;
+        }
+
+        return $candidate;
+    }
+
+    private static function firstForwardedValue(mixed $value): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $parts = explode(',', (string) $value);
+        $first = trim($parts[0] ?? '');
+
+        return $first === '' ? null : strtolower($first);
+    }
+
+    /**
+     * @return array{proto?: string, host?: string, port?: string}
+     */
+    private static function parseForwardedHeader(?string $header): array
+    {
+        if ($header === null || trim($header) === '') {
+            return [];
+        }
+
+        $first = trim(explode(',', $header)[0] ?? '');
+        if ($first === '') {
+            return [];
+        }
+
+        $result = [];
+
+        foreach (explode(';', $first) as $pair) {
+            [$name, $value] = array_pad(explode('=', trim($pair), 2), 2, null);
+            if ($name === null || $value === null) {
+                continue;
+            }
+
+            $key = strtolower(trim($name));
+            $normalizedValue = trim($value, " \t\n\r\0\x0B\"");
+            if ($normalizedValue === '') {
+                continue;
+            }
+
+            if (in_array($key, ['proto', 'host', 'port'], true)) {
+                $result[$key] = strtolower($normalizedValue);
+            }
+        }
+
+        return $result;
+    }
+
+    private static function isDefaultPortForScheme(string $scheme, string $port): bool
+    {
+        $normalizedScheme = strtolower($scheme);
+
+        return ($normalizedScheme === 'http' && $port === '80')
+            || ($normalizedScheme === 'https' && $port === '443');
     }
 
     /**
