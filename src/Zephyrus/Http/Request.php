@@ -14,7 +14,7 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
-     * @param array<string, UploadedFile> $files
+     * @param array<string, UploadedFile|array<int, UploadedFile>> $files
      */
     public function __construct(
         public string $method,
@@ -88,7 +88,7 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
-     * @param array<string, UploadedFile> $files
+     * @param array<string, UploadedFile|array<int, UploadedFile>> $files
      */
     public static function fromArray(
         string $method,
@@ -134,7 +134,35 @@ final readonly class Request
 
     public function file(string $field): ?UploadedFile
     {
-        return $this->files[$field] ?? null;
+        $entry = $this->files[$field] ?? null;
+
+        if ($entry instanceof UploadedFile) {
+            return $entry;
+        }
+
+        if (is_array($entry) && $entry !== [] && $entry[0] instanceof UploadedFile) {
+            return $entry[0];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, UploadedFile>
+     */
+    public function filesOf(string $field): array
+    {
+        $entry = $this->files[$field] ?? null;
+
+        if ($entry instanceof UploadedFile) {
+            return [$entry];
+        }
+
+        if (is_array($entry)) {
+            return array_values(array_filter($entry, static fn (mixed $value): bool => $value instanceof UploadedFile));
+        }
+
+        return [];
     }
 
     public function path(): string
@@ -419,7 +447,7 @@ final readonly class Request
 
     /**
      * @param array<string, mixed> $files
-     * @return array<string, UploadedFile>
+     * @return array<string, UploadedFile|array<int, UploadedFile>>
      */
     private static function normalizeUploadedFiles(array $files): array
     {
@@ -431,6 +459,10 @@ final readonly class Request
             }
 
             if (isset($entry['name']) && is_array($entry['name'])) {
+                $grouped = self::normalizeMultiUploadField((string) $field, $entry);
+                if ($grouped !== []) {
+                    $normalized[(string) $field] = $grouped;
+                }
                 continue;
             }
 
@@ -438,6 +470,47 @@ final readonly class Request
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
+     * @return array<int, UploadedFile>
+     */
+    private static function normalizeMultiUploadField(string $field, array $entry): array
+    {
+        if (!isset($entry['name'], $entry['type'], $entry['tmp_name'], $entry['error'], $entry['size'])) {
+            return [];
+        }
+
+        if (
+            !is_array($entry['name'])
+            || !is_array($entry['type'])
+            || !is_array($entry['tmp_name'])
+            || !is_array($entry['error'])
+            || !is_array($entry['size'])
+        ) {
+            return [];
+        }
+
+        $files = [];
+        foreach (array_keys($entry['name']) as $index) {
+            $tmpName = $entry['tmp_name'][$index] ?? null;
+            $error = $entry['error'][$index] ?? null;
+
+            if ($tmpName === null || $error === null) {
+                continue;
+            }
+
+            $files[] = UploadedFile::fromFilesArray($field, [
+                'name' => $entry['name'][$index] ?? '',
+                'type' => $entry['type'][$index] ?? '',
+                'tmp_name' => $tmpName,
+                'error' => $error,
+                'size' => $entry['size'][$index] ?? 0,
+            ]);
+        }
+
+        return $files;
     }
 
     /**

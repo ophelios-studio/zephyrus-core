@@ -555,6 +555,13 @@ $router->group('/api/v1', fn ($r) => $r
 - `withAttribute(...)` and `withAttributes(...)` now preserve file payloads in immutable clones.
 - Added unit coverage in `RequestTest` for direct `fromArray` file access and `fromGlobals` file normalization paths.
 
+## Implemented Slice: Request multi-file normalization (Phase 1)
+- Extended `Http\Request` upload support to handle both single and multi-file `$_FILES` shapes.
+- Added `filesOf(field): UploadedFile[]` helper for retrieving all files under a field.
+- `file(field)` now returns the first file when the field contains multiple uploads.
+- Added internal normalization for PHP multi-upload payload shape (`name[]`, `tmp_name[]`, etc.) with graceful skipping of malformed entries.
+- Added unit coverage for multi-file normalization and retrieval behavior.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
