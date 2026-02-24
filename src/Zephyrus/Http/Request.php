@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Http;
 
-use Zephyrus\Uploader\UploadedFile;
+use Zephyrus\Upload\FileUpload;
 
 final readonly class Request
 {
@@ -14,7 +14,7 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
-     * @param array<string, UploadedFile|array<int, UploadedFile>> $files
+     * @param array<string, FileUpload|array<int, FileUpload>> $files
      */
     public function __construct(
         public string $method,
@@ -78,7 +78,7 @@ final readonly class Request
             headers:    $headers,
             cookies:    $cookie,
             attributes: [],
-            files:      self::normalizeUploadedFiles($files),
+            files:      self::normalizeFileUploads($files),
         );
     }
 
@@ -88,7 +88,7 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
-     * @param array<string, UploadedFile|array<int, UploadedFile>> $files
+     * @param array<string, FileUpload|array<int, FileUpload>> $files
      */
     public static function fromArray(
         string $method,
@@ -132,15 +132,15 @@ final readonly class Request
         return $this->cookies[$name] ?? $default;
     }
 
-    public function file(string $field): ?UploadedFile
+    public function file(string $field): ?FileUpload
     {
         $entry = $this->files[$field] ?? null;
 
-        if ($entry instanceof UploadedFile) {
+        if ($entry instanceof FileUpload) {
             return $entry;
         }
 
-        if (is_array($entry) && $entry !== [] && $entry[0] instanceof UploadedFile) {
+        if (is_array($entry) && $entry !== [] && $entry[0] instanceof FileUpload) {
             return $entry[0];
         }
 
@@ -148,18 +148,18 @@ final readonly class Request
     }
 
     /**
-     * @return array<int, UploadedFile>
+     * @return array<int, FileUpload>
      */
     public function filesOf(string $field): array
     {
         $entry = $this->files[$field] ?? null;
 
-        if ($entry instanceof UploadedFile) {
+        if ($entry instanceof FileUpload) {
             return [$entry];
         }
 
         if (is_array($entry)) {
-            return array_values(array_filter($entry, static fn (mixed $value): bool => $value instanceof UploadedFile));
+            return array_values(array_filter($entry, static fn (mixed $value): bool => $value instanceof FileUpload));
         }
 
         return [];
@@ -447,9 +447,9 @@ final readonly class Request
 
     /**
      * @param array<string, mixed> $files
-     * @return array<string, UploadedFile|array<int, UploadedFile>>
+     * @return array<string, FileUpload|array<int, FileUpload>>
      */
-    private static function normalizeUploadedFiles(array $files): array
+    private static function normalizeFileUploads(array $files): array
     {
         $normalized = [];
 
@@ -459,14 +459,14 @@ final readonly class Request
             }
 
             if (isset($entry['name']) && is_array($entry['name'])) {
-                $grouped = self::normalizeMultiUploadField((string) $field, $entry);
+                $grouped = self::normalizeMultiUploadField($entry);
                 if ($grouped !== []) {
                     $normalized[(string) $field] = $grouped;
                 }
                 continue;
             }
 
-            $normalized[(string) $field] = UploadedFile::fromFilesArray((string) $field, $entry);
+            $normalized[(string) $field] = FileUpload::fromPhpArray($entry);
         }
 
         return $normalized;
@@ -474,9 +474,9 @@ final readonly class Request
 
     /**
      * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
-     * @return array<int, UploadedFile>
+     * @return array<int, FileUpload>
      */
-    private static function normalizeMultiUploadField(string $field, array $entry): array
+    private static function normalizeMultiUploadField(array $entry): array
     {
         if (!isset($entry['name'], $entry['type'], $entry['tmp_name'], $entry['error'], $entry['size'])) {
             return [];
@@ -501,7 +501,7 @@ final readonly class Request
                 continue;
             }
 
-            $files[] = UploadedFile::fromFilesArray($field, [
+            $files[] = FileUpload::fromPhpArray([
                 'name' => $entry['name'][$index] ?? '',
                 'type' => $entry['type'][$index] ?? '',
                 'tmp_name' => $tmpName,
