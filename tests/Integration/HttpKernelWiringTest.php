@@ -20,6 +20,7 @@ use Zephyrus\Security\HeaderTokenGuard;
 use Zephyrus\Security\IpAllowlistGuard;
 use Zephyrus\Security\PredicateAuthGuard;
 use Zephyrus\Security\RequestAttributeGuard;
+use Zephyrus\Security\NotAuthGuard;
 
 /**
  * End-to-end tests for the full HttpKernel → Router → RouteDispatcher
@@ -465,6 +466,29 @@ final class HttpKernelWiringTest extends TestCase
 
         $allowed = $kernel->handle(Request::fromArray('GET', '/predicate-guarded', headers: ['X-Role' => 'admin']));
         self::assertSame(200, $allowed->status);
+    }
+
+    public function testNotAuthGuardInvertsPolicyInMiddleware(): void
+    {
+        $router = (new Router())
+            ->get('/not-guarded', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $guard = new NotAuthGuard(new HeaderTokenGuard('blocked-token'));
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware($guard, 403, 'Forbidden'))
+            ->build();
+
+        $allowed = $kernel->handle(Request::fromArray('GET', '/not-guarded'));
+        self::assertSame(200, $allowed->status);
+
+        $denied = $kernel->handle(Request::fromArray(
+            'GET',
+            '/not-guarded',
+            headers: ['Authorization' => 'Bearer blocked-token'],
+        ));
+        self::assertSame(403, $denied->status);
     }
 
     // -- Attribute-based route registration -----------------------------------
