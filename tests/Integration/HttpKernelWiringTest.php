@@ -13,6 +13,10 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Attribute\Route;
 use Zephyrus\Routing\Router;
+use Zephyrus\Security\AllAuthGuard;
+use Zephyrus\Security\AnyAuthGuard;
+use Zephyrus\Security\AuthGuardMiddleware;
+use Zephyrus\Security\HeaderTokenGuard;
 
 /**
  * End-to-end tests for the full HttpKernel → Router → RouteDispatcher
@@ -294,6 +298,81 @@ final class HttpKernelWiringTest extends TestCase
 
         self::assertSame('yes', $response->headers['X-Global']);
         self::assertSame('ok', $response->headers['X-Auth']);
+    }
+
+    public function testAuthGuardMiddlewareRejectsUnauthorizedRequest(): void
+    {
+        $router = (new Router())
+            ->get('/admin', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware(new HeaderTokenGuard('top-secret')))
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/admin'));
+
+        self::assertSame(401, $response->status);
+        self::assertStringContainsString('Unauthorized', $response->body);
+    }
+
+    public function testAuthGuardMiddlewareAllowsAuthorizedRequest(): void
+    {
+        $router = (new Router())
+            ->get('/admin', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware(new HeaderTokenGuard('top-secret')))
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray(
+            'GET',
+            '/admin',
+            headers: ['Authorization' => 'Bearer top-secret'],
+        ));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('pong', $response->body);
+    }
+
+    public function testCompositeAuthGuardsCanBeUsedInMiddleware(): void
+    {
+        $router = (new Router())
+            ->get('/composite', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $anyGuard = new AnyAuthGuard([
+            new HeaderTokenGuard('api-token', headerName: 'X-Api-Key', bearerPrefix: ''),
+            new HeaderTokenGuard('bearer-token'),
+        ]);
+
+        $allGuard = new AllAuthGuard([
+            $anyGuard,
+            new HeaderTokenGuard('tenant-42', headerName: 'X-Tenant-Token', bearerPrefix: ''),
+        ]);
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware($allGuard, 403, 'Forbidden'))
+            ->build();
+
+        $denied = $kernel->handle(Request::fromArray(
+            'GET',
+            '/composite',
+            headers: ['X-Api-Key' => 'api-token'],
+        ));
+        self::assertSame(403, $denied->status);
+
+        $allowed = $kernel->handle(Request::fromArray(
+            'GET',
+            '/composite',
+            headers: [
+                'X-Api-Key' => 'api-token',
+                'X-Tenant-Token' => 'tenant-42',
+            ],
+        ));
+
+        self::assertSame(200, $allowed->status);
     }
 
     // -- Attribute-based route registration -----------------------------------
