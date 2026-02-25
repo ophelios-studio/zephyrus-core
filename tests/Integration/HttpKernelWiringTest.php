@@ -17,6 +17,7 @@ use Zephyrus\Security\AllAuthGuard;
 use Zephyrus\Security\AnyAuthGuard;
 use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\HeaderTokenGuard;
+use Zephyrus\Security\IpAllowlistGuard;
 use Zephyrus\Security\RequestAttributeGuard;
 
 /**
@@ -409,6 +410,40 @@ final class HttpKernelWiringTest extends TestCase
 
         $allowed = $kernelAllowed->handle(Request::fromArray('GET', '/role-guarded'));
 
+        self::assertSame(200, $allowed->status);
+    }
+
+    public function testIpAllowlistGuardCanProtectRoutes(): void
+    {
+        $router = (new Router())
+            ->get('/ip-guarded', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $kernelDenied = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request->withAttribute('client_ip', '203.0.113.10'));
+                }
+            })
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware(new IpAllowlistGuard(['127.0.0.1']), 403, 'Forbidden'))
+            ->build();
+
+        $denied = $kernelDenied->handle(Request::fromArray('GET', '/ip-guarded'));
+        self::assertSame(403, $denied->status);
+
+        $kernelAllowed = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request->withAttribute('client_ip', '127.0.0.1'));
+                }
+            })
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware(new IpAllowlistGuard(['127.0.0.1']), 403, 'Forbidden'))
+            ->build();
+
+        $allowed = $kernelAllowed->handle(Request::fromArray('GET', '/ip-guarded'));
         self::assertSame(200, $allowed->status);
     }
 

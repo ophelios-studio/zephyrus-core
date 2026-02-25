@@ -615,6 +615,12 @@ $router->group('/api/v1', fn ($r) => $r
   - complex attribute payloads (arrays/objects) are rejected for predictable policy behavior
 - Added unit coverage (`RequestAttributeGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` using `AuthGuardMiddleware`.
 
+## Implemented Slice: IP allowlist authorization guard (Phase 6)
+- Added `Security\IpAllowlistGuard` implementing `AuthGuardInterface` for source-IP-based route authorization.
+- Guard resolves client IP from `X-Forwarded-For` (first hop) with fallback to request `client_ip` attribute.
+- Enables straightforward allowlist protection for internal/admin endpoints when deployed behind trusted proxy layers.
+- Added unit coverage (`IpAllowlistGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` via `AuthGuardMiddleware`.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
