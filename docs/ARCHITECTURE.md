@@ -599,6 +599,12 @@ $router->group('/api/v1', fn ($r) => $r
   - authenticated user AND role/tenant guard
 - Added focused unit coverage in `CompositeAuthGuardTest` for pass/fail behavior and empty-guard edge cases.
 
+## Implemented Slice: Auth guard middleware integration wiring (Phase 6)
+- Added end-to-end kernel integration coverage for security guards through named route middleware registration.
+- Verified `AuthGuardMiddleware` + `HeaderTokenGuard` flow for both deny (401) and allow paths.
+- Verified composite policy wiring (`AnyAuthGuard` + `AllAuthGuard`) with customizable deny semantics (403) in real route dispatch.
+- This confirms auth-guard primitives are production-wireable through `KernelBuilder::registerMiddleware(...)` with no custom kernel glue.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
