@@ -627,6 +627,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Works with existing `AuthGuardMiddleware` and guard composition primitives.
 - Added unit and integration coverage (`PredicateAuthGuardTest` + `HttpKernelWiringTest`) validating deny/allow behavior with request-derived predicates.
 
+## Implemented Slice: Negated authorization guard composition (Phase 6)
+- Added `Security\NotAuthGuard` to invert any `AuthGuardInterface` policy (`NOT` semantics).
+- Enables concise deny-list and inverse-policy flows without custom middleware branches (e.g. block specific token/condition while allowing everything else).
+- Added unit coverage (`NotAuthGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` through `AuthGuardMiddleware`.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
