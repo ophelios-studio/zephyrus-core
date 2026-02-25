@@ -583,6 +583,14 @@ $router->group('/api/v1', fn ($r) => $r
   - defaults to `401 Unauthorized`, customizable status/message (e.g. `403 Forbidden`)
 - Added focused unit coverage in `AuthGuardMiddlewareTest` for allow path, deny short-circuit path, and custom status/message behavior.
 
+## Implemented Slice: Header token authorization guard (Phase 6)
+- Added `Security\HeaderTokenGuard` as a concrete `AuthGuardInterface` implementation for token-based route protection.
+- Supports both bearer-auth style headers and raw token headers:
+  - default: `Authorization: Bearer <token>`
+  - configurable: custom header name (e.g. `X-Api-Key`) and optional empty prefix.
+- Uses constant-time token comparison (`hash_equals`) for verification.
+- Added focused unit coverage (`HeaderTokenGuardTest`) for bearer success/failure, missing header behavior, custom header mode, and raw-token acceptance.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
