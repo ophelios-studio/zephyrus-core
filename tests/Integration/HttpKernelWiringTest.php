@@ -17,6 +17,7 @@ use Zephyrus\Security\AllAuthGuard;
 use Zephyrus\Security\AnyAuthGuard;
 use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\HeaderTokenGuard;
+use Zephyrus\Security\RequestAttributeGuard;
 
 /**
  * End-to-end tests for the full HttpKernel → Router → RouteDispatcher
@@ -371,6 +372,42 @@ final class HttpKernelWiringTest extends TestCase
                 'X-Tenant-Token' => 'tenant-42',
             ],
         ));
+
+        self::assertSame(200, $allowed->status);
+    }
+
+    public function testRequestAttributeGuardCanProtectRoutes(): void
+    {
+        $router = (new Router())
+            ->get('/role-guarded', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request->withAttribute('role', 'teacher'));
+                }
+            })
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware(new RequestAttributeGuard('role', ['admin']), 403, 'Forbidden'))
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/role-guarded'));
+
+        self::assertSame(403, $response->status);
+
+        $kernelAllowed = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    return $next($request->withAttribute('role', 'admin'));
+                }
+            })
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware(new RequestAttributeGuard('role', ['admin']), 403, 'Forbidden'))
+            ->build();
+
+        $allowed = $kernelAllowed->handle(Request::fromArray('GET', '/role-guarded'));
 
         self::assertSame(200, $allowed->status);
     }
