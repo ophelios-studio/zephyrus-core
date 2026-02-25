@@ -18,6 +18,7 @@ use Zephyrus\Security\AnyAuthGuard;
 use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\HeaderTokenGuard;
 use Zephyrus\Security\IpAllowlistGuard;
+use Zephyrus\Security\PredicateAuthGuard;
 use Zephyrus\Security\RequestAttributeGuard;
 
 /**
@@ -444,6 +445,25 @@ final class HttpKernelWiringTest extends TestCase
             ->build();
 
         $allowed = $kernelAllowed->handle(Request::fromArray('GET', '/ip-guarded'));
+        self::assertSame(200, $allowed->status);
+    }
+
+    public function testPredicateAuthGuardCanProtectRoutes(): void
+    {
+        $router = (new Router())
+            ->get('/predicate-guarded', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
+
+        $guard = new PredicateAuthGuard(static fn (Request $request): bool => $request->header('X-Role') === 'admin');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->registerMiddleware('auth.guard', new AuthGuardMiddleware($guard, 403, 'Forbidden'))
+            ->build();
+
+        $denied = $kernel->handle(Request::fromArray('GET', '/predicate-guarded', headers: ['X-Role' => 'teacher']));
+        self::assertSame(403, $denied->status);
+
+        $allowed = $kernel->handle(Request::fromArray('GET', '/predicate-guarded', headers: ['X-Role' => 'admin']));
         self::assertSame(200, $allowed->status);
     }
 

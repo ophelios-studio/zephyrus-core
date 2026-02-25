@@ -621,6 +621,12 @@ $router->group('/api/v1', fn ($r) => $r
 - Enables straightforward allowlist protection for internal/admin endpoints when deployed behind trusted proxy layers.
 - Added unit coverage (`IpAllowlistGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` via `AuthGuardMiddleware`.
 
+## Implemented Slice: Predicate authorization guard (Phase 6)
+- Added `Security\PredicateAuthGuard` implementing `AuthGuardInterface` with a closure predicate for dynamic policy checks.
+- Enables lightweight custom authorization rules without creating dedicated guard classes for every one-off policy.
+- Works with existing `AuthGuardMiddleware` and guard composition primitives.
+- Added unit and integration coverage (`PredicateAuthGuardTest` + `HttpKernelWiringTest`) validating deny/allow behavior with request-derived predicates.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
