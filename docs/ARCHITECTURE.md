@@ -605,6 +605,16 @@ $router->group('/api/v1', fn ($r) => $r
 - Verified composite policy wiring (`AnyAuthGuard` + `AllAuthGuard`) with customizable deny semantics (403) in real route dispatch.
 - This confirms auth-guard primitives are production-wireable through `KernelBuilder::registerMiddleware(...)` with no custom kernel glue.
 
+## Implemented Slice: Request-attribute authorization guard (Phase 6)
+- Added `Security\RequestAttributeGuard` as an `AuthGuardInterface` implementation that authorizes based on a request attribute value allowlist.
+- Intended use cases:
+  - role/permission checks after identity middleware hydrates claims into request attributes
+  - tenant/environment gating from upstream middleware
+- Behavior:
+  - scalar/null attribute values are evaluated with strict matching
+  - complex attribute payloads (arrays/objects) are rejected for predictable policy behavior
+- Added unit coverage (`RequestAttributeGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` using `AuthGuardMiddleware`.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
