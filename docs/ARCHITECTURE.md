@@ -591,6 +591,14 @@ $router->group('/api/v1', fn ($r) => $r
 - Uses constant-time token comparison (`hash_equals`) for verification.
 - Added focused unit coverage (`HeaderTokenGuardTest`) for bearer success/failure, missing header behavior, custom header mode, and raw-token acceptance.
 
+## Implemented Slice: Composite authorization guards (Phase 6)
+- Added `Security\AnyAuthGuard` (OR semantics): request is authorized when at least one inner guard authorizes it.
+- Added `Security\AllAuthGuard` (AND semantics): request is authorized only when every inner guard authorizes it.
+- Composition enables practical policy scenarios without custom middleware branching:
+  - API key OR bearer token
+  - authenticated user AND role/tenant guard
+- Added focused unit coverage in `CompositeAuthGuardTest` for pass/fail behavior and empty-guard edge cases.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
