@@ -574,6 +574,15 @@ $router->group('/api/v1', fn ($r) => $r
 - Extended `ApplicationBuilder` locale setup capabilities and app-level supported locale policy propagation.
 - Added broad unit and integration coverage for resolver behavior, override precedence, q-values, supported-locale filtering, and end-to-end request-driven localization.
 
+## Implemented Slice: Security authorization guard middleware (Phase 6 seed)
+- Added `Security\AuthGuardInterface` (`isAuthorized(Request): bool`) to define authorization policy checks.
+- Added `Security\AuthGuardMiddleware` to enforce route/global authorization before handler execution.
+- Middleware behavior:
+  - when authorized, request proceeds normally
+  - when denied, middleware returns JSON error response and short-circuits handler
+  - defaults to `401 Unauthorized`, customizable status/message (e.g. `403 Forbidden`)
+- Added focused unit coverage in `AuthGuardMiddlewareTest` for allow path, deny short-circuit path, and custom status/message behavior.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
