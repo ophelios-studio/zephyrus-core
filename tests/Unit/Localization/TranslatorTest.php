@@ -227,6 +227,75 @@ final class TranslatorTest extends TestCase
         self::assertSame('   hello', $translator->trans('{v|rtrim}', ['v' => '   hello   ']));
     }
 
+    // -----------------------------------------------------------------
+    // resolveLocaleChain — regional default locale
+    // -----------------------------------------------------------------
+
+    public function testLocaleChainWithRegionalDefaultLocaleFallsThroughToRegionalDefault(): void
+    {
+        // defaultLocale 'fr-CA': chain for 'de' → ['de', 'fr-CA', 'fr']
+        $loader = new class implements \Zephyrus\Localization\LocaleLoaderInterface {
+            public function load(string $locale): array
+            {
+                return match ($locale) {
+                    'fr-CA' => ['greeting' => 'Bonjour (CA)'],
+                    'fr'    => ['greeting' => 'Bonjour'],
+                    default => [],
+                };
+            }
+        };
+
+        $translator = new Translator($loader, 'fr-CA');
+
+        // 'de' has no catalog → falls through to 'fr-CA' (regional default)
+        self::assertSame('Bonjour (CA)', $translator->trans('greeting', locale: 'de'));
+    }
+
+    public function testLocaleChainWithRegionalDefaultLocaleDeduplicatesBaseLanguage(): void
+    {
+        // defaultLocale 'fr-CA': chain for 'fr' → ['fr', 'fr-CA'] (base already in chain so 'fr'
+        // is not appended again from the defaultBase extraction).
+        $loader = new class implements \Zephyrus\Localization\LocaleLoaderInterface {
+            public function load(string $locale): array
+            {
+                return match ($locale) {
+                    'fr'    => ['greeting' => 'Bonjour'],
+                    'fr-CA' => ['greeting' => 'Bonjour (CA)'],
+                    default => [],
+                };
+            }
+        };
+
+        $translator = new Translator($loader, 'fr-CA');
+
+        // Requesting 'fr' directly hits the 'fr' catalog first
+        self::assertSame('Bonjour', $translator->trans('greeting', locale: 'fr'));
+    }
+
+    // -----------------------------------------------------------------
+    // applyTruncate — zero-length guard
+    // -----------------------------------------------------------------
+
+    public function testTruncatePipeZeroLengthReturnsUnchanged(): void
+    {
+        $translator = $this->buildTranslator();
+
+        // truncate:0 → length ≤ 0 → value returned untouched
+        self::assertSame('hello', $translator->trans('{v|truncate:0}', ['v' => 'hello']));
+    }
+
+    // -----------------------------------------------------------------
+    // applyPipes — empty segment guard (trailing pipe)
+    // -----------------------------------------------------------------
+
+    public function testEmptyPipeSegmentFromTrailingPipeIsIgnored(): void
+    {
+        $translator = $this->buildTranslator();
+
+        // trailing '|' splits into ['upper', ''] — the empty segment must be skipped
+        self::assertSame('HELLO', $translator->trans('{v|upper|}', ['v' => 'hello']));
+    }
+
     private function buildTranslator(): Translator
     {
         $loader = new JsonLocaleLoader(__DIR__ . '/../../Fixtures/locales');
