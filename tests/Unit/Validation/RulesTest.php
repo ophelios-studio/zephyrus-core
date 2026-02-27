@@ -1476,7 +1476,7 @@ final class RulesTest extends TestCase
         );
     }
 
-    // ---- locale / uuidV1toV5 / uuidV4 ----
+    // ---- locale / uuidV1toV5 / uuidV4 / uuidV7 ----
 
     public function testLocalePassesAndFails(): void
     {
@@ -1517,6 +1517,65 @@ final class RulesTest extends TestCase
     public function testUuidV4DefaultMessage(): void
     {
         self::assertSame('Must be a valid UUID v4.', Rules::uuidV4()->errorMessage());
+    }
+
+    public function testUuidV7PassesValidCanonicalForms(): void
+    {
+        // version nibble = 7, variant nibble = 8 (1000 binary)
+        self::assertTrue(Rules::uuidV7()->test('018e2990-aa07-7000-8000-000000000000'));
+        // variant nibble = 9
+        self::assertTrue(Rules::uuidV7()->test('018e2990-aa07-7abc-9123-abcdef012345'));
+        // variant nibble = a
+        self::assertTrue(Rules::uuidV7()->test('018e2990-aa07-7fff-afff-ffffffffffff'));
+        // variant nibble = b
+        self::assertTrue(Rules::uuidV7()->test('018e2990-aa07-7001-b001-000000000001'));
+        // uppercase is accepted (case-insensitive)
+        self::assertTrue(Rules::uuidV7()->test('018E2990-AA07-7ABC-AABC-000000000000'));
+    }
+
+    public function testUuidV7RejectsWrongVersion(): void
+    {
+        // version nibble = 4 (UUID v4)
+        self::assertFalse(Rules::uuidV7()->test('550e8400-e29b-41d4-a716-446655440000'));
+        // version nibble = 1 (UUID v1)
+        self::assertFalse(Rules::uuidV7()->test('6ba7b810-9dad-11d1-80b4-00c04fd430c8'));
+        // version nibble = 8 (not 7)
+        self::assertFalse(Rules::uuidV7()->test('018e2990-aa07-8000-8000-000000000000'));
+    }
+
+    public function testUuidV7RejectsWrongVariant(): void
+    {
+        // variant nibble = c (not in [89ab])
+        self::assertFalse(Rules::uuidV7()->test('018e2990-aa07-7000-c000-000000000000'));
+        // variant nibble = 0
+        self::assertFalse(Rules::uuidV7()->test('018e2990-aa07-7000-0000-000000000000'));
+        // variant nibble = f
+        self::assertFalse(Rules::uuidV7()->test('018e2990-aa07-7000-f000-000000000000'));
+    }
+
+    public function testUuidV7RejectsMalformedStrings(): void
+    {
+        self::assertFalse(Rules::uuidV7()->test('not-a-uuid'));
+        self::assertFalse(Rules::uuidV7()->test('018e2990-aa07-7000-8000-00000000000'));  // too short
+        self::assertFalse(Rules::uuidV7()->test('018e2990-aa07-7000-8000-0000000000000')); // too long
+        self::assertFalse(Rules::uuidV7()->test(''));
+    }
+
+    public function testUuidV7RejectsNonString(): void
+    {
+        self::assertFalse(Rules::uuidV7()->test(null));
+        self::assertFalse(Rules::uuidV7()->test(42));
+        self::assertFalse(Rules::uuidV7()->test([]));
+    }
+
+    public function testUuidV7DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid UUID v7.', Rules::uuidV7()->errorMessage());
+    }
+
+    public function testUuidV7CustomMessage(): void
+    {
+        self::assertSame('Invalid UUID v7 format.', Rules::uuidV7('Invalid UUID v7 format.')->errorMessage());
     }
 
     // ---- countryCode / currencyCode ----

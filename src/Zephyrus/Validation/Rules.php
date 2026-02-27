@@ -1019,6 +1019,19 @@ final class Rules
     }
 
     /**
+     * Validates UUID version 7 (RFC 9562): version nibble must be 7,
+     * variant nibble must be 8, 9, a, or b (RFC 4122 variant).
+     */
+    public static function uuidV7(string $message = 'Must be a valid UUID v7.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates ISO 4217 currency codes.
      */
     public static function currencyCode(string $message = 'Must be a valid ISO currency code.'): Rule
