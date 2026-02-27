@@ -17,23 +17,34 @@ use Zephyrus\Http\Response;
  * the inner handler.
  *
  * Token lookup order (first match wins):
- *   1. Request body field (default: "_csrf_token").
- *   2. Request header (default: "X-CSRF-Token").
+ *   1. Request body field (default: "_csrf_token", via CsrfConfig::bodyField).
+ *   2. Request header (default: "X-CSRF-Token", via CsrfConfig::headerName).
  *
  * Both sources are checked so that traditional HTML forms and AJAX/fetch
  * clients can both authenticate their requests with the same token.
+ *
+ * Path exclusions
+ * ---------------
+ * Paths whose URI matches any PCRE pattern in CsrfConfig::excludedPathPatterns
+ * are exempt from CSRF checks entirely.  This is useful for webhook receivers,
+ * public API endpoints protected by other means (bearer tokens, HMAC, …), or
+ * health-check routes.
+ *
+ *   $config = CsrfConfig::fromArray([
+ *       'excluded_path_patterns' => ['#^/webhooks/#', '#^/api/public#'],
+ *   ]);
+ *   $mw = new CsrfMiddleware($sessionManager, $config);
  *
  * The token is validated by the injected CsrfTokenManagerInterface using a
  * constant-time comparison; the middleware itself does not generate tokens.
  *
  * Usage:
  *
- *   // Inject a session-backed manager (Phase 6):
  *   $kernel = KernelBuilder::create()
  *       ->withMiddleware(new CsrfMiddleware($sessionManager))
  *       ->build();
  *
- *   // In a Blade/Twig/PHP template, embed the token:
+ *   // In a template, embed the token:
  *   <input type="hidden" name="_csrf_token" value="<?= $manager->getToken() ?>">
  *
  *   // Or via AJAX header:
@@ -41,10 +52,6 @@ use Zephyrus\Http\Response;
  *       method: 'POST',
  *       headers: { 'X-CSRF-Token': csrfToken },
  *   });
- *
- * Customising the token field / header name:
- *
- *   new CsrfMiddleware($manager, bodyField: '_token', headerName: 'X-XSRF-TOKEN')
  */
 final class CsrfMiddleware implements MiddlewareInterface
 {
@@ -53,14 +60,18 @@ final class CsrfMiddleware implements MiddlewareInterface
 
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,
-        private readonly string $bodyField  = '_csrf_token',
-        private readonly string $headerName = 'X-CSRF-Token',
+        private readonly CsrfConfig $config = new CsrfConfig(),
     ) {
     }
 
     public function process(Request $request, callable $next): Response
     {
         if (in_array($request->method, self::SAFE_METHODS, true)) {
+            /** @var Response */
+            return $next($request);
+        }
+
+        if ($this->isPathExcluded($request)) {
             /** @var Response */
             return $next($request);
         }
@@ -77,14 +88,34 @@ final class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
+     * Returns true when the request path matches any of the configured
+     * exclusion patterns and should bypass CSRF validation.
+     */
+    private function isPathExcluded(Request $request): bool
+    {
+        if ($this->config->excludedPathPatterns === []) {
+            return false;
+        }
+
+        $path = $request->path();
+        foreach ($this->config->excludedPathPatterns as $pattern) {
+            if (@preg_match($pattern, $path) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Resolve the submitted CSRF token from the request (body or header) and
      * delegate validation to the injected token manager.
      */
     private function isTokenValid(Request $request): bool
     {
         // Body field takes precedence over the header.
-        $submitted = $request->input($this->bodyField)
-            ?? $request->header($this->headerName);
+        $submitted = $request->input($this->config->bodyField)
+            ?? $request->header($this->config->headerName);
 
         if ($submitted === null || !is_string($submitted) || $submitted === '') {
             return false;
