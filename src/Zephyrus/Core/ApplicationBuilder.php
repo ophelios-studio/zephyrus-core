@@ -7,6 +7,7 @@ namespace Zephyrus\Core;
 use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Localization\FallbackLocaleLoader;
 use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
@@ -96,6 +97,17 @@ final class ApplicationBuilder
     public function withJsonLocales(string $basePath, string $defaultLocale = 'en', string $extension = 'json'): self
     {
         return $this->withLocaleLoader(new JsonLocaleLoader($basePath, $extension), $defaultLocale);
+    }
+
+    /**
+     * Configure translation from multiple locale loaders merged in last-wins
+     * order. Later loaders override earlier loaders for the same key.
+     *
+     * @param LocaleLoaderInterface[] $loaders
+     */
+    public function withFallbackLoaders(array $loaders, string $defaultLocale = 'en'): self
+    {
+        return $this->withLocaleLoader(new FallbackLocaleLoader($loaders), $defaultLocale);
     }
 
     /**

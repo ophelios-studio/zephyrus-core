@@ -46,6 +46,29 @@ final class ApplicationBuilderTest extends TestCase
         self::assertSame('Welcome Bob', $app->trans('messages.welcome', ['name' => 'Bob'], 'fr'));
     }
 
+    public function testWithFallbackLoadersMergesLoadersLastWins(): void
+    {
+        $base = new class implements LocaleLoaderInterface {
+            public function load(string $locale): array
+            {
+                return $locale === 'en' ? ['app.label' => 'Base', 'app.only' => 'Only Base'] : [];
+            }
+        };
+        $override = new class implements LocaleLoaderInterface {
+            public function load(string $locale): array
+            {
+                return $locale === 'en' ? ['app.label' => 'Override'] : [];
+            }
+        };
+
+        $app = ApplicationBuilder::create()
+            ->withFallbackLoaders([$base, $override], defaultLocale: 'en')
+            ->build();
+
+        self::assertSame('Override', $app->trans('app.label'));    // second loader wins
+        self::assertSame('Only Base', $app->trans('app.only'));    // only in first loader
+    }
+
     public function testWithLocaleLoaderOverridesDefaultTranslatorSource(): void
     {
         $loader = new class implements LocaleLoaderInterface {
