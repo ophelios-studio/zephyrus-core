@@ -495,4 +495,113 @@ final class RouteCollectionTest extends TestCase
             'constrained_routes' => 2,
         ], $collection->summary());
     }
+
+    // -----------------------------------------------------------------------
+    // Trailing-slash tolerance tests
+    // -----------------------------------------------------------------------
+
+    public function testDefaultIsTrailingSlashTolerant(): void
+    {
+        $collection = new RouteCollection();
+
+        self::assertTrue($collection->isTrailingSlashTolerant());
+    }
+
+    public function testExplicitToleranceFalseGetterReturnsFalse(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+
+        self::assertFalse($collection->isTrailingSlashTolerant());
+    }
+
+    public function testTolerantModeMatchesStaticRouteWithTrailingSlash(): void
+    {
+        $collection = new RouteCollection(); // tolerant=true by default
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        $match = $collection->match('GET', '/users/');
+
+        self::assertSame('/users', $match->route->path);
+        self::assertSame([], $match->parameters);
+    }
+
+    public function testTolerantModeMatchesParameterizedRouteWithTrailingSlash(): void
+    {
+        $collection = new RouteCollection(); // tolerant=true by default
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $match = $collection->match('GET', '/users/42/');
+
+        self::assertSame('42', $match->parameter('id'));
+    }
+
+    public function testStrictModeRejectsStaticRouteWithTrailingSlash(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        $this->expectException(RouteNotFoundException::class);
+        $this->expectExceptionMessage('No route matched GET /users/');
+
+        $collection->match('GET', '/users/');
+    }
+
+    public function testStrictModeMatchesStaticRouteWithoutTrailingSlash(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        $match = $collection->match('GET', '/users');
+
+        self::assertSame('/users', $match->route->path);
+    }
+
+    public function testStrictModeRejectsParameterizedRouteWithTrailingSlash(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $this->expectException(RouteNotFoundException::class);
+        $this->expectExceptionMessage('No route matched GET /users/42/');
+
+        $collection->match('GET', '/users/42/');
+    }
+
+    public function testStrictModeMatchesParameterizedRouteWithoutTrailingSlash(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $match = $collection->match('GET', '/users/42');
+
+        self::assertSame('42', $match->parameter('id'));
+    }
+
+    public function testStrictModeRootPathStillMatches(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+
+        $match = $collection->match('GET', '/');
+
+        self::assertSame('/', $match->route->path);
+        self::assertSame([], $match->parameters);
+    }
+
+    public function testWithRoutePreservesTrailingSlashTolerantSetting(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $derived = $collection->withRoute(Route::define('GET', '/users', 'UserController@index'));
+
+        self::assertFalse($derived->isTrailingSlashTolerant());
+    }
+
+    public function testWithLastRouteNamePreservesTrailingSlashTolerantSetting(): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+        $derived = $collection->withLastRouteName('users.index');
+
+        self::assertFalse($derived->isTrailingSlashTolerant());
+    }
 }
