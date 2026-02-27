@@ -15,6 +15,16 @@ final class RouteCollection
      */
     private array $routes = [];
 
+    /**
+     * When true (default), a trailing slash on the incoming request path is
+     * ignored so that /users and /users/ resolve to the same route.  Set to
+     * false to require paths to match exactly, trailing slash and all.
+     */
+    public function __construct(
+        private readonly bool $trailingSlashTolerant = true,
+    ) {
+    }
+
     public function add(Route $route): void
     {
         $this->routes[] = $route;
@@ -22,7 +32,7 @@ final class RouteCollection
 
     public function withRoute(Route $route): self
     {
-        $collection = new self();
+        $collection = new self($this->trailingSlashTolerant);
         $collection->routes = $this->routes;
         $collection->routes[] = $route;
 
@@ -35,7 +45,7 @@ final class RouteCollection
             return $this;
         }
 
-        $collection = new self();
+        $collection = new self($this->trailingSlashTolerant);
         $collection->routes = $this->routes;
 
         $lastIndex = count($collection->routes) - 1;
@@ -359,6 +369,11 @@ final class RouteCollection
         }
     }
 
+    public function isTrailingSlashTolerant(): bool
+    {
+        return $this->trailingSlashTolerant;
+    }
+
     public function count(): int
     {
         return count($this->routes);
@@ -472,9 +487,22 @@ final class RouteCollection
     {
         $parsedPath = (string) parse_url($path, PHP_URL_PATH);
 
+        if ($this->trailingSlashTolerant) {
+            $normalized = '/' . trim($parsedPath, '/');
+
+            return $normalized === '/' ? '/' : $normalized;
+        }
+
+        // Strict mode: preserve a trailing slash so that /users/ and /users are
+        // treated as distinct paths during segment-count comparison.
+        $hasTrailingSlash = str_ends_with($parsedPath, '/') && strlen($parsedPath) > 1;
         $normalized = '/' . trim($parsedPath, '/');
 
-        return $normalized === '/' ? '/' : $normalized;
+        if ($normalized === '/') {
+            return '/';
+        }
+
+        return $hasTrailingSlash ? $normalized . '/' : $normalized;
     }
 
     private function routeAcceptsMethod(Route $route, string $method): bool
