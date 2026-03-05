@@ -75,6 +75,7 @@ final class AcceptLanguageResolver
         }
 
         $entries = [];
+        $position = 0;
 
         foreach (explode(',', $header) as $part) {
             $part = trim($part);
@@ -98,12 +99,22 @@ final class AcceptLanguageResolver
             // Wildcard language-range (*) is handled as a generic fallback and
             // should not be treated as a literal locale tag.
             if ($locale !== '' && $locale !== '*' && $quality > 0.0) {
-                $entries[] = [$locale, $quality];
+                // Preserve source order so equal q-values stay stable.
+                $entries[] = [$locale, $quality, $position];
             }
+
+            $position++;
         }
 
-        // Stable descending sort by quality value.
-        usort($entries, static fn(array $a, array $b): int => $b[1] <=> $a[1]);
+        // Descending by quality, then ascending original position for stability.
+        usort($entries, static function (array $a, array $b): int {
+            $qualityCompare = $b[1] <=> $a[1];
+            if ($qualityCompare !== 0) {
+                return $qualityCompare;
+            }
+
+            return $a[2] <=> $b[2];
+        });
 
         return array_column($entries, 0);
     }
@@ -117,7 +128,17 @@ final class AcceptLanguageResolver
             return 1.0;
         }
 
-        return (float) $quality;
+        $parsed = (float) $quality;
+
+        if ($parsed < 0.0) {
+            return 0.0;
+        }
+
+        if ($parsed > 1.0) {
+            return 1.0;
+        }
+
+        return $parsed;
     }
 
     /**
