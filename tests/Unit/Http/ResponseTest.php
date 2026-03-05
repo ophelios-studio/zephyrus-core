@@ -42,6 +42,22 @@ final class ResponseTest extends TestCase
         self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
     }
 
+    public function testJsonFactoryAcceptsScalarPayloads(): void
+    {
+        $response = Response::json('ok');
+
+        self::assertSame('"ok"', $response->body);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+    }
+
+    public function testJsonFactoryAcceptsObjectPayloads(): void
+    {
+        $response = Response::json((object) ['id' => 7]);
+
+        self::assertSame('{"id":7}', $response->body);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+    }
+
     public function testNoContentFactoryBuilds204WithoutBody(): void
     {
         $response = Response::noContent();
