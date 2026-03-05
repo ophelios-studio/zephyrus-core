@@ -153,3 +153,10 @@ $app = ApplicationBuilder::create()
     ->withConfigurationFile(__DIR__ . '/../config/app.php')
     ->build();
 ```
+
+Static bootstrap shortcuts are also available:
+
+```php
+$app = ApplicationBuilder::fromConfigurationFile(__DIR__ . '/../config/app.php')
+    ->build();
+```

@@ -36,6 +36,24 @@ final class ApplicationBuilder
         return new self();
     }
 
+    public static function fromConfiguration(Configuration $configuration): self
+    {
+        return self::create()->withConfiguration($configuration);
+    }
+
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    public static function fromConfigurationArray(array $configuration): self
+    {
+        return self::create()->withConfigurationArray($configuration);
+    }
+
+    public static function fromConfigurationFile(string $path): self
+    {
+        return self::create()->withConfigurationFile($path);
+    }
+
     public function withRouter(Router $router): self
     {
         $clone = clone $this;
