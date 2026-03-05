@@ -80,6 +80,24 @@ final class AcceptLanguageResolverTest extends TestCase
         ));
     }
 
+    public function testWildcardIsNotTreatedAsLiteralLocale(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(
+            acceptLanguageHeader: '*, fr;q=0',
+            supportedLocales:     ['en', 'fr'],
+            defaultLocale:        'en',
+        ));
+    }
+
+    public function testWildcardIsIgnoredWhenSpecificSupportedLocaleExists(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve(
+            acceptLanguageHeader: '*, fr;q=0.8',
+            supportedLocales:     ['en', 'fr'],
+            defaultLocale:        'en',
+        ));
+    }
+
     // -- Supported-locales filter ---------------------------------------------
 
     public function testFiltersToSupportedLocales(): void
