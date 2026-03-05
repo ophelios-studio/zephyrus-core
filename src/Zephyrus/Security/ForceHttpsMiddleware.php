@@ -58,6 +58,7 @@ final class ForceHttpsMiddleware implements MiddlewareInterface
 
         // Strip the default HTTP port from the authority component.
         // "https://example.com:80/path" → "https://example.com/path"
-        return preg_replace('#^(https://[^/:]+):80(/.*)$#', '$1$2', $https) ?? $https;
+        // "https://example.com:80"      → "https://example.com"
+        return preg_replace('#^(https://[^/:]+):80(?=(?:[/?\#]|$))#', '$1', $https) ?? $https;
     }
 }
