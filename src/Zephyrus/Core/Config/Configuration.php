@@ -119,7 +119,7 @@ final readonly class Configuration
     {
         $merged = [];
 
-        foreach ($paths as $path) {
+        foreach (self::normalizePaths($paths) as $path) {
             if ($ignoreMissing && !is_file($path)) {
                 continue;
             }
@@ -129,6 +129,30 @@ final readonly class Configuration
         }
 
         return $merged;
+    }
+
+    /**
+     * @param string[] $paths
+     * @return string[]
+     */
+    private static function normalizePaths(array $paths): array
+    {
+        $normalized = [];
+
+        foreach ($paths as $index => $path) {
+            if (!is_string($path)) {
+                throw new RuntimeException(sprintf('Configuration file path at index %d must be a string.', $index));
+            }
+
+            $trimmed = trim($path);
+            if ($trimmed === '') {
+                throw new RuntimeException(sprintf('Configuration file path at index %d must not be empty.', $index));
+            }
+
+            $normalized[] = $trimmed;
+        }
+
+        return $normalized;
     }
 
     /**
