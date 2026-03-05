@@ -70,8 +70,15 @@ final readonly class Configuration
             throw new RuntimeException(sprintf('Configuration file not found: %s', $path));
         }
 
-        /** @var mixed $loaded */
-        $loaded = require $path;
+        try {
+            /** @var mixed $loaded */
+            $loaded = require $path;
+        } catch (\Throwable $exception) {
+            throw new RuntimeException(
+                sprintf('Configuration file failed to load: %s', $path),
+                previous: $exception,
+            );
+        }
 
         if (!is_array($loaded)) {
             throw new RuntimeException(sprintf('Configuration file must return an array: %s', $path));
