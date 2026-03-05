@@ -337,6 +337,21 @@ final class ConfigurationTest extends TestCase
         }
     }
 
+    public function testFromFilesRejectsNonStringPathEntries(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        /** @phpstan-ignore-next-line */
+        Configuration::fromFiles(['valid.php', 123]);
+    }
+
+    public function testFromFilesRejectsEmptyPathEntries(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        Configuration::fromFiles(['   ']);
+    }
+
     public function testFromFileWrapsThrownExceptionWithContext(): void
     {
         $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . uniqid('', true) . '.php';

@@ -194,4 +194,4 @@ Or build directly from config in one call:
 $app = ApplicationBuilder::buildFromConfigurationFile(__DIR__ . '/../config/app.php');
 ```
 
-If the config file is missing, returns a non-array payload, or throws while loading, bootstrap raises a `RuntimeException` with file context.
+If a config file is missing, returns a non-array payload, throws while loading, or a path entry is invalid/empty, bootstrap raises a `RuntimeException` with file context.
