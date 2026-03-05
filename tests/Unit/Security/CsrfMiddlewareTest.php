@@ -382,6 +382,32 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertStringNotContainsString('_csrf_token', $response->body);
     }
 
+    public function testInjectTokenSkipsGetForms(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
+        $request = new Request('GET', 'https://example.com/form');
+        $html = '<html><body><form method="get" action="/search"><input name="q"></form></body></html>';
+
+        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]));
+
+        self::assertStringNotContainsString('_csrf_token', $response->body);
+    }
+
+    public function testInjectTokenSkipsFormsWithoutMethodAttribute(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
+        $request = new Request('GET', 'https://example.com/form');
+        $html = '<html><body><form action="/search"><input name="q"></form></body></html>';
+
+        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]));
+
+        self::assertStringNotContainsString('_csrf_token', $response->body);
+    }
+
     // ── CsrfConfig factory tests ──────────────────────────────────────────────
 
     public function testCsrfConfigDefaults(): void
