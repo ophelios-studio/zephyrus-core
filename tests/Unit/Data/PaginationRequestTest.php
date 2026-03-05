@@ -58,6 +58,17 @@ final class PaginationRequestTest extends TestCase
         self::assertSame(1, $request->perPage);
     }
 
+    public function testFromArrayWithBoundsClampsPageToMinimumOne(): void
+    {
+        $request = PaginationRequest::fromArrayWithBounds([
+            'page' => 0,
+            'per_page' => 20,
+        ], defaultPerPage: 25, maxPerPage: 100);
+
+        self::assertSame(1, $request->page);
+        self::assertSame(20, $request->perPage);
+    }
+
     public function testWithPageAndWithPerPageReturnNewInstances(): void
     {
         $request = new PaginationRequest(page: 2, perPage: 25);
@@ -98,6 +109,14 @@ final class PaginationRequestTest extends TestCase
 
         self::assertSame(2, $request->page);
         self::assertSame(100, $request->perPage);
+    }
+
+    public function testFromQueryClampsInvalidPageToMinimumOne(): void
+    {
+        $request = PaginationRequest::fromQuery(['page' => -4, 'per_page' => 15], 25, 100);
+
+        self::assertSame(1, $request->page);
+        self::assertSame(15, $request->perPage);
     }
 
     public function testConstructThrowsWhenPageIsInvalid(): void
