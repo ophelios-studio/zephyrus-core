@@ -182,6 +182,24 @@ final class ApplicationBuilderTest extends TestCase
         ));
     }
 
+    public function testWithConfigurationArrayParsesAndAppliesLocalization(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withConfigurationArray([
+                'localization' => [
+                    'default_locale' => 'en',
+                    'supported_locales' => ['en', 'fr'],
+                    'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+                ],
+            ])
+            ->build();
+
+        self::assertSame('Bonjour', $app->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+        ));
+    }
+
     public function testWithMiddlewarePassesThroughToKernelBuilder(): void
     {
         $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health');
