@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use Zephyrus\Container\ContainerInterface;
+use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Localization\FallbackLocaleLoader;
@@ -147,6 +148,28 @@ final class ApplicationBuilder
         $clone->supportedLocales = $locales;
 
         return $clone;
+    }
+
+    public function withLocalizationConfig(LocalizationConfig $config): self
+    {
+        $builder = $this;
+
+        if ($config->jsonLocalePaths !== []) {
+            $builder = $builder->withJsonLocaleLayers(
+                basePaths: $config->jsonLocalePaths,
+                defaultLocale: $config->defaultLocale,
+                extension: $config->jsonExtension,
+            );
+        } else {
+            $builder = $builder->withLocaleLoader(new class implements LocaleLoaderInterface {
+                public function load(string $locale): array
+                {
+                    return [];
+                }
+            }, $config->defaultLocale);
+        }
+
+        return $builder->withSupportedLocales($config->supportedLocales);
     }
 
     public function build(): Application
