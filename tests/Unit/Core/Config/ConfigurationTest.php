@@ -217,4 +217,41 @@ final class ConfigurationTest extends TestCase
 
         Configuration::fromArray(['localization' => ['defaultLocale' => '']]);
     }
+
+    public function testFromFileLoadsAndHydratesConfiguration(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-config-' . uniqid('', true) . '.php';
+        file_put_contents($path, "<?php\nreturn " . var_export([
+            'localization' => ['defaultLocale' => 'fr'],
+            'security' => ['forceHttps' => true],
+        ], true) . ";\n");
+
+        try {
+            $config = Configuration::fromFile($path);
+            self::assertSame('fr', $config->localization->defaultLocale);
+            self::assertTrue($config->security->forceHttps);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testFromFileThrowsWhenFileMissing(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        Configuration::fromFile('/tmp/zephyrus-missing-' . uniqid('', true) . '.php');
+    }
+
+    public function testFromFileThrowsWhenPayloadIsNotArray(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-config-invalid-' . uniqid('', true) . '.php';
+        file_put_contents($path, "<?php return 'bad';");
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            Configuration::fromFile($path);
+        } finally {
+            @unlink($path);
+        }
+    }
 }
