@@ -27,9 +27,23 @@ namespace Zephyrus\Upload;
  */
 final class Uploader
 {
+    /**
+     * @param string[] $allowedExtensions Lowercased extension allowlist without dot (empty = accept any).
+     * @param string[] $allowedMimeTypes  Lowercased MIME allowlist (empty = accept any).
+     */
     public function __construct(
         private string $destinationRoot,
+        private array $allowedExtensions = [],
+        private array $allowedMimeTypes = [],
+        private ?int $maxSizeBytes = null,
     ) {
+        $this->allowedExtensions = array_values(array_filter(array_map(static function (string $extension): string {
+            return ltrim(strtolower(trim($extension)), '.');
+        }, $this->allowedExtensions), static fn (string $extension): bool => $extension !== ''));
+
+        $this->allowedMimeTypes = array_values(array_filter(array_map(static function (string $mimeType): string {
+            return strtolower(trim($mimeType));
+        }, $this->allowedMimeTypes), static fn (string $mimeType): bool => $mimeType !== ''));
     }
 
     /**
@@ -46,6 +60,7 @@ final class Uploader
     public function store(FileUpload $file, ?string $subDirectory = null, ?string $targetName = null): string
     {
         $file->assertValid();
+        $this->assertConstraints($file);
 
         $normalizedSubDir = $subDirectory !== null ? $this->normalizeSubDirectory($subDirectory) : null;
         $absoluteDir = $this->resolveDirectory($normalizedSubDir);
@@ -66,6 +81,30 @@ final class Uploader
         return $normalizedSubDir !== null && $normalizedSubDir !== ''
             ? $normalizedSubDir . '/' . $name
             : $name;
+    }
+
+    /**
+     * Validates optional extension/MIME/size constraints configured at construction.
+     */
+    private function assertConstraints(FileUpload $file): void
+    {
+        if ($this->maxSizeBytes !== null && $file->sizeBytes > $this->maxSizeBytes) {
+            throw UploadException::fileTooLarge($file->sizeBytes, $this->maxSizeBytes);
+        }
+
+        if ($this->allowedExtensions !== []) {
+            $extension = $file->extension();
+            if ($extension === '' || !in_array($extension, $this->allowedExtensions, true)) {
+                throw UploadException::extensionNotAllowed($extension, $this->allowedExtensions);
+            }
+        }
+
+        if ($this->allowedMimeTypes !== []) {
+            $mimeType = strtolower(trim($file->clientMimeType));
+            if ($mimeType === '' || !in_array($mimeType, $this->allowedMimeTypes, true)) {
+                throw UploadException::mimeTypeNotAllowed($mimeType, $this->allowedMimeTypes);
+            }
+        }
     }
 
     // ------------------------------------------------------------------

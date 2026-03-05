@@ -20,3 +20,4 @@ Early bootstrap on `dev` branch.
 
 ## Documentation
 - Localization: `docs/localization.md`
+- Uploads: `docs/uploads.md`

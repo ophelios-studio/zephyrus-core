@@ -223,6 +223,69 @@ final class UploaderTest extends TestCase
         }
     }
 
+    public function test_store_rejects_file_when_size_exceeds_configured_maximum(): void
+    {
+        $dest = $this->makeTempDir();
+        $tmp = $this->makeTempFile('1234567890');
+        $file = new FileUpload('payload.txt', 'text/plain', $tmp, 10, UPLOAD_ERR_OK);
+
+        try {
+            $this->expectException(UploadException::class);
+            $this->expectExceptionMessage('too large');
+            (new Uploader($dest, maxSizeBytes: 8))->store($file);
+        } finally {
+            @unlink($tmp);
+            $this->removeDir($dest);
+        }
+    }
+
+    public function test_store_rejects_file_when_extension_not_allowlisted(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = $this->makeValidFile('avatar.gif', 'image/gif');
+
+        try {
+            $this->expectException(UploadException::class);
+            $this->expectExceptionMessage('Allowed extensions: jpg, png');
+            (new Uploader($dest, allowedExtensions: ['jpg', '.png']))->store($file);
+        } finally {
+            $this->removeDir($dest);
+        }
+    }
+
+    public function test_store_rejects_file_when_mime_type_not_allowlisted(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = $this->makeValidFile('avatar.jpg', 'image/gif');
+
+        try {
+            $this->expectException(UploadException::class);
+            $this->expectExceptionMessage('Allowed MIME types: image/jpeg, image/png');
+            (new Uploader($dest, allowedMimeTypes: ['image/jpeg', 'image/png']))->store($file);
+        } finally {
+            $this->removeDir($dest);
+        }
+    }
+
+    public function test_store_accepts_file_when_constraints_match(): void
+    {
+        $dest = $this->makeTempDir();
+        $tmp = $this->makeTempFile('ok');
+        $file = new FileUpload('avatar.JPG', 'IMAGE/JPEG', $tmp, 2, UPLOAD_ERR_OK);
+
+        $relative = (new Uploader(
+            $dest,
+            allowedExtensions: ['jpg', 'png'],
+            allowedMimeTypes: ['image/jpeg', 'image/png'],
+            maxSizeBytes: 100,
+        ))->store($file, 'avatars');
+
+        self::assertMatchesRegularExpression('#^avatars/[a-f0-9]{32}\.jpg$#', $relative);
+        self::assertFileExists($dest . '/' . $relative);
+
+        $this->removeDir($dest);
+    }
+
     // ------------------------------------------------------------------
     // Path traversal rejection — sub-directory
     // ------------------------------------------------------------------
