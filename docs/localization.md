@@ -147,6 +147,8 @@ $configuration = Configuration::fromFiles([
 ]);
 ```
 
+Duplicate path entries are ignored after normalization.
+
 Builder shortcuts for layered files are also available:
 
 ```php
