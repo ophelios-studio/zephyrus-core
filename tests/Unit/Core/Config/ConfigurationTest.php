@@ -255,6 +255,58 @@ final class ConfigurationTest extends TestCase
         }
     }
 
+    public function testFromFilesMergesLaterFilesOverEarlierFiles(): void
+    {
+        $basePath = sys_get_temp_dir() . '/zephyrus-config-base-' . uniqid('', true) . '.php';
+        $envPath = sys_get_temp_dir() . '/zephyrus-config-env-' . uniqid('', true) . '.php';
+
+        file_put_contents($basePath, "<?php\nreturn " . var_export([
+            'application' => ['environment' => 'production', 'debug' => false],
+            'localization' => [
+                'defaultLocale' => 'en',
+                'supportedLocales' => ['en'],
+                'jsonLocalePaths' => ['/base/locales'],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($envPath, "<?php\nreturn " . var_export([
+            'application' => ['debug' => true],
+            'localization' => [
+                'supportedLocales' => ['en', 'fr'],
+                'jsonLocalePaths' => ['/env/locales'],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $config = Configuration::fromFiles([$basePath, $envPath]);
+
+            self::assertTrue($config->application->debug);
+            self::assertSame('production', $config->application->environment->value);
+            self::assertSame(['en', 'fr'], $config->localization->supportedLocales);
+            self::assertSame(['/env/locales'], $config->localization->jsonLocalePaths);
+        } finally {
+            @unlink($basePath);
+            @unlink($envPath);
+        }
+    }
+
+    public function testToArrayExportsExpectedSectionKeys(): void
+    {
+        $config = Configuration::fromArray([
+            'application' => ['environment' => 'production', 'debug' => false],
+            'localization' => ['defaultLocale' => 'fr', 'supportedLocales' => ['fr']],
+        ]);
+
+        $export = $config->toArray();
+
+        self::assertArrayHasKey('application', $export);
+        self::assertArrayHasKey('session', $export);
+        self::assertArrayHasKey('security', $export);
+        self::assertArrayHasKey('localization', $export);
+        self::assertArrayHasKey('database', $export);
+        self::assertSame('fr', $export['localization']['defaultLocale']);
+    }
+
     public function testFromFileWrapsThrownExceptionWithContext(): void
     {
         $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . uniqid('', true) . '.php';
