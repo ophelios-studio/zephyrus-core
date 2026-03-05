@@ -65,6 +65,32 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // resolveLocaleFromRequest() helper
+    // -------------------------------------------------------------------------
+
+    public function testResolveLocaleFromRequestReturnsNullWhenNoSignalsProvided(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
+            ->build();
+
+        self::assertNull($app->resolveLocaleFromRequest());
+    }
+
+    public function testResolveLocaleFromRequestUsesRequestedLocaleThenHeaderThenDefault(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
+            ->withSupportedLocales(['en', 'fr'])
+            ->build();
+
+        $request = $this->requestWithHeader('de, fr;q=0.9');
+
+        self::assertSame('fr', $app->resolveLocaleFromRequest(request: $request));
+        self::assertSame('fr', $app->resolveLocaleFromRequest(request: $request, requestedLocale: 'fr-CA'));
+    }
+
+    // -------------------------------------------------------------------------
     // transFromRequest() — no signals → translator default locale
     // -------------------------------------------------------------------------
 
