@@ -50,6 +50,15 @@ $message = $app->transFromRequest(
 );
 ```
 
+If you need locale negotiation without translating immediately, use:
+
+```php
+$locale = $app->resolveLocaleFromRequest(
+    request: $request,
+    requestedLocale: $routeLocale,
+);
+```
+
 Resolution priority:
 1. explicit `requestedLocale`
 2. `Accept-Language` header (q-values respected)

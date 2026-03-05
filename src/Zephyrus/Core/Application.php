@@ -60,19 +60,33 @@ final readonly class Application
         ?string $requestedLocale = null,
         array $supportedLocales = [],
     ): string {
+        $locale = $this->resolveLocaleFromRequest($request, $requestedLocale, $supportedLocales);
+
+        return $this->translator->trans($key, $parameters, $locale);
+    }
+
+    /**
+     * Resolve a locale token using the same policy as transFromRequest().
+     *
+     * @param string[] $supportedLocales Per-call allowlist override.
+     */
+    public function resolveLocaleFromRequest(
+        ?Request $request = null,
+        ?string $requestedLocale = null,
+        array $supportedLocales = [],
+    ): ?string {
         if ($request === null && $requestedLocale === null) {
-            return $this->translator->trans($key, $parameters);
+            return null;
         }
 
         $acceptLanguage = $request?->header('accept-language');
         $resolver       = new LocaleResolver();
-        $locale         = $resolver->resolve(
+
+        return $resolver->resolve(
             requestedLocale:      $requestedLocale,
             acceptLanguageHeader: $acceptLanguage,
             defaultLocale:        $this->defaultLocale,
             supportedLocales:     $supportedLocales !== [] ? $supportedLocales : $this->supportedLocales,
         );
-
-        return $this->translator->trans($key, $parameters, $locale);
     }
 }
