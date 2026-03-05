@@ -10,6 +10,7 @@ use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Core\Config\Environment;
+use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Core\Config\SessionConfig;
 
@@ -23,9 +24,10 @@ final class ConfigurationTest extends TestCase
     {
         $config = Configuration::defaults();
 
-        self::assertInstanceOf(ApplicationConfig::class, $config->application);
-        self::assertInstanceOf(SessionConfig::class,     $config->session);
-        self::assertInstanceOf(SecurityConfig::class,    $config->security);
+        self::assertInstanceOf(ApplicationConfig::class,  $config->application);
+        self::assertInstanceOf(SessionConfig::class,      $config->session);
+        self::assertInstanceOf(SecurityConfig::class,     $config->security);
+        self::assertInstanceOf(LocalizationConfig::class, $config->localization);
         self::assertNull($config->database);
     }
 
@@ -34,9 +36,10 @@ final class ConfigurationTest extends TestCase
         $defaults = Configuration::defaults();
         $empty    = Configuration::fromArray([]);
 
-        self::assertSame($defaults->application->environment, $empty->application->environment);
-        self::assertSame($defaults->session->name,            $empty->session->name);
-        self::assertSame($defaults->security->csrfEnabled,    $empty->security->csrfEnabled);
+        self::assertSame($defaults->application->environment,   $empty->application->environment);
+        self::assertSame($defaults->session->name,              $empty->session->name);
+        self::assertSame($defaults->security->csrfEnabled,      $empty->security->csrfEnabled);
+        self::assertSame($defaults->localization->defaultLocale, $empty->localization->defaultLocale);
         self::assertNull($empty->database);
     }
 
@@ -108,6 +111,33 @@ final class ConfigurationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // Localization section
+    // -------------------------------------------------------------------------
+
+    public function testLocalizationSectionIsHydrated(): void
+    {
+        $config = Configuration::fromArray([
+            'localization' => [
+                'defaultLocale' => 'fr',
+                'supportedLocales' => ['fr', 'en'],
+                'jsonLocalePaths' => ['/app/locales'],
+            ],
+        ]);
+
+        self::assertSame('fr', $config->localization->defaultLocale);
+        self::assertSame(['fr', 'en'], $config->localization->supportedLocales);
+        self::assertSame(['/app/locales'], $config->localization->jsonLocalePaths);
+    }
+
+    public function testMissingLocalizationSectionUsesDefaults(): void
+    {
+        $config = Configuration::fromArray([]);
+
+        self::assertSame('en', $config->localization->defaultLocale);
+        self::assertSame([], $config->localization->supportedLocales);
+    }
+
+    // -------------------------------------------------------------------------
     // Database section
     // -------------------------------------------------------------------------
 
@@ -142,6 +172,7 @@ final class ConfigurationTest extends TestCase
             'application' => ['environment' => 'production', 'debug' => false],
             'session'     => ['name' => 'APP', 'secure' => true],
             'security'    => ['forceHttps' => true, 'csrfEnabled' => true],
+            'localization' => ['defaultLocale' => 'fr', 'supportedLocales' => ['fr', 'en']],
             'database'    => ['database' => 'mydb', 'username' => 'user', 'password' => 's3cr3t'],
         ]);
 
@@ -150,6 +181,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame('APP',  $config->session->name);
         self::assertTrue($config->session->secure);
         self::assertTrue($config->security->forceHttps);
+        self::assertSame('fr', $config->localization->defaultLocale);
         self::assertSame('mydb', $config->database->database);
         self::assertSame('s3cr3t', $config->database->password);
     }
@@ -177,5 +209,12 @@ final class ConfigurationTest extends TestCase
         $this->expectException(ConfigurationException::class);
 
         Configuration::fromArray(['security' => ['maxBodySize' => -100]]);
+    }
+
+    public function testInvalidLocalizationSectionPropagatesException(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        Configuration::fromArray(['localization' => ['defaultLocale' => '']]);
     }
 }
