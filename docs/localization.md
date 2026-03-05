@@ -89,3 +89,14 @@ $loader = new FallbackLocaleLoader([
     new JsonLocaleLoader('/app/resources/locales'), // overrides vendor keys
 ]);
 ```
+
+For a JSON-only bootstrap shortcut, use `ApplicationBuilder::withJsonLocaleLayers()`:
+
+```php
+$app = ApplicationBuilder::create()
+    ->withJsonLocaleLayers([
+        '/vendor/package/locales',
+        '/app/resources/locales', // overrides vendor keys
+    ], defaultLocale: 'en')
+    ->build();
+```
