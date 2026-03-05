@@ -668,6 +668,52 @@ final class RequestTest extends TestCase
         self::assertSame('/tmp/b', $files[1]->tmpPath);
     }
 
+    public function testFromGlobalsSkipsMalformedSingleFileEntry(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'example.com',
+                'REQUEST_URI' => '/upload',
+            ],
+            files: [
+                'avatar' => [
+                    'name' => 'bad.jpg',
+                    // tmp_name intentionally missing
+                    'error' => UPLOAD_ERR_OK,
+                    'size' => 12,
+                ],
+            ],
+        );
+
+        self::assertNull($request->file('avatar'));
+        self::assertSame([], $request->filesOf('avatar'));
+    }
+
+    public function testFromGlobalsSkipsMalformedEntriesInsideMultiUploadShape(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'example.com',
+                'REQUEST_URI' => '/upload',
+            ],
+            files: [
+                'photos' => [
+                    'name' => ['a.jpg', 'b.jpg'],
+                    'type' => ['image/jpeg', 'image/jpeg'],
+                    'tmp_name' => ['/tmp/a'], // second index missing
+                    'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK],
+                    'size' => [100, 200],
+                ],
+            ],
+        );
+
+        $files = $request->filesOf('photos');
+        self::assertCount(1, $files);
+        self::assertSame('/tmp/a', $files[0]->tmpPath);
+    }
+
     // -------------------------------------------------------------------------
     // fromGlobals — query string
     // -------------------------------------------------------------------------

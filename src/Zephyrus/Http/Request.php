@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Http;
 
 use Zephyrus\Upload\FileUpload;
+use Zephyrus\Upload\UploadException;
 
 final readonly class Request
 {
@@ -466,7 +467,11 @@ final readonly class Request
                 continue;
             }
 
-            $normalized[(string) $field] = FileUpload::fromPhpArray($entry);
+            try {
+                $normalized[(string) $field] = FileUpload::fromPhpArray($entry);
+            } catch (UploadException) {
+                continue;
+            }
         }
 
         return $normalized;
@@ -501,13 +506,17 @@ final readonly class Request
                 continue;
             }
 
-            $files[] = FileUpload::fromPhpArray([
-                'name' => $entry['name'][$index] ?? '',
-                'type' => $entry['type'][$index] ?? '',
-                'tmp_name' => $tmpName,
-                'error' => $error,
-                'size' => $entry['size'][$index] ?? 0,
-            ]);
+            try {
+                $files[] = FileUpload::fromPhpArray([
+                    'name' => $entry['name'][$index] ?? '',
+                    'type' => $entry['type'][$index] ?? '',
+                    'tmp_name' => $tmpName,
+                    'error' => $error,
+                    'size' => $entry['size'][$index] ?? 0,
+                ]);
+            } catch (UploadException) {
+                continue;
+            }
         }
 
         return $files;
