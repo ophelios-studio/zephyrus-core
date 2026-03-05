@@ -72,6 +72,22 @@ final class ApplicationBuilder
         return self::fromConfigurationFile($path)->build();
     }
 
+    /**
+     * @param string[] $paths
+     */
+    public static function fromConfigurationFiles(array $paths): self
+    {
+        return self::fromConfiguration(Configuration::fromFiles($paths));
+    }
+
+    /**
+     * @param string[] $paths
+     */
+    public static function buildFromConfigurationFiles(array $paths): Application
+    {
+        return self::fromConfigurationFiles($paths)->build();
+    }
+
     public function withRouter(Router $router): self
     {
         $clone = clone $this;
@@ -236,6 +252,16 @@ final class ApplicationBuilder
     public function withConfigurationFile(string $path): self
     {
         return $this->withConfiguration(Configuration::fromFile($path));
+    }
+
+    /**
+     * Load, merge, and apply multiple configuration files.
+     *
+     * @param string[] $paths
+     */
+    public function withConfigurationFiles(array $paths): self
+    {
+        return $this->withConfiguration(Configuration::fromFiles($paths));
     }
 
     public function build(): Application
