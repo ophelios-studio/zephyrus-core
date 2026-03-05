@@ -88,6 +88,69 @@ final readonly class Configuration
     }
 
     /**
+     * Build a Configuration tree from multiple PHP files merged recursively.
+     *
+     * Later files override earlier files (`array_replace_recursive` semantics).
+     *
+     * @param string[] $paths
+     */
+    public static function fromFiles(array $paths): self
+    {
+        $merged = [];
+
+        foreach ($paths as $path) {
+            $loaded = self::fromFile($path);
+            $merged = array_replace_recursive($merged, $loaded->toArray());
+        }
+
+        return self::fromArray($merged);
+    }
+
+    /**
+     * Export configuration sections to a plain associative array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'application' => [
+                'environment' => $this->application->environment->value,
+                'debug' => $this->application->debug,
+            ],
+            'session' => [
+                'name' => $this->session->name,
+                'lifetime' => $this->session->lifetime,
+                'secure' => $this->session->secure,
+                'httpOnly' => $this->session->httpOnly,
+                'sameSite' => $this->session->sameSite,
+                'cookiePath' => $this->session->cookiePath,
+            ],
+            'security' => [
+                'forceHttps' => $this->security->forceHttps,
+                'csrfEnabled' => $this->security->csrfEnabled,
+                'allowedHosts' => $this->security->allowedHosts,
+                'maxBodySize' => $this->security->maxBodySize,
+            ],
+            'localization' => [
+                'defaultLocale' => $this->localization->defaultLocale,
+                'supportedLocales' => $this->localization->supportedLocales,
+                'jsonLocalePaths' => $this->localization->jsonLocalePaths,
+                'jsonExtension' => $this->localization->jsonExtension,
+            ],
+            'database' => $this->database === null ? null : [
+                'driver' => $this->database->driver,
+                'host' => $this->database->host,
+                'port' => $this->database->port,
+                'database' => $this->database->database,
+                'username' => $this->database->username,
+                'password' => $this->database->password,
+                'charset' => $this->database->charset,
+            ],
+        ];
+    }
+
+    /**
      * Produce a configuration tree where every section uses its built-in defaults.
      *
      * Equivalent to `Configuration::fromArray([])`.  Useful in tests and

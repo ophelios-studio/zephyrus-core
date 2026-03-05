@@ -138,6 +138,15 @@ $app = ApplicationBuilder::create()
     ->build();
 ```
 
+For layered environments (base + local override), merge multiple files:
+
+```php
+$configuration = Configuration::fromFiles([
+    __DIR__ . '/../config/app.php',
+    __DIR__ . '/../config/app.local.php',
+]);
+```
+
 Or parse and apply a plain config array directly:
 
 ```php
