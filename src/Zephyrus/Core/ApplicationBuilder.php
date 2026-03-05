@@ -184,6 +184,16 @@ final class ApplicationBuilder
         return $this->withLocalizationConfig($configuration->localization);
     }
 
+    /**
+     * Parse and apply a root configuration array in one call.
+     *
+     * @param array<string, mixed> $configuration
+     */
+    public function withConfigurationArray(array $configuration): self
+    {
+        return $this->withConfiguration(Configuration::fromArray($configuration));
+    }
+
     public function build(): Application
     {
         $loader = $this->localeLoader ?? new class implements LocaleLoaderInterface {

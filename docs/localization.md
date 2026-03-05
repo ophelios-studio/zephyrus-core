@@ -137,3 +137,11 @@ $app = ApplicationBuilder::create()
     ->withConfiguration($configuration)
     ->build();
 ```
+
+Or parse and apply a plain config array directly:
+
+```php
+$app = ApplicationBuilder::create()
+    ->withConfigurationArray(require __DIR__ . '/../config/app.php')
+    ->build();
+```
