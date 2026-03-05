@@ -83,9 +83,25 @@ final class ApplicationBuilder
     /**
      * @param string[] $paths
      */
+    public static function fromOptionalConfigurationFiles(array $paths): self
+    {
+        return self::fromConfiguration(Configuration::fromOptionalFiles($paths));
+    }
+
+    /**
+     * @param string[] $paths
+     */
     public static function buildFromConfigurationFiles(array $paths): Application
     {
         return self::fromConfigurationFiles($paths)->build();
+    }
+
+    /**
+     * @param string[] $paths
+     */
+    public static function buildFromOptionalConfigurationFiles(array $paths): Application
+    {
+        return self::fromOptionalConfigurationFiles($paths)->build();
     }
 
     public function withRouter(Router $router): self
@@ -262,6 +278,16 @@ final class ApplicationBuilder
     public function withConfigurationFiles(array $paths): self
     {
         return $this->withConfiguration(Configuration::fromFiles($paths));
+    }
+
+    /**
+     * Load, merge, and apply multiple configuration files while ignoring missing files.
+     *
+     * @param string[] $paths
+     */
+    public function withOptionalConfigurationFiles(array $paths): self
+    {
+        return $this->withConfiguration(Configuration::fromOptionalFiles($paths));
     }
 
     public function build(): Application

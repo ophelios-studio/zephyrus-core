@@ -307,6 +307,36 @@ final class ConfigurationTest extends TestCase
         self::assertSame('fr', $export['localization']['defaultLocale']);
     }
 
+    public function testFromOptionalFilesSkipsMissingOverrides(): void
+    {
+        $basePath = sys_get_temp_dir() . '/zephyrus-config-optional-base-' . uniqid('', true) . '.php';
+        file_put_contents($basePath, "<?php\nreturn " . var_export([
+            'localization' => ['defaultLocale' => 'fr'],
+        ], true) . ";\n");
+
+        $missingPath = sys_get_temp_dir() . '/zephyrus-config-optional-missing-' . uniqid('', true) . '.php';
+
+        try {
+            $config = Configuration::fromOptionalFiles([$basePath, $missingPath]);
+            self::assertSame('fr', $config->localization->defaultLocale);
+        } finally {
+            @unlink($basePath);
+        }
+    }
+
+    public function testFromOptionalFilesStillThrowsOnExistingInvalidFile(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-config-optional-invalid-' . uniqid('', true) . '.php';
+        file_put_contents($path, "<?php return 'bad';");
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            Configuration::fromOptionalFiles([$path]);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function testFromFileWrapsThrownExceptionWithContext(): void
     {
         $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . uniqid('', true) . '.php';

@@ -96,14 +96,47 @@ final readonly class Configuration
      */
     public static function fromFiles(array $paths): self
     {
+        return self::fromFilesInternal($paths, ignoreMissing: false);
+    }
+
+    /**
+     * Build a Configuration tree from multiple PHP files and ignore missing paths.
+     *
+     * Useful for optional local overrides (e.g. app.local.php).
+     *
+     * @param string[] $paths
+     */
+    public static function fromOptionalFiles(array $paths): self
+    {
+        return self::fromFilesInternal($paths, ignoreMissing: true);
+    }
+
+    /**
+     * @param string[] $paths
+     * @return array<string, mixed>
+     */
+    private static function mergeFilesToArray(array $paths, bool $ignoreMissing): array
+    {
         $merged = [];
 
         foreach ($paths as $path) {
+            if ($ignoreMissing && !is_file($path)) {
+                continue;
+            }
+
             $loaded = self::fromFile($path);
             $merged = array_replace_recursive($merged, $loaded->toArray());
         }
 
-        return self::fromArray($merged);
+        return $merged;
+    }
+
+    /**
+     * @param string[] $paths
+     */
+    private static function fromFilesInternal(array $paths, bool $ignoreMissing): self
+    {
+        return self::fromArray(self::mergeFilesToArray($paths, $ignoreMissing));
     }
 
     /**
