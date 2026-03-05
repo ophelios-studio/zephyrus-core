@@ -131,7 +131,7 @@ Or apply the full typed root config tree:
 ```php
 use Zephyrus\Core\Config\Configuration;
 
-$configuration = Configuration::fromArray(require __DIR__ . '/../config/app.php');
+$configuration = Configuration::fromFile(__DIR__ . '/../config/app.php');
 
 $app = ApplicationBuilder::create()
     ->withConfiguration($configuration)

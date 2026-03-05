@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use RuntimeException;
+
 /**
  * Immutable top-level configuration tree.
  *
@@ -57,6 +59,25 @@ final readonly class Configuration
                 ? DatabaseConfig::fromArray((array) $config['database'])
                 : null,
         );
+    }
+
+    /**
+     * Build a Configuration tree from a PHP file that returns an array.
+     */
+    public static function fromFile(string $path): self
+    {
+        if (!is_file($path)) {
+            throw new RuntimeException(sprintf('Configuration file not found: %s', $path));
+        }
+
+        /** @var mixed $loaded */
+        $loaded = require $path;
+
+        if (!is_array($loaded)) {
+            throw new RuntimeException(sprintf('Configuration file must return an array: %s', $path));
+        }
+
+        return self::fromArray($loaded);
     }
 
     /**

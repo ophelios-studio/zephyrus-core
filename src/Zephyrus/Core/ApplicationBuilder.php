@@ -195,24 +195,11 @@ final class ApplicationBuilder
     }
 
     /**
-     * Load a PHP config file and apply it as a root configuration array.
-     *
-     * The file must return an array.
+     * Load and apply a root configuration file.
      */
     public function withConfigurationFile(string $path): self
     {
-        if (!is_file($path)) {
-            throw new \RuntimeException(sprintf('Configuration file not found: %s', $path));
-        }
-
-        /** @var mixed $loaded */
-        $loaded = require $path;
-
-        if (!is_array($loaded)) {
-            throw new \RuntimeException(sprintf('Configuration file must return an array: %s', $path));
-        }
-
-        return $this->withConfigurationArray($loaded);
+        return $this->withConfiguration(Configuration::fromFile($path));
     }
 
     public function build(): Application
