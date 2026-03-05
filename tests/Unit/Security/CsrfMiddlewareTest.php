@@ -451,14 +451,14 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(['#^/hooks/#'], $config->excludedPathPatterns);
     }
 
-    public function testCsrfConfigFromArraySnakeCaseTakesPriorityOverCamelCase(): void
+    public function testCsrfConfigFromArrayCamelCaseTakesPriorityOverSnakeCase(): void
     {
         $config = CsrfConfig::fromArray([
-            'body_field' => 'snake-wins',   // snake wins
-            'bodyField'  => 'camel-loses',
+            'body_field' => 'snake-loses',
+            'bodyField'  => 'camel-wins',
         ]);
 
-        self::assertSame('snake-wins', $config->bodyField);
+        self::assertSame('camel-wins', $config->bodyField);
     }
 
     public function testCsrfConfigFromArrayParityAliases(): void

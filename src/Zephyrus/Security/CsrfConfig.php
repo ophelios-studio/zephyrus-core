@@ -77,8 +77,8 @@ final class CsrfConfig
     /**
      * Build from a plain associative array.
      *
-     * Accepts both camelCase and snake_case keys; snake_case takes priority
-     * when both are present so that framework config files feel natural.
+     * Accepts both camelCase and snake_case keys; camelCase takes priority
+     * when both are present to match typed config conventions elsewhere.
      *
      * @param array<string, mixed> $config
      */
@@ -91,18 +91,18 @@ final class CsrfConfig
                 ?? $config['csrfEnabled']
                 ?? true
             ),
-            bodyField: (string) ($config['body_field'] ?? $config['bodyField'] ?? '_csrf_token'),
-            headerName: (string) ($config['header_name'] ?? $config['headerName'] ?? 'X-CSRF-Token'),
+            bodyField: (string) ($config['bodyField'] ?? $config['body_field'] ?? '_csrf_token'),
+            headerName: (string) ($config['headerName'] ?? $config['header_name'] ?? 'X-CSRF-Token'),
             injectToken: (bool) (
-                $config['inject_token']
-                ?? $config['injectToken']
+                $config['injectToken']
+                ?? $config['inject_token']
                 ?? $config['csrf_auto_html']
                 ?? $config['csrfAutoHtml']
                 ?? false
             ),
             excludedPathPatterns: (array) (
-                $config['excluded_path_patterns']
-                ?? $config['excludedPathPatterns']
+                $config['excludedPathPatterns']
+                ?? $config['excluded_path_patterns']
                 ?? $config['csrf_exceptions']
                 ?? $config['csrfExceptions']
                 ?? []
