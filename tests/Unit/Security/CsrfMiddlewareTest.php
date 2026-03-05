@@ -408,6 +408,34 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertStringNotContainsString('_csrf_token', $response->body);
     }
 
+    public function testInjectTokenSkipsFormsThatAlreadyContainCsrfField(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
+        $request = new Request('GET', 'https://example.com/form');
+        $html = '<html><body><form method="post" action="/save"><input type="hidden" name="_csrf_token" value="existing"><button>Save</button></form></body></html>';
+
+        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]));
+
+        self::assertSame(1, substr_count($response->body, 'name="_csrf_token"'));
+        self::assertStringContainsString('value="existing"', $response->body);
+    }
+
+    public function testInjectTokenHonorsCustomBodyFieldWhenDetectingExistingInput(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true, bodyField: '_token'));
+        $request = new Request('GET', 'https://example.com/form');
+        $html = '<html><body><form method="post" action="/save"><input type="hidden" name="_token" value="existing-custom"></form></body></html>';
+
+        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]));
+
+        self::assertSame(1, substr_count($response->body, 'name="_token"'));
+        self::assertStringContainsString('value="existing-custom"', $response->body);
+    }
+
     // ── CsrfConfig factory tests ──────────────────────────────────────────────
 
     public function testCsrfConfigDefaults(): void
