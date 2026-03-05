@@ -8,6 +8,11 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
+use function htmlspecialchars;
+use function preg_replace_callback;
+use function sprintf;
+use function str_contains;
+
 /**
  * Middleware that enforces synchronizer-token CSRF protection.
  *
@@ -66,25 +71,24 @@ final class CsrfMiddleware implements MiddlewareInterface
 
     public function process(Request $request, callable $next): Response
     {
-        if (in_array($request->method, self::SAFE_METHODS, true)) {
-            /** @var Response */
-            return $next($request);
-        }
-
-        if ($this->isPathExcluded($request)) {
-            /** @var Response */
-            return $next($request);
-        }
-
-        if (!$this->isTokenValid($request)) {
+        if (!in_array($request->method, self::SAFE_METHODS, true)
+            && !$this->isPathExcluded($request)
+            && !$this->isTokenValid($request)
+        ) {
             return Response::json(
                 ['error' => 'Invalid or missing CSRF token.'],
                 403,
             );
         }
 
-        /** @var Response */
-        return $next($request);
+        /** @var Response $response */
+        $response = $next($request);
+
+        if (!$this->config->injectToken) {
+            return $response;
+        }
+
+        return $this->injectTokenIntoHtmlForms($response);
     }
 
     /**
@@ -122,5 +126,43 @@ final class CsrfMiddleware implements MiddlewareInterface
         }
 
         return $this->tokenManager->isTokenValid($submitted);
+    }
+
+    private function injectTokenIntoHtmlForms(Response $response): Response
+    {
+        if ($response->body === '' || !$this->isHtmlResponse($response)) {
+            return $response;
+        }
+
+        $token = htmlspecialchars($this->tokenManager->getToken(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $field = htmlspecialchars($this->config->bodyField, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $injectedBody = preg_replace_callback(
+            '/<form\b[^>]*>/i',
+            static fn (array $match): string => sprintf(
+                "%s\n<input type=\"hidden\" name=\"%s\" value=\"%s\">",
+                $match[0],
+                $field,
+                $token,
+            ),
+            $response->body,
+        );
+
+        if ($injectedBody === null) {
+            return $response;
+        }
+
+        return new Response($injectedBody, $response->status, $response->headers);
+    }
+
+    private function isHtmlResponse(Response $response): bool
+    {
+        foreach ($response->headers as $header => $value) {
+            if (strtolower($header) === 'content-type' && str_contains(strtolower($value), 'text/html')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

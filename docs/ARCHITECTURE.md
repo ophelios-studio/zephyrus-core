@@ -260,7 +260,8 @@
 - **State-changing methods** (POST, PUT, PATCH, DELETE) must supply a valid CSRF token or the middleware returns `403 Forbidden` with a JSON error body without calling the inner handler.
 - **Token lookup order** (first match wins): request body field (default `_csrf_token`) → request header (default `X-CSRF-Token`). Both sources are checked so HTML forms and AJAX/fetch clients work with the same token.
 - Body field name and header name are injectable at construction time (`bodyField`, `headerName`) for framework interoperability (e.g. `_token` / `X-XSRF-TOKEN`).
-- Added 18 unit tests in `CsrfMiddlewareTest` covering: all four safe methods pass-through, all four state-changing methods rejected without token, valid token via body field (POST/PUT), valid token via header (POST/DELETE), invalid token in body/header returns 403, body-field takes precedence over header, custom body/header names, JSON 403 body shape, inner-handler-not-called on rejection, manager `getToken()` surface.
+- Added optional HTML form token injection (`CsrfConfig::injectToken`). When enabled, middleware injects a hidden `<input>` token right after each `<form ...>` opening tag in `text/html` responses, leaving non-HTML payloads untouched.
+- Added 20 unit tests in `CsrfMiddlewareTest` covering: all four safe methods pass-through, all four state-changing methods rejected without token, valid token via body field (POST/PUT), valid token via header (POST/DELETE), invalid token in body/header returns 403, body-field takes precedence over header, custom body/header names, JSON 403 body shape, inner-handler-not-called on rejection, manager `getToken()` surface, and HTML-form injection behavior for HTML/non-HTML responses.
 
 ### Totals after this slice
 - Total test suite: **495 tests, 942 assertions**, line coverage TBD (run with `XDEBUG_MODE=coverage`).
