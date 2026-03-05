@@ -409,6 +409,60 @@ final class ApplicationBuilderTest extends TestCase
         }
     }
 
+    public function testWithOptionalConfigurationFilesIgnoresMissingOverrides(): void
+    {
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-opt-base-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        file_put_contents($basePath, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        $missingPath = sys_get_temp_dir() . '/zephyrus-app-config-opt-missing-' . uniqid('', true) . '.php';
+
+        try {
+            $app = ApplicationBuilder::create()
+                ->withOptionalConfigurationFiles([$basePath, $missingPath])
+                ->build();
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($basePath);
+        }
+    }
+
+    public function testBuildFromOptionalConfigurationFilesIgnoresMissingOverrides(): void
+    {
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-opt2-base-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        file_put_contents($basePath, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        $missingPath = sys_get_temp_dir() . '/zephyrus-app-config-opt2-missing-' . uniqid('', true) . '.php';
+
+        try {
+            $app = ApplicationBuilder::buildFromOptionalConfigurationFiles([$basePath, $missingPath]);
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($basePath);
+        }
+    }
+
     public function testWithConfigurationFileThrowsWhenFileMissing(): void
     {
         $this->expectException(\RuntimeException::class);

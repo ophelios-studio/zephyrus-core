@@ -156,6 +156,15 @@ $app = ApplicationBuilder::buildFromConfigurationFiles([
 ]);
 ```
 
+If local override files are optional, use:
+
+```php
+$app = ApplicationBuilder::buildFromOptionalConfigurationFiles([
+    __DIR__ . '/../config/app.php',
+    __DIR__ . '/../config/app.local.php', // may be missing
+]);
+```
+
 Or parse and apply a plain config array directly:
 
 ```php
