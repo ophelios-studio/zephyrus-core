@@ -30,6 +30,14 @@ $relativePath = $uploader->store($upload, 'avatars');
 
 `store()` returns a path relative to the destination root (for example `avatars/a1b2c3...jpg`).
 
+## Request normalization
+
+`Request::fromGlobals()` normalizes `$_FILES` entries into `FileUpload` objects:
+
+- single file fields are exposed via `Request::file('field')`
+- multi-file fields are exposed via `Request::filesOf('field')`
+- malformed file entries are skipped instead of crashing request construction
+
 ## Security behavior
 
 - Rejects invalid upload error codes
