@@ -88,13 +88,14 @@ final class AcceptLanguageResolver
 
             foreach (array_slice($segments, 1) as $param) {
                 $param = trim($param);
-                if (str_starts_with($param, 'q=')) {
-                    $quality = (float) substr($param, 2);
+                if (str_starts_with(strtolower($param), 'q=')) {
+                    $quality = $this->parseQuality(substr($param, 2));
                     break;
                 }
             }
 
-            if ($locale !== '') {
+            // RFC7231: q=0 means "not acceptable".
+            if ($locale !== '' && $quality > 0.0) {
                 $entries[] = [$locale, $quality];
             }
         }
@@ -103,6 +104,18 @@ final class AcceptLanguageResolver
         usort($entries, static fn(array $a, array $b): int => $b[1] <=> $a[1]);
 
         return array_column($entries, 0);
+    }
+
+    private function parseQuality(string $value): float
+    {
+        $quality = trim($value);
+
+        // Keep default behavior for invalid q-values.
+        if ($quality === '' || !is_numeric($quality)) {
+            return 1.0;
+        }
+
+        return (float) $quality;
     }
 
     /**

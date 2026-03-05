@@ -83,6 +83,11 @@ final class LocaleResolverTest extends TestCase
         self::assertSame('fr', $this->resolver->resolve(null, 'en;q=0.7, fr;q=0.9, de;q=0.8', 'es'));
     }
 
+    public function testQZeroCandidateIsIgnoredAsNotAcceptable(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(null, 'fr;q=0, en;q=0.8', 'de'));
+    }
+
     // --- Supported-locales filter --------------------------------------------
 
     public function testFiltersToSupportedLocales(): void

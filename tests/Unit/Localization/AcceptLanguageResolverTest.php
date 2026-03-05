@@ -66,6 +66,20 @@ final class AcceptLanguageResolverTest extends TestCase
         self::assertSame('fr', $this->resolver->resolve('en;q=0.7, fr;q=0.9, de;q=0.8'));
     }
 
+    public function testQZeroCandidateIsTreatedAsNotAcceptable(): void
+    {
+        self::assertSame('en', $this->resolver->resolve('fr;q=0, en;q=0.9'));
+    }
+
+    public function testAllQZeroCandidatesFallBackToDefault(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(
+            acceptLanguageHeader: 'fr;q=0, de;q=0.0',
+            supportedLocales:     ['en', 'fr', 'de'],
+            defaultLocale:        'en',
+        ));
+    }
+
     // -- Supported-locales filter ---------------------------------------------
 
     public function testFiltersToSupportedLocales(): void
