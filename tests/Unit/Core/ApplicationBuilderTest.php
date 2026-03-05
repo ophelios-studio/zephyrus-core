@@ -341,6 +341,74 @@ final class ApplicationBuilderTest extends TestCase
         }
     }
 
+    public function testWithConfigurationFilesMergesAndAppliesLocalization(): void
+    {
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-base-' . uniqid('', true) . '.php';
+        $envPath = sys_get_temp_dir() . '/zephyrus-app-config-env-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+
+        file_put_contents($basePath, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($envPath, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'supported_locales' => ['en', 'fr'],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBuilder::create()
+                ->withConfigurationFiles([$basePath, $envPath])
+                ->build();
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($basePath);
+            @unlink($envPath);
+        }
+    }
+
+    public function testBuildFromConfigurationFilesFactoryBuildsMergedConfiguration(): void
+    {
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-base2-' . uniqid('', true) . '.php';
+        $envPath = sys_get_temp_dir() . '/zephyrus-app-config-env2-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+
+        file_put_contents($basePath, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($envPath, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'supported_locales' => ['en', 'fr'],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBuilder::buildFromConfigurationFiles([$basePath, $envPath]);
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($basePath);
+            @unlink($envPath);
+        }
+    }
+
     public function testWithConfigurationFileThrowsWhenFileMissing(): void
     {
         $this->expectException(\RuntimeException::class);

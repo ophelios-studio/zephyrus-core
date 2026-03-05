@@ -147,6 +147,15 @@ $configuration = Configuration::fromFiles([
 ]);
 ```
 
+Builder shortcuts for layered files are also available:
+
+```php
+$app = ApplicationBuilder::buildFromConfigurationFiles([
+    __DIR__ . '/../config/app.php',
+    __DIR__ . '/../config/app.local.php',
+]);
+```
+
 Or parse and apply a plain config array directly:
 
 ```php
