@@ -10,6 +10,7 @@ use Zephyrus\Http\Response;
 
 use function htmlspecialchars;
 use function preg_match;
+use function preg_quote;
 use function preg_replace_callback;
 use function sprintf;
 use function str_contains;
@@ -139,20 +140,35 @@ final class CsrfMiddleware implements MiddlewareInterface
 
         $token = htmlspecialchars($this->tokenManager->getToken(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $field = htmlspecialchars($this->config->bodyField, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $rawField = $this->config->bodyField;
 
         $injectedBody = preg_replace_callback(
-            '/<form\b[^>]*>/i',
-            static function (array $match) use ($field, $token): string {
-                if (!self::formRequiresCsrfToken($match[0])) {
-                    return $match[0];
+            '/<form\b[^>]*>.*?<\/form>/is',
+            static function (array $match) use ($field, $rawField, $token): string {
+                $formHtml = $match[0];
+
+                if (!preg_match('/<form\b[^>]*>/i', $formHtml, $openTagMatch)) {
+                    return $formHtml;
                 }
 
-                return sprintf(
-                    "%s\n<input type=\"hidden\" name=\"%s\" value=\"%s\">",
-                    $match[0],
-                    $field,
-                    $token,
-                );
+                if (!self::formRequiresCsrfToken($openTagMatch[0])) {
+                    return $formHtml;
+                }
+
+                if (self::formAlreadyContainsTokenField($formHtml, $rawField)) {
+                    return $formHtml;
+                }
+
+                return preg_replace(
+                    '/<form\b[^>]*>/i',
+                    sprintf(
+                        '$0\n<input type="hidden" name="%s" value="%s">',
+                        $field,
+                        $token,
+                    ),
+                    $formHtml,
+                    1,
+                ) ?? $formHtml;
             },
             $response->body,
         );
@@ -171,6 +187,13 @@ final class CsrfMiddleware implements MiddlewareInterface
         }
 
         return in_array(strtoupper($matches[1]), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+    }
+
+    private static function formAlreadyContainsTokenField(string $formHtml, string $fieldName): bool
+    {
+        $quotedField = preg_quote($fieldName, '/');
+
+        return preg_match('/<input\b[^>]*\bname\s*=\s*["\']' . $quotedField . '["\'][^>]*>/i', $formHtml) === 1;
     }
 
     private function isHtmlResponse(Response $response): bool
