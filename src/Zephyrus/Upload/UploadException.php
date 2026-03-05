@@ -49,4 +49,37 @@ final class UploadException extends ZephyrusRuntimeException
     {
         return new self(sprintf('Unable to move uploaded file from "%s" to "%s".', $src, $dst));
     }
+
+    /**
+     * @param string[] $allowedExtensions
+     */
+    public static function extensionNotAllowed(string $extension, array $allowedExtensions): self
+    {
+        return new self(sprintf(
+            'Upload extension "%s" is not allowed. Allowed extensions: %s',
+            $extension,
+            implode(', ', $allowedExtensions),
+        ));
+    }
+
+    /**
+     * @param string[] $allowedMimeTypes
+     */
+    public static function mimeTypeNotAllowed(string $mimeType, array $allowedMimeTypes): self
+    {
+        return new self(sprintf(
+            'Upload MIME type "%s" is not allowed. Allowed MIME types: %s',
+            $mimeType,
+            implode(', ', $allowedMimeTypes),
+        ));
+    }
+
+    public static function fileTooLarge(int $sizeBytes, int $maxSizeBytes): self
+    {
+        return new self(sprintf(
+            'Upload is too large (%d bytes). Maximum allowed size is %d bytes.',
+            $sizeBytes,
+            $maxSizeBytes,
+        ));
+    }
 }
