@@ -76,22 +76,47 @@ final class FilterRequest implements \JsonSerializable
             }
 
             if (is_array($value)) {
-                $listValues = array_values(array_filter($value, static fn (mixed $item): bool => !is_array($item)));
+                $listValues = [];
+                $hasNull = false;
 
-                if ($listValues === []) {
+                foreach ($value as $item) {
+                    if (is_array($item)) {
+                        continue;
+                    }
+
+                    if ($item === null) {
+                        $hasNull = true;
+                        continue;
+                    }
+
+                    $listValues[] = $item;
+                }
+
+                if ($listValues === [] && !$hasNull) {
                     $parts[] = '1 = 0';
                     continue;
                 }
 
+                if ($listValues === [] && $hasNull) {
+                    $parts[] = sprintf('%s IS NULL', $column);
+                    continue;
+                }
+
                 $placeholders = [];
-                foreach ($listValues as $index => $item) {
+                foreach (array_values($listValues) as $index => $item) {
                     $paramName = sprintf('%s_%d', $baseParamName, $index);
                     $placeholder = ':' . $paramName;
                     $placeholders[] = $placeholder;
                     $params[$placeholder] = $item;
                 }
 
-                $parts[] = sprintf('%s IN (%s)', $column, implode(', ', $placeholders));
+                $inClause = sprintf('%s IN (%s)', $column, implode(', ', $placeholders));
+                if ($hasNull) {
+                    $parts[] = sprintf('(%s OR %s IS NULL)', $inClause, $column);
+                    continue;
+                }
+
+                $parts[] = $inClause;
                 continue;
             }
 

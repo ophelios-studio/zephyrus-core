@@ -97,6 +97,37 @@ final class FilterRequestTest extends TestCase
         self::assertSame([], $where['params']);
     }
 
+    public function testToWhereClauseBuildsIsNullForNullOnlyArrayValues(): void
+    {
+        $filter = new FilterRequest([
+            'deleted_at' => [null],
+        ]);
+
+        $where = $filter->toWhereClause([
+            'deleted_at' => 'users.deleted_at',
+        ]);
+
+        self::assertSame(' WHERE users.deleted_at IS NULL', $where['sql']);
+        self::assertSame([], $where['params']);
+    }
+
+    public function testToWhereClauseBuildsInOrIsNullForMixedArrayValues(): void
+    {
+        $filter = new FilterRequest([
+            'status' => ['active', null, 'pending'],
+        ]);
+
+        $where = $filter->toWhereClause([
+            'status' => 'users.status',
+        ]);
+
+        self::assertSame(' WHERE (users.status IN (:f_status_0, :f_status_1) OR users.status IS NULL)', $where['sql']);
+        self::assertSame([
+            ':f_status_0' => 'active',
+            ':f_status_1' => 'pending',
+        ], $where['params']);
+    }
+
     public function testToWhereClauseNormalizesParameterNamesForUnsafeKeys(): void
     {
         $filter = new FilterRequest([
