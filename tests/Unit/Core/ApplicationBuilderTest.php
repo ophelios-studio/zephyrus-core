@@ -24,6 +24,40 @@ final class ApplicationBuilderTest extends TestCase
         self::assertInstanceOf(Application::class, $app);
     }
 
+    public function testFromConfigurationFactoryAppliesLocalizationConfig(): void
+    {
+        $builder = ApplicationBuilder::fromConfiguration(Configuration::fromArray([
+            'localization' => [
+                'defaultLocale' => 'en',
+                'supportedLocales' => ['en', 'fr'],
+                'jsonLocalePaths' => [__DIR__ . '/../../Fixtures/locales'],
+            ],
+        ]));
+
+        $app = $builder->build();
+
+        self::assertSame('Bonjour', $app->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+        ));
+    }
+
+    public function testFromConfigurationArrayFactoryAppliesLocalizationConfig(): void
+    {
+        $app = ApplicationBuilder::fromConfigurationArray([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+            ],
+        ])->build();
+
+        self::assertSame('Bonjour', $app->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+        ));
+    }
+
     public function testHandleDelegatesToKernel(): void
     {
         $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health');
@@ -216,6 +250,30 @@ final class ApplicationBuilderTest extends TestCase
             $app = ApplicationBuilder::create()
                 ->withConfigurationFile($path)
                 ->build();
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+            ));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testFromConfigurationFileFactoryParsesAndAppliesLocalization(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-static-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        file_put_contents($path, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBuilder::fromConfigurationFile($path)->build();
 
             self::assertSame('Bonjour', $app->transFromRequest(
                 'messages.plain',
