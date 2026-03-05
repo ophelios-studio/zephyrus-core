@@ -24,6 +24,15 @@ final class ResponseTest extends TestCase
         self::assertSame('text/plain; charset=utf-8', $response->headers['Content-Type']);
     }
 
+    public function testHtmlFactoryBuildsHtmlResponse(): void
+    {
+        $response = Response::html('<h1>Hello</h1>', 202);
+
+        self::assertSame(202, $response->status);
+        self::assertSame('<h1>Hello</h1>', $response->body);
+        self::assertSame('text/html; charset=utf-8', $response->headers['Content-Type']);
+    }
+
     public function testJsonFactoryEncodesPayloadAndSetsContentTypeHeader(): void
     {
         $response = Response::json(['ok' => true], 201);
