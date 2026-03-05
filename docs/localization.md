@@ -109,3 +109,19 @@ $app = ApplicationBuilder::create()
     ], defaultLocale: 'en')
     ->build();
 ```
+
+For config-driven bootstrap, use `LocalizationConfig`:
+
+```php
+use Zephyrus\Core\Config\LocalizationConfig;
+
+$config = LocalizationConfig::fromArray([
+    'default_locale' => 'en',
+    'supported_locales' => ['en', 'fr'],
+    'json_locale_paths' => ['/app/resources/locales'],
+]);
+
+$app = ApplicationBuilder::create()
+    ->withLocalizationConfig($config)
+    ->build();
+```

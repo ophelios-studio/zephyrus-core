@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Core;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
+use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -126,6 +127,38 @@ final class ApplicationBuilderTest extends TestCase
             ->build();
 
         self::assertSame('Hola Alice', $app->trans('greet', ['name' => 'Alice'], 'es'));
+    }
+
+    public function testWithLocalizationConfigWiresJsonPathsAndSupportedLocales(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withLocalizationConfig(new LocalizationConfig(
+                defaultLocale: 'en',
+                supportedLocales: ['en', 'fr'],
+                jsonLocalePaths: [__DIR__ . '/../../Fixtures/locales'],
+                jsonExtension: 'json',
+            ))
+            ->build();
+
+        self::assertSame('Bonjour', $app->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+        ));
+    }
+
+    public function testWithLocalizationConfigWithoutPathsUsesRequestedDefaultLocale(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withLocalizationConfig(new LocalizationConfig(
+                defaultLocale: 'fr',
+                supportedLocales: [],
+                jsonLocalePaths: [],
+                jsonExtension: 'json',
+            ))
+            ->build();
+
+        self::assertSame('missing.key', $app->trans('missing.key'));
+        self::assertSame('fr', $app->resolveLocaleFromRequest(requestedLocale: 'fr'));
     }
 
     public function testWithMiddlewarePassesThroughToKernelBuilder(): void
