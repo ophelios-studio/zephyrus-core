@@ -145,3 +145,11 @@ $app = ApplicationBuilder::create()
     ->withConfigurationArray(require __DIR__ . '/../config/app.php')
     ->build();
 ```
+
+Or load the config file in one step:
+
+```php
+$app = ApplicationBuilder::create()
+    ->withConfigurationFile(__DIR__ . '/../config/app.php')
+    ->build();
+```

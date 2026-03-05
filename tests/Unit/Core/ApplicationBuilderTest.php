@@ -200,6 +200,52 @@ final class ApplicationBuilderTest extends TestCase
         ));
     }
 
+    public function testWithConfigurationFileParsesAndAppliesLocalization(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        file_put_contents($path, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBuilder::create()
+                ->withConfigurationFile($path)
+                ->build();
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+            ));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testWithConfigurationFileThrowsWhenFileMissing(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBuilder::create()->withConfigurationFile('/tmp/does-not-exist-' . uniqid('', true) . '.php');
+    }
+
+    public function testWithConfigurationFileThrowsWhenFileDoesNotReturnArray(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-invalid-' . uniqid('', true) . '.php';
+        file_put_contents($path, "<?php return 'invalid';");
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            ApplicationBuilder::create()->withConfigurationFile($path);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function testWithMiddlewarePassesThroughToKernelBuilder(): void
     {
         $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health');
