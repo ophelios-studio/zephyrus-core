@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use Zephyrus\Container\ContainerInterface;
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\MiddlewareInterface;
@@ -170,6 +171,17 @@ final class ApplicationBuilder
         }
 
         return $builder->withSupportedLocales($config->supportedLocales);
+    }
+
+    /**
+     * Apply a full typed Configuration tree to application bootstrap.
+     *
+     * Current wiring scope:
+     * - localization section
+     */
+    public function withConfiguration(Configuration $configuration): self
+    {
+        return $this->withLocalizationConfig($configuration->localization);
     }
 
     public function build(): Application

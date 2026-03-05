@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Core;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -159,6 +160,26 @@ final class ApplicationBuilderTest extends TestCase
 
         self::assertSame('missing.key', $app->trans('missing.key'));
         self::assertSame('fr', $app->resolveLocaleFromRequest(requestedLocale: 'fr'));
+    }
+
+    public function testWithConfigurationAppliesLocalizationSection(): void
+    {
+        $configuration = Configuration::fromArray([
+            'localization' => [
+                'defaultLocale' => 'en',
+                'supportedLocales' => ['en', 'fr'],
+                'jsonLocalePaths' => [__DIR__ . '/../../Fixtures/locales'],
+            ],
+        ]);
+
+        $app = ApplicationBuilder::create()
+            ->withConfiguration($configuration)
+            ->build();
+
+        self::assertSame('Bonjour', $app->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+        ));
     }
 
     public function testWithMiddlewarePassesThroughToKernelBuilder(): void
