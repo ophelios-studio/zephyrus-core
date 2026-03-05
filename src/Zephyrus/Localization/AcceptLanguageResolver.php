@@ -95,7 +95,9 @@ final class AcceptLanguageResolver
             }
 
             // RFC7231: q=0 means "not acceptable".
-            if ($locale !== '' && $quality > 0.0) {
+            // Wildcard language-range (*) is handled as a generic fallback and
+            // should not be treated as a literal locale tag.
+            if ($locale !== '' && $locale !== '*' && $quality > 0.0) {
                 $entries[] = [$locale, $quality];
             }
         }
