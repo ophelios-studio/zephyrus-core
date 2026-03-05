@@ -17,3 +17,6 @@ Early bootstrap on `dev` branch.
 - Secure by default
 - Fast feedback through tests
 - Backward migration path from Zephyrus v1 for real projects like CodeQuill
+
+## Documentation
+- Localization: `docs/localization.md`

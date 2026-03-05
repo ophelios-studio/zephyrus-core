@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Localization;
 
+use JsonException;
 use RuntimeException;
 
 final class JsonLocaleLoader implements LocaleLoaderInterface
@@ -27,8 +28,16 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
             throw new RuntimeException(sprintf('Unable to read locale file "%s".', $path));
         }
 
-        /** @var mixed $decoded */
-        $decoded = json_decode($content, true);
+        try {
+            /** @var mixed $decoded */
+            $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $exception) {
+            throw new RuntimeException(
+                sprintf('Invalid JSON in locale file "%s": %s', $path, $exception->getMessage()),
+                previous: $exception,
+            );
+        }
+
         if (!is_array($decoded)) {
             throw new RuntimeException(sprintf('Locale file "%s" must decode to an object.', $path));
         }

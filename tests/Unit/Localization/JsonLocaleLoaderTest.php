@@ -37,6 +37,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
         try {
             $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('Invalid JSON in locale file');
             $loader->load('en');
         } finally {
             @unlink($tempDir . '/en.json');
