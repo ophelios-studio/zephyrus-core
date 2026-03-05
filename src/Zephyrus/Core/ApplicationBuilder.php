@@ -194,6 +194,27 @@ final class ApplicationBuilder
         return $this->withConfiguration(Configuration::fromArray($configuration));
     }
 
+    /**
+     * Load a PHP config file and apply it as a root configuration array.
+     *
+     * The file must return an array.
+     */
+    public function withConfigurationFile(string $path): self
+    {
+        if (!is_file($path)) {
+            throw new \RuntimeException(sprintf('Configuration file not found: %s', $path));
+        }
+
+        /** @var mixed $loaded */
+        $loaded = require $path;
+
+        if (!is_array($loaded)) {
+            throw new \RuntimeException(sprintf('Configuration file must return an array: %s', $path));
+        }
+
+        return $this->withConfigurationArray($loaded);
+    }
+
     public function build(): Application
     {
         $loader = $this->localeLoader ?? new class implements LocaleLoaderInterface {
