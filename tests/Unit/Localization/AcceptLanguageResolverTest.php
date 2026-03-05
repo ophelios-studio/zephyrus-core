@@ -71,6 +71,22 @@ final class AcceptLanguageResolverTest extends TestCase
         self::assertSame('en', $this->resolver->resolve('fr;q=0, en;q=0.9'));
     }
 
+    public function testQValueAboveOneIsClampedToOne(): void
+    {
+        // fr is clamped to q=1.0 and stays ahead of en;q=0.9.
+        self::assertSame('fr', $this->resolver->resolve('fr;q=1.5, en;q=0.9'));
+    }
+
+    public function testNegativeQValueIsClampedToZeroAndRejected(): void
+    {
+        self::assertSame('en', $this->resolver->resolve('fr;q=-0.2, en;q=0.5'));
+    }
+
+    public function testEqualQValuesKeepHeaderOrder(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=0.8, en;q=0.8'));
+    }
+
     public function testAllQZeroCandidatesFallBackToDefault(): void
     {
         self::assertSame('en', $this->resolver->resolve(
