@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
+use Zephyrus\Routing\Exception\RouteNotFoundException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Router;
 
@@ -556,5 +557,41 @@ final class RouterTest extends TestCase
         $route = $router->routes()->all()[0];
 
         self::assertSame('/admin', $route->path);
+    }
+
+    public function testWithTrailingSlashToleranceFalseUsesStrictMatching(): void
+    {
+        $router = (new Router())
+            ->withTrailingSlashTolerance(false)
+            ->get('/users', 'UserController@index');
+
+        self::assertFalse($router->isTrailingSlashTolerant());
+        self::assertSame('/users', $router->routes()->match('GET', '/users')->route->path);
+
+        $this->expectException(RouteNotFoundException::class);
+        $router->routes()->match('GET', '/users/');
+    }
+
+    public function testStrictTrailingSlashesIsConvenienceAlias(): void
+    {
+        $router = (new Router())
+            ->strictTrailingSlashes()
+            ->get('/health', 'HealthController@show');
+
+        self::assertFalse($router->isTrailingSlashTolerant());
+
+        $this->expectException(RouteNotFoundException::class);
+        $router->routes()->match('GET', '/health/');
+    }
+
+    public function testWithTrailingSlashToleranceIsImmutableAndDoesNotMutateSourceRouter(): void
+    {
+        $base = (new Router())->get('/users', 'UserController@index');
+        $strict = $base->withTrailingSlashTolerance(false);
+
+        self::assertTrue($base->isTrailingSlashTolerant());
+        self::assertFalse($strict->isTrailingSlashTolerant());
+        self::assertSame('/users', $strict->routes()->match('GET', '/users')->route->path);
+        self::assertSame('/users', $base->routes()->match('GET', '/users/')->route->path);
     }
 }
