@@ -9,9 +9,11 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
 use function htmlspecialchars;
+use function preg_match;
 use function preg_replace_callback;
 use function sprintf;
 use function str_contains;
+use function strtoupper;
 
 /**
  * Middleware that enforces synchronizer-token CSRF protection.
@@ -140,12 +142,18 @@ final class CsrfMiddleware implements MiddlewareInterface
 
         $injectedBody = preg_replace_callback(
             '/<form\b[^>]*>/i',
-            static fn (array $match): string => sprintf(
-                "%s\n<input type=\"hidden\" name=\"%s\" value=\"%s\">",
-                $match[0],
-                $field,
-                $token,
-            ),
+            static function (array $match) use ($field, $token): string {
+                if (!self::formRequiresCsrfToken($match[0])) {
+                    return $match[0];
+                }
+
+                return sprintf(
+                    "%s\n<input type=\"hidden\" name=\"%s\" value=\"%s\">",
+                    $match[0],
+                    $field,
+                    $token,
+                );
+            },
             $response->body,
         );
 
@@ -154,6 +162,15 @@ final class CsrfMiddleware implements MiddlewareInterface
         }
 
         return new Response($injectedBody, $response->status, $response->headers);
+    }
+
+    private static function formRequiresCsrfToken(string $formTag): bool
+    {
+        if (preg_match('/\bmethod\s*=\s*["\']?([a-zA-Z]+)["\']?/i', $formTag, $matches) !== 1) {
+            return false;
+        }
+
+        return in_array(strtoupper($matches[1]), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
     }
 
     private function isHtmlResponse(Response $response): bool
