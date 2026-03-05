@@ -126,7 +126,16 @@ final class AcceptLanguageResolver
             return $a[2] <=> $b[2];
         });
 
-        return array_column($entries, 0);
+        $ordered = [];
+        foreach ($entries as [$locale]) {
+            if (in_array($locale, $ordered, true)) {
+                continue;
+            }
+
+            $ordered[] = $locale;
+        }
+
+        return $ordered;
     }
 
     private function parseQuality(string $value): float
