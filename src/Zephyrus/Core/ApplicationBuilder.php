@@ -100,6 +100,31 @@ final class ApplicationBuilder
     }
 
     /**
+     * Configure JSON translation catalogs from multiple directories merged in
+     * last-wins order. Later paths override earlier paths for duplicate keys.
+     *
+     * @param string[] $basePaths
+     */
+    public function withJsonLocaleLayers(array $basePaths, string $defaultLocale = 'en', string $extension = 'json'): self
+    {
+        $loaders = array_values(array_map(
+            static fn (string $basePath): JsonLocaleLoader => new JsonLocaleLoader($basePath, $extension),
+            $basePaths,
+        ));
+
+        if ($loaders === []) {
+            return $this->withLocaleLoader(new class implements LocaleLoaderInterface {
+                public function load(string $locale): array
+                {
+                    return [];
+                }
+            }, $defaultLocale);
+        }
+
+        return $this->withFallbackLoaders($loaders, $defaultLocale);
+    }
+
+    /**
      * Configure translation from multiple locale loaders merged in last-wins
      * order. Later loaders override earlier loaders for the same key.
      *

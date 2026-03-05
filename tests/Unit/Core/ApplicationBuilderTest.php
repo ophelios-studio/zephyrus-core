@@ -69,6 +69,49 @@ final class ApplicationBuilderTest extends TestCase
         self::assertSame('Only Base', $app->trans('app.only'));    // only in first loader
     }
 
+    public function testWithJsonLocaleLayersMergesDirectoryCatalogsLastWins(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-json-layers-' . uniqid('', true);
+        $basePath = $root . '/base';
+        $overridePath = $root . '/override';
+        mkdir($basePath, 0775, true);
+        mkdir($overridePath, 0775, true);
+
+        file_put_contents($basePath . '/en.json', json_encode([
+            'app' => ['label' => 'Base', 'only' => 'From Base'],
+            'errors' => ['required' => 'Required'],
+        ], JSON_THROW_ON_ERROR));
+
+        file_put_contents($overridePath . '/en.json', json_encode([
+            'app' => ['label' => 'Override'],
+        ], JSON_THROW_ON_ERROR));
+
+        try {
+            $app = ApplicationBuilder::create()
+                ->withJsonLocaleLayers([$basePath, $overridePath], defaultLocale: 'en')
+                ->build();
+
+            self::assertSame('Override', $app->trans('app.label'));
+            self::assertSame('From Base', $app->trans('app.only'));
+            self::assertSame('Required', $app->trans('errors.required'));
+        } finally {
+            @unlink($basePath . '/en.json');
+            @unlink($overridePath . '/en.json');
+            @rmdir($basePath);
+            @rmdir($overridePath);
+            @rmdir($root);
+        }
+    }
+
+    public function testWithJsonLocaleLayersWithNoPathsKeepsTranslatorOperational(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withJsonLocaleLayers([], defaultLocale: 'en')
+            ->build();
+
+        self::assertSame('missing.key', $app->trans('missing.key'));
+    }
+
     public function testWithLocaleLoaderOverridesDefaultTranslatorSource(): void
     {
         $loader = new class implements LocaleLoaderInterface {
