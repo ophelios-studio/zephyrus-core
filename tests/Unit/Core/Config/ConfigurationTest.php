@@ -254,4 +254,23 @@ final class ConfigurationTest extends TestCase
             @unlink($path);
         }
     }
+
+    public function testFromFileWrapsThrownExceptionWithContext(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . uniqid('', true) . '.php';
+        file_put_contents($path, "<?php throw new RuntimeException('boom');");
+
+        try {
+            try {
+                Configuration::fromFile($path);
+                self::fail('Expected RuntimeException was not thrown.');
+            } catch (\RuntimeException $exception) {
+                self::assertStringContainsString('failed to load', $exception->getMessage());
+                self::assertInstanceOf(\RuntimeException::class, $exception->getPrevious());
+                self::assertSame('boom', $exception->getPrevious()?->getMessage());
+            }
+        } finally {
+            @unlink($path);
+        }
+    }
 }

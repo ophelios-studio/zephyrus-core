@@ -160,3 +160,5 @@ Static bootstrap shortcuts are also available:
 $app = ApplicationBuilder::fromConfigurationFile(__DIR__ . '/../config/app.php')
     ->build();
 ```
+
+If the config file is missing, returns a non-array payload, or throws while loading, bootstrap raises a `RuntimeException` with file context.
