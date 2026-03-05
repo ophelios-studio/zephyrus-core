@@ -25,10 +25,11 @@ namespace Zephyrus\Core\Config;
 final readonly class Configuration
 {
     public function __construct(
-        public ApplicationConfig $application,
-        public SessionConfig     $session,
-        public SecurityConfig    $security,
-        public ?DatabaseConfig   $database,
+        public ApplicationConfig  $application,
+        public SessionConfig      $session,
+        public SecurityConfig     $security,
+        public LocalizationConfig $localization,
+        public ?DatabaseConfig    $database,
     ) {
     }
 
@@ -39,6 +40,7 @@ final readonly class Configuration
      *   'application' => ApplicationConfig::fromArray(...)
      *   'session'     => SessionConfig::fromArray(...)
      *   'security'    => SecurityConfig::fromArray(...)
+     *   'localization'=> LocalizationConfig::fromArray(...)
      *   'database'    => DatabaseConfig::fromArray(...) — omit to leave null
      *
      * @param array<string, mixed> $config
@@ -47,10 +49,11 @@ final readonly class Configuration
     public static function fromArray(array $config): self
     {
         return new self(
-            application: ApplicationConfig::fromArray((array) ($config['application'] ?? [])),
-            session:     SessionConfig::fromArray((array) ($config['session']     ?? [])),
-            security:    SecurityConfig::fromArray((array) ($config['security']   ?? [])),
-            database:    isset($config['database'])
+            application:  ApplicationConfig::fromArray((array) ($config['application']  ?? [])),
+            session:      SessionConfig::fromArray((array) ($config['session']      ?? [])),
+            security:     SecurityConfig::fromArray((array) ($config['security']    ?? [])),
+            localization: LocalizationConfig::fromArray((array) ($config['localization'] ?? [])),
+            database:     isset($config['database'])
                 ? DatabaseConfig::fromArray((array) $config['database'])
                 : null,
         );
