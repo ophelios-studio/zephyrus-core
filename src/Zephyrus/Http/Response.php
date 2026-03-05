@@ -63,9 +63,9 @@ final readonly class Response
     }
 
     /**
-     * @param array<mixed> $payload
+     * @param mixed $payload Any value supported by json_encode
      */
-    public static function json(array $payload, int $status = 200): self
+    public static function json(mixed $payload, int $status = 200): self
     {
         return new self(
             body: (string) json_encode($payload, JSON_THROW_ON_ERROR),
