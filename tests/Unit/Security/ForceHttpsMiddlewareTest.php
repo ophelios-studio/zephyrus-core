@@ -69,6 +69,15 @@ final class ForceHttpsMiddlewareTest extends TestCase
         self::assertContains('Location: https://example.com/secure-me', $response->toHeaderLines());
     }
 
+    public function testHttpRedirectStripsPort80WithoutPath(): void
+    {
+        $request  = new Request('GET', 'http://example.com:80');
+        $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(308, $response->status);
+        self::assertContains('Location: https://example.com', $response->toHeaderLines());
+    }
+
     public function testHttpRedirectPreservesNonStandardPort(): void
     {
         $request  = new Request('GET', 'http://example.com:8080/path');
