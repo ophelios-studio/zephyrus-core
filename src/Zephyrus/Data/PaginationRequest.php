@@ -50,8 +50,11 @@ final class PaginationRequest implements \JsonSerializable
         $requestedPerPage = (int) ($data['per_page'] ?? $data['perPage'] ?? $defaultPerPage);
         $perPage = min(max($requestedPerPage, 1), $maxPerPage);
 
+        $requestedPage = (int) ($data['page'] ?? 1);
+        $page = max($requestedPage, 1);
+
         return new self(
-            page: (int) ($data['page'] ?? 1),
+            page: $page,
             perPage: $perPage,
         );
     }
