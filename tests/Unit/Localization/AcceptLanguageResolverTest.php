@@ -87,6 +87,17 @@ final class AcceptLanguageResolverTest extends TestCase
         self::assertSame('fr', $this->resolver->resolve('fr;q=0.8, en;q=0.8'));
     }
 
+    public function testDuplicateCandidatesAreDeDuplicatedAfterOrdering(): void
+    {
+        // en appears twice; highest-q en still wins, duplicates are collapsed.
+        self::assertSame('en', $this->resolver->resolve('en;q=0.7, fr;q=0.9, en;q=1.0'));
+    }
+
+    public function testDuplicateCandidatesWithSameQKeepFirstOccurrence(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=0.8, fr-CA;q=0.8, fr;q=0.8'));
+    }
+
     public function testAllQZeroCandidatesFallBackToDefault(): void
     {
         self::assertSame('en', $this->resolver->resolve(
