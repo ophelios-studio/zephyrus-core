@@ -30,6 +30,16 @@ final class AcceptLanguageResolver
         string $defaultLocale = 'en',
         string $requestedLocale = '',
     ): string {
+        $supportedLocales = array_values(array_filter(array_map(
+            fn (string $locale): string => $this->normalize($locale),
+            $supportedLocales,
+        ), static fn (string $locale): bool => $locale !== ''));
+
+        $defaultLocale = $this->normalize($defaultLocale);
+        if ($defaultLocale === '') {
+            $defaultLocale = 'en';
+        }
+
         // 1. Explicit requested locale wins if it is accepted.
         if ($requestedLocale !== '') {
             $normalized = $this->normalize($requestedLocale);
