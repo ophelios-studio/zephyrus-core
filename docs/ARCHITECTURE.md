@@ -633,6 +633,15 @@ $router->group('/api/v1', fn ($r) => $r
 - Enables concise deny-list and inverse-policy flows without custom middleware branches (e.g. block specific token/condition while allowing everything else).
 - Added unit coverage (`NotAuthGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` through `AuthGuardMiddleware`.
 
+## Implemented Slice: Router trailing-slash mode controls (Phase 2)
+- Added fluent trailing-slash mode control to `Routing\Router`:
+  - `withTrailingSlashTolerance(bool $tolerant = true)` to explicitly switch route matching behavior.
+  - `strictTrailingSlashes()` as a convenience alias for strict mode.
+  - `isTrailingSlashTolerant()` for quick introspection.
+- The mode remains immutable and preserves existing registered routes when switching modes.
+- Added focused unit coverage in `RouterTest` validating strict-mode matching behavior, convenience alias behavior, and source-router immutability.
+- Current suite snapshot: **1436 tests, 2842 assertions**, line coverage **98.01%** (3208/3273).
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

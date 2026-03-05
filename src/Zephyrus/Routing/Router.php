@@ -28,6 +28,31 @@ final class Router
     }
 
     /**
+     * Controls whether incoming request paths ignore trailing slashes.
+     *
+     * When set to false, `/users` and `/users/` are treated as distinct paths.
+     * Returns a new Router instance and preserves registered routes.
+     */
+    public function withTrailingSlashTolerance(bool $tolerant = true): self
+    {
+        $routes = new RouteCollection($tolerant);
+
+        foreach ($this->routes->all() as $route) {
+            $routes->add($route);
+        }
+
+        return new self($routes, $this->attributeReader, $this->middlewareGroups);
+    }
+
+    /**
+     * Convenience shortcut for strict trailing-slash matching.
+     */
+    public function strictTrailingSlashes(): self
+    {
+        return $this->withTrailingSlashTolerance(false);
+    }
+
+    /**
      * Registers a reusable middleware group alias.
      *
      * Group entries may include both concrete middleware names and other group
@@ -380,6 +405,11 @@ final class Router
     public function isEmpty(): bool
     {
         return $this->routes->isEmpty();
+    }
+
+    public function isTrailingSlashTolerant(): bool
+    {
+        return $this->routes->isTrailingSlashTolerant();
     }
 
     private function joinPath(string $prefix, string $path): string
