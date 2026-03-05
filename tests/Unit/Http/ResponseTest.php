@@ -141,6 +141,53 @@ final class ResponseTest extends TestCase
         self::assertSame('r1', $updated->headers['X-Request-Id']);
     }
 
+    public function testWithHeadersMergesMultipleHeadersIntoNewInstance(): void
+    {
+        $initial = Response::text('ok')->withHeader('X-Request-Id', 'req-1');
+        $updated = $initial->withHeaders([
+            'Cache-Control' => 'no-store',
+            'X-Trace-Id' => 'trace-1',
+        ]);
+
+        self::assertNotSame($initial, $updated);
+        self::assertArrayNotHasKey('Cache-Control', $initial->headers);
+        self::assertSame('req-1', $updated->headers['X-Request-Id']);
+        self::assertSame('no-store', $updated->headers['Cache-Control']);
+        self::assertSame('trace-1', $updated->headers['X-Trace-Id']);
+    }
+
+    public function testWithHeadersOverwritesMatchingHeaderNames(): void
+    {
+        $initial = Response::json(['ok' => true]);
+        $updated = $initial->withHeaders([
+            'Content-Type' => 'application/problem+json; charset=utf-8',
+        ]);
+
+        self::assertSame(
+            'application/problem+json; charset=utf-8',
+            $updated->headers['Content-Type'],
+        );
+    }
+
+    public function testWithoutHeaderReturnsNewResponseWithoutSpecifiedHeader(): void
+    {
+        $initial = Response::json(['ok' => true])->withHeader('X-Trace-Id', 'abc123');
+        $updated = $initial->withoutHeader('X-Trace-Id');
+
+        self::assertNotSame($initial, $updated);
+        self::assertArrayHasKey('X-Trace-Id', $initial->headers);
+        self::assertArrayNotHasKey('X-Trace-Id', $updated->headers);
+        self::assertArrayHasKey('Content-Type', $updated->headers);
+    }
+
+    public function testWithoutHeaderNoOpsWhenHeaderDoesNotExist(): void
+    {
+        $initial = Response::text('ok');
+        $updated = $initial->withoutHeader('X-Missing');
+
+        self::assertSame($initial->headers, $updated->headers);
+    }
+
     public function testWithStatusReturnsNewResponseWithUpdatedStatus(): void
     {
         $initial = Response::text('created', 200);

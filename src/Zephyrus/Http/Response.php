@@ -108,6 +108,30 @@ final readonly class Response
         );
     }
 
+    /**
+     * @param array<string, string> $headers
+     */
+    public function withHeaders(array $headers): self
+    {
+        return new self(
+            body: $this->body,
+            status: $this->status,
+            headers: [...$this->headers, ...$headers],
+        );
+    }
+
+    public function withoutHeader(string $name): self
+    {
+        $headers = $this->headers;
+        unset($headers[$name]);
+
+        return new self(
+            body: $this->body,
+            status: $this->status,
+            headers: $headers,
+        );
+    }
+
     public function withStatus(int $status): self
     {
         return new self(
