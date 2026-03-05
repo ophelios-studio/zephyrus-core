@@ -149,6 +149,10 @@ final readonly class Configuration
                 throw new RuntimeException(sprintf('Configuration file path at index %d must not be empty.', $index));
             }
 
+            if (in_array($trimmed, $normalized, true)) {
+                continue;
+            }
+
             $normalized[] = $trimmed;
         }
 

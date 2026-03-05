@@ -352,6 +352,21 @@ final class ConfigurationTest extends TestCase
         Configuration::fromFiles(['   ']);
     }
 
+    public function testFromFilesDeDuplicatesDuplicatePaths(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-config-dedupe-' . uniqid('', true) . '.php';
+        file_put_contents($path, "<?php\nreturn " . var_export([
+            'localization' => ['defaultLocale' => 'fr'],
+        ], true) . ";\n");
+
+        try {
+            $config = Configuration::fromFiles([$path, $path]);
+            self::assertSame('fr', $config->localization->defaultLocale);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function testFromFileWrapsThrownExceptionWithContext(): void
     {
         $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . uniqid('', true) . '.php';
