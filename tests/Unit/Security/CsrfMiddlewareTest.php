@@ -388,6 +388,7 @@ final class CsrfMiddlewareTest extends TestCase
     {
         $config = CsrfConfig::defaults();
 
+        self::assertTrue($config->enabled);
         self::assertSame('_csrf_token', $config->bodyField);
         self::assertSame('X-CSRF-Token', $config->headerName);
         self::assertFalse($config->injectToken);
@@ -434,14 +435,38 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame('snake-wins', $config->bodyField);
     }
 
+    public function testCsrfConfigFromArrayParityAliases(): void
+    {
+        $config = CsrfConfig::fromArray([
+            'csrf_enabled'    => false,
+            'csrf_auto_html'  => true,
+            'csrf_exceptions' => ['#^/hooks/#'],
+        ]);
+
+        self::assertFalse($config->enabled);
+        self::assertTrue($config->injectToken);
+        self::assertSame(['#^/hooks/#'], $config->excludedPathPatterns);
+    }
+
     public function testCsrfConfigFromArrayEmptyUsesDefaults(): void
     {
         $config = CsrfConfig::fromArray([]);
 
+        self::assertTrue($config->enabled);
         self::assertSame('_csrf_token', $config->bodyField);
         self::assertSame('X-CSRF-Token', $config->headerName);
         self::assertFalse($config->injectToken);
         self::assertSame([], $config->excludedPathPatterns);
+    }
+
+    public function testDisabledCsrfValidationBypassesTokenChecks(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(enabled: false));
+        $request = new Request('POST', 'https://example.com/submit');
+
+        $response = $mw->process($request, static fn (Request $r): Response => Response::text('ok'));
+
+        self::assertSame(200, $response->status);
     }
 
     // ── middleware defaults to CsrfConfig::defaults() when omitted ───────────

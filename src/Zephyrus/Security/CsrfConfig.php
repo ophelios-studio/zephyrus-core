@@ -38,6 +38,7 @@ namespace Zephyrus\Security;
  * Example:
  *
  *   $config = CsrfConfig::fromArray([
+ *       'enabled'                  => true,
  *       'body_field'               => '_token',
  *       'header_name'              => 'X-XSRF-TOKEN',
  *       'inject_token'             => true,
@@ -56,12 +57,14 @@ final class CsrfConfig
      * @param string       $headerName             HTTP header accepted as an alternative token source.
      * @param bool         $injectToken            Auto-inject a hidden field into HTML form responses.
      * @param list<string> $excludedPathPatterns   PCRE patterns for paths that skip CSRF validation.
+     * @param bool         $enabled                Enable CSRF token validation on mutating requests.
      */
     public function __construct(
         public readonly string $bodyField            = '_csrf_token',
         public readonly string $headerName           = 'X-CSRF-Token',
         public readonly bool   $injectToken          = false,
         public readonly array  $excludedPathPatterns = [],
+        public readonly bool   $enabled              = true,
     ) {
     }
 
@@ -82,10 +85,28 @@ final class CsrfConfig
     public static function fromArray(array $config): self
     {
         return new self(
+            enabled: (bool) (
+                $config['enabled']
+                ?? $config['csrf_enabled']
+                ?? $config['csrfEnabled']
+                ?? true
+            ),
             bodyField: (string) ($config['body_field'] ?? $config['bodyField'] ?? '_csrf_token'),
             headerName: (string) ($config['header_name'] ?? $config['headerName'] ?? 'X-CSRF-Token'),
-            injectToken: (bool) ($config['inject_token'] ?? $config['injectToken'] ?? false),
-            excludedPathPatterns: (array) ($config['excluded_path_patterns'] ?? $config['excludedPathPatterns'] ?? []),
+            injectToken: (bool) (
+                $config['inject_token']
+                ?? $config['injectToken']
+                ?? $config['csrf_auto_html']
+                ?? $config['csrfAutoHtml']
+                ?? false
+            ),
+            excludedPathPatterns: (array) (
+                $config['excluded_path_patterns']
+                ?? $config['excludedPathPatterns']
+                ?? $config['csrf_exceptions']
+                ?? $config['csrfExceptions']
+                ?? []
+            ),
         );
     }
 }

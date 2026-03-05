@@ -71,7 +71,8 @@ final class CsrfMiddleware implements MiddlewareInterface
 
     public function process(Request $request, callable $next): Response
     {
-        if (!in_array($request->method, self::SAFE_METHODS, true)
+        if ($this->config->enabled
+            && !in_array($request->method, self::SAFE_METHODS, true)
             && !$this->isPathExcluded($request)
             && !$this->isTokenValid($request)
         ) {
