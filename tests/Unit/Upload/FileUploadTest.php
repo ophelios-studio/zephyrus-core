@@ -150,15 +150,17 @@ final class FileUploadTest extends TestCase
         self::assertSame('b.pdf', $files[1]->originalName);
     }
 
-    public function test_list_from_php_array_throws_on_malformed_shape(): void
+    public function test_list_from_php_array_skips_malformed_nested_branches(): void
     {
-        $this->expectException(UploadException::class);
-
-        FileUpload::listFromPhpArray([
-            'name' => ['x.txt'],
+        $files = FileUpload::listFromPhpArray([
+            'name' => ['x.txt', 'y.txt'],
             'tmp_name' => ['/tmp/php-x'],
-            'error' => [],
+            'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK],
+            'size' => [1, 2],
         ]);
+
+        self::assertCount(1, $files);
+        self::assertSame('/tmp/php-x', $files[0]->tmpPath);
     }
 
     // ------------------------------------------------------------------

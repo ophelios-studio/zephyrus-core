@@ -590,67 +590,20 @@ final readonly class Request
                 continue;
             }
 
-            if (isset($entry['name']) && is_array($entry['name'])) {
-                $grouped = self::normalizeMultiUploadField($entry);
-                if ($grouped !== []) {
-                    $normalized[(string) $field] = $grouped;
-                }
-                continue;
-            }
-
             try {
-                $normalized[(string) $field] = FileUpload::fromPhpArray($entry);
+                $group = FileUpload::listFromPhpArray($entry);
             } catch (UploadException) {
                 continue;
             }
+
+            if ($group === []) {
+                continue;
+            }
+
+            $normalized[(string) $field] = count($group) === 1 ? $group[0] : $group;
         }
 
         return $normalized;
-    }
-
-    /**
-     * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
-     * @return array<int, FileUpload>
-     */
-    private static function normalizeMultiUploadField(array $entry): array
-    {
-        if (!isset($entry['name'], $entry['type'], $entry['tmp_name'], $entry['error'], $entry['size'])) {
-            return [];
-        }
-
-        if (
-            !is_array($entry['name'])
-            || !is_array($entry['type'])
-            || !is_array($entry['tmp_name'])
-            || !is_array($entry['error'])
-            || !is_array($entry['size'])
-        ) {
-            return [];
-        }
-
-        $files = [];
-        foreach (array_keys($entry['name']) as $index) {
-            $tmpName = $entry['tmp_name'][$index] ?? null;
-            $error = $entry['error'][$index] ?? null;
-
-            if ($tmpName === null || $error === null) {
-                continue;
-            }
-
-            try {
-                $files[] = FileUpload::fromPhpArray([
-                    'name' => $entry['name'][$index] ?? '',
-                    'type' => $entry['type'][$index] ?? '',
-                    'tmp_name' => $tmpName,
-                    'error' => $error,
-                    'size' => $entry['size'][$index] ?? 0,
-                ]);
-            } catch (UploadException) {
-                continue;
-            }
-        }
-
-        return $files;
     }
 
     /**
