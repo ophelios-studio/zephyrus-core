@@ -218,6 +218,26 @@ final class AcceptLanguageResolverTest extends TestCase
         ));
     }
 
+    public function testRequestedLocaleWildcardFallsBackToHeaderCandidate(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve(
+            acceptLanguageHeader: 'fr, en;q=0.8',
+            supportedLocales:     ['en', 'fr'],
+            defaultLocale:        'en',
+            requestedLocale:      '*',
+        ));
+    }
+
+    public function testRequestedLocaleWildcardFallsBackToDefaultWhenHeaderCannotMatch(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(
+            acceptLanguageHeader: 'de;q=0.9',
+            supportedLocales:     ['en', 'fr'],
+            defaultLocale:        'en',
+            requestedLocale:      '*',
+        ));
+    }
+
     // -- Default fallback chain -----------------------------------------------
 
     public function testDefaultFallbackWhenNothingMatches(): void
