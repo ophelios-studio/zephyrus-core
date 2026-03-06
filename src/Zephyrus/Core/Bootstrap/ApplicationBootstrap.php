@@ -44,6 +44,45 @@ final class ApplicationBootstrap
     }
 
     /**
+     * Build an application using environment variables as bootstrap inputs.
+     *
+     * Supported variables:
+     * - APP_CONFIG_DIR   (default: getcwd() . '/config')
+     * - APP_CONFIG_BASE  (default: 'app')
+     * - APP_ENV          (optional environment suffix)
+     * - APP_CONFIG_EXTRA (comma-separated extra optional names)
+     */
+    public static function fromEnvironment(): Application
+    {
+        $dir = getenv('APP_CONFIG_DIR');
+        $base = getenv('APP_CONFIG_BASE');
+        $env = getenv('APP_ENV');
+        $extra = getenv('APP_CONFIG_EXTRA');
+
+        $configDir = is_string($dir) && trim($dir) !== ''
+            ? trim($dir)
+            : rtrim((string) getcwd(), '/\\') . '/config';
+
+        $baseName = is_string($base) && trim($base) !== '' ? trim($base) : 'app';
+        $environment = is_string($env) ? $env : null;
+
+        $extraOptionalNames = [];
+        if (is_string($extra) && trim($extra) !== '') {
+            $extraOptionalNames = array_values(array_filter(array_map(
+                static fn (string $name): string => trim($name),
+                explode(',', $extra),
+            ), static fn (string $name): bool => $name !== ''));
+        }
+
+        return self::fromConfigDirectory(
+            configDir: $configDir,
+            baseName: $baseName,
+            environment: $environment,
+            extraOptionalNames: $extraOptionalNames,
+        );
+    }
+
+    /**
      * Build an application from a conventional config directory layout.
      *
      * Required file:   <configDir>/<baseName>.php
