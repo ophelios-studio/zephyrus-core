@@ -20,10 +20,12 @@ final class FilterRequest implements \JsonSerializable
     /**
      * @param array<string, mixed> $query
      * @param array<int, string> $allowedKeys
+     * @param array<int, string> $csvKeys
      */
-    public static function fromQuery(array $query, array $allowedKeys): self
+    public static function fromQuery(array $query, array $allowedKeys, array $csvKeys = []): self
     {
         $conditions = [];
+        $csvLookup = array_flip($csvKeys);
 
         foreach ($allowedKeys as $key) {
             if (!array_key_exists($key, $query)) {
@@ -33,6 +35,20 @@ final class FilterRequest implements \JsonSerializable
             $value = $query[$key];
 
             if ($value === null || $value === '') {
+                continue;
+            }
+
+            if (is_string($value) && isset($csvLookup[$key])) {
+                $list = array_values(array_filter(
+                    array_map('trim', explode(',', $value)),
+                    static fn (string $item): bool => $item !== '',
+                ));
+
+                if ($list === []) {
+                    continue;
+                }
+
+                $conditions[$key] = $list;
                 continue;
             }
 
