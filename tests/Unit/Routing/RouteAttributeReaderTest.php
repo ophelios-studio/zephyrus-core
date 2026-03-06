@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
+use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
@@ -81,6 +82,21 @@ class VerbAttributesController
 
     #[DeleteAttribute('/articles/{id}')]
     public function destroy(): void {}
+}
+
+#[MiddlewareAttribute('api')]
+#[MiddlewareAttribute('auth')]
+class MiddlewareAttributedController
+{
+    #[GetAttribute('/feed')]
+    public function feed(): void {}
+
+    #[MiddlewareAttribute('rate-limit')]
+    #[PostAttribute('/feed')]
+    public function publish(): void {}
+
+    #[PostAttribute('/feed/admin', middlewares: ['admin'])]
+    public function publishAsAdmin(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +253,36 @@ final class RouteAttributeReaderTest extends TestCase
 
         self::assertNotNull($replace);
         self::assertSame(['id' => '\\d+'], $replace->constraints);
+    }
+
+    public function testClassMiddlewareAttributesApplyToAllRoutes(): void
+    {
+        $routes = $this->reader->read(MiddlewareAttributedController::class);
+
+        self::assertSame(
+            ['api', 'auth'],
+            $this->findByHandler($routes, MiddlewareAttributedController::class . '@feed')?->middlewares,
+        );
+    }
+
+    public function testMethodMiddlewareAttributesApplyAfterClassMiddlewares(): void
+    {
+        $routes = $this->reader->read(MiddlewareAttributedController::class);
+
+        self::assertSame(
+            ['api', 'auth', 'rate-limit'],
+            $this->findByHandler($routes, MiddlewareAttributedController::class . '@publish')?->middlewares,
+        );
+    }
+
+    public function testRouteMiddlewaresApplyAfterClassAndMethodMiddlewares(): void
+    {
+        $routes = $this->reader->read(MiddlewareAttributedController::class);
+
+        self::assertSame(
+            ['api', 'auth', 'admin'],
+            $this->findByHandler($routes, MiddlewareAttributedController::class . '@publishAsAdmin')?->middlewares,
+        );
     }
 
     public function testUnresolvableClassThrowsException(): void
