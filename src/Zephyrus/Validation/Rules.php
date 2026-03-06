@@ -634,6 +634,25 @@ final class Rules
     }
 
     /**
+     * Validates that a JSON-encoded string is a JSON object.
+     */
+    public static function jsonObject(string $message = 'Must be a valid JSON object.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                $decoded = json_decode($v);
+
+                return json_last_error() === JSON_ERROR_NONE && is_object($decoded);
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates a URL slug (lowercase letters, numbers, single hyphen separators).
      */
     public static function slug(string $message = 'Must be a valid slug.'): Rule
