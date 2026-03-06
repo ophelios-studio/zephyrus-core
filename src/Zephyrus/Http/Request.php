@@ -178,7 +178,7 @@ final readonly class Request
 
     public function isJson(): bool
     {
-        return str_contains($this->headers['content-type'] ?? '', 'application/json');
+        return self::isJsonContentType($this->headers['content-type'] ?? '');
     }
 
     public function isSecure(): bool
@@ -327,7 +327,7 @@ final readonly class Request
 
         $contentType = $headers['content-type'] ?? '';
 
-        if (str_contains($contentType, 'application/json')) {
+        if (self::isJsonContentType($contentType)) {
             $body = $rawBody ?? (string) file_get_contents('php://input');
             if ($body === '') {
                 return [];
@@ -444,6 +444,19 @@ final readonly class Request
 
         return ($normalizedScheme === 'http' && $port === '80')
             || ($normalizedScheme === 'https' && $port === '443');
+    }
+
+    private static function isJsonContentType(string $contentType): bool
+    {
+        $normalized = strtolower(trim($contentType));
+
+        if ($normalized === '') {
+            return false;
+        }
+
+        $mediaType = trim(strtok($normalized, ';') ?: '');
+
+        return $mediaType === 'application/json' || str_ends_with($mediaType, '+json');
     }
 
     /**
