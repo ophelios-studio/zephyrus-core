@@ -47,10 +47,16 @@ final class ApplicationBootstrap
      *
      * Required file:   <configDir>/<baseName>.php
      * Optional files:  <configDir>/<baseName>.local.php
-     *                  <configDir>/<baseName>.<APP_ENV>.php (when APP_ENV is set)
+     *                  <configDir>/<baseName>.<environment>.php
+     *
+     * $environment defaults to APP_ENV (when set); pass null to disable
+     * environment-specific optional loading.
      */
-    public static function fromConfigDirectory(string $configDir, string $baseName = 'app'): Application
-    {
+    public static function fromConfigDirectory(
+        string $configDir,
+        string $baseName = 'app',
+        ?string $environment = null,
+    ): Application {
         $configDir = rtrim($configDir, '/\\');
         $baseFile = $configDir . '/' . $baseName . '.php';
 
@@ -58,9 +64,15 @@ final class ApplicationBootstrap
             $configDir . '/' . $baseName . '.local.php',
         ];
 
-        $appEnv = getenv('APP_ENV');
-        if (is_string($appEnv) && trim($appEnv) !== '') {
-            $optional[] = $configDir . '/' . $baseName . '.' . trim($appEnv) . '.php';
+        $resolvedEnvironment = $environment;
+        if ($resolvedEnvironment === null) {
+            $appEnv = getenv('APP_ENV');
+            $resolvedEnvironment = is_string($appEnv) ? $appEnv : '';
+        }
+
+        $resolvedEnvironment = trim($resolvedEnvironment);
+        if ($resolvedEnvironment !== '') {
+            $optional[] = $configDir . '/' . $baseName . '.' . $resolvedEnvironment . '.php';
         }
 
         return self::fromConfigFiles([$baseFile], $optional);

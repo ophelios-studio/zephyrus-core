@@ -218,4 +218,76 @@ final class ApplicationBootstrapTest extends TestCase
             @rmdir($dir);
         }
     }
+
+    public function testFromConfigDirectoryUsesExplicitEnvironmentOverride(): void
+    {
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-explicit-env-' . uniqid('', true);
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        mkdir($dir, 0775, true);
+
+        file_put_contents($dir . '/app.php', "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($dir . '/app.qa.php', "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'supported_locales' => ['en', 'fr'],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBootstrap::fromConfigDirectory($dir, environment: 'qa');
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($dir . '/app.php');
+            @unlink($dir . '/app.qa.php');
+            @rmdir($dir);
+        }
+    }
+
+    public function testFromConfigDirectoryCanDisableEnvironmentOverride(): void
+    {
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-disable-env-' . uniqid('', true);
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        mkdir($dir, 0775, true);
+
+        file_put_contents($dir . '/app.php', "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($dir . '/app.testing.php', "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'supported_locales' => ['en', 'fr'],
+            ],
+        ], true) . ";\n");
+
+        $original = getenv('APP_ENV');
+        putenv('APP_ENV=testing');
+
+        try {
+            $app = ApplicationBootstrap::fromConfigDirectory($dir, environment: '');
+
+            self::assertSame('Hello', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            putenv($original === false ? 'APP_ENV' : 'APP_ENV=' . $original);
+            @unlink($dir . '/app.php');
+            @unlink($dir . '/app.testing.php');
+            @rmdir($dir);
+        }
+    }
 }
