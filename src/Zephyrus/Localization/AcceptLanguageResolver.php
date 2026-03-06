@@ -65,6 +65,10 @@ final class AcceptLanguageResolver
 
         // 2. Walk Accept-Language candidates in descending quality order.
         foreach ($this->parseHeader($acceptLanguageHeader) as $candidate) {
+            if ($candidate === '*') {
+                return $defaultLocale;
+            }
+
             if ($this->isAccepted($candidate, $supportedLocales)) {
                 return $candidate;
             }
@@ -114,9 +118,7 @@ final class AcceptLanguageResolver
             }
 
             // RFC7231: q=0 means "not acceptable".
-            // Wildcard language-range (*) is handled as a generic fallback and
-            // should not be treated as a literal locale tag.
-            if ($locale !== '' && $locale !== '*' && $quality > 0.0) {
+            if ($locale !== '' && $quality > 0.0) {
                 // Preserve source order so equal q-values stay stable.
                 $entries[] = [$locale, $quality, $position];
             }

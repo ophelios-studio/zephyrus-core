@@ -107,7 +107,7 @@ final class AcceptLanguageResolverTest extends TestCase
         ));
     }
 
-    public function testWildcardIsNotTreatedAsLiteralLocale(): void
+    public function testWildcardFallsBackToDefaultWhenNoSpecificCandidateMatches(): void
     {
         self::assertSame('en', $this->resolver->resolve(
             acceptLanguageHeader: '*, fr;q=0',
@@ -116,10 +116,19 @@ final class AcceptLanguageResolverTest extends TestCase
         ));
     }
 
-    public function testWildcardIsIgnoredWhenSpecificSupportedLocaleExists(): void
+    public function testWildcardRespectsQOrderingAgainstSpecificCandidates(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(
+            acceptLanguageHeader: '*, fr;q=0.8',
+            supportedLocales:     ['en', 'fr'],
+            defaultLocale:        'en',
+        ));
+    }
+
+    public function testWildcardWithQZeroIsIgnored(): void
     {
         self::assertSame('fr', $this->resolver->resolve(
-            acceptLanguageHeader: '*, fr;q=0.8',
+            acceptLanguageHeader: '*;q=0, fr;q=0.8',
             supportedLocales:     ['en', 'fr'],
             defaultLocale:        'en',
         ));
