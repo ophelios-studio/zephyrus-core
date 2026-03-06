@@ -190,6 +190,8 @@ final readonly class Configuration
             'security' => [
                 'forceHttps' => $this->security->forceHttps,
                 'csrfEnabled' => $this->security->csrfEnabled,
+                'csrfAutoHtml' => $this->security->csrfAutoHtml,
+                'csrfExceptions' => $this->security->csrfExceptions,
                 'allowedHosts' => $this->security->allowedHosts,
                 'maxBodySize' => $this->security->maxBodySize,
             ],

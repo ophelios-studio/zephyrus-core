@@ -8,26 +8,33 @@ namespace Zephyrus\Core\Config;
  * Immutable configuration section for HTTP security behaviour.
  *
  * Defaults are conservative yet development-friendly:
- *   - forceHttps:  false (must be explicitly enabled in production)
- *   - csrfEnabled: true  (on by default)
- *   - allowedHosts: []   (empty = any host; populate for production lockdown)
- *   - maxBodySize: 2097152 (2 MB; 0 = unlimited)
+ *   - forceHttps:   false (must be explicitly enabled in production)
+ *   - csrfEnabled:  true  (on by default)
+ *   - csrfAutoHtml: false (disabled by default)
+ *   - csrfExceptions: []  (no excluded paths by default)
+ *   - allowedHosts: []    (empty = any host; populate for production lockdown)
+ *   - maxBodySize:  2097152 (2 MB; 0 = unlimited)
  *
  * Validation rules:
  *   - maxBodySize must be 0 or greater.
  *   - Each allowedHost entry must be a non-empty string.
+ *   - Each csrfExceptions entry must be a non-empty string.
  */
 final readonly class SecurityConfig
 {
     /**
-     * @param bool          $forceHttps   Redirect plain-HTTP requests to HTTPS.
-     * @param bool          $csrfEnabled  Enable CSRF token verification on mutating requests.
-     * @param string[]      $allowedHosts Restrict accepted Host headers; empty allows all.
-     * @param int           $maxBodySize  Maximum request body in bytes (0 = unlimited).
+     * @param bool     $forceHttps      Redirect plain-HTTP requests to HTTPS.
+     * @param bool     $csrfEnabled     Enable CSRF token verification on mutating requests.
+     * @param bool     $csrfAutoHtml    Auto-inject CSRF hidden input in HTML forms.
+     * @param string[] $csrfExceptions  Regex path patterns excluded from CSRF validation.
+     * @param string[] $allowedHosts    Restrict accepted Host headers; empty allows all.
+     * @param int      $maxBodySize     Maximum request body in bytes (0 = unlimited).
      */
     public function __construct(
         public bool $forceHttps,
         public bool $csrfEnabled,
+        public bool $csrfAutoHtml,
+        public array $csrfExceptions,
         public array $allowedHosts,
         public int $maxBodySize,
     ) {
@@ -43,10 +50,20 @@ final readonly class SecurityConfig
      */
     public static function fromArray(array $values): self
     {
-        $forceHttps   = (bool) ($values['forceHttps']   ?? $values['force_https']   ?? false);
-        $csrfEnabled  = (bool) ($values['csrfEnabled']  ?? $values['csrf_enabled']  ?? true);
+        $forceHttps = (bool) ($values['forceHttps'] ?? $values['force_https'] ?? false);
+        $csrfEnabled = (bool) ($values['csrfEnabled'] ?? $values['csrf_enabled'] ?? true);
+        $csrfAutoHtml = (bool) (
+            $values['csrfAutoHtml']
+            ?? $values['csrf_auto_html']
+            ?? false
+        );
+        $csrfExceptions = (array) (
+            $values['csrfExceptions']
+            ?? $values['csrf_exceptions']
+            ?? []
+        );
         $allowedHosts = (array) ($values['allowedHosts'] ?? $values['allowed_hosts'] ?? []);
-        $maxBodySize  = (int)  ($values['maxBodySize']  ?? $values['max_body_size']  ?? 2_097_152);
+        $maxBodySize = (int) ($values['maxBodySize'] ?? $values['max_body_size'] ?? 2_097_152);
 
         if ($maxBodySize < 0) {
             throw ConfigurationException::invalidValue(
@@ -55,6 +72,17 @@ final readonly class SecurityConfig
                 $maxBodySize,
                 'must be 0 (unlimited) or a positive byte count',
             );
+        }
+
+        foreach ($csrfExceptions as $i => $pattern) {
+            if (!is_string($pattern) || trim($pattern) === '') {
+                throw ConfigurationException::invalidValue(
+                    'security',
+                    "csrfExceptions[$i]",
+                    $pattern,
+                    'each entry must be a non-empty string',
+                );
+            }
         }
 
         foreach ($allowedHosts as $i => $host) {
@@ -69,10 +97,12 @@ final readonly class SecurityConfig
         }
 
         return new self(
-            forceHttps:   $forceHttps,
-            csrfEnabled:  $csrfEnabled,
+            forceHttps: $forceHttps,
+            csrfEnabled: $csrfEnabled,
+            csrfAutoHtml: $csrfAutoHtml,
+            csrfExceptions: array_values($csrfExceptions),
             allowedHosts: array_values($allowedHosts),
-            maxBodySize:  $maxBodySize,
+            maxBodySize: $maxBodySize,
         );
     }
 }
