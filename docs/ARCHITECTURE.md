@@ -618,9 +618,15 @@ $router->group('/api/v1', fn ($r) => $r
 
 ## Implemented Slice: IP allowlist authorization guard (Phase 6)
 - Added `Security\IpAllowlistGuard` implementing `AuthGuardInterface` for source-IP-based route authorization.
-- Guard resolves client IP from `X-Forwarded-For` (first hop) with fallback to request `client_ip` attribute.
+- Guard resolves client IP using `Request::clientIp()` (Forwarded / X-Forwarded-For / X-Real-IP / CF-Connecting-IP / REMOTE_ADDR fallback, with optional `client_ip` attribute override).
 - Enables straightforward allowlist protection for internal/admin endpoints when deployed behind trusted proxy layers.
 - Added unit coverage (`IpAllowlistGuardTest`) and integration wiring coverage in `HttpKernelWiringTest` via `AuthGuardMiddleware`.
+
+## Implemented Slice: Request client IP helper (Phase 1)
+- Added `Request::clientIp()` helper and backing `clientIp` property populated by `Request::fromGlobals()`.
+- Resolver honors RFC 7239 `Forwarded` headers (including IPv6 + port), `X-Forwarded-For` first hop, `X-Real-IP`, `CF-Connecting-IP`, `X-Client-IP`, `REMOTE_ADDR`, and an explicit `client_ip` request attribute fallback.
+- Synthetic requests created via `Request::fromArray()` automatically reuse the header/attribute resolver without needing server superglobals.
+- `Security\IpAllowlistGuard` now consumes the helper for stricter, centralized IP normalization.
 
 ## Implemented Slice: Predicate authorization guard (Phase 6)
 - Added `Security\PredicateAuthGuard` implementing `AuthGuardInterface` with a closure predicate for dynamic policy checks.

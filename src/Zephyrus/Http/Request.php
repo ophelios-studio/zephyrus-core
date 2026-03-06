@@ -26,6 +26,7 @@ final readonly class Request
         public array $cookies = [],
         public array $attributes = [],
         public array $files = [],
+        public ?string $clientIp = null,
     ) {
     }
 
@@ -67,6 +68,7 @@ final readonly class Request
         $method  = strtoupper($server['REQUEST_METHOD'] ?? 'GET');
         $headers = self::extractHeadersFromServer($server);
         $uri     = self::buildUri($server);
+        $clientIp = self::resolveClientIp($server, $headers);
 
         $parsedBody = self::parseBody($method, $headers, $post, $rawBody);
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
@@ -80,6 +82,7 @@ final readonly class Request
             cookies:    $cookie,
             attributes: [],
             files:      self::normalizeFileUploads($files),
+            clientIp:   $clientIp,
         );
     }
 
@@ -100,6 +103,7 @@ final readonly class Request
         array $cookies = [],
         array $attributes = [],
         array $files = [],
+        ?string $clientIp = null,
     ): self {
         return new self(
             method:     strtoupper($method),
@@ -110,6 +114,7 @@ final readonly class Request
             cookies:    $cookies,
             attributes: $attributes,
             files:      $files,
+            clientIp:   $clientIp,
         );
     }
 
@@ -186,6 +191,28 @@ final readonly class Request
         return str_starts_with($this->uri, 'https://');
     }
 
+    public function clientIp(?string $default = null): ?string
+    {
+        if ($this->clientIp !== null) {
+            return $this->clientIp;
+        }
+
+        $headerIp = self::resolveClientIpFromHeaders($this->headers);
+        if ($headerIp !== null) {
+            return $headerIp;
+        }
+
+        $attributeValue = $this->attributes['client_ip'] ?? null;
+        if (is_string($attributeValue)) {
+            $normalized = self::normalizeIp($attributeValue);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        return $default;
+    }
+
     public function attribute(string $key, mixed $default = null): mixed
     {
         return $this->attributes[$key] ?? $default;
@@ -205,6 +232,7 @@ final readonly class Request
             cookies:    $this->cookies,
             attributes: $attributes,
             files:      $this->files,
+            clientIp:   $this->clientIp,
         );
     }
 
@@ -222,6 +250,7 @@ final readonly class Request
             cookies:    $this->cookies,
             attributes: $attributes,
             files:      $this->files,
+            clientIp:   $this->clientIp,
         );
     }
 
@@ -390,6 +419,90 @@ final readonly class Request
         return $candidate;
     }
 
+    /**
+     * @param array<string, mixed>  $server
+     * @param array<string, string> $headers
+     */
+    private static function resolveClientIp(array $server, array $headers): ?string
+    {
+        $forwarded = self::parseForwardedHeader(isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null);
+        $forwardedIp = self::normalizeIp($forwarded['for'] ?? null);
+        if ($forwardedIp !== null) {
+            return $forwardedIp;
+        }
+
+        $headerIp = self::resolveClientIpFromHeaders($headers);
+        if ($headerIp !== null) {
+            return $headerIp;
+        }
+
+        return self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
+    }
+
+    /**
+     * @param array<string, string> $headers
+     */
+    private static function resolveClientIpFromHeaders(array $headers): ?string
+    {
+        $forwarded = self::parseForwardedHeader($headers['forwarded'] ?? null);
+        $forwardedIp = self::normalizeIp($forwarded['for'] ?? null);
+        if ($forwardedIp !== null) {
+            return $forwardedIp;
+        }
+
+        $forwardedFor = $headers['x-forwarded-for'] ?? null;
+        if (is_string($forwardedFor) && $forwardedFor !== '') {
+            foreach (explode(',', $forwardedFor) as $candidate) {
+                $ip = self::normalizeIp($candidate);
+                if ($ip !== null) {
+                    return $ip;
+                }
+            }
+        }
+
+        foreach (['x-real-ip', 'cf-connecting-ip', 'x-client-ip'] as $header) {
+            $ip = self::normalizeIp($headers[$header] ?? null);
+            if ($ip !== null) {
+                return $ip;
+            }
+        }
+
+        return null;
+    }
+
+    private static function normalizeIp(?string $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $trimmed = trim($value, " \t\n\r\0\x0B\"");
+        if ($trimmed === '' || strtolower($trimmed) === 'unknown') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, '[')) {
+            $endBracket = strpos($trimmed, ']');
+            if ($endBracket !== false) {
+                $embedded = substr($trimmed, 1, $endBracket - 1);
+                if ($embedded !== false && filter_var($embedded, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+                    return $embedded;
+                }
+            }
+        }
+
+        if (filter_var($trimmed, FILTER_VALIDATE_IP)) {
+            return $trimmed;
+        }
+
+        $withoutPort = explode(':', $trimmed)[0] ?? '';
+        if ($withoutPort !== '' && filter_var($withoutPort, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return $withoutPort;
+        }
+
+        return null;
+    }
+
     private static function firstForwardedValue(mixed $value): ?string
     {
         if (!is_scalar($value)) {
@@ -403,7 +516,7 @@ final readonly class Request
     }
 
     /**
-     * @return array{proto?: string, host?: string, port?: string}
+     * @return array{proto?: string, host?: string, port?: string, for?: string}
      */
     private static function parseForwardedHeader(?string $header): array
     {
@@ -427,6 +540,11 @@ final readonly class Request
             $key = strtolower(trim($name));
             $normalizedValue = trim($value, " \t\n\r\0\x0B\"");
             if ($normalizedValue === '') {
+                continue;
+            }
+
+            if ($key === 'for') {
+                $result[$key] = $normalizedValue;
                 continue;
             }
 

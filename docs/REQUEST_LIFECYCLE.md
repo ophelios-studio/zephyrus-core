@@ -76,6 +76,7 @@ An immutable value object that carries all input for one HTTP transaction.
 | `headers`     | Lowercased header map                                    |
 | `cookies`     | Cookie name → value map (`$_COOKIE`)                     |
 | `attributes`  | Mutable overlay populated during dispatch                |
+| `clientIp`    | Resolved client IP (may be `null` when unknown)          |
 
 Route parameters (e.g. `{id}`) are injected into `attributes` by
 `RouteDispatcher` before the middleware pipeline runs — so both middleware
@@ -130,6 +131,15 @@ supported, in priority order:
 
 The override value is uppercased and applied only when the raw method is
 `POST`.
+
+**Client IP helper**
+
+`Request::clientIp()` exposes a sanitized best-effort client address. It
+inspects `Forwarded` headers (including IPv6 + port), `X-Forwarded-For`
+first-hop entries, `X-Real-IP`, `CF-Connecting-IP`, `X-Client-IP`,
+`REMOTE_ADDR`, and a manually injected `client_ip` attribute, returning `null`
+when no trustworthy signal exists. This keeps IP normalization logic in one
+place for guards and middleware.
 
 ---
 

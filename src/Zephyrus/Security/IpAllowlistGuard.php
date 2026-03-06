@@ -17,26 +17,8 @@ final class IpAllowlistGuard implements AuthGuardInterface
 
     public function isAuthorized(Request $request): bool
     {
-        $ip = $this->resolveIp($request);
+        $ip = $request->clientIp();
 
         return $ip !== null && in_array($ip, $this->allowedIps, true);
-    }
-
-    private function resolveIp(Request $request): ?string
-    {
-        $forwarded = $request->header('X-Forwarded-For');
-        if (is_string($forwarded) && $forwarded !== '') {
-            $first = trim(explode(',', $forwarded)[0] ?? '');
-            if ($first !== '') {
-                return $first;
-            }
-        }
-
-        $remote = $request->attribute('client_ip');
-        if (is_string($remote) && $remote !== '') {
-            return $remote;
-        }
-
-        return null;
     }
 }
