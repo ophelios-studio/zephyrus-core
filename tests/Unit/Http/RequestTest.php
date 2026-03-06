@@ -163,6 +163,68 @@ final class RequestTest extends TestCase
         self::assertFalse($plain->isSecure());
     }
 
+    public function testFromGlobalsResolvesClientIpFromForwardedHeader(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'HTTP_FORWARDED' => 'for=203.0.113.10:1234;proto=https;host=app.example.com',
+            ],
+        );
+
+        self::assertSame('203.0.113.10', $request->clientIp());
+        self::assertSame('203.0.113.10', $request->clientIp);
+    }
+
+    public function testFromGlobalsClientIpFallsBackToRemoteAddress(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '192.0.2.9',
+            ],
+        );
+
+        self::assertSame('192.0.2.9', $request->clientIp());
+    }
+
+    public function testClientIpResolvesFromSyntheticForwardedHeader(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/secure',
+            headers: ['Forwarded' => 'for="[2001:db8::1]:4711"'],
+        );
+
+        self::assertSame('2001:db8::1', $request->clientIp());
+    }
+
+    public function testClientIpResolvesFromForwardedForHeader(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/secure',
+            headers: ['X-Forwarded-For' => '10.0.0.2, 10.0.0.3'],
+        );
+
+        self::assertSame('10.0.0.2', $request->clientIp());
+    }
+
+    public function testClientIpFallsBackToClientIpAttribute(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/secure',
+            attributes: ['client_ip' => '8.8.8.8'],
+        );
+
+        self::assertSame('8.8.8.8', $request->clientIp());
+    }
+
     // -------------------------------------------------------------------------
     // fromGlobals — URI construction
     // -------------------------------------------------------------------------
