@@ -28,6 +28,20 @@ final class FormValidator
     }
 
     /**
+     * Adds or replaces multiple field validators (immutable).
+     *
+     * @param array<string, FieldValidator> $fields
+     */
+    public function withFields(array $fields): self
+    {
+        $clone = clone $this;
+        foreach ($fields as $name => $validator) {
+            $clone->fields[$name] = $validator;
+        }
+        return $clone;
+    }
+
+    /**
      * Merges all fields from $sub prefixed with "$prefix." (immutable).
      *
      * Allows reusable sub-validators to be composed into a parent:
