@@ -163,6 +163,14 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::decimalString(2)->test(123.45));
     }
 
+    public function testDecimalStringWithZeroScaleAcceptsIntegersOnly(): void
+    {
+        self::assertTrue(Rules::decimalString(0)->test('123'));
+        self::assertTrue(Rules::decimalString(0)->test('-99'));
+        self::assertFalse(Rules::decimalString(0)->test('123.4'));
+        self::assertFalse(Rules::decimalString(0)->test('-0.1'));
+    }
+
     public function testDecimalStringDefaultMessage(): void
     {
         self::assertSame(
