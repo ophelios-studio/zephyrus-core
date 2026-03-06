@@ -81,6 +81,16 @@ final readonly class ContentSecurityPolicy
         return new self($updated);
     }
 
+    public function appendNonce(string $name, string $nonce): self
+    {
+        return $this->appendValue($name, self::formatNonceSource($nonce));
+    }
+
+    public function appendHash(string $name, string $algorithm, string $hash): self
+    {
+        return $this->appendValue($name, self::formatHashSource($algorithm, $hash));
+    }
+
     public function withoutDirective(string $name): self
     {
         $normalizedName = self::normalizeDirectiveName($name);
@@ -117,6 +127,35 @@ final readonly class ContentSecurityPolicy
     public function __toString(): string
     {
         return $this->toHeaderValue();
+    }
+
+    private static function formatNonceSource(string $nonce): string
+    {
+        return "'nonce-" . self::normalizeBase64Token($nonce) . "'";
+    }
+
+    private static function formatHashSource(string $algorithm, string $hash): string
+    {
+        $normalizedAlgorithm = strtolower(trim($algorithm));
+        if (!in_array($normalizedAlgorithm, ['sha256', 'sha384', 'sha512'], true)) {
+            throw new InvalidArgumentException('CSP hash algorithm must be sha256, sha384, or sha512.');
+        }
+
+        return "'" . $normalizedAlgorithm . '-' . self::normalizeBase64Token($hash) . "'";
+    }
+
+    private static function normalizeBase64Token(string $value): string
+    {
+        $normalized = trim($value);
+        if ($normalized === '') {
+            throw new InvalidArgumentException('CSP nonce/hash value cannot be empty.');
+        }
+
+        if (preg_match('/^[A-Za-z0-9+\/_-]+={0,2}$/', $normalized) !== 1) {
+            throw new InvalidArgumentException('CSP nonce/hash value must be valid base64 content.');
+        }
+
+        return $normalized;
     }
 
     private static function normalizeDirectiveName(string $name): string

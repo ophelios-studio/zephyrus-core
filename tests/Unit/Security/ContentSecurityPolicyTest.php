@@ -69,6 +69,36 @@ final class ContentSecurityPolicyTest extends TestCase
         self::assertSame("default-src 'self'", $policy->toHeaderValue());
     }
 
+    public function testAppendNonceFormatsSourceExpression(): void
+    {
+        $policy = ContentSecurityPolicy::create()
+            ->appendNonce('script-src', 'abc123+/==');
+
+        self::assertSame("script-src 'nonce-abc123+/=='", $policy->toHeaderValue());
+    }
+
+    public function testAppendHashFormatsSourceExpression(): void
+    {
+        $policy = ContentSecurityPolicy::create()
+            ->appendHash('style-src', 'sha384', 'deadbeef+/==');
+
+        self::assertSame("style-src 'sha384-deadbeef+/=='", $policy->toHeaderValue());
+    }
+
+    public function testAppendHashRejectsUnsupportedAlgorithm(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->appendHash('script-src', 'md5', 'deadbeef+/==');
+    }
+
+    public function testAppendNonceRejectsInvalidBase64Token(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->appendNonce('script-src', 'bad token');
+    }
+
     public function testMultipleDirectivesSerializeInInsertionOrder(): void
     {
         $policy = ContentSecurityPolicy::create()
