@@ -88,6 +88,16 @@ final class LocaleResolverTest extends TestCase
         self::assertSame('en', $this->resolver->resolve(null, 'fr;q=0, en;q=0.8', 'de'));
     }
 
+    public function testWildcardFallsBackToDefaultBasedOnQOrdering(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(null, '*, fr;q=0.8', 'en', ['en', 'fr']));
+    }
+
+    public function testWildcardWithQZeroIsIgnored(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve(null, '*;q=0, fr;q=0.8', 'en', ['en', 'fr']));
+    }
+
     // --- Supported-locales filter --------------------------------------------
 
     public function testFiltersToSupportedLocales(): void

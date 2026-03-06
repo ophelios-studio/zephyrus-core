@@ -61,7 +61,7 @@ $locale = $app->resolveLocaleFromRequest(
 
 Resolution priority:
 1. explicit `requestedLocale`
-2. `Accept-Language` header (q-values respected)
+2. `Accept-Language` header (q-values respected, including `*` wildcard fallback)
 3. app `defaultLocale`
 
 When `supportedLocales` is configured, locale selection is constrained to that allowlist, with regional fallback (`fr-CA` → `fr`) when possible.
