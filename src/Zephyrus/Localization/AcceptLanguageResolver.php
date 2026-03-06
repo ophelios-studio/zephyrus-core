@@ -44,7 +44,7 @@ final class AcceptLanguageResolver
         if ($requestedLocale !== '') {
             $normalized = $this->normalize($requestedLocale);
 
-            if ($normalized !== '' && $this->isAccepted($normalized, $supportedLocales)) {
+            if ($normalized !== '' && $normalized !== '*' && $this->isAccepted($normalized, $supportedLocales)) {
                 return $normalized;
             }
 
