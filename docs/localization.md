@@ -213,6 +213,7 @@ Additional bootstrap shortcuts:
 $app = ApplicationBootstrap::fromConfigurationFile(__DIR__ . '/../config/app.php');
 $app = ApplicationBootstrap::fromConfigurationArray(require __DIR__ . '/../config/app.php');
 $app = ApplicationBootstrap::fromEnvironment(); // APP_CONFIG_DIR / APP_CONFIG_BASE / APP_ENV / APP_CONFIG_EXTRA
+// APP_CONFIG_EXTRA accepts comma-separated optional names; duplicates are ignored.
 ```
 
 Or use a conventional config directory bootstrap:

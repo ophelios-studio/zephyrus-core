@@ -339,6 +339,54 @@ final class ApplicationBootstrapTest extends TestCase
         }
     }
 
+    public function testFromEnvironmentAppliesExtraOptionalLayers(): void
+    {
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envextra-' . uniqid('', true);
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+        mkdir($dir, 0775, true);
+
+        file_put_contents($dir . '/service.php', "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($dir . '/service.secrets.php', "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'supported_locales' => ['en', 'fr'],
+            ],
+        ], true) . ";\n");
+
+        $originalDir = getenv('APP_CONFIG_DIR');
+        $originalBase = getenv('APP_CONFIG_BASE');
+        $originalEnv = getenv('APP_ENV');
+        $originalExtra = getenv('APP_CONFIG_EXTRA');
+
+        putenv('APP_CONFIG_DIR=' . $dir);
+        putenv('APP_CONFIG_BASE=service');
+        putenv('APP_ENV=');
+        putenv('APP_CONFIG_EXTRA=secrets, secrets');
+
+        try {
+            $app = ApplicationBootstrap::fromEnvironment();
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            putenv($originalDir === false ? 'APP_CONFIG_DIR' : 'APP_CONFIG_DIR=' . $originalDir);
+            putenv($originalBase === false ? 'APP_CONFIG_BASE' : 'APP_CONFIG_BASE=' . $originalBase);
+            putenv($originalEnv === false ? 'APP_ENV' : 'APP_ENV=' . $originalEnv);
+            putenv($originalExtra === false ? 'APP_CONFIG_EXTRA' : 'APP_CONFIG_EXTRA=' . $originalExtra);
+            @unlink($dir . '/service.php');
+            @unlink($dir . '/service.secrets.php');
+            @rmdir($dir);
+        }
+    }
+
     public function testConfigPathsForDirectoryBuildsExpectedDefaultPaths(): void
     {
         $paths = ApplicationBootstrap::configPathsForDirectory('/tmp/config');
@@ -459,6 +507,29 @@ final class ApplicationBootstrapTest extends TestCase
             'required' => '/tmp/app.php',
             'optional' => ['   '],
         ]);
+    }
+
+    public function testFromEnvironmentRejectsInvalidExtraOptionalNames(): void
+    {
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envinvalid-' . uniqid('', true);
+        mkdir($dir, 0775, true);
+        file_put_contents($dir . '/app.php', "<?php return [];\n");
+
+        $originalDir = getenv('APP_CONFIG_DIR');
+        $originalExtra = getenv('APP_CONFIG_EXTRA');
+
+        putenv('APP_CONFIG_DIR=' . $dir);
+        putenv('APP_CONFIG_EXTRA=../secret');
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            ApplicationBootstrap::fromEnvironment();
+        } finally {
+            putenv($originalDir === false ? 'APP_CONFIG_DIR' : 'APP_CONFIG_DIR=' . $originalDir);
+            putenv($originalExtra === false ? 'APP_CONFIG_EXTRA' : 'APP_CONFIG_EXTRA=' . $originalExtra);
+            @unlink($dir . '/app.php');
+            @rmdir($dir);
+        }
     }
 
     public function testFromConfigDirectoryRejectsOptionalNamesWithPathSeparators(): void
