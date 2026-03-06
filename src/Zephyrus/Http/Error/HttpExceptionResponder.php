@@ -13,6 +13,10 @@ use Zephyrus\Validation\ValidationException;
 
 final class HttpExceptionResponder
 {
+    private const FORMAT_TEXT = 'text';
+    private const FORMAT_JSON = 'json';
+    private const FORMAT_PROBLEM_JSON = 'problem+json';
+
     public function toResponse(Throwable $exception, ?Request $request = null): Response
     {
         if ($exception instanceof MethodNotAllowedException) {
@@ -42,8 +46,9 @@ final class HttpExceptionResponder
     private function formatValidation(ValidationException $exception, ?Request $request): Response
     {
         $errors = $exception->errors()->toArray();
+        $format = $this->preferredFormat($request);
 
-        if ($this->prefersProblemJson($request)) {
+        if ($format === self::FORMAT_PROBLEM_JSON) {
             return Response::json([
                 'type'   => 'about:blank',
                 'title'  => 'Unprocessable Entity',
@@ -52,7 +57,7 @@ final class HttpExceptionResponder
             ], 422)->withHeader('Content-Type', 'application/problem+json; charset=utf-8');
         }
 
-        if ($this->prefersJson($request)) {
+        if ($format === self::FORMAT_JSON) {
             return Response::json(['errors' => $errors], 422);
         }
 
@@ -61,7 +66,9 @@ final class HttpExceptionResponder
 
     private function format(HttpErrorPayload $payload, ?Request $request): Response
     {
-        if ($this->prefersProblemJson($request)) {
+        $format = $this->preferredFormat($request);
+
+        if ($format === self::FORMAT_PROBLEM_JSON) {
             return Response::json([
                 'type' => 'about:blank',
                 'title' => $payload->message,
@@ -69,28 +76,100 @@ final class HttpExceptionResponder
             ], $payload->status)->withHeader('Content-Type', 'application/problem+json; charset=utf-8');
         }
 
-        if ($this->prefersJson($request)) {
+        if ($format === self::FORMAT_JSON) {
             return Response::json($payload->toArray(), $payload->status);
         }
 
         return Response::text($payload->message, $payload->status);
     }
 
-    private function prefersProblemJson(?Request $request): bool
+    private function preferredFormat(?Request $request): string
     {
         if ($request === null) {
-            return false;
+            return self::FORMAT_TEXT;
         }
 
-        return str_contains(strtolower($request->header('accept', '')), 'application/problem+json');
+        $acceptHeader = $request->header('accept', '');
+        $ranges = $this->parseAcceptHeader($acceptHeader);
+
+        if ($ranges === []) {
+            return self::FORMAT_TEXT;
+        }
+
+        $problemQ = 0.0;
+        $jsonQ = 0.0;
+
+        foreach ($ranges as $range) {
+            if ($range['q'] <= 0.0 || $range['type'] !== 'application') {
+                continue;
+            }
+
+            if ($range['subtype'] === 'problem+json' || $range['subtype'] === '*+json') {
+                $problemQ = max($problemQ, $range['q']);
+            }
+
+            if (
+                $range['subtype'] === 'json'
+                || $range['subtype'] === '*+json'
+                || str_ends_with($range['subtype'], '+json')
+            ) {
+                $jsonQ = max($jsonQ, $range['q']);
+            }
+        }
+
+        if ($problemQ <= 0.0 && $jsonQ <= 0.0) {
+            return self::FORMAT_TEXT;
+        }
+
+        return $problemQ >= $jsonQ ? self::FORMAT_PROBLEM_JSON : self::FORMAT_JSON;
     }
 
-    private function prefersJson(?Request $request): bool
+    /**
+     * @return array<int, array{type: string, subtype: string, q: float}>
+     */
+    private function parseAcceptHeader(string $header): array
     {
-        if ($request === null) {
-            return false;
+        $ranges = [];
+
+        foreach (explode(',', strtolower($header)) as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+
+            $segments = explode(';', $part);
+            $mediaType = trim((string) array_shift($segments));
+            if (!str_contains($mediaType, '/')) {
+                continue;
+            }
+
+            [$type, $subtype] = array_map('trim', explode('/', $mediaType, 2));
+            if ($type === '' || $subtype === '') {
+                continue;
+            }
+
+            $q = 1.0;
+            foreach ($segments as $parameter) {
+                $parameter = trim($parameter);
+                if (!str_starts_with($parameter, 'q=')) {
+                    continue;
+                }
+
+                $rawQ = trim(substr($parameter, 2));
+                if (!is_numeric($rawQ)) {
+                    continue;
+                }
+
+                $q = max(0.0, min(1.0, (float) $rawQ));
+            }
+
+            $ranges[] = [
+                'type' => $type,
+                'subtype' => $subtype,
+                'q' => $q,
+            ];
         }
 
-        return str_contains(strtolower($request->header('accept', '')), 'application/json');
+        return $ranges;
     }
 }
