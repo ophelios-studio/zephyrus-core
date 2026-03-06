@@ -128,7 +128,7 @@ final readonly class FileUpload
         }
 
         if ($tmp === null || $error === null) {
-            throw UploadException::invalidArrayShape();
+            return;
         }
 
         $entries[] = self::fromPhpArray([

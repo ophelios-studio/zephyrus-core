@@ -756,6 +756,31 @@ final class RequestTest extends TestCase
         self::assertSame('/tmp/b', $files[1]->tmpPath);
     }
 
+    public function testFromGlobalsNormalizesNestedMultiFileUploadArrayShape(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'example.com',
+                'REQUEST_URI' => '/upload',
+            ],
+            files: [
+                'attachments' => [
+                    'name' => ['contracts' => ['a.pdf', 'b.pdf']],
+                    'type' => ['contracts' => ['application/pdf', 'application/pdf']],
+                    'tmp_name' => ['contracts' => ['/tmp/c1', '/tmp/c2']],
+                    'error' => ['contracts' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK]],
+                    'size' => ['contracts' => [10, 20]],
+                ],
+            ],
+        );
+
+        $files = $request->filesOf('attachments');
+        self::assertCount(2, $files);
+        self::assertSame('/tmp/c1', $files[0]->tmpPath);
+        self::assertSame('/tmp/c2', $files[1]->tmpPath);
+    }
+
     public function testFromGlobalsSkipsMalformedSingleFileEntry(): void
     {
         $request = Request::fromGlobals(
