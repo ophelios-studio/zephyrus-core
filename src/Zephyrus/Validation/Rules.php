@@ -914,6 +914,18 @@ final class Rules
     }
 
     /**
+     * Validates an HTTP version token (HTTP/1.0, HTTP/1.1, HTTP/2, HTTP/2.0, HTTP/3, HTTP/3.0).
+     */
+    public static function httpVersion(string $message = 'Must be a valid HTTP version.'): Rule
+    {
+        return Rule::of(
+            static fn (mixed $v): bool => is_string($v)
+                && preg_match('/^HTTP\/(?:1\.0|1\.1|2(?:\.0)?|3(?:\.0)?)$/i', $v) === 1,
+            $message,
+        );
+    }
+
+    /**
      * Validates a MIME type such as "application/json".
      */
     public static function mimeType(string $message = 'Must be a valid MIME type.'): Rule
