@@ -17,15 +17,28 @@ final class ApplicationBootstrap
         array $requiredConfigFiles = [],
         array $optionalConfigFiles = [],
     ): Application {
+        if ($requiredConfigFiles === [] && $optionalConfigFiles === []) {
+            return ApplicationBuilder::create()->build();
+        }
+
         $existingOptional = array_values(array_filter(
             $optionalConfigFiles,
-            static fn (string $path): bool => is_file($path),
+            static fn (mixed $path): bool => is_string($path) && is_file($path),
         ));
 
-        $allPaths = array_merge($requiredConfigFiles, $existingOptional);
+        return ApplicationBuilder::buildFromConfigurationFiles(array_merge($requiredConfigFiles, $existingOptional));
+    }
 
-        return $allPaths !== []
-            ? ApplicationBuilder::buildFromConfigurationFiles($allPaths)
-            : ApplicationBuilder::create()->build();
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    public static function fromConfigurationArray(array $configuration): Application
+    {
+        return ApplicationBuilder::buildFromConfigurationArray($configuration);
+    }
+
+    public static function fromConfigurationFile(string $path): Application
+    {
+        return ApplicationBuilder::buildFromConfigurationFile($path);
     }
 }

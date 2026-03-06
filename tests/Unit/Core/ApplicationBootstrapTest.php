@@ -5,11 +5,20 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Application;
 use Zephyrus\Core\Bootstrap\ApplicationBootstrap;
 use Zephyrus\Http\Request;
 
 final class ApplicationBootstrapTest extends TestCase
 {
+    public function testFromConfigFilesWithoutPathsBuildsDefaultApplication(): void
+    {
+        $app = ApplicationBootstrap::fromConfigFiles();
+
+        self::assertInstanceOf(Application::class, $app);
+        self::assertSame('missing.key', $app->trans('missing.key'));
+    }
+
     public function testFromConfigFilesBuildsLocalizedApplicationFromRequiredFile(): void
     {
         $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . uniqid('', true) . '.php';
@@ -92,6 +101,49 @@ final class ApplicationBootstrapTest extends TestCase
             ));
         } finally {
             @unlink($required);
+        }
+    }
+
+    public function testFromConfigurationArrayBuildsApplication(): void
+    {
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+
+        $app = ApplicationBootstrap::fromConfigurationArray([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ]);
+
+        self::assertSame('Bonjour', $app->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+        ));
+    }
+
+    public function testFromConfigurationFileBuildsApplication(): void
+    {
+        $path = sys_get_temp_dir() . '/zephyrus-bootstrap-file-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+
+        file_put_contents($path, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en', 'fr'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBootstrap::fromConfigurationFile($path);
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($path);
         }
     }
 }
