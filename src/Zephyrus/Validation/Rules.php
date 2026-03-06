@@ -64,9 +64,12 @@ final class Rules
 
     public static function decimalString(int $scale = 2, string $message = ''): Rule
     {
+        $pattern = $scale <= 0
+            ? '/^-?\d+$/'
+            : '/^-?\d+(?:\.\d{1,' . $scale . '})?$/';
+
         return Rule::of(
-            fn (mixed $v) => is_string($v)
-                && preg_match('/^-?\d+(?:\.\d{1,' . max(1, $scale) . '})?$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match($pattern, $v) === 1,
             $message ?: "Must be a decimal string with up to {$scale} decimal places.",
         );
     }
