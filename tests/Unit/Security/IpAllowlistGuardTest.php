@@ -34,6 +34,30 @@ final class IpAllowlistGuardTest extends TestCase
         self::assertFalse($guard->isAuthorized($request));
     }
 
+    public function testAuthorizesWhenIpMatchesIpv4Cidr(): void
+    {
+        $guard = new IpAllowlistGuard(['10.42.0.0/16']);
+        $request = Request::fromArray('GET', '/secure', attributes: ['client_ip' => '10.42.9.12']);
+
+        self::assertTrue($guard->isAuthorized($request));
+    }
+
+    public function testAuthorizesWhenIpMatchesIpv6Cidr(): void
+    {
+        $guard = new IpAllowlistGuard(['2001:db8::/32']);
+        $request = Request::fromArray('GET', '/secure', attributes: ['client_ip' => '2001:db8:abcd::42']);
+
+        self::assertTrue($guard->isAuthorized($request));
+    }
+
+    public function testRejectsWhenIpDoesNotMatchCidr(): void
+    {
+        $guard = new IpAllowlistGuard(['10.42.0.0/16']);
+        $request = Request::fromArray('GET', '/secure', attributes: ['client_ip' => '10.43.1.2']);
+
+        self::assertFalse($guard->isAuthorized($request));
+    }
+
     public function testRejectsWhenNoIpSignalExists(): void
     {
         $guard = new IpAllowlistGuard(['127.0.0.1']);
