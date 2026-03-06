@@ -226,4 +226,4 @@ $app = ApplicationBootstrap::fromConfigDirectory(
 );
 ```
 
-If a config file is missing, returns a non-array payload, throws while loading, or a path entry is invalid/empty, bootstrap raises a `RuntimeException` with file context.
+If a config file is missing, returns a non-array payload, throws while loading, a path entry is invalid/empty, or config-directory inputs are invalid, bootstrap raises a `RuntimeException` with context.

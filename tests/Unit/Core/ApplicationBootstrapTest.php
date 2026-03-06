@@ -290,4 +290,25 @@ final class ApplicationBootstrapTest extends TestCase
             @rmdir($dir);
         }
     }
+
+    public function testFromConfigDirectoryRejectsEmptyDirectory(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromConfigDirectory('   ');
+    }
+
+    public function testFromConfigDirectoryRejectsEmptyBaseName(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '');
+    }
+
+    public function testFromConfigDirectoryRejectsBaseNameWithPathSeparator(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '../app');
+    }
 }
