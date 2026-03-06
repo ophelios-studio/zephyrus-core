@@ -324,6 +324,20 @@ final class ApplicationBootstrapTest extends TestCase
         ], $paths['optional']);
     }
 
+    public function testConfigPathsForDirectoryDeDuplicatesOptionalPathCollisions(): void
+    {
+        $paths = ApplicationBootstrap::configPathsForDirectory(
+            '/tmp/config',
+            environment: 'local',
+            extraOptionalNames: ['local', 'local', 'region.eu'],
+        );
+
+        self::assertSame([
+            '/tmp/config/app.local.php',
+            '/tmp/config/app.region.eu.php',
+        ], $paths['optional']);
+    }
+
     public function testFromResolvedPathsBuildsApplicationFromProvidedGroups(): void
     {
         $required = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-required-' . uniqid('', true) . '.php';

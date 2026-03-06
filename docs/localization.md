@@ -225,6 +225,7 @@ $app = ApplicationBootstrap::fromConfigDirectory(
     environment: 'staging', // explicit override (or '' to disable env override)
     extraOptionalNames: ['secrets', 'region.eu'],
 );
+// optional path collisions are de-duplicated automatically
 
 $paths = ApplicationBootstrap::configPathsForDirectory(__DIR__ . '/../config');
 // ['required' => '.../app.php', 'optional' => ['.../app.local.php', ...]]
