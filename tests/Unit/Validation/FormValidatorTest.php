@@ -81,6 +81,54 @@ final class FormValidatorTest extends TestCase
         self::assertCount(2, $form2->fields()['age']->rules());
     }
 
+    public function testWithFieldsIsImmutableAndMergesValidators(): void
+    {
+        $form1 = new FormValidator([
+            'email' => FieldValidator::withRules(Rules::required()),
+        ]);
+
+        $form2 = $form1->withFields([
+            'name' => FieldValidator::withRules(Rules::required(), Rules::minLength(2)),
+            'age'  => FieldValidator::withRules(Rules::integer(), Rules::min(18)),
+        ]);
+
+        self::assertNotSame($form1, $form2);
+        self::assertCount(1, $form1->fields());
+        self::assertCount(3, $form2->fields());
+        self::assertArrayHasKey('email', $form2->fields());
+        self::assertArrayHasKey('name', $form2->fields());
+        self::assertArrayHasKey('age', $form2->fields());
+    }
+
+    public function testWithFieldsOverridesExistingKeys(): void
+    {
+        $form = new FormValidator([
+            'age' => FieldValidator::withRules(Rules::required()),
+        ]);
+
+        $form2 = $form->withFields([
+            'age' => FieldValidator::withRules(Rules::required(), Rules::integer()),
+        ]);
+
+        self::assertCount(1, $form->fields()['age']->rules());
+        self::assertCount(2, $form2->fields()['age']->rules());
+    }
+
+    public function testWithFieldsIntegratesIntoValidationFlow(): void
+    {
+        $form = (new FormValidator())
+            ->withFields([
+                'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+                'age'   => FieldValidator::withRules(Rules::required(), Rules::integer(), Rules::min(18)),
+            ]);
+
+        self::assertFalse($form->validate(['email' => 'user@example.com', 'age' => '21'])->hasErrors());
+
+        $bag = $form->validate(['email' => 'bad', 'age' => '15']);
+        self::assertTrue($bag->hasErrorsFor('email'));
+        self::assertTrue($bag->hasErrorsFor('age'));
+    }
+
     public function testExtraFieldsInDataAreIgnored(): void
     {
         $form = new FormValidator([
