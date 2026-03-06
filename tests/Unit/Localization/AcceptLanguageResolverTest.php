@@ -156,6 +156,33 @@ final class AcceptLanguageResolverTest extends TestCase
         ));
     }
 
+    public function testUnsupportedDefaultFallsBackToFirstSupportedLocale(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve(
+            acceptLanguageHeader: 'de, es',
+            supportedLocales:     ['fr', 'en'],
+            defaultLocale:        'it',
+        ));
+    }
+
+    public function testUnsupportedRegionalDefaultFallsBackToSupportedBaseLocale(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve(
+            acceptLanguageHeader: 'de, es',
+            supportedLocales:     ['fr', 'en'],
+            defaultLocale:        'fr-CA',
+        ));
+    }
+
+    public function testEmptyDefaultFallsBackToSupportedAllowlistWhenConfigured(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve(
+            acceptLanguageHeader: '',
+            supportedLocales:     ['fr', 'de'],
+            defaultLocale:        '',
+        ));
+    }
+
     // -- Regional fallback (fr-CA → fr) ---------------------------------------
 
     public function testRegionalFallbackFromHeaderToBaseLanguage(): void

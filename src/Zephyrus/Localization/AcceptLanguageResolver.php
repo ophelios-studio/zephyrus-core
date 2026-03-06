@@ -40,6 +40,14 @@ final class AcceptLanguageResolver
             $defaultLocale = 'en';
         }
 
+        // Keep the final fallback within the supported-locale allowlist.
+        if ($supportedLocales !== [] && !$this->isAccepted($defaultLocale, $supportedLocales)) {
+            $base = $this->base($defaultLocale);
+            $defaultLocale = $this->isAccepted($base, $supportedLocales)
+                ? $base
+                : $supportedLocales[0];
+        }
+
         // 1. Explicit requested locale wins if it is accepted.
         if ($requestedLocale !== '') {
             $normalized = $this->normalize($requestedLocale);
