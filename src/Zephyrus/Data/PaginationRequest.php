@@ -33,7 +33,7 @@ final class PaginationRequest implements \JsonSerializable
     {
         return new self(
             page: (int) ($data['page'] ?? 1),
-            perPage: (int) ($data['per_page'] ?? $data['perPage'] ?? 25),
+            perPage: self::resolvePerPage($data, 25),
         );
     }
 
@@ -47,7 +47,7 @@ final class PaginationRequest implements \JsonSerializable
             throw DatabaseException::queryFailed('pagination', 'Max per-page must be >= 1');
         }
 
-        $requestedPerPage = (int) ($data['per_page'] ?? $data['perPage'] ?? $defaultPerPage);
+        $requestedPerPage = self::resolvePerPage($data, $defaultPerPage);
         $perPage = min(max($requestedPerPage, 1), $maxPerPage);
 
         $requestedPage = (int) ($data['page'] ?? 1);
@@ -96,6 +96,14 @@ final class PaginationRequest implements \JsonSerializable
     public static function fromQuery(array $query, int $defaultPerPage = 25, int $maxPerPage = 100): self
     {
         return self::fromArrayWithBounds($query, $defaultPerPage, $maxPerPage);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private static function resolvePerPage(array $data, int $defaultPerPage): int
+    {
+        return (int) ($data['per_page'] ?? $data['perPage'] ?? $data['page_size'] ?? $data['pageSize'] ?? $defaultPerPage);
     }
 
     /**
