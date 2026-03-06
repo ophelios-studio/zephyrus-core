@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Session;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
 
 /**
@@ -206,5 +207,15 @@ final class SessionManagerTest extends TestCase
         self::assertTrue($session->get('bool'));
         self::assertSame([1, 2, 3], $session->get('array'));
         self::assertNull($session->get('null'));
+    }
+
+    public function testEmptySessionKeyThrowsConsistentSessionException(): void
+    {
+        $session = $this->makeSession();
+
+        $this->expectException(SessionException::class);
+        $this->expectExceptionMessage('Session key must be a non-empty string.');
+
+        $session->set('', 'value');
     }
 }

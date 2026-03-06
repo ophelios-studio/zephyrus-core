@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Session;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Security\CsrfTokenManagerInterface;
 use Zephyrus\Session\SessionCsrfTokenManager;
+use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
 
 final class SessionCsrfTokenManagerTest extends TestCase
@@ -211,5 +212,15 @@ final class SessionCsrfTokenManagerTest extends TestCase
         $manager = new SessionCsrfTokenManager($session);
 
         self::assertSame('pre-seeded-token-abc123', $manager->getToken());
+    }
+
+    public function testEmptyCustomSessionKeyThrowsSessionException(): void
+    {
+        $session = new SessionManager([]);
+
+        $this->expectException(SessionException::class);
+        $this->expectExceptionMessage('Session key must be a non-empty string.');
+
+        new SessionCsrfTokenManager($session, '');
     }
 }
