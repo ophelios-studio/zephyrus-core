@@ -131,6 +131,40 @@ final class HttpExceptionResponderTest extends TestCase
         self::assertSame('{"type":"about:blank","title":"Not Found","status":404}', $response->body);
     }
 
+    public function testFormatsErrorAsGenericJsonForWildcardPlusJsonAcceptHeader(): void
+    {
+        $responder = new HttpExceptionResponder();
+
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/missing',
+            headers: ['Accept' => 'application/*+json'],
+        );
+
+        $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
+
+        self::assertSame(404, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
+    }
+
+    public function testFormatsErrorAsGenericJsonWhenWildcardAndJsonAreTied(): void
+    {
+        $responder = new HttpExceptionResponder();
+
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/missing',
+            headers: ['Accept' => 'application/*+json;q=0.9, application/json;q=0.9'],
+        );
+
+        $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
+
+        self::assertSame(404, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
+    }
+
     // ---- ValidationException → 422 -----------------------------------------
 
     public function testMapsValidationExceptionTo422PlainText(): void

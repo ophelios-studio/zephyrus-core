@@ -97,23 +97,37 @@ final class HttpExceptionResponder
         }
 
         $problemQ = 0.0;
+        $problemSpecificity = 0;
         $jsonQ = 0.0;
+        $jsonSpecificity = 0;
 
         foreach ($ranges as $range) {
             if ($range['q'] <= 0.0 || $range['type'] !== 'application') {
                 continue;
             }
 
-            if ($range['subtype'] === 'problem+json' || $range['subtype'] === '*+json') {
-                $problemQ = max($problemQ, $range['q']);
+            if ($range['subtype'] === 'problem+json') {
+                if ($range['q'] > $problemQ || ($range['q'] === $problemQ && 2 > $problemSpecificity)) {
+                    $problemQ = $range['q'];
+                    $problemSpecificity = 2;
+                }
+            } elseif ($range['subtype'] === '*+json') {
+                if ($range['q'] > $problemQ || ($range['q'] === $problemQ && 1 > $problemSpecificity)) {
+                    $problemQ = $range['q'];
+                    $problemSpecificity = 1;
+                }
             }
 
-            if (
-                $range['subtype'] === 'json'
-                || $range['subtype'] === '*+json'
-                || str_ends_with($range['subtype'], '+json')
-            ) {
-                $jsonQ = max($jsonQ, $range['q']);
+            if ($range['subtype'] === 'json' || str_ends_with($range['subtype'], '+json')) {
+                $specificity = match ($range['subtype']) {
+                    '*+json', 'problem+json' => 1,
+                    default => 2,
+                };
+
+                if ($range['q'] > $jsonQ || ($range['q'] === $jsonQ && $specificity > $jsonSpecificity)) {
+                    $jsonQ = $range['q'];
+                    $jsonSpecificity = $specificity;
+                }
             }
         }
 
@@ -121,7 +135,19 @@ final class HttpExceptionResponder
             return self::FORMAT_TEXT;
         }
 
-        return $problemQ >= $jsonQ ? self::FORMAT_PROBLEM_JSON : self::FORMAT_JSON;
+        if ($problemQ > $jsonQ) {
+            return self::FORMAT_PROBLEM_JSON;
+        }
+
+        if ($jsonQ > $problemQ) {
+            return self::FORMAT_JSON;
+        }
+
+        if ($problemSpecificity > $jsonSpecificity) {
+            return self::FORMAT_PROBLEM_JSON;
+        }
+
+        return self::FORMAT_JSON;
     }
 
     /**
