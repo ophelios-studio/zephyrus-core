@@ -41,4 +41,28 @@ final class ApplicationBootstrap
     {
         return ApplicationBuilder::buildFromConfigurationFile($path);
     }
+
+    /**
+     * Build an application from a conventional config directory layout.
+     *
+     * Required file:   <configDir>/<baseName>.php
+     * Optional files:  <configDir>/<baseName>.local.php
+     *                  <configDir>/<baseName>.<APP_ENV>.php (when APP_ENV is set)
+     */
+    public static function fromConfigDirectory(string $configDir, string $baseName = 'app'): Application
+    {
+        $configDir = rtrim($configDir, '/\\');
+        $baseFile = $configDir . '/' . $baseName . '.php';
+
+        $optional = [
+            $configDir . '/' . $baseName . '.local.php',
+        ];
+
+        $appEnv = getenv('APP_ENV');
+        if (is_string($appEnv) && trim($appEnv) !== '') {
+            $optional[] = $configDir . '/' . $baseName . '.' . trim($appEnv) . '.php';
+        }
+
+        return self::fromConfigFiles([$baseFile], $optional);
+    }
 }
