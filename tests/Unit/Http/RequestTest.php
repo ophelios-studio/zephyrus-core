@@ -143,6 +143,17 @@ final class RequestTest extends TestCase
         self::assertFalse($request->isJson());
     }
 
+    public function testIsJsonReturnsTrueForJsonSuffixMediaType(): void
+    {
+        $request = Request::fromArray(
+            method: 'POST',
+            uri: '/problem',
+            headers: ['Content-Type' => 'application/problem+json'],
+        );
+
+        self::assertTrue($request->isJson());
+    }
+
     public function testIsSecureDetectsHttpsUri(): void
     {
         $secure  = Request::fromArray('GET', 'https://example.com/page');
@@ -404,6 +415,21 @@ final class RequestTest extends TestCase
         );
 
         self::assertSame('active', $request->input('status'));
+    }
+
+    public function testFromGlobalsJsonSuffixMediaTypeBodyIsParsed(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/problems',
+                'CONTENT_TYPE'   => 'application/problem+json',
+            ],
+            rawBody: '{"type":"about:blank","title":"Bad Request"}',
+        );
+
+        self::assertSame('Bad Request', $request->input('title'));
     }
 
     public function testFromGlobalsEmptyJsonBodyReturnsEmptyParsedBody(): void
