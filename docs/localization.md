@@ -224,6 +224,9 @@ $app = ApplicationBootstrap::fromConfigDirectory(
     __DIR__ . '/../config',
     environment: 'staging', // explicit override (or '' to disable env override)
 );
+
+$paths = ApplicationBootstrap::configPathsForDirectory(__DIR__ . '/../config');
+// ['required' => '.../app.php', 'optional' => ['.../app.local.php', ...]]
 ```
 
 If a config file is missing, returns a non-array payload, throws while loading, a path entry is invalid/empty, or config-directory inputs are invalid, bootstrap raises a `RuntimeException` with context.
