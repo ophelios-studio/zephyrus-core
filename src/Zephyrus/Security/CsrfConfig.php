@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use InvalidArgumentException;
+
+use function array_values;
+use function is_array;
+use function is_string;
+use function preg_match;
+use function sprintf;
+use function trim;
+
 /**
  * Immutable configuration for CsrfMiddleware.
  *
@@ -100,7 +109,7 @@ final class CsrfConfig
                 ?? $config['csrfAutoHtml']
                 ?? false
             ),
-            excludedPathPatterns: (array) (
+            excludedPathPatterns: self::normalizeExcludedPathPatterns(
                 $config['excludedPathPatterns']
                 ?? $config['excluded_path_patterns']
                 ?? $config['csrf_exceptions']
@@ -108,5 +117,31 @@ final class CsrfConfig
                 ?? []
             ),
         );
+    }
+
+    /**
+     * @param mixed $patterns
+     * @return list<string>
+     */
+    private static function normalizeExcludedPathPatterns(mixed $patterns): array
+    {
+        if (!is_array($patterns)) {
+            throw new InvalidArgumentException('CSRF excluded path patterns must be an array of regex strings.');
+        }
+
+        $normalized = [];
+        foreach ($patterns as $index => $pattern) {
+            if (!is_string($pattern) || trim($pattern) === '') {
+                throw new InvalidArgumentException(sprintf('CSRF excluded path pattern at index %s must be a non-empty string.', (string) $index));
+            }
+
+            if (@preg_match($pattern, '') === false) {
+                throw new InvalidArgumentException(sprintf('CSRF excluded path pattern at index %s is not a valid regex: %s', (string) $index, $pattern));
+            }
+
+            $normalized[] = $pattern;
+        }
+
+        return array_values($normalized);
     }
 }

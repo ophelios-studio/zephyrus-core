@@ -513,6 +513,26 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame([], $config->excludedPathPatterns);
     }
 
+    public function testCsrfConfigFromArrayRejectsInvalidExcludedPathPatternRegex(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('not a valid regex');
+
+        CsrfConfig::fromArray([
+            'excludedPathPatterns' => ['#^/hooks/#', '#[invalid'],
+        ]);
+    }
+
+    public function testCsrfConfigFromArrayRejectsNonArrayExcludedPatterns(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must be an array');
+
+        CsrfConfig::fromArray([
+            'excludedPathPatterns' => '#^/hooks/#',
+        ]);
+    }
+
     public function testDisabledCsrfValidationBypassesTokenChecks(): void
     {
         $mw = $this->makeMiddleware(new CsrfConfig(enabled: false));
