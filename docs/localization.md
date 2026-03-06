@@ -214,4 +214,11 @@ $app = ApplicationBootstrap::fromConfigurationFile(__DIR__ . '/../config/app.php
 $app = ApplicationBootstrap::fromConfigurationArray(require __DIR__ . '/../config/app.php');
 ```
 
+Or use a conventional config directory bootstrap:
+
+```php
+$app = ApplicationBootstrap::fromConfigDirectory(__DIR__ . '/../config');
+// loads app.php + optional app.local.php + optional app.<APP_ENV>.php
+```
+
 If a config file is missing, returns a non-array payload, throws while loading, or a path entry is invalid/empty, bootstrap raises a `RuntimeException` with file context.
