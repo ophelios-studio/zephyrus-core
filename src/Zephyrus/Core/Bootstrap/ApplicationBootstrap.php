@@ -80,7 +80,7 @@ final class ApplicationBootstrap
 
         return self::fromConfigFiles(
             requiredConfigFiles: [trim($required)],
-            optionalConfigFiles: array_values($optional),
+            optionalConfigFiles: self::normalizeOptionalPaths($optional),
         );
     }
 
@@ -136,5 +136,33 @@ final class ApplicationBootstrap
         }
 
         return $baseName;
+    }
+
+    /**
+     * @param mixed[] $optional
+     * @return string[]
+     */
+    private static function normalizeOptionalPaths(array $optional): array
+    {
+        $normalized = [];
+
+        foreach ($optional as $index => $path) {
+            if (!is_string($path)) {
+                throw new RuntimeException(sprintf('Resolved optional path at index %d must be a string.', $index));
+            }
+
+            $trimmed = trim($path);
+            if ($trimmed === '') {
+                throw new RuntimeException(sprintf('Resolved optional path at index %d must not be empty.', $index));
+            }
+
+            if (in_array($trimmed, $normalized, true)) {
+                continue;
+            }
+
+            $normalized[] = $trimmed;
+        }
+
+        return $normalized;
     }
 }

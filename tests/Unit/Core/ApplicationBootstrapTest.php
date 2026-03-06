@@ -365,6 +365,26 @@ final class ApplicationBootstrapTest extends TestCase
         ]);
     }
 
+    public function testFromResolvedPathsRejectsNonStringOptionalEntries(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromResolvedPaths([
+            'required' => '/tmp/app.php',
+            'optional' => ['/tmp/app.local.php', 123],
+        ]);
+    }
+
+    public function testFromResolvedPathsRejectsEmptyOptionalEntries(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromResolvedPaths([
+            'required' => '/tmp/app.php',
+            'optional' => ['   '],
+        ]);
+    }
+
     public function testFromConfigDirectoryRejectsEmptyDirectory(): void
     {
         $this->expectException(\RuntimeException::class);

@@ -231,4 +231,4 @@ $paths = ApplicationBootstrap::configPathsForDirectory(__DIR__ . '/../config');
 $app = ApplicationBootstrap::fromResolvedPaths($paths);
 ```
 
-If a config file is missing, returns a non-array payload, throws while loading, a path entry is invalid/empty, or config-directory inputs are invalid, bootstrap raises a `RuntimeException` with context.
+If a config file is missing, returns a non-array payload, throws while loading, a path entry is invalid/empty, or config-directory inputs are invalid, bootstrap raises a `RuntimeException` with context. Duplicate optional paths are de-duplicated during bootstrap path normalization.
