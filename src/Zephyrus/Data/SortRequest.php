@@ -23,8 +23,8 @@ final class SortRequest implements \JsonSerializable
     public static function fromArray(array $data, string $defaultColumn, string $defaultDirection = 'ASC'): self
     {
         return new self(
-            column: (string) ($data['sort_by'] ?? $data['sortBy'] ?? $defaultColumn),
-            direction: (string) ($data['sort_dir'] ?? $data['sortDir'] ?? $defaultDirection),
+            column: self::resolveColumn($data, $defaultColumn),
+            direction: self::resolveDirection($data, $defaultDirection),
         );
     }
 
@@ -34,14 +34,14 @@ final class SortRequest implements \JsonSerializable
      */
     public static function fromQuery(array $query, array $allowedColumns, string $defaultColumn, string $defaultDirection = 'ASC'): self
     {
-        $candidate = (string) ($query['sort_by'] ?? $query['sortBy'] ?? $defaultColumn);
+        $candidate = self::resolveColumn($query, $defaultColumn);
         if (!in_array($candidate, $allowedColumns, true)) {
             $candidate = $defaultColumn;
         }
 
         return new self(
             column: $candidate,
-            direction: (string) ($query['sort_dir'] ?? $query['sortDir'] ?? $defaultDirection),
+            direction: self::resolveDirection($query, $defaultDirection),
         );
     }
 
@@ -63,5 +63,21 @@ final class SortRequest implements \JsonSerializable
     public function jsonSerialize(): array
     {
         return $this->toArray();
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private static function resolveColumn(array $data, string $defaultColumn): string
+    {
+        return (string) ($data['sort_by'] ?? $data['sortBy'] ?? $data['order_by'] ?? $data['orderBy'] ?? $defaultColumn);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private static function resolveDirection(array $data, string $defaultDirection): string
+    {
+        return (string) ($data['sort_dir'] ?? $data['sortDir'] ?? $data['direction'] ?? $data['order'] ?? $defaultDirection);
     }
 }

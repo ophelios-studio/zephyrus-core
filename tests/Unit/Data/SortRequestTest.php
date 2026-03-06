@@ -21,11 +21,42 @@ final class SortRequestTest extends TestCase
     {
         $snake = SortRequest::fromArray(['sort_by' => 'created_at', 'sort_dir' => 'ASC'], 'id');
         $camel = SortRequest::fromArray(['sortBy' => 'name', 'sortDir' => 'DESC'], 'id');
+        $orderSnake = SortRequest::fromArray(['order_by' => 'updated_at', 'order' => 'DESC'], 'id');
+        $orderCamel = SortRequest::fromArray(['orderBy' => 'email', 'direction' => 'ASC'], 'id');
 
         self::assertSame('created_at', $snake->column);
         self::assertSame('ASC', strtoupper($snake->direction));
         self::assertSame('name', $camel->column);
         self::assertSame('DESC', strtoupper($camel->direction));
+        self::assertSame('updated_at', $orderSnake->column);
+        self::assertSame('DESC', strtoupper($orderSnake->direction));
+        self::assertSame('email', $orderCamel->column);
+        self::assertSame('ASC', strtoupper($orderCamel->direction));
+    }
+
+    public function testFromArrayPrioritizesSortKeysOverOrderAliases(): void
+    {
+        $sort = SortRequest::fromArray([
+            'sort_by' => 'created_at',
+            'order_by' => 'name',
+            'sort_dir' => 'DESC',
+            'order' => 'ASC',
+        ], 'id');
+
+        self::assertSame('created_at', $sort->column);
+        self::assertSame('DESC', strtoupper($sort->direction));
+    }
+
+    public function testFromQuerySupportsOrderAliasesWithAllowlist(): void
+    {
+        $sort = SortRequest::fromQuery(
+            ['order_by' => 'name', 'direction' => 'desc'],
+            allowedColumns: ['id', 'name'],
+            defaultColumn: 'id',
+        );
+
+        self::assertSame('name', $sort->column);
+        self::assertSame('DESC', strtoupper($sort->direction));
     }
 
     public function testFromQueryFallsBackToDefaultWhenColumnNotAllowed(): void
