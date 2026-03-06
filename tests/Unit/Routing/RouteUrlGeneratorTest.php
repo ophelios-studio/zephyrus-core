@@ -87,6 +87,41 @@ final class RouteUrlGeneratorTest extends TestCase
         self::assertSame('/search?q=hello%20world&tags%5B0%5D=php&tags%5B1%5D=zephyrus%202', $path);
     }
 
+    public function testGenerateSortsNestedAssociativeQueryKeysDeterministically(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/search', 'SearchController@index', name: 'search.index'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $path = $generator->generate('search.index', query: [
+            'filters' => [
+                'sort' => 'desc',
+                'term' => 'zephyrus',
+            ],
+            'page' => 2,
+        ]);
+
+        self::assertSame('/search?filters%5Bsort%5D=desc&filters%5Bterm%5D=zephyrus&page=2', $path);
+    }
+
+    public function testGenerateKeepsNestedListOrderWhileSortingAssociativeKeys(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/search', 'SearchController@index', name: 'search.index'));
+
+        $generator = new RouteUrlGenerator($routes);
+
+        $path = $generator->generate('search.index', query: [
+            'filters' => [
+                'tags' => ['zeta', 'alpha'],
+                'sort' => 'desc',
+            ],
+        ]);
+
+        self::assertSame('/search?filters%5Bsort%5D=desc&filters%5Btags%5D%5B0%5D=zeta&filters%5Btags%5D%5B1%5D=alpha', $path);
+    }
+
     public function testGeneratePrependsBaseUrlWhenConfigured(): void
     {
         $routes = new RouteCollection();

@@ -56,7 +56,7 @@ final readonly class RouteUrlGenerator
         $url = $resolvedPath;
 
         if ($query !== []) {
-            ksort($query);
+            $query = $this->normalizeQuery($query);
             $queryString = http_build_query($query, arg_separator: '&', encoding_type: PHP_QUERY_RFC3986);
             $url = $queryString === '' ? $url : $url . '?' . $queryString;
         }
@@ -192,6 +192,42 @@ final readonly class RouteUrlGenerator
         }
 
         return $url . '#' . rawurlencode($normalized);
+    }
+
+    /**
+     * @param array<string, scalar|array<scalar>> $query
+     * @return array<string, scalar|array<scalar>>
+     */
+    private function normalizeQuery(array $query): array
+    {
+        foreach ($query as $key => $value) {
+            if (is_array($value)) {
+                $query[$key] = $this->normalizeQueryArray($value);
+            }
+        }
+
+        ksort($query);
+
+        return $query;
+    }
+
+    /**
+     * @param array<mixed> $value
+     * @return array<mixed>
+     */
+    private function normalizeQueryArray(array $value): array
+    {
+        foreach ($value as $key => $item) {
+            if (is_array($item)) {
+                $value[$key] = $this->normalizeQueryArray($item);
+            }
+        }
+
+        if (!array_is_list($value)) {
+            ksort($value);
+        }
+
+        return $value;
     }
 
     private function requireSignature(): RouteSignature
