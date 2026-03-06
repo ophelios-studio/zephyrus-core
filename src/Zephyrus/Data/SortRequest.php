@@ -34,14 +34,20 @@ final class SortRequest implements \JsonSerializable
      */
     public static function fromQuery(array $query, array $allowedColumns, string $defaultColumn, string $defaultDirection = 'ASC'): self
     {
-        $candidate = self::resolveColumn($query, $defaultColumn);
+        $compactSort = self::resolveCompactSort($query);
+        $candidate = $compactSort['column'] ?? self::resolveColumn($query, $defaultColumn);
         if (!in_array($candidate, $allowedColumns, true)) {
             $candidate = $defaultColumn;
         }
 
+        $direction = self::resolveDirection($query, $defaultDirection);
+        if ($compactSort !== null && !self::hasExplicitDirection($query)) {
+            $direction = $compactSort['direction'];
+        }
+
         return new self(
             column: $candidate,
-            direction: self::resolveDirection($query, $defaultDirection),
+            direction: $direction,
         );
     }
 
@@ -79,5 +85,61 @@ final class SortRequest implements \JsonSerializable
     private static function resolveDirection(array $data, string $defaultDirection): string
     {
         return (string) ($data['sort_dir'] ?? $data['sortDir'] ?? $data['direction'] ?? $data['order'] ?? $defaultDirection);
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @return array{column: string, direction: string}|null
+     */
+    private static function resolveCompactSort(array $query): ?array
+    {
+        if (!array_key_exists('sort', $query)) {
+            return null;
+        }
+
+        $raw = trim((string) $query['sort']);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (str_starts_with($raw, '-')) {
+            $column = substr($raw, 1);
+            if ($column === '' || $column === false) {
+                return null;
+            }
+
+            return [
+                'column' => $column,
+                'direction' => 'DESC',
+            ];
+        }
+
+        if (str_starts_with($raw, '+')) {
+            $column = substr($raw, 1);
+            if ($column === '' || $column === false) {
+                return null;
+            }
+
+            return [
+                'column' => $column,
+                'direction' => 'ASC',
+            ];
+        }
+
+        return [
+            'column' => $raw,
+            'direction' => 'ASC',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     */
+    private static function hasExplicitDirection(array $query): bool
+    {
+        return array_key_exists('sort_dir', $query)
+            || array_key_exists('sortDir', $query)
+            || array_key_exists('direction', $query)
+            || array_key_exists('order', $query);
     }
 }
