@@ -24,6 +24,43 @@ final class FilterRequestTest extends TestCase
         ], $filter->toArray());
     }
 
+    public function testFromQueryParsesConfiguredCsvKeys(): void
+    {
+        $filter = FilterRequest::fromQuery(
+            ['status' => 'active, pending ,archived'],
+            ['status'],
+            ['status'],
+        );
+
+        self::assertSame([
+            'status' => ['active', 'pending', 'archived'],
+        ], $filter->toArray());
+    }
+
+    public function testFromQuerySkipsCsvKeyWhenOnlyBlankItems(): void
+    {
+        $filter = FilterRequest::fromQuery(
+            ['status' => ' ,  , '],
+            ['status'],
+            ['status'],
+        );
+
+        self::assertSame([], $filter->toArray());
+        self::assertTrue($filter->isEmpty());
+    }
+
+    public function testFromQueryDoesNotParseCsvForNonConfiguredKeys(): void
+    {
+        $filter = FilterRequest::fromQuery(
+            ['status' => 'active,pending'],
+            ['status'],
+        );
+
+        self::assertSame([
+            'status' => 'active,pending',
+        ], $filter->toArray());
+    }
+
     public function testToWhereClauseBuildsSqlAndBindings(): void
     {
         $filter = new FilterRequest(['status' => 'active', 'email' => 'a@example.com']);
