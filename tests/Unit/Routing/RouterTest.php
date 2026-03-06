@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
@@ -36,6 +37,17 @@ class MiddlewareGroupAttributeController
 {
     #[RouteAttribute('/dashboard', 'GET', middlewares: ['web'])]
     public function dashboard(): void {}
+}
+
+#[MiddlewareAttribute('web')]
+class MiddlewareLayeredController
+{
+    #[RouteAttribute('/reports', 'GET')]
+    public function reports(): void {}
+
+    #[MiddlewareAttribute('audit')]
+    #[RouteAttribute('/reports', 'POST', middlewares: ['auth'])]
+    public function generate(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +240,19 @@ final class RouterTest extends TestCase
         $route = $router->routes()->all()[0];
 
         self::assertSame(['csrf', 'session'], $route->middlewares);
+    }
+
+    public function testControllerMergesClassMethodAndRouteMiddlewaresBeforeGroupExpansion(): void
+    {
+        $router = (new Router())
+            ->middlewareGroup('web', ['csrf', 'session'])
+            ->controller(MiddlewareLayeredController::class);
+
+        $routes = $router->routes()->all();
+        self::assertCount(2, $routes);
+
+        self::assertSame(['csrf', 'session'], $routes[0]->middlewares);
+        self::assertSame(['csrf', 'session', 'audit', 'auth'], $routes[1]->middlewares);
     }
 
     public function testMiddlewareGroupDetectsCircularReferences(): void

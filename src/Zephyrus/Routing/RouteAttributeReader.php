@@ -9,6 +9,7 @@ use ReflectionException;
 use ReflectionMethod;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
+use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
@@ -42,6 +43,8 @@ final class RouteAttributeReader
         $routes = [];
         $seenRouteNames = [];
 
+        $classMiddlewares = $this->readMiddlewareAttributes($reflection->getAttributes(MiddlewareAttribute::class));
+
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() !== $className) {
                 continue;
@@ -49,7 +52,7 @@ final class RouteAttributeReader
 
             $handler = sprintf('%s@%s', $className, $method->getName());
 
-            foreach ($this->readMethodAttributes($method) as $attr) {
+            foreach ($this->readMethodAttributes($method, $classMiddlewares) as $attr) {
                 $name = $attr['name'] !== '' ? $attr['name'] : null;
 
                 if ($name !== null) {
@@ -75,11 +78,13 @@ final class RouteAttributeReader
     }
 
     /**
+     * @param list<string> $classMiddlewares
      * @return list<array{method: string, path: string, constraints: array<string, string>, middlewares: array<int, string>, name: string}>
      */
-    private function readMethodAttributes(ReflectionMethod $method): array
+    private function readMethodAttributes(ReflectionMethod $method, array $classMiddlewares = []): array
     {
         $routes = [];
+        $methodMiddlewares = $this->readMiddlewareAttributes($method->getAttributes(MiddlewareAttribute::class));
 
         foreach ($method->getAttributes(RouteAttribute::class) as $attributeRef) {
             /** @var RouteAttribute $attr */
@@ -88,7 +93,7 @@ final class RouteAttributeReader
                 'method' => $attr->method,
                 'path' => $attr->path,
                 'constraints' => $attr->constraints,
-                'middlewares' => $attr->middlewares,
+                'middlewares' => [...$classMiddlewares, ...$methodMiddlewares, ...$attr->middlewares],
                 'name' => $attr->name,
             ];
         }
@@ -109,12 +114,29 @@ final class RouteAttributeReader
                     'method' => $methodName,
                     'path' => $attr->path,
                     'constraints' => $attr->constraints,
-                    'middlewares' => $attr->middlewares,
+                    'middlewares' => [...$classMiddlewares, ...$methodMiddlewares, ...$attr->middlewares],
                     'name' => $attr->name,
                 ];
             }
         }
 
         return $routes;
+    }
+
+    /**
+     * @param list<\ReflectionAttribute<MiddlewareAttribute>> $attributes
+     * @return list<string>
+     */
+    private function readMiddlewareAttributes(array $attributes): array
+    {
+        $middlewares = [];
+
+        foreach ($attributes as $attributeRef) {
+            /** @var MiddlewareAttribute $attr */
+            $attr = $attributeRef->newInstance();
+            $middlewares[] = $attr->name;
+        }
+
+        return $middlewares;
     }
 }
