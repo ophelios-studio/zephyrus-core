@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Bootstrap;
 
+use RuntimeException;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 
@@ -57,6 +58,12 @@ final class ApplicationBootstrap
         string $baseName = 'app',
         ?string $environment = null,
     ): Application {
+        $configDir = trim($configDir);
+        if ($configDir === '') {
+            throw new RuntimeException('Config directory must not be empty.');
+        }
+
+        $baseName = self::normalizeBaseName($baseName);
         $configDir = rtrim($configDir, '/\\');
         $baseFile = $configDir . '/' . $baseName . '.php';
 
@@ -76,5 +83,19 @@ final class ApplicationBootstrap
         }
 
         return self::fromConfigFiles([$baseFile], $optional);
+    }
+
+    private static function normalizeBaseName(string $baseName): string
+    {
+        $baseName = trim($baseName);
+        if ($baseName === '') {
+            throw new RuntimeException('Config base name must not be empty.');
+        }
+
+        if (str_contains($baseName, '/') || str_contains($baseName, '\\')) {
+            throw new RuntimeException('Config base name must not contain path separators.');
+        }
+
+        return $baseName;
     }
 }
