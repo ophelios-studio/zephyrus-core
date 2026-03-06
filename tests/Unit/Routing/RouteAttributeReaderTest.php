@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
+use Zephyrus\Routing\Attribute\Get as GetAttribute;
+use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
+use Zephyrus\Routing\Attribute\Post as PostAttribute;
+use Zephyrus\Routing\Attribute\Put as PutAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\RouteAttributeReader;
@@ -58,6 +63,24 @@ class DuplicateRouteNameController
 
     #[RouteAttribute('/people', 'GET', name: 'users.index')]
     public function people(): void {}
+}
+
+class VerbAttributesController
+{
+    #[GetAttribute('/articles', name: 'articles.index')]
+    public function index(): void {}
+
+    #[PostAttribute('/articles', middlewares: ['auth'])]
+    public function store(): void {}
+
+    #[PutAttribute('/articles/{id}', constraints: ['id' => '\\d+'])]
+    public function replace(): void {}
+
+    #[PatchAttribute('/articles/{id}')]
+    public function update(): void {}
+
+    #[DeleteAttribute('/articles/{id}')]
+    public function destroy(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +206,37 @@ final class RouteAttributeReaderTest extends TestCase
         $this->expectExceptionMessage('Duplicate route name "users.index" discovered while reading attributes on class');
 
         $this->reader->read(DuplicateRouteNameController::class);
+    }
+
+    public function testVerbAttributesMapToExpectedHttpMethods(): void
+    {
+        $routes = $this->reader->read(VerbAttributesController::class);
+
+        self::assertCount(5, $routes);
+
+        self::assertSame('GET', $this->findByHandler($routes, VerbAttributesController::class . '@index')?->method);
+        self::assertSame('POST', $this->findByHandler($routes, VerbAttributesController::class . '@store')?->method);
+        self::assertSame('PUT', $this->findByHandler($routes, VerbAttributesController::class . '@replace')?->method);
+        self::assertSame('PATCH', $this->findByHandler($routes, VerbAttributesController::class . '@update')?->method);
+        self::assertSame('DELETE', $this->findByHandler($routes, VerbAttributesController::class . '@destroy')?->method);
+    }
+
+    public function testVerbAttributesPreserveRouteMetadata(): void
+    {
+        $routes = $this->reader->read(VerbAttributesController::class);
+
+        $index = $this->findByHandler($routes, VerbAttributesController::class . '@index');
+        $store = $this->findByHandler($routes, VerbAttributesController::class . '@store');
+        $replace = $this->findByHandler($routes, VerbAttributesController::class . '@replace');
+
+        self::assertNotNull($index);
+        self::assertSame('articles.index', $index->name);
+
+        self::assertNotNull($store);
+        self::assertSame(['auth'], $store->middlewares);
+
+        self::assertNotNull($replace);
+        self::assertSame(['id' => '\\d+'], $replace->constraints);
     }
 
     public function testUnresolvableClassThrowsException(): void
