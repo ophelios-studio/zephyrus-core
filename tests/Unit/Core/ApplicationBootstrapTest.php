@@ -310,6 +310,61 @@ final class ApplicationBootstrapTest extends TestCase
         ], $paths['optional']);
     }
 
+    public function testFromResolvedPathsBuildsApplicationFromProvidedGroups(): void
+    {
+        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-required-' . uniqid('', true) . '.php';
+        $optional = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-optional-' . uniqid('', true) . '.php';
+        $fixturePath = __DIR__ . '/../../Fixtures/locales';
+
+        file_put_contents($required, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'default_locale' => 'en',
+                'supported_locales' => ['en'],
+                'json_locale_paths' => [$fixturePath],
+            ],
+        ], true) . ";\n");
+
+        file_put_contents($optional, "<?php\n\nreturn " . var_export([
+            'localization' => [
+                'supported_locales' => ['en', 'fr'],
+            ],
+        ], true) . ";\n");
+
+        try {
+            $app = ApplicationBootstrap::fromResolvedPaths([
+                'required' => $required,
+                'optional' => [$optional],
+            ]);
+
+            self::assertSame('Bonjour', $app->transFromRequest(
+                'messages.plain',
+                request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
+            ));
+        } finally {
+            @unlink($required);
+            @unlink($optional);
+        }
+    }
+
+    public function testFromResolvedPathsRejectsMissingRequiredEntry(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromResolvedPaths([
+            'optional' => ['/tmp/app.local.php'],
+        ]);
+    }
+
+    public function testFromResolvedPathsRejectsNonArrayOptionalEntry(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromResolvedPaths([
+            'required' => '/tmp/app.php',
+            'optional' => 'invalid',
+        ]);
+    }
+
     public function testFromConfigDirectoryRejectsEmptyDirectory(): void
     {
         $this->expectException(\RuntimeException::class);

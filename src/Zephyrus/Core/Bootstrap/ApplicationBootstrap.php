@@ -58,11 +58,29 @@ final class ApplicationBootstrap
         string $baseName = 'app',
         ?string $environment = null,
     ): Application {
-        $paths = self::configPathsForDirectory($configDir, $baseName, $environment);
+        return self::fromResolvedPaths(self::configPathsForDirectory($configDir, $baseName, $environment));
+    }
+
+    /**
+     * Build an application from pre-resolved required/optional path groups.
+     *
+     * @param array{required: string, optional?: string[]} $paths
+     */
+    public static function fromResolvedPaths(array $paths): Application
+    {
+        $required = $paths['required'] ?? '';
+        if (!is_string($required) || trim($required) === '') {
+            throw new RuntimeException('Resolved config paths must include a non-empty "required" entry.');
+        }
+
+        $optional = $paths['optional'] ?? [];
+        if (!is_array($optional)) {
+            throw new RuntimeException('Resolved config "optional" entry must be an array of file paths.');
+        }
 
         return self::fromConfigFiles(
-            requiredConfigFiles: [$paths['required']],
-            optionalConfigFiles: $paths['optional'],
+            requiredConfigFiles: [trim($required)],
+            optionalConfigFiles: array_values($optional),
         );
     }
 
