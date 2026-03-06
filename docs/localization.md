@@ -223,6 +223,7 @@ $app = ApplicationBootstrap::fromConfigDirectory(__DIR__ . '/../config');
 $app = ApplicationBootstrap::fromConfigDirectory(
     __DIR__ . '/../config',
     environment: 'staging', // explicit override (or '' to disable env override)
+    extraOptionalNames: ['secrets', 'region.eu'],
 );
 
 $paths = ApplicationBootstrap::configPathsForDirectory(__DIR__ . '/../config');

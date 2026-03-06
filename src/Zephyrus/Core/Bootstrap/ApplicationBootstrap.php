@@ -57,8 +57,14 @@ final class ApplicationBootstrap
         string $configDir,
         string $baseName = 'app',
         ?string $environment = null,
+        array $extraOptionalNames = [],
     ): Application {
-        return self::fromResolvedPaths(self::configPathsForDirectory($configDir, $baseName, $environment));
+        return self::fromResolvedPaths(self::configPathsForDirectory(
+            configDir: $configDir,
+            baseName: $baseName,
+            environment: $environment,
+            extraOptionalNames: $extraOptionalNames,
+        ));
     }
 
     /**
@@ -93,6 +99,7 @@ final class ApplicationBootstrap
         string $configDir,
         string $baseName = 'app',
         ?string $environment = null,
+        array $extraOptionalNames = [],
     ): array {
         $configDir = trim($configDir);
         if ($configDir === '') {
@@ -106,6 +113,10 @@ final class ApplicationBootstrap
         $optional = [
             $configDir . '/' . $baseName . '.local.php',
         ];
+
+        foreach (self::normalizeOptionalNames($extraOptionalNames) as $name) {
+            $optional[] = $configDir . '/' . $baseName . '.' . $name . '.php';
+        }
 
         $resolvedEnvironment = $environment;
         if ($resolvedEnvironment === null) {
@@ -136,6 +147,38 @@ final class ApplicationBootstrap
         }
 
         return $baseName;
+    }
+
+    /**
+     * @param mixed[] $optionalNames
+     * @return string[]
+     */
+    private static function normalizeOptionalNames(array $optionalNames): array
+    {
+        $normalized = [];
+
+        foreach ($optionalNames as $index => $name) {
+            if (!is_string($name)) {
+                throw new RuntimeException(sprintf('Optional config name at index %d must be a string.', $index));
+            }
+
+            $trimmed = trim($name);
+            if ($trimmed === '') {
+                throw new RuntimeException(sprintf('Optional config name at index %d must not be empty.', $index));
+            }
+
+            if (str_contains($trimmed, '/') || str_contains($trimmed, '\\')) {
+                throw new RuntimeException(sprintf('Optional config name at index %d must not contain path separators.', $index));
+            }
+
+            if (in_array($trimmed, $normalized, true)) {
+                continue;
+            }
+
+            $normalized[] = $trimmed;
+        }
+
+        return $normalized;
     }
 
     /**

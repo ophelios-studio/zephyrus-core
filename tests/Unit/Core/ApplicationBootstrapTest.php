@@ -310,6 +310,20 @@ final class ApplicationBootstrapTest extends TestCase
         ], $paths['optional']);
     }
 
+    public function testConfigPathsForDirectoryIncludesExtraOptionalNames(): void
+    {
+        $paths = ApplicationBootstrap::configPathsForDirectory(
+            '/tmp/config',
+            extraOptionalNames: ['secrets', 'region.eu'],
+        );
+
+        self::assertSame([
+            '/tmp/config/app.local.php',
+            '/tmp/config/app.secrets.php',
+            '/tmp/config/app.region.eu.php',
+        ], $paths['optional']);
+    }
+
     public function testFromResolvedPathsBuildsApplicationFromProvidedGroups(): void
     {
         $required = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-required-' . uniqid('', true) . '.php';
@@ -383,6 +397,20 @@ final class ApplicationBootstrapTest extends TestCase
             'required' => '/tmp/app.php',
             'optional' => ['   '],
         ]);
+    }
+
+    public function testFromConfigDirectoryRejectsOptionalNamesWithPathSeparators(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromConfigDirectory('/tmp', extraOptionalNames: ['../secret']);
+    }
+
+    public function testFromConfigDirectoryRejectsEmptyOptionalNames(): void
+    {
+        $this->expectException(\RuntimeException::class);
+
+        ApplicationBootstrap::fromConfigDirectory('/tmp', extraOptionalNames: ['']);
     }
 
     public function testFromConfigDirectoryRejectsEmptyDirectory(): void
