@@ -196,4 +196,15 @@ Or build directly from config in one call:
 $app = ApplicationBuilder::buildFromConfigurationFile(__DIR__ . '/../config/app.php');
 ```
 
+For a minimal bootstrap entrypoint, use `ApplicationBootstrap`:
+
+```php
+use Zephyrus\Core\Bootstrap\ApplicationBootstrap;
+
+$app = ApplicationBootstrap::fromConfigFiles(
+    requiredConfigFiles: [__DIR__ . '/../config/app.php'],
+    optionalConfigFiles: [__DIR__ . '/../config/app.local.php'],
+);
+```
+
 If a config file is missing, returns a non-array payload, throws while loading, or a path entry is invalid/empty, bootstrap raises a `RuntimeException` with file context.
