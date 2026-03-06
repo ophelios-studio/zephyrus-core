@@ -18,15 +18,21 @@ final class PaginationRequestTest extends TestCase
         self::assertSame(25, $request->limit());
     }
 
-    public function testFromArraySupportsSnakeAndCamelPerPageKeys(): void
+    public function testFromArraySupportsPerPageAliases(): void
     {
         $snake = PaginationRequest::fromArray(['page' => 2, 'per_page' => 10]);
-        $camel = PaginationRequest::fromArray(['page' => 2, 'perPage' => 10]);
+        $camel = PaginationRequest::fromArray(['page' => 2, 'perPage' => 11]);
+        $snakeSize = PaginationRequest::fromArray(['page' => 2, 'page_size' => 12]);
+        $camelSize = PaginationRequest::fromArray(['page' => 2, 'pageSize' => 13]);
 
         self::assertSame(2, $snake->page);
         self::assertSame(10, $snake->perPage);
         self::assertSame(2, $camel->page);
-        self::assertSame(10, $camel->perPage);
+        self::assertSame(11, $camel->perPage);
+        self::assertSame(2, $snakeSize->page);
+        self::assertSame(12, $snakeSize->perPage);
+        self::assertSame(2, $camelSize->page);
+        self::assertSame(13, $camelSize->perPage);
     }
 
     public function testFromArrayProvidesDefaultValues(): void
@@ -103,12 +109,15 @@ final class PaginationRequestTest extends TestCase
         self::assertSame($request->toArray(), $request->jsonSerialize());
     }
 
-    public function testFromQueryUsesBoundsAndDefaults(): void
+    public function testFromQueryUsesBoundsAndSupportsPageSizeAlias(): void
     {
-        $request = PaginationRequest::fromQuery(['page' => 2, 'per_page' => 999], 25, 100);
+        $clamped = PaginationRequest::fromQuery(['page' => 2, 'per_page' => 999], 25, 100);
+        $alias = PaginationRequest::fromQuery(['page' => 3, 'page_size' => 40], 25, 100);
 
-        self::assertSame(2, $request->page);
-        self::assertSame(100, $request->perPage);
+        self::assertSame(2, $clamped->page);
+        self::assertSame(100, $clamped->perPage);
+        self::assertSame(3, $alias->page);
+        self::assertSame(40, $alias->perPage);
     }
 
     public function testFromQueryClampsInvalidPageToMinimumOne(): void
