@@ -13,6 +13,14 @@ use Zephyrus\Upload\FileUpload;
 $upload = FileUpload::fromPhpArray($_FILES['avatar']);
 ```
 
+For fields that may contain one-or-many files, use `listFromPhpArray()`.
+It accepts single, `[]` multi, and nested `foo[bar][]` array shapes from PHP.
+
+```php
+/** @var list<FileUpload> $uploads */
+$uploads = FileUpload::listFromPhpArray($_FILES['attachments']);
+```
+
 ## Persisting uploads
 
 ```php

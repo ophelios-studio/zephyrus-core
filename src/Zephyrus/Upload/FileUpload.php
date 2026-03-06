@@ -12,6 +12,33 @@ namespace Zephyrus\Upload;
  */
 final readonly class FileUpload
 {
+    /**
+     * Builds one-or-many FileUpload instances from a PHP $_FILES field entry.
+     *
+     * Supports both single uploads and nested/multi file arrays such as:
+     * - <input type="file" name="avatar">
+     * - <input type="file" name="photos[]" multiple>
+     * - <input type="file" name="attachments[contracts][]" multiple>
+     *
+     * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
+     * @return list<FileUpload>
+     */
+    public static function listFromPhpArray(array $entry): array
+    {
+        if (!array_key_exists('tmp_name', $entry) || !array_key_exists('error', $entry)) {
+            throw UploadException::invalidArrayShape();
+        }
+
+        if (!is_array($entry['tmp_name']) && !is_array($entry['error'])) {
+            return [self::fromPhpArray($entry)];
+        }
+
+        $entries = [];
+        self::flattenPhpEntry($entry, [], $entries);
+
+        return $entries;
+    }
+
     public function __construct(
         public string $originalName,
         public string $clientMimeType,
@@ -72,5 +99,61 @@ final readonly class FileUpload
         if (!$this->isValid()) {
             throw UploadException::uploadFailed($this->errorCode);
         }
+    }
+
+    /**
+     * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
+     * @param list<int|string> $path
+     * @param list<FileUpload> $entries
+     */
+    private static function flattenPhpEntry(array $entry, array $path, array &$entries): void
+    {
+        $tmp = self::valueAtPath($entry['tmp_name'], $path);
+        $error = self::valueAtPath($entry['error'], $path);
+
+        if (is_array($tmp) || is_array($error)) {
+            $keys = [];
+            if (is_array($tmp)) {
+                $keys = array_merge($keys, array_keys($tmp));
+            }
+            if (is_array($error)) {
+                $keys = array_merge($keys, array_keys($error));
+            }
+
+            foreach (array_values(array_unique($keys, SORT_REGULAR)) as $key) {
+                self::flattenPhpEntry($entry, [...$path, $key], $entries);
+            }
+
+            return;
+        }
+
+        if ($tmp === null || $error === null) {
+            throw UploadException::invalidArrayShape();
+        }
+
+        $entries[] = self::fromPhpArray([
+            'name' => self::valueAtPath($entry['name'] ?? null, $path),
+            'type' => self::valueAtPath($entry['type'] ?? null, $path),
+            'tmp_name' => $tmp,
+            'error' => $error,
+            'size' => self::valueAtPath($entry['size'] ?? null, $path),
+        ]);
+    }
+
+    /**
+     * @param mixed $value
+     * @param list<int|string> $path
+     */
+    private static function valueAtPath(mixed $value, array $path): mixed
+    {
+        foreach ($path as $segment) {
+            if (!is_array($value) || !array_key_exists($segment, $value)) {
+                return null;
+            }
+
+            $value = $value[$segment];
+        }
+
+        return $value;
     }
 }
