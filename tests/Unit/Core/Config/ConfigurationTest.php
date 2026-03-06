@@ -93,12 +93,16 @@ final class ConfigurationTest extends TestCase
     {
         $config = Configuration::fromArray([
             'security' => [
-                'forceHttps'   => true,
+                'forceHttps' => true,
+                'csrfAutoHtml' => true,
+                'csrfExceptions' => ['#^/hooks/#'],
                 'allowedHosts' => ['example.com'],
             ],
         ]);
 
         self::assertTrue($config->security->forceHttps);
+        self::assertTrue($config->security->csrfAutoHtml);
+        self::assertSame(['#^/hooks/#'], $config->security->csrfExceptions);
         self::assertSame(['example.com'], $config->security->allowedHosts);
     }
 
@@ -108,6 +112,8 @@ final class ConfigurationTest extends TestCase
 
         self::assertFalse($config->security->forceHttps);
         self::assertTrue($config->security->csrfEnabled);
+        self::assertFalse($config->security->csrfAutoHtml);
+        self::assertSame([], $config->security->csrfExceptions);
     }
 
     // -------------------------------------------------------------------------
@@ -171,7 +177,12 @@ final class ConfigurationTest extends TestCase
         $config = Configuration::fromArray([
             'application' => ['environment' => 'production', 'debug' => false],
             'session'     => ['name' => 'APP', 'secure' => true],
-            'security'    => ['forceHttps' => true, 'csrfEnabled' => true],
+            'security'    => [
+                'forceHttps' => true,
+                'csrfEnabled' => true,
+                'csrfAutoHtml' => true,
+                'csrfExceptions' => ['#^/webhooks/#'],
+            ],
             'localization' => ['defaultLocale' => 'fr', 'supportedLocales' => ['fr', 'en']],
             'database'    => ['database' => 'mydb', 'username' => 'user', 'password' => 's3cr3t'],
         ]);
@@ -181,6 +192,8 @@ final class ConfigurationTest extends TestCase
         self::assertSame('APP',  $config->session->name);
         self::assertTrue($config->session->secure);
         self::assertTrue($config->security->forceHttps);
+        self::assertTrue($config->security->csrfAutoHtml);
+        self::assertSame(['#^/webhooks/#'], $config->security->csrfExceptions);
         self::assertSame('fr', $config->localization->defaultLocale);
         self::assertSame('mydb', $config->database->database);
         self::assertSame('s3cr3t', $config->database->password);
@@ -304,6 +317,8 @@ final class ConfigurationTest extends TestCase
         self::assertArrayHasKey('security', $export);
         self::assertArrayHasKey('localization', $export);
         self::assertArrayHasKey('database', $export);
+        self::assertArrayHasKey('csrfAutoHtml', $export['security']);
+        self::assertArrayHasKey('csrfExceptions', $export['security']);
         self::assertSame('fr', $export['localization']['defaultLocale']);
     }
 
