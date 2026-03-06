@@ -103,6 +103,64 @@ final class FileUploadTest extends TestCase
         FileUpload::fromPhpArray([]);
     }
 
+    public function test_list_from_php_array_wraps_single_entry(): void
+    {
+        $files = FileUpload::listFromPhpArray([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'tmp_name' => '/tmp/php-single',
+            'error' => UPLOAD_ERR_OK,
+            'size' => 100,
+        ]);
+
+        self::assertCount(1, $files);
+        self::assertSame('avatar.png', $files[0]->originalName);
+        self::assertSame('/tmp/php-single', $files[0]->tmpPath);
+    }
+
+    public function test_list_from_php_array_flattens_multiple_files(): void
+    {
+        $files = FileUpload::listFromPhpArray([
+            'name' => ['first.png', 'second.jpg'],
+            'type' => ['image/png', 'image/jpeg'],
+            'tmp_name' => ['/tmp/php-a', '/tmp/php-b'],
+            'error' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK],
+            'size' => [10, 20],
+        ]);
+
+        self::assertCount(2, $files);
+        self::assertSame('first.png', $files[0]->originalName);
+        self::assertSame('second.jpg', $files[1]->originalName);
+        self::assertSame('/tmp/php-a', $files[0]->tmpPath);
+        self::assertSame('/tmp/php-b', $files[1]->tmpPath);
+    }
+
+    public function test_list_from_php_array_flattens_nested_named_files(): void
+    {
+        $files = FileUpload::listFromPhpArray([
+            'name' => ['contracts' => ['a.pdf', 'b.pdf']],
+            'type' => ['contracts' => ['application/pdf', 'application/pdf']],
+            'tmp_name' => ['contracts' => ['/tmp/php-c1', '/tmp/php-c2']],
+            'error' => ['contracts' => [UPLOAD_ERR_OK, UPLOAD_ERR_OK]],
+            'size' => ['contracts' => [11, 12]],
+        ]);
+
+        self::assertCount(2, $files);
+        self::assertSame('a.pdf', $files[0]->originalName);
+        self::assertSame('b.pdf', $files[1]->originalName);
+    }
+
+    public function test_list_from_php_array_throws_on_malformed_shape(): void
+    {
+        $this->expectException(UploadException::class);
+
+        FileUpload::listFromPhpArray([
+            'name' => ['x.txt'],
+            'tmp_name' => ['/tmp/php-x'],
+            'error' => [],
+        ]);
+    }
+
     // ------------------------------------------------------------------
     // extension()
     // ------------------------------------------------------------------
