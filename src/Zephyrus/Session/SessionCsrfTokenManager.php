@@ -43,6 +43,9 @@ final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
         private readonly SessionManager $session,
         private readonly string $sessionKey = '_csrf_token',
     ) {
+        if ($this->sessionKey === '') {
+            throw SessionException::invalidKey($this->sessionKey);
+        }
     }
 
     /**

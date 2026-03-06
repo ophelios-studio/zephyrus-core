@@ -140,6 +140,8 @@ final class SessionManager
      */
     public function get(string $key, mixed $default = null): mixed
     {
+        $this->assertValidKey($key);
+
         $storage = $this->overrideStorage ?? $_SESSION ?? [];
 
         return array_key_exists($key, $storage) ? $storage[$key] : $default;
@@ -150,6 +152,8 @@ final class SessionManager
      */
     public function set(string $key, mixed $value): void
     {
+        $this->assertValidKey($key);
+
         if ($this->overrideStorage !== null) {
             $this->overrideStorage[$key] = $value;
             return;
@@ -163,6 +167,8 @@ final class SessionManager
      */
     public function has(string $key): bool
     {
+        $this->assertValidKey($key);
+
         $storage = $this->overrideStorage ?? $_SESSION ?? [];
 
         return array_key_exists($key, $storage);
@@ -173,6 +179,8 @@ final class SessionManager
      */
     public function remove(string $key): void
     {
+        $this->assertValidKey($key);
+
         if ($this->overrideStorage !== null) {
             unset($this->overrideStorage[$key]);
             return;
@@ -202,5 +210,12 @@ final class SessionManager
         $this->remove($key);
 
         return $value;
+    }
+
+    private function assertValidKey(string $key): void
+    {
+        if ($key === '') {
+            throw SessionException::invalidKey($key);
+        }
     }
 }
