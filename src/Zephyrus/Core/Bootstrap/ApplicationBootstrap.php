@@ -129,6 +129,8 @@ final class ApplicationBootstrap
             $optional[] = $configDir . '/' . $baseName . '.' . $resolvedEnvironment . '.php';
         }
 
+        $optional = self::uniqueStrings($optional);
+
         return [
             'required' => $required,
             'optional' => $optional,
@@ -199,13 +201,28 @@ final class ApplicationBootstrap
                 throw new RuntimeException(sprintf('Resolved optional path at index %d must not be empty.', $index));
             }
 
-            if (in_array($trimmed, $normalized, true)) {
-                continue;
-            }
-
             $normalized[] = $trimmed;
         }
 
-        return $normalized;
+        return self::uniqueStrings($normalized);
+    }
+
+    /**
+     * @param string[] $values
+     * @return string[]
+     */
+    private static function uniqueStrings(array $values): array
+    {
+        $unique = [];
+
+        foreach ($values as $value) {
+            if (in_array($value, $unique, true)) {
+                continue;
+            }
+
+            $unique[] = $value;
+        }
+
+        return $unique;
     }
 }
