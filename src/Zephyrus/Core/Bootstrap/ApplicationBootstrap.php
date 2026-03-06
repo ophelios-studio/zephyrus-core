@@ -58,6 +58,24 @@ final class ApplicationBootstrap
         string $baseName = 'app',
         ?string $environment = null,
     ): Application {
+        $paths = self::configPathsForDirectory($configDir, $baseName, $environment);
+
+        return self::fromConfigFiles(
+            requiredConfigFiles: [$paths['required']],
+            optionalConfigFiles: $paths['optional'],
+        );
+    }
+
+    /**
+     * Resolve required + optional config file paths for a conventional config directory.
+     *
+     * @return array{required: string, optional: string[]}
+     */
+    public static function configPathsForDirectory(
+        string $configDir,
+        string $baseName = 'app',
+        ?string $environment = null,
+    ): array {
         $configDir = trim($configDir);
         if ($configDir === '') {
             throw new RuntimeException('Config directory must not be empty.');
@@ -65,7 +83,7 @@ final class ApplicationBootstrap
 
         $baseName = self::normalizeBaseName($baseName);
         $configDir = rtrim($configDir, '/\\');
-        $baseFile = $configDir . '/' . $baseName . '.php';
+        $required = $configDir . '/' . $baseName . '.php';
 
         $optional = [
             $configDir . '/' . $baseName . '.local.php',
@@ -82,7 +100,10 @@ final class ApplicationBootstrap
             $optional[] = $configDir . '/' . $baseName . '.' . $resolvedEnvironment . '.php';
         }
 
-        return self::fromConfigFiles([$baseFile], $optional);
+        return [
+            'required' => $required,
+            'optional' => $optional,
+        ];
     }
 
     private static function normalizeBaseName(string $baseName): string

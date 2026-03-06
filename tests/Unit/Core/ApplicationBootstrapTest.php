@@ -291,6 +291,25 @@ final class ApplicationBootstrapTest extends TestCase
         }
     }
 
+    public function testConfigPathsForDirectoryBuildsExpectedDefaultPaths(): void
+    {
+        $paths = ApplicationBootstrap::configPathsForDirectory('/tmp/config');
+
+        self::assertSame('/tmp/config/app.php', $paths['required']);
+        self::assertSame(['/tmp/config/app.local.php'], $paths['optional']);
+    }
+
+    public function testConfigPathsForDirectoryIncludesEnvironmentSpecificOverride(): void
+    {
+        $paths = ApplicationBootstrap::configPathsForDirectory('/tmp/config', environment: 'staging');
+
+        self::assertSame('/tmp/config/app.php', $paths['required']);
+        self::assertSame([
+            '/tmp/config/app.local.php',
+            '/tmp/config/app.staging.php',
+        ], $paths['optional']);
+    }
+
     public function testFromConfigDirectoryRejectsEmptyDirectory(): void
     {
         $this->expectException(\RuntimeException::class);
