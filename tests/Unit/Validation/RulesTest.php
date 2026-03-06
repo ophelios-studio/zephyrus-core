@@ -1335,6 +1335,33 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid HTTP method.', Rules::httpMethod()->errorMessage());
     }
 
+    // ---- httpVersion ----
+
+    public function testHttpVersionPassesCommonVersions(): void
+    {
+        self::assertTrue(Rules::httpVersion()->test('HTTP/1.0'));
+        self::assertTrue(Rules::httpVersion()->test('http/1.1'));
+        self::assertTrue(Rules::httpVersion()->test('HTTP/2'));
+        self::assertTrue(Rules::httpVersion()->test('HTTP/2.0'));
+        self::assertTrue(Rules::httpVersion()->test('HTTP/3'));
+        self::assertTrue(Rules::httpVersion()->test('HTTP/3.0'));
+    }
+
+    public function testHttpVersionFailsInvalidValues(): void
+    {
+        self::assertFalse(Rules::httpVersion()->test('HTTP/1'));
+        self::assertFalse(Rules::httpVersion()->test('HTTP/1.2'));
+        self::assertFalse(Rules::httpVersion()->test('HTTP/4'));
+        self::assertFalse(Rules::httpVersion()->test('1.1'));
+        self::assertFalse(Rules::httpVersion()->test(''));
+        self::assertFalse(Rules::httpVersion()->test(null));
+    }
+
+    public function testHttpVersionDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP version.', Rules::httpVersion()->errorMessage());
+    }
+
     // ---- mimeType ----
 
     public function testMimeTypePasses(): void
