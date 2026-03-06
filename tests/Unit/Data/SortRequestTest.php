@@ -59,6 +59,37 @@ final class SortRequestTest extends TestCase
         self::assertSame('DESC', strtoupper($sort->direction));
     }
 
+    public function testFromQuerySupportsCompactSortParameter(): void
+    {
+        $descending = SortRequest::fromQuery(
+            ['sort' => '-name'],
+            allowedColumns: ['id', 'name'],
+            defaultColumn: 'id',
+        );
+        $ascending = SortRequest::fromQuery(
+            ['sort' => 'created_at'],
+            allowedColumns: ['id', 'created_at'],
+            defaultColumn: 'id',
+        );
+
+        self::assertSame('name', $descending->column);
+        self::assertSame('DESC', strtoupper($descending->direction));
+        self::assertSame('created_at', $ascending->column);
+        self::assertSame('ASC', strtoupper($ascending->direction));
+    }
+
+    public function testFromQueryCompactSortKeepsExplicitDirectionPrecedence(): void
+    {
+        $sort = SortRequest::fromQuery(
+            ['sort' => '-name', 'sort_dir' => 'ASC'],
+            allowedColumns: ['id', 'name'],
+            defaultColumn: 'id',
+        );
+
+        self::assertSame('name', $sort->column);
+        self::assertSame('ASC', strtoupper($sort->direction));
+    }
+
     public function testFromQueryFallsBackToDefaultWhenColumnNotAllowed(): void
     {
         $sort = SortRequest::fromQuery(
