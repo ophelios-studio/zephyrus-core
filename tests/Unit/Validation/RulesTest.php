@@ -1003,6 +1003,28 @@ final class RulesTest extends TestCase
         self::assertSame('Must be valid JSON.', Rules::json()->errorMessage());
     }
 
+    public function testJsonObjectPasses(): void
+    {
+        self::assertTrue(Rules::jsonObject()->test('{"name":"zephyrus"}'));
+        self::assertTrue(Rules::jsonObject()->test('{"meta":{"ok":true},"items":[1,2]}'));
+    }
+
+    public function testJsonObjectFails(): void
+    {
+        self::assertFalse(Rules::jsonObject()->test(''));
+        self::assertFalse(Rules::jsonObject()->test('{invalid}'));
+        self::assertFalse(Rules::jsonObject()->test('[1,2,3]'));
+        self::assertFalse(Rules::jsonObject()->test('"string"'));
+        self::assertFalse(Rules::jsonObject()->test('null'));
+        self::assertFalse(Rules::jsonObject()->test(null));
+        self::assertFalse(Rules::jsonObject()->test(123));
+    }
+
+    public function testJsonObjectDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid JSON object.', Rules::jsonObject()->errorMessage());
+    }
+
     // ---- slug ----
 
     public function testSlugPasses(): void
