@@ -10,6 +10,7 @@ use ReflectionMethod;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
 use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
+use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
@@ -43,7 +44,10 @@ final class RouteAttributeReader
         $routes = [];
         $seenRouteNames = [];
 
-        $classMiddlewares = $this->readMiddlewareAttributes($reflection->getAttributes(MiddlewareAttribute::class));
+        $classMiddlewares = [
+            ...$this->readMiddlewareAttributes($reflection->getAttributes(MiddlewareAttribute::class)),
+            ...$this->readMiddlewareGroupAttributes($reflection->getAttributes(MiddlewareGroupAttribute::class)),
+        ];
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() !== $className) {
@@ -84,7 +88,10 @@ final class RouteAttributeReader
     private function readMethodAttributes(ReflectionMethod $method, array $classMiddlewares = []): array
     {
         $routes = [];
-        $methodMiddlewares = $this->readMiddlewareAttributes($method->getAttributes(MiddlewareAttribute::class));
+        $methodMiddlewares = [
+            ...$this->readMiddlewareAttributes($method->getAttributes(MiddlewareAttribute::class)),
+            ...$this->readMiddlewareGroupAttributes($method->getAttributes(MiddlewareGroupAttribute::class)),
+        ];
 
         foreach ($method->getAttributes(RouteAttribute::class) as $attributeRef) {
             /** @var RouteAttribute $attr */
@@ -133,6 +140,23 @@ final class RouteAttributeReader
 
         foreach ($attributes as $attributeRef) {
             /** @var MiddlewareAttribute $attr */
+            $attr = $attributeRef->newInstance();
+            $middlewares[] = $attr->name;
+        }
+
+        return $middlewares;
+    }
+
+    /**
+     * @param list<\ReflectionAttribute<MiddlewareGroupAttribute>> $attributes
+     * @return list<string>
+     */
+    private function readMiddlewareGroupAttributes(array $attributes): array
+    {
+        $middlewares = [];
+
+        foreach ($attributes as $attributeRef) {
+            /** @var MiddlewareGroupAttribute $attr */
             $attr = $attributeRef->newInstance();
             $middlewares[] = $attr->name;
         }

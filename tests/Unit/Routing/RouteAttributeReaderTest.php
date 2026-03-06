@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
 use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
+use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
@@ -97,6 +98,17 @@ class MiddlewareAttributedController
 
     #[PostAttribute('/feed/admin', middlewares: ['admin'])]
     public function publishAsAdmin(): void {}
+}
+
+#[MiddlewareGroupAttribute('web')]
+class MiddlewareGroupAttributedController
+{
+    #[GetAttribute('/profile')]
+    public function profile(): void {}
+
+    #[MiddlewareGroupAttribute('audit-group')]
+    #[PostAttribute('/profile', middlewares: ['auth'])]
+    public function updateProfile(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +294,26 @@ final class RouteAttributeReaderTest extends TestCase
         self::assertSame(
             ['api', 'auth', 'admin'],
             $this->findByHandler($routes, MiddlewareAttributedController::class . '@publishAsAdmin')?->middlewares,
+        );
+    }
+
+    public function testClassMiddlewareGroupAttributesApplyToAllRoutes(): void
+    {
+        $routes = $this->reader->read(MiddlewareGroupAttributedController::class);
+
+        self::assertSame(
+            ['web'],
+            $this->findByHandler($routes, MiddlewareGroupAttributedController::class . '@profile')?->middlewares,
+        );
+    }
+
+    public function testMethodMiddlewareGroupAttributesApplyAfterClassMiddlewares(): void
+    {
+        $routes = $this->reader->read(MiddlewareGroupAttributedController::class);
+
+        self::assertSame(
+            ['web', 'audit-group', 'auth'],
+            $this->findByHandler($routes, MiddlewareGroupAttributedController::class . '@updateProfile')?->middlewares,
         );
     }
 
