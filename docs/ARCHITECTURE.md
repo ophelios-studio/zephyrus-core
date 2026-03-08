@@ -648,6 +648,11 @@ $router->group('/api/v1', fn ($r) => $r
 - Added focused unit coverage in `RouterTest` validating strict-mode matching behavior, convenience alias behavior, and source-router immutability.
 - Current suite snapshot: **1436 tests, 2842 assertions**, line coverage **98.01%** (3208/3273).
 
+## Implemented Slice: Validation Base64URL rule
+- Added `Rules::base64Url()` to validate RFC 4648 URL-safe Base64 tokens using strict alphabet checks (`A-Z`, `a-z`, `0-9`, `-`, `_`) and canonical decode/encode round-trip verification.
+- Rejects empty values, standard Base64 (`+`, `/`, `=`), whitespace, and malformed inputs.
+- Added focused unit coverage in `RulesTest` for pass/fail/default-message scenarios.
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem

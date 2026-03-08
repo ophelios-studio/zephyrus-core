@@ -781,6 +781,39 @@ final class Rules
     }
 
     /**
+     * Validates Base64URL-encoded strings (RFC 4648 URL-safe alphabet).
+     */
+    public static function base64Url(string $message = 'Must be valid Base64URL.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || $v === '') {
+                    return false;
+                }
+
+                if (preg_match('/^[A-Za-z0-9\-_]+$/', $v) !== 1) {
+                    return false;
+                }
+
+                $normalized = strtr($v, '-_', '+/');
+                $padding = strlen($normalized) % 4;
+                if ($padding > 0) {
+                    $normalized .= str_repeat('=', 4 - $padding);
+                }
+
+                $decoded = base64_decode($normalized, true);
+
+                if ($decoded === false) {
+                    return false;
+                }
+
+                return rtrim(strtr(base64_encode($decoded), '+/', '-_'), '=') === $v;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates semantic version strings (SemVer 2.0 core + optional prerelease/build).
      */
     public static function semver(string $message = 'Must be a valid semantic version.'): Rule
