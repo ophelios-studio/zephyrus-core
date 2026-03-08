@@ -1620,6 +1620,59 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid UUID v4.', Rules::uuidV4()->errorMessage());
     }
 
+    public function testUuidV6PassesValidCanonicalForms(): void
+    {
+        // version nibble = 6, variant nibble = 8 (1000 binary)
+        self::assertTrue(Rules::uuidV6()->test('1ef22c49-2f62-6000-8000-000000000000'));
+        // variant nibble = 9
+        self::assertTrue(Rules::uuidV6()->test('1ef22c49-2f62-6abc-9123-abcdef012345'));
+        // variant nibble = a
+        self::assertTrue(Rules::uuidV6()->test('1ef22c49-2f62-6fff-afff-ffffffffffff'));
+        // variant nibble = b
+        self::assertTrue(Rules::uuidV6()->test('1ef22c49-2f62-6001-b001-000000000001'));
+        // uppercase is accepted (case-insensitive)
+        self::assertTrue(Rules::uuidV6()->test('1EF22C49-2F62-6ABC-AABC-000000000000'));
+    }
+
+    public function testUuidV6RejectsWrongVersion(): void
+    {
+        self::assertFalse(Rules::uuidV6()->test('550e8400-e29b-41d4-a716-446655440000')); // v4
+        self::assertFalse(Rules::uuidV6()->test('6ba7b810-9dad-11d1-80b4-00c04fd430c8')); // v1
+        self::assertFalse(Rules::uuidV6()->test('018e2990-aa07-7000-8000-000000000000')); // v7
+    }
+
+    public function testUuidV6RejectsWrongVariant(): void
+    {
+        self::assertFalse(Rules::uuidV6()->test('1ef22c49-2f62-6000-c000-000000000000')); // variant c
+        self::assertFalse(Rules::uuidV6()->test('1ef22c49-2f62-6000-0000-000000000000')); // variant 0
+        self::assertFalse(Rules::uuidV6()->test('1ef22c49-2f62-6000-f000-000000000000')); // variant f
+    }
+
+    public function testUuidV6RejectsMalformedStrings(): void
+    {
+        self::assertFalse(Rules::uuidV6()->test('not-a-uuid'));
+        self::assertFalse(Rules::uuidV6()->test('1ef22c49-2f62-6000-8000-00000000000'));  // too short
+        self::assertFalse(Rules::uuidV6()->test('1ef22c49-2f62-6000-8000-0000000000000')); // too long
+        self::assertFalse(Rules::uuidV6()->test(''));
+    }
+
+    public function testUuidV6RejectsNonString(): void
+    {
+        self::assertFalse(Rules::uuidV6()->test(null));
+        self::assertFalse(Rules::uuidV6()->test(42));
+        self::assertFalse(Rules::uuidV6()->test([]));
+    }
+
+    public function testUuidV6DefaultMessage(): void
+    {
+        self::assertSame('Must be a valid UUID v6.', Rules::uuidV6()->errorMessage());
+    }
+
+    public function testUuidV6CustomMessage(): void
+    {
+        self::assertSame('Invalid UUID v6 format.', Rules::uuidV6('Invalid UUID v6 format.')->errorMessage());
+    }
+
     public function testUuidV7PassesValidCanonicalForms(): void
     {
         // version nibble = 7, variant nibble = 8 (1000 binary)
