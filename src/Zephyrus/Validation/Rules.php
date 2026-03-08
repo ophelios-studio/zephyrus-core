@@ -1034,6 +1034,26 @@ final class Rules
     }
 
     /**
+     * Validates an Accept-Language header value.
+     */
+    public static function acceptLanguage(string $message = 'Must be a valid Accept-Language header value.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v) || trim($v) === '') {
+                    return false;
+                }
+
+                $part = '[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*|\*';
+                $q = '(?:0(?:\.\d{1,3})?|1(?:\.0{1,3})?)';
+
+                return preg_match('/^\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?(?:\s*,\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?)*\s*$/', $v) === 1;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates an HTTP header name token (RFC 7230 token charset).
      */
     public static function httpHeaderName(string $message = 'Must be a valid HTTP header name.'): Rule
