@@ -336,6 +336,32 @@ final class RouteCollection
     /**
      * @return array<int, string>
      */
+    public function allowedMethodsForPath(string $path): array
+    {
+        $normalizedPath = $this->normalizePath($path);
+        $allowedMethods = [];
+
+        foreach ($this->routes as $route) {
+            if ($this->extractParameters($route, $normalizedPath) === null) {
+                continue;
+            }
+
+            $allowedMethods[] = $route->method;
+
+            if ($route->method === 'GET') {
+                $allowedMethods[] = 'HEAD';
+            }
+        }
+
+        $allowedMethods = array_values(array_unique($allowedMethods));
+        sort($allowedMethods);
+
+        return $allowedMethods;
+    }
+
+    /**
+     * @return array<int, string>
+     */
     public function duplicateRouteNames(): array
     {
         $counts = [];
