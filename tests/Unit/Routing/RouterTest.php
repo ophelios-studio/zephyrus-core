@@ -70,15 +70,19 @@ final class RouterTest extends TestCase
     {
         $router = (new Router())
             ->get('/health', 'HealthController@show')
+            ->head('/health', 'HealthController@head')
+            ->options('/health', 'HealthController@options')
             ->post('/users', 'UserController@store')
             ->delete('/users/{id}', 'UserController@delete');
 
         $routes = $router->routes()->all();
 
-        self::assertCount(3, $routes);
+        self::assertCount(5, $routes);
         self::assertSame('GET', $routes[0]->method);
-        self::assertSame('POST', $routes[1]->method);
-        self::assertSame('DELETE', $routes[2]->method);
+        self::assertSame('HEAD', $routes[1]->method);
+        self::assertSame('OPTIONS', $routes[2]->method);
+        self::assertSame('POST', $routes[3]->method);
+        self::assertSame('DELETE', $routes[4]->method);
     }
 
     public function testGetSupportsConstraintsAndMiddlewareNames(): void
@@ -99,10 +103,11 @@ final class RouterTest extends TestCase
         $result = $router
             ->put('/users/{id}', 'UserController@update', ['id' => '\\d+'])
             ->patch('/users/{id}/status', 'UserController@patchStatus')
-            ->add('HEAD', '/health', 'HealthController@head');
+            ->head('/health', 'HealthController@head')
+            ->options('/health', 'HealthController@options');
 
         self::assertInstanceOf(Router::class, $result);
-        self::assertCount(3, $result->routes()->all());
+        self::assertCount(4, $result->routes()->all());
     }
 
     public function testAddReturnsNewRouterWithoutMutatingPreviousInstance(): void

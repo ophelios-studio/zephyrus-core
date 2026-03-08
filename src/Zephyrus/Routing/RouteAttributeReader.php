@@ -9,8 +9,10 @@ use ReflectionException;
 use ReflectionMethod;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
+use Zephyrus\Routing\Attribute\Head as HeadAttribute;
 use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
+use Zephyrus\Routing\Attribute\Options as OptionsAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
@@ -107,6 +109,8 @@ final class RouteAttributeReader
 
         $verbs = [
             GetAttribute::class => 'GET',
+            HeadAttribute::class => 'HEAD',
+            OptionsAttribute::class => 'OPTIONS',
             PostAttribute::class => 'POST',
             PutAttribute::class => 'PUT',
             PatchAttribute::class => 'PATCH',
@@ -115,7 +119,7 @@ final class RouteAttributeReader
 
         foreach ($verbs as $attributeClass => $methodName) {
             foreach ($method->getAttributes($attributeClass) as $attributeRef) {
-                /** @var GetAttribute|PostAttribute|PutAttribute|PatchAttribute|DeleteAttribute $attr */
+                /** @var GetAttribute|HeadAttribute|OptionsAttribute|PostAttribute|PutAttribute|PatchAttribute|DeleteAttribute $attr */
                 $attr = $attributeRef->newInstance();
                 $routes[] = [
                     'method' => $methodName,
