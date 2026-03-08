@@ -91,4 +91,30 @@ final class ErrorBagTest extends TestCase
         $bag->add('password', 'Must contain a symbol.');
         self::assertCount(3, $bag->errorsFor('password'));
     }
+
+    public function testMergeAddsErrorsFromOtherBag(): void
+    {
+        $primary = new ErrorBag();
+        $primary->add('email', 'Required.');
+
+        $secondary = new ErrorBag();
+        $secondary->add('email', 'Invalid format.');
+        $secondary->add('name', 'Too short.');
+
+        $primary->merge($secondary);
+
+        self::assertSame(['Required.', 'Invalid format.'], $primary->errorsFor('email'));
+        self::assertSame(['Too short.'], $primary->errorsFor('name'));
+    }
+
+    public function testMergeWithEmptyBagKeepsOriginalUnchanged(): void
+    {
+        $primary = new ErrorBag();
+        $primary->add('email', 'Required.');
+
+        $primary->merge(new ErrorBag());
+
+        self::assertSame(['Required.'], $primary->errorsFor('email'));
+        self::assertSame(['email'], $primary->failingFields());
+    }
 }

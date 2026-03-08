@@ -14,6 +14,15 @@ final class ErrorBag
         $this->errors[$field][] = $message;
     }
 
+    public function merge(self $other): void
+    {
+        foreach ($other->toArray() as $field => $messages) {
+            foreach ($messages as $message) {
+                $this->add($field, $message);
+            }
+        }
+    }
+
     public function hasErrors(): bool
     {
         return $this->errors !== [];
