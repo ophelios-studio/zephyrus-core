@@ -108,6 +108,37 @@ final class RequestTest extends TestCase
         self::assertSame(7, $updated->attribute('userId'));
     }
 
+    public function testBearerTokenExtractsDefaultAuthorizationPrefixCaseInsensitively(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/admin',
+            headers: ['Authorization' => 'bearer secret-token'],
+        );
+
+        self::assertSame('secret-token', $request->bearerToken());
+    }
+
+    public function testBearerTokenReturnsRawHeaderWhenPrefixDoesNotMatch(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/admin',
+            headers: ['Authorization' => 'raw-token'],
+        );
+
+        self::assertSame('raw-token', $request->bearerToken());
+    }
+
+    public function testBearerTokenReturnsNullWhenHeaderIsMissingOrEmpty(): void
+    {
+        $missing = Request::fromArray(method: 'GET', uri: '/admin');
+        $empty = Request::fromArray(method: 'GET', uri: '/admin', headers: ['Authorization' => '   ']);
+
+        self::assertNull($missing->bearerToken());
+        self::assertNull($empty->bearerToken());
+    }
+
     public function testFromArrayProvidesFileUploadHelper(): void
     {
         $file = new FileUpload('me.png', 'image/png', '/tmp/phpA', 123);

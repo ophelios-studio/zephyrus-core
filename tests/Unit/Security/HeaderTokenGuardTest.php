@@ -26,6 +26,14 @@ final class HeaderTokenGuardTest extends TestCase
         self::assertFalse($guard->isAuthorized($request));
     }
 
+    public function testAuthorizesWithLowercaseBearerScheme(): void
+    {
+        $guard = new HeaderTokenGuard('secret-token');
+        $request = Request::fromArray('GET', '/admin', headers: ['Authorization' => 'bearer secret-token']);
+
+        self::assertTrue($guard->isAuthorized($request));
+    }
+
     public function testRejectsWhenHeaderMissing(): void
     {
         $guard = new HeaderTokenGuard('secret-token');
