@@ -24,6 +24,7 @@ final class PaginationRequestTest extends TestCase
         $camel = PaginationRequest::fromArray(['page' => 2, 'perPage' => 11]);
         $snakeSize = PaginationRequest::fromArray(['page' => 2, 'page_size' => 12]);
         $camelSize = PaginationRequest::fromArray(['page' => 2, 'pageSize' => 13]);
+        $limit = PaginationRequest::fromArray(['page' => 2, 'limit' => 14]);
 
         self::assertSame(2, $snake->page);
         self::assertSame(10, $snake->perPage);
@@ -33,6 +34,8 @@ final class PaginationRequestTest extends TestCase
         self::assertSame(12, $snakeSize->perPage);
         self::assertSame(2, $camelSize->page);
         self::assertSame(13, $camelSize->perPage);
+        self::assertSame(2, $limit->page);
+        self::assertSame(14, $limit->perPage);
     }
 
     public function testFromArrayProvidesDefaultValues(): void
@@ -113,11 +116,14 @@ final class PaginationRequestTest extends TestCase
     {
         $clamped = PaginationRequest::fromQuery(['page' => 2, 'per_page' => 999], 25, 100);
         $alias = PaginationRequest::fromQuery(['page' => 3, 'page_size' => 40], 25, 100);
+        $limit = PaginationRequest::fromQuery(['page' => 4, 'limit' => 35], 25, 100);
 
         self::assertSame(2, $clamped->page);
         self::assertSame(100, $clamped->perPage);
         self::assertSame(3, $alias->page);
         self::assertSame(40, $alias->perPage);
+        self::assertSame(4, $limit->page);
+        self::assertSame(35, $limit->perPage);
     }
 
     public function testFromQueryClampsInvalidPageToMinimumOne(): void
@@ -126,6 +132,14 @@ final class PaginationRequestTest extends TestCase
 
         self::assertSame(1, $request->page);
         self::assertSame(15, $request->perPage);
+    }
+
+    public function testFromQueryPrefersPerPageOverLimitAlias(): void
+    {
+        $request = PaginationRequest::fromQuery(['page' => 2, 'per_page' => 20, 'limit' => 5], 25, 100);
+
+        self::assertSame(2, $request->page);
+        self::assertSame(20, $request->perPage);
     }
 
     public function testConstructThrowsWhenPageIsInvalid(): void

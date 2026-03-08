@@ -103,7 +103,7 @@ final class PaginationRequest implements \JsonSerializable
      */
     private static function resolvePerPage(array $data, int $defaultPerPage): int
     {
-        return (int) ($data['per_page'] ?? $data['perPage'] ?? $data['page_size'] ?? $data['pageSize'] ?? $defaultPerPage);
+        return (int) ($data['per_page'] ?? $data['perPage'] ?? $data['page_size'] ?? $data['pageSize'] ?? $data['limit'] ?? $defaultPerPage);
     }
 
     /**
