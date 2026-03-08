@@ -330,4 +330,32 @@ final class AcceptLanguageResolverTest extends TestCase
             supportedLocales:     ['en', 'fr'],
         ));
     }
+
+    public function testFallsBackToIntermediateScriptLocaleFromHeader(): void
+    {
+        self::assertSame('zh-Hant', $this->resolver->resolve(
+            acceptLanguageHeader: 'zh-Hant-TW, en;q=0.8',
+            supportedLocales:     ['en', 'zh-Hant'],
+            defaultLocale:        'en',
+        ));
+    }
+
+    public function testFallsBackToIntermediateScriptLocaleFromRequestedLocale(): void
+    {
+        self::assertSame('zh-Hant', $this->resolver->resolve(
+            acceptLanguageHeader: 'en;q=0.9',
+            supportedLocales:     ['en', 'zh-Hant'],
+            defaultLocale:        'en',
+            requestedLocale:      'zh-Hant-TW',
+        ));
+    }
+
+    public function testDefaultLocaleFallsBackToIntermediateScriptLocale(): void
+    {
+        self::assertSame('zh-Hant', $this->resolver->resolve(
+            acceptLanguageHeader: 'de;q=0.9',
+            supportedLocales:     ['zh-Hant', 'en'],
+            defaultLocale:        'zh-Hant-TW',
+        ));
+    }
 }
