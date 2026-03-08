@@ -436,6 +436,32 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertStringContainsString('value="existing-custom"', $response->body);
     }
 
+    public function testInjectTokenSkipsFormsWithDataCsrfAttribute(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
+        $request = new Request('GET', 'https://example.com/form');
+        $html = '<html><body><form method="post" action="/save" data-csrf><button>Save</button></form></body></html>';
+
+        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]));
+
+        self::assertStringNotContainsString('_csrf_token', $response->body);
+    }
+
+    public function testInjectTokenSkipsFormsWithDataCsrfOptOutValue(): void
+    {
+        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
+        $request = new Request('GET', 'https://example.com/form');
+        $html = '<html><body><form method="post" action="/save" data-csrf="manual"><button>Save</button></form></body></html>';
+
+        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+        ]));
+
+        self::assertStringNotContainsString('_csrf_token', $response->body);
+    }
+
     // ── CsrfConfig factory tests ──────────────────────────────────────────────
 
     public function testCsrfConfigDefaults(): void

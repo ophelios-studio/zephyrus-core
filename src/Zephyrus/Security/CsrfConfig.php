@@ -42,7 +42,9 @@ use function trim;
  *   <input type="hidden" name="_csrf_token" value="…">
  *
  * Only responses with a Content-Type of text/html are modified; JSON, plain
- * text, and other types pass through unchanged.
+ * text, and other types pass through unchanged. Individual forms can opt out
+ * by adding a `data-csrf` attribute (with or without a value such as `manual`
+ * or `off`), which signals the middleware to leave the markup untouched.
  *
  * Example:
  *
