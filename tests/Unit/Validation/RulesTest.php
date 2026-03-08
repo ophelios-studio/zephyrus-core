@@ -594,12 +594,14 @@ final class RulesTest extends TestCase
     {
         self::assertTrue(Rules::rfc3339DateTime()->test('2026-03-08T00:39:00+00:00'));
         self::assertTrue(Rules::rfc3339DateTime()->test('2026-03-07T19:39:00-05:00'));
+        self::assertTrue(Rules::rfc3339DateTime()->test('2026-03-08T00:39:00Z'));
     }
 
     public function testRfc3339DateTimeFailsInvalidValues(): void
     {
         self::assertFalse(Rules::rfc3339DateTime()->test('2026-03-08 00:39:00'));
         self::assertFalse(Rules::rfc3339DateTime()->test('2026-13-08T00:39:00+00:00'));
+        self::assertFalse(Rules::rfc3339DateTime()->test('2026-03-08T00:39:00z'));
         self::assertFalse(Rules::rfc3339DateTime()->test(null));
     }
 

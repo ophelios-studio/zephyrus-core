@@ -316,9 +316,17 @@ final class Rules
                     return false;
                 }
 
-                $dt = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, $v);
+                if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/', $v) !== 1) {
+                    return false;
+                }
 
-                return $dt !== false && $dt->format(\DateTimeInterface::RFC3339) === $v;
+                $normalized = str_ends_with($v, 'Z')
+                    ? substr($v, 0, -1) . '+00:00'
+                    : $v;
+
+                $dt = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, $normalized);
+
+                return $dt !== false && $dt->format(\DateTimeInterface::RFC3339) === $normalized;
             },
             $message,
         );
