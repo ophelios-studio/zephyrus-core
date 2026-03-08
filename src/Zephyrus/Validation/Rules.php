@@ -306,6 +306,25 @@ final class Rules
     }
 
     /**
+     * Validates an RFC 3339 datetime string (e.g. 2026-03-08T00:39:00Z).
+     */
+    public static function rfc3339DateTime(string $message = 'Must be a valid RFC 3339 datetime.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                $dt = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC3339, $v);
+
+                return $dt !== false && $dt->format(\DateTimeInterface::RFC3339) === $v;
+            },
+            $message,
+        );
+    }
+
+    /**
      * Validates an IANA timezone identifier.
      */
     public static function timezone(string $message = 'Must be a valid timezone identifier.'): Rule
