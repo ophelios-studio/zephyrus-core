@@ -64,7 +64,7 @@ Resolution priority:
 2. `Accept-Language` header (q-values respected, including `*` wildcard fallback)
 3. app `defaultLocale`
 
-When `supportedLocales` is configured, locale selection is constrained to that allowlist, with regional fallback (`fr-CA` → `fr`) when possible.
+When `supportedLocales` is configured, locale selection is constrained to that allowlist, with progressive fallback for compound tags (`zh-Hant-TW` → `zh-Hant` → `zh`, `fr-CA` → `fr`) when possible.
 Locale codes are normalized in both resolver and translator chains (`fr_ca`, `FR-ca` → `fr-CA`).
 
 ## Interpolation pipes

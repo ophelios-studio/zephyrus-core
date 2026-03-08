@@ -10,7 +10,7 @@ namespace Zephyrus\Localization;
  * supported locales.
  *
  * Resolution order:
- *   1. $requestedLocale (normalized; regional fallback to base language).
+ *   1. $requestedLocale (normalized; progressive subtag fallback).
  *   2. Candidates parsed from $acceptLanguageHeader, ordered by q-value.
  *   3. $defaultLocale as the final fallback.
  *
@@ -41,25 +41,20 @@ final class AcceptLanguageResolver
         }
 
         // Keep the final fallback within the supported-locale allowlist.
-        if ($supportedLocales !== [] && !$this->isAccepted($defaultLocale, $supportedLocales)) {
-            $base = $this->base($defaultLocale);
-            $defaultLocale = $this->isAccepted($base, $supportedLocales)
-                ? $base
-                : $supportedLocales[0];
+        if ($supportedLocales !== []) {
+            $defaultLocale = $this->resolveAcceptedLocale($defaultLocale, $supportedLocales)
+                ?? $supportedLocales[0];
         }
 
         // 1. Explicit requested locale wins if it is accepted.
         if ($requestedLocale !== '') {
             $normalized = $this->normalize($requestedLocale);
 
-            if ($normalized !== '' && $normalized !== '*' && $this->isAccepted($normalized, $supportedLocales)) {
-                return $normalized;
-            }
-
-            // Try the base language as a regional fallback (fr-CA → fr).
-            $base = $this->base($normalized);
-            if ($base !== $normalized && $this->isAccepted($base, $supportedLocales)) {
-                return $base;
+            if ($normalized !== '' && $normalized !== '*') {
+                $acceptedRequested = $this->resolveAcceptedLocale($normalized, $supportedLocales);
+                if ($acceptedRequested !== null) {
+                    return $acceptedRequested;
+                }
             }
         }
 
@@ -69,14 +64,9 @@ final class AcceptLanguageResolver
                 return $defaultLocale;
             }
 
-            if ($this->isAccepted($candidate, $supportedLocales)) {
-                return $candidate;
-            }
-
-            // Regional fallback for each header candidate (fr-CA → fr).
-            $base = $this->base($candidate);
-            if ($base !== $candidate && $this->isAccepted($base, $supportedLocales)) {
-                return $base;
+            $acceptedCandidate = $this->resolveAcceptedLocale($candidate, $supportedLocales);
+            if ($acceptedCandidate !== null) {
+                return $acceptedCandidate;
             }
         }
 
@@ -217,18 +207,37 @@ final class AcceptLanguageResolver
     }
 
     /**
-     * Extract the base language code from a locale tag (fr-CA → fr).
-     */
-    private function base(string $locale): string
-    {
-        return explode('-', $locale, 2)[0];
-    }
-
-    /**
      * @param string[] $supported
      */
     private function isAccepted(string $locale, array $supported): bool
     {
         return $supported === [] || in_array($locale, $supported, true);
+    }
+
+    /**
+     * @param string[] $supported
+     */
+    private function resolveAcceptedLocale(string $locale, array $supported): ?string
+    {
+        if ($locale === '') {
+            return null;
+        }
+
+        if ($this->isAccepted($locale, $supported)) {
+            return $locale;
+        }
+
+        // Progressive fallback for compound tags: zh-Hant-TW -> zh-Hant -> zh.
+        $parts = explode('-', $locale);
+        while (count($parts) > 1) {
+            array_pop($parts);
+            $fallback = implode('-', $parts);
+
+            if ($this->isAccepted($fallback, $supported)) {
+                return $fallback;
+            }
+        }
+
+        return null;
     }
 }
