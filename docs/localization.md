@@ -65,6 +65,7 @@ Resolution priority:
 3. app `defaultLocale`
 
 When `supportedLocales` is configured, locale selection is constrained to that allowlist, with regional fallback (`fr-CA` → `fr`) when possible.
+Locale codes are normalized in both resolver and translator chains (`fr_ca`, `FR-ca` → `fr-CA`).
 
 ## Interpolation pipes
 

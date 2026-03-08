@@ -35,24 +35,55 @@ final class Translator
      */
     private function resolveLocaleChain(string $requestedLocale): array
     {
-        $chain = [$requestedLocale];
-
-        if (str_contains($requestedLocale, '-')) {
-            $chain[] = explode('-', $requestedLocale, 2)[0];
+        $normalizedDefault = $this->normalizeLocale($this->defaultLocale);
+        if ($normalizedDefault === '') {
+            $normalizedDefault = 'en';
         }
 
-        if (!in_array($this->defaultLocale, $chain, true)) {
-            $chain[] = $this->defaultLocale;
+        $normalizedRequested = $this->normalizeLocale($requestedLocale);
+        if ($normalizedRequested === '') {
+            $normalizedRequested = $normalizedDefault;
         }
 
-        if (str_contains($this->defaultLocale, '-')) {
-            $defaultBase = explode('-', $this->defaultLocale, 2)[0];
-            if (!in_array($defaultBase, $chain, true)) {
-                $chain[] = $defaultBase;
-            }
+        $chain = [$normalizedRequested];
+
+        $requestedBase = $this->baseLocale($normalizedRequested);
+        if ($requestedBase !== $normalizedRequested) {
+            $chain[] = $requestedBase;
+        }
+
+        if (!in_array($normalizedDefault, $chain, true)) {
+            $chain[] = $normalizedDefault;
+        }
+
+        $defaultBase = $this->baseLocale($normalizedDefault);
+        if ($defaultBase !== $normalizedDefault && !in_array($defaultBase, $chain, true)) {
+            $chain[] = $defaultBase;
         }
 
         return $chain;
+    }
+
+    private function normalizeLocale(string $locale): string
+    {
+        $locale = trim(str_replace('_', '-', $locale));
+        if ($locale === '') {
+            return '';
+        }
+
+        $parts = explode('-', $locale, 2);
+        $normalized = strtolower($parts[0]);
+
+        if (isset($parts[1])) {
+            $normalized .= '-' . strtoupper($parts[1]);
+        }
+
+        return $normalized;
+    }
+
+    private function baseLocale(string $locale): string
+    {
+        return explode('-', $locale, 2)[0];
     }
 
     /**

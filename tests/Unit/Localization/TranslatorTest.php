@@ -45,6 +45,13 @@ final class TranslatorTest extends TestCase
         self::assertSame('Bonjour', $translator->trans('messages.plain', locale: 'fr-CA'));
     }
 
+    public function testNormalizesUnderscoreAndRegionCaseInRequestedLocale(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('Bonjour', $translator->trans('messages.plain', locale: 'FR_ca'));
+    }
+
     public function testInterpolationSupportsTextPipes(): void
     {
         $translator = $this->buildTranslator();
@@ -248,6 +255,23 @@ final class TranslatorTest extends TestCase
         $translator = new Translator($loader, 'fr-CA');
 
         // 'de' has no catalog → falls through to 'fr-CA' (regional default)
+        self::assertSame('Bonjour (CA)', $translator->trans('greeting', locale: 'de'));
+    }
+
+    public function testLocaleChainNormalizesRegionalDefaultLocale(): void
+    {
+        $loader = new class implements \Zephyrus\Localization\LocaleLoaderInterface {
+            public function load(string $locale): array
+            {
+                return match ($locale) {
+                    'fr-CA' => ['greeting' => 'Bonjour (CA)'],
+                    default => [],
+                };
+            }
+        };
+
+        $translator = new Translator($loader, 'FR_ca');
+
         self::assertSame('Bonjour (CA)', $translator->trans('greeting', locale: 'de'));
     }
 
