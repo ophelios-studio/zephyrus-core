@@ -52,6 +52,26 @@ final class FilterRequest implements \JsonSerializable
                 continue;
             }
 
+            if (is_array($value)) {
+                $list = array_values(array_filter(array_map(
+                    static function (mixed $item): mixed {
+                        if (is_string($item)) {
+                            return trim($item);
+                        }
+
+                        return $item;
+                    },
+                    $value,
+                ), static fn (mixed $item): bool => $item !== null && $item !== ''));
+
+                if ($list === []) {
+                    continue;
+                }
+
+                $conditions[$key] = $list;
+                continue;
+            }
+
             $conditions[$key] = $value;
         }
 
