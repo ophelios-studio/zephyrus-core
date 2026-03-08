@@ -17,29 +17,11 @@ final class HeaderTokenGuard implements AuthGuardInterface
 
     public function isAuthorized(Request $request): bool
     {
-        $value = $request->header($this->headerName);
-        if ($value === null || $value === '') {
-            return false;
-        }
-
-        $token = $this->extractToken($value);
-        if ($token === '') {
+        $token = $request->bearerToken($this->headerName, $this->bearerPrefix);
+        if ($token === null || $token === '') {
             return false;
         }
 
         return hash_equals($this->expectedToken, $token);
-    }
-
-    private function extractToken(string $value): string
-    {
-        if ($this->bearerPrefix === '') {
-            return trim($value);
-        }
-
-        if (str_starts_with($value, $this->bearerPrefix)) {
-            return trim(substr($value, strlen($this->bearerPrefix)));
-        }
-
-        return trim($value);
     }
 }

@@ -133,6 +133,31 @@ final readonly class Request
         return $this->headers[strtolower($name)] ?? $default;
     }
 
+    public function bearerToken(string $headerName = 'Authorization', string $prefix = 'Bearer '): ?string
+    {
+        $value = $this->header($headerName);
+        if ($value === null) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $normalizedPrefix = trim($prefix);
+        if ($normalizedPrefix === '') {
+            return $trimmed;
+        }
+
+        if (strncasecmp($trimmed, $normalizedPrefix, strlen($normalizedPrefix)) === 0) {
+            $token = trim(substr($trimmed, strlen($normalizedPrefix)));
+            return $token === '' ? null : $token;
+        }
+
+        return $trimmed;
+    }
+
     public function cookie(string $name, ?string $default = null): ?string
     {
         return $this->cookies[$name] ?? $default;
