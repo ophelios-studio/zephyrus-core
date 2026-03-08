@@ -1627,8 +1627,17 @@ final class Rules
 
                 $start = (int) $m[1];
                 $end = (int) $m[2];
+                if ($start > $end) {
+                    return false;
+                }
 
-                return $start <= $end;
+                if ($m[3] === '*') {
+                    return true;
+                }
+
+                $size = (int) $m[3];
+
+                return $size > 0 && $start < $size && $end < $size;
             },
             $message,
         );
