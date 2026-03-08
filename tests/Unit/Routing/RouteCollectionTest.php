@@ -337,6 +337,24 @@ final class RouteCollectionTest extends TestCase
         self::assertSame('/users', $getRoutes[1]->path);
     }
 
+    public function testAllowedMethodsForPathReturnsSortedUniqueMethodsAndHeadAlias(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('PUT', '/users/{id}', 'UserController@update'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@showDuplicate'));
+
+        self::assertSame(['GET', 'HEAD', 'PUT'], $collection->allowedMethodsForPath('/users/42'));
+    }
+
+    public function testAllowedMethodsForPathReturnsEmptyArrayWhenPathDoesNotMatch(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        self::assertSame([], $collection->allowedMethodsForPath('/projects'));
+    }
+
     public function testHandlersReturnsRegisteredHandlersInOrder(): void
     {
         $collection = new RouteCollection();
