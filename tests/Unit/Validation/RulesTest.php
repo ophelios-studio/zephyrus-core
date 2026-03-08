@@ -424,6 +424,27 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::url()->test(null));
     }
 
+    // ---- httpUrl ----
+
+    public function testHttpUrlPasses(): void
+    {
+        self::assertTrue(Rules::httpUrl()->test('https://example.com'));
+        self::assertTrue(Rules::httpUrl()->test('http://localhost:8080/path?q=1'));
+    }
+
+    public function testHttpUrlFails(): void
+    {
+        self::assertFalse(Rules::httpUrl()->test('ftp://example.com/file.txt'));
+        self::assertFalse(Rules::httpUrl()->test('mailto:test@example.com'));
+        self::assertFalse(Rules::httpUrl()->test('not-a-url'));
+        self::assertFalse(Rules::httpUrl()->test(null));
+    }
+
+    public function testHttpUrlDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid HTTP/HTTPS URL.', Rules::httpUrl()->errorMessage());
+    }
+
     // ---- notBlank ----
 
     public function testNotBlankPasses(): void

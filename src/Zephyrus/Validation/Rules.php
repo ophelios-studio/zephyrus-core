@@ -204,6 +204,29 @@ final class Rules
         );
     }
 
+    /**
+     * Validates an HTTP/HTTPS URL.
+     */
+    public static function httpUrl(string $message = 'Must be a valid HTTP/HTTPS URL.'): Rule
+    {
+        return Rule::of(
+            static function (mixed $v): bool {
+                if (!is_string($v)) {
+                    return false;
+                }
+
+                if (filter_var($v, FILTER_VALIDATE_URL) === false) {
+                    return false;
+                }
+
+                $scheme = parse_url($v, PHP_URL_SCHEME);
+
+                return is_string($scheme) && in_array(strtolower($scheme), ['http', 'https'], true);
+            },
+            $message,
+        );
+    }
+
     public static function notBlank(string $message = 'Must not be blank.'): Rule
     {
         return Rule::of(
