@@ -7,8 +7,10 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
+use Zephyrus\Routing\Attribute\Head as HeadAttribute;
 use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
+use Zephyrus\Routing\Attribute\Options as OptionsAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
@@ -71,6 +73,12 @@ class VerbAttributesController
 {
     #[GetAttribute('/articles', name: 'articles.index')]
     public function index(): void {}
+
+    #[HeadAttribute('/articles')]
+    public function indexHead(): void {}
+
+    #[OptionsAttribute('/articles')]
+    public function options(): void {}
 
     #[PostAttribute('/articles', middlewares: ['auth'])]
     public function store(): void {}
@@ -240,9 +248,11 @@ final class RouteAttributeReaderTest extends TestCase
     {
         $routes = $this->reader->read(VerbAttributesController::class);
 
-        self::assertCount(5, $routes);
+        self::assertCount(7, $routes);
 
         self::assertSame('GET', $this->findByHandler($routes, VerbAttributesController::class . '@index')?->method);
+        self::assertSame('HEAD', $this->findByHandler($routes, VerbAttributesController::class . '@indexHead')?->method);
+        self::assertSame('OPTIONS', $this->findByHandler($routes, VerbAttributesController::class . '@options')?->method);
         self::assertSame('POST', $this->findByHandler($routes, VerbAttributesController::class . '@store')?->method);
         self::assertSame('PUT', $this->findByHandler($routes, VerbAttributesController::class . '@replace')?->method);
         self::assertSame('PATCH', $this->findByHandler($routes, VerbAttributesController::class . '@update')?->method);

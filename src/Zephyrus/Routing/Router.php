@@ -157,6 +157,24 @@ final class Router
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
      */
+    public function head(string $path, string $handler, array $constraints = [], array $middlewares = []): self
+    {
+        return $this->add('HEAD', $path, $handler, $constraints, $middlewares);
+    }
+
+    /**
+     * @param array<string, string> $constraints
+     * @param array<int, string> $middlewares
+     */
+    public function options(string $path, string $handler, array $constraints = [], array $middlewares = []): self
+    {
+        return $this->add('OPTIONS', $path, $handler, $constraints, $middlewares);
+    }
+
+    /**
+     * @param array<string, string> $constraints
+     * @param array<int, string> $middlewares
+     */
     public function post(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
         return $this->add('POST', $path, $handler, $constraints, $middlewares);
