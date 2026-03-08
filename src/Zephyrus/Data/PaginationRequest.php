@@ -31,9 +31,11 @@ final class PaginationRequest implements \JsonSerializable
 
     public static function fromArray(array $data): self
     {
+        $perPage = self::resolvePerPage($data, 25);
+
         return new self(
-            page: (int) ($data['page'] ?? 1),
-            perPage: self::resolvePerPage($data, 25),
+            page: self::resolvePage($data, $perPage),
+            perPage: $perPage,
         );
     }
 
@@ -50,8 +52,7 @@ final class PaginationRequest implements \JsonSerializable
         $requestedPerPage = self::resolvePerPage($data, $defaultPerPage);
         $perPage = min(max($requestedPerPage, 1), $maxPerPage);
 
-        $requestedPage = (int) ($data['page'] ?? 1);
-        $page = max($requestedPage, 1);
+        $page = max(self::resolvePage($data, $perPage), 1);
 
         return new self(
             page: $page,
@@ -104,6 +105,25 @@ final class PaginationRequest implements \JsonSerializable
     private static function resolvePerPage(array $data, int $defaultPerPage): int
     {
         return (int) ($data['per_page'] ?? $data['perPage'] ?? $data['page_size'] ?? $data['pageSize'] ?? $data['limit'] ?? $defaultPerPage);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private static function resolvePage(array $data, int $perPage): int
+    {
+        if (array_key_exists('page', $data)) {
+            return (int) $data['page'];
+        }
+
+        if (array_key_exists('offset', $data)) {
+            $offset = max(0, (int) $data['offset']);
+            $safePerPage = max(1, $perPage);
+
+            return intdiv($offset, $safePerPage) + 1;
+        }
+
+        return 1;
     }
 
     /**

@@ -46,6 +46,21 @@ final class PaginationRequestTest extends TestCase
         self::assertSame(25, $request->perPage);
     }
 
+    public function testFromArrayDerivesPageFromOffsetWhenPageMissing(): void
+    {
+        $request = PaginationRequest::fromArray(['offset' => 40, 'per_page' => 20]);
+
+        self::assertSame(3, $request->page);
+        self::assertSame(20, $request->perPage);
+    }
+
+    public function testFromArrayPrefersExplicitPageOverOffset(): void
+    {
+        $request = PaginationRequest::fromArray(['page' => 4, 'offset' => 0, 'per_page' => 20]);
+
+        self::assertSame(4, $request->page);
+    }
+
     public function testFromArrayWithBoundsClampsPerPageToMax(): void
     {
         $request = PaginationRequest::fromArrayWithBounds([
@@ -132,6 +147,14 @@ final class PaginationRequestTest extends TestCase
 
         self::assertSame(1, $request->page);
         self::assertSame(15, $request->perPage);
+    }
+
+    public function testFromQueryDerivesPageFromOffsetWhenPageMissing(): void
+    {
+        $request = PaginationRequest::fromQuery(['offset' => 75, 'limit' => 25], 25, 100);
+
+        self::assertSame(4, $request->page);
+        self::assertSame(25, $request->perPage);
     }
 
     public function testFromQueryPrefersPerPageOverLimitAlias(): void
