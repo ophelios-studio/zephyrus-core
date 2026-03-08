@@ -61,6 +61,27 @@ final class FilterRequestTest extends TestCase
         ], $filter->toArray());
     }
 
+    public function testFromQueryNormalizesArrayValuesAndSkipsBlankEntries(): void
+    {
+        $filter = FilterRequest::fromQuery([
+            'status' => [' active ', '', null, 'pending', '  '],
+        ], ['status']);
+
+        self::assertSame([
+            'status' => ['active', 'pending'],
+        ], $filter->toArray());
+    }
+
+    public function testFromQuerySkipsArrayKeyWhenValuesAreAllBlank(): void
+    {
+        $filter = FilterRequest::fromQuery([
+            'status' => ['', ' ', null],
+        ], ['status']);
+
+        self::assertSame([], $filter->toArray());
+        self::assertTrue($filter->isEmpty());
+    }
+
     public function testToWhereClauseBuildsSqlAndBindings(): void
     {
         $filter = new FilterRequest(['status' => 'active', 'email' => 'a@example.com']);
