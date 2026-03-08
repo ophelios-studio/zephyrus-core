@@ -1157,6 +1157,29 @@ final class RulesTest extends TestCase
         self::assertSame('Must be valid Base64.', Rules::base64()->errorMessage());
     }
 
+    // ---- base64Url ----
+
+    public function testBase64UrlPasses(): void
+    {
+        self::assertTrue(Rules::base64Url()->test('SGVsbG8'));
+        self::assertTrue(Rules::base64Url()->test('eyJzdWIiOiIxMjMifQ'));
+        self::assertTrue(Rules::base64Url()->test('-_8'));
+    }
+
+    public function testBase64UrlFails(): void
+    {
+        self::assertFalse(Rules::base64Url()->test(''));
+        self::assertFalse(Rules::base64Url()->test('aGVsbG8='));
+        self::assertFalse(Rules::base64Url()->test('a+b/c'));
+        self::assertFalse(Rules::base64Url()->test('not base64url'));
+        self::assertFalse(Rules::base64Url()->test(null));
+    }
+
+    public function testBase64UrlDefaultMessage(): void
+    {
+        self::assertSame('Must be valid Base64URL.', Rules::base64Url()->errorMessage());
+    }
+
     // ---- semver ----
 
     public function testSemverPasses(): void
