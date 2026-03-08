@@ -1490,6 +1490,29 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid language tag.', Rules::languageTag()->errorMessage());
     }
 
+    // ---- acceptLanguage ----
+
+    public function testAcceptLanguagePasses(): void
+    {
+        self::assertTrue(Rules::acceptLanguage()->test('en'));
+        self::assertTrue(Rules::acceptLanguage()->test('en-CA,fr-CA;q=0.9,fr;q=0.8'));
+        self::assertTrue(Rules::acceptLanguage()->test('fr, *;q=0.5'));
+    }
+
+    public function testAcceptLanguageFails(): void
+    {
+        self::assertFalse(Rules::acceptLanguage()->test(''));
+        self::assertFalse(Rules::acceptLanguage()->test('en_CA'));
+        self::assertFalse(Rules::acceptLanguage()->test('en;q=1.5'));
+        self::assertFalse(Rules::acceptLanguage()->test('en;q=.5'));
+        self::assertFalse(Rules::acceptLanguage()->test(null));
+    }
+
+    public function testAcceptLanguageDefaultMessage(): void
+    {
+        self::assertSame('Must be a valid Accept-Language header value.', Rules::acceptLanguage()->errorMessage());
+    }
+
     // ---- httpHeaderName ----
 
     public function testHttpHeaderNamePasses(): void
