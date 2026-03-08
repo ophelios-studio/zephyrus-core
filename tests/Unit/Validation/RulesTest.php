@@ -1752,6 +1752,33 @@ final class RulesTest extends TestCase
         self::assertSame('Invalid UUID v7 format.', Rules::uuidV7('Invalid UUID v7 format.')->errorMessage());
     }
 
+    public function testUuidV8PassesValidCanonicalForms(): void
+    {
+        self::assertTrue(Rules::uuidV8()->test('018e2990-aa07-8000-8000-000000000000'));
+        self::assertTrue(Rules::uuidV8()->test('018e2990-aa07-8abc-9123-abcdef012345'));
+        self::assertTrue(Rules::uuidV8()->test('018E2990-AA07-8ABC-AABC-000000000000'));
+    }
+
+    public function testUuidV8RejectsWrongVersionOrVariant(): void
+    {
+        self::assertFalse(Rules::uuidV8()->test('018e2990-aa07-7000-8000-000000000000'));
+        self::assertFalse(Rules::uuidV8()->test('018e2990-aa07-8000-c000-000000000000'));
+    }
+
+    public function testUuidV8RejectsMalformedOrNonStringValues(): void
+    {
+        self::assertFalse(Rules::uuidV8()->test('not-a-uuid'));
+        self::assertFalse(Rules::uuidV8()->test('018e2990-aa07-8000-8000-00000000000'));
+        self::assertFalse(Rules::uuidV8()->test(null));
+        self::assertFalse(Rules::uuidV8()->test(42));
+    }
+
+    public function testUuidV8DefaultAndCustomMessages(): void
+    {
+        self::assertSame('Must be a valid UUID v8.', Rules::uuidV8()->errorMessage());
+        self::assertSame('Invalid UUID v8 format.', Rules::uuidV8('Invalid UUID v8 format.')->errorMessage());
+    }
+
     // ---- countryCode / currencyCode ----
 
     public function testCountryCodePassesAndFails(): void
