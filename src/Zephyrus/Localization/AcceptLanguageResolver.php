@@ -182,14 +182,38 @@ final class AcceptLanguageResolver
             return '';
         }
 
-        $parts      = explode('-', $locale, 2);
-        $normalized = strtolower($parts[0]);
-
-        if (isset($parts[1])) {
-            $normalized .= '-' . strtoupper($parts[1]);
+        if ($locale === '*') {
+            return '*';
         }
 
-        return $normalized;
+        $parts = array_values(array_filter(explode('-', $locale), static fn (string $part): bool => $part !== ''));
+        if ($parts === []) {
+            return '';
+        }
+
+        $normalized   = [strtolower($parts[0])];
+        $subtagCount  = count($parts);
+
+        for ($index = 1; $index < $subtagCount; $index++) {
+            $subtag = $parts[$index];
+
+            // Script subtag (e.g. Hant -> Hant).
+            if (strlen($subtag) === 4 && ctype_alpha($subtag)) {
+                $normalized[] = ucfirst(strtolower($subtag));
+                continue;
+            }
+
+            // Region subtag (e.g. us -> US, 419 -> 419).
+            if ((strlen($subtag) === 2 && ctype_alpha($subtag)) || (strlen($subtag) === 3 && ctype_digit($subtag))) {
+                $normalized[] = strtoupper($subtag);
+                continue;
+            }
+
+            // Variants/extensions are kept lowercased.
+            $normalized[] = strtolower($subtag);
+        }
+
+        return implode('-', $normalized);
     }
 
     /**

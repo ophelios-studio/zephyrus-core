@@ -46,6 +46,16 @@ final class AcceptLanguageResolverTest extends TestCase
         self::assertSame('fr-CA', $this->resolver->resolve('fr_CA'));
     }
 
+    public function testNormalizesScriptAndRegionSubtags(): void
+    {
+        self::assertSame('zh-Hant-TW', $this->resolver->resolve('zh_hant_tw'));
+    }
+
+    public function testNormalizesScriptWithoutForcingUppercase(): void
+    {
+        self::assertSame('sr-Latn', $this->resolver->resolve('SR-lATN'));
+    }
+
     // -- Quality value ordering -----------------------------------------------
 
     public function testQValueOrderingPicksHighestQuality(): void
