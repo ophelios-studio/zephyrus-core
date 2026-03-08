@@ -14,6 +14,7 @@ use function parse_url;
 use function str_contains;
 use function str_ends_with;
 use function str_starts_with;
+use function substr_count;
 use function strtolower;
 use function substr;
 use function trim;
@@ -112,7 +113,7 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         }
 
         $colonPosition = strpos($normalized, ':');
-        if ($colonPosition !== false) {
+        if ($colonPosition !== false && substr_count($normalized, ':') === 1) {
             $normalized = substr($normalized, 0, $colonPosition);
         }
 

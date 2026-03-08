@@ -44,6 +44,28 @@ final class AllowedHostsMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
+    public function testHostCanBeResolvedFromIpv6UriWhenHostHeaderMissing(): void
+    {
+        $mw = new AllowedHostsMiddleware(['::1']);
+        $request = new Request('GET', 'http://[::1]/v1');
+
+        $response = $mw->process($request, static fn (Request $r): Response => Response::text('ok'));
+
+        self::assertSame(200, $response->status);
+    }
+
+    public function testIpv6HostHeaderWithPortIsNormalizedAndAllowed(): void
+    {
+        $mw = new AllowedHostsMiddleware(['2001:db8::1']);
+        $request = new Request('GET', 'https://example.com/secure', headers: [
+            'host' => '[2001:db8::1]:443',
+        ]);
+
+        $response = $mw->process($request, static fn (Request $r): Response => Response::text('ok'));
+
+        self::assertSame(200, $response->status);
+    }
+
     public function testRejectsUnknownHostAndSkipsInnerHandler(): void
     {
         $called = false;
