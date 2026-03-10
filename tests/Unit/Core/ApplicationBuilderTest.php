@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
@@ -18,11 +19,43 @@ use Zephyrus\Routing\Router;
 
 final class ApplicationBuilderTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        App::reset();
+    }
+
     public function testBuildReturnsApplication(): void
     {
         $app = ApplicationBuilder::create()->build();
 
         self::assertInstanceOf(Application::class, $app);
+    }
+
+    public function testBuildRegistersTranslatorInAppRegistry(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withJsonLocales(__DIR__ . '/../../Fixtures/locales', defaultLocale: 'en')
+            ->build();
+
+        self::assertNotNull(App::getTranslator());
+        self::assertSame('Bonjour', localize('messages.plain', locale: 'fr'));
+        self::assertSame('Hello', $app->trans('messages.plain', locale: 'en'));
+    }
+
+    public function testBuildRegistersConfigurationInAppRegistryWhenProvided(): void
+    {
+        ApplicationBuilder::create()
+            ->withConfigurationArray([
+                'localization' => [
+                    'default_locale' => 'en',
+                    'supported_locales' => ['en', 'fr'],
+                    'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+                ],
+            ])
+            ->build();
+
+        self::assertNotNull(App::getConfiguration());
+        self::assertSame('en', config('localization', 'defaultLocale'));
     }
 
     public function testFromConfigurationFactoryAppliesLocalizationConfig(): void

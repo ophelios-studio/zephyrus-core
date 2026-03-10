@@ -26,6 +26,8 @@ final class ApplicationBuilder
     /** @var string[] */
     private array $supportedLocales = [];
 
+    private ?Configuration $configuration = null;
+
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
         $this->kernelBuilder = $kernelBuilder ?? KernelBuilder::create();
@@ -249,7 +251,10 @@ final class ApplicationBuilder
      */
     public function withConfiguration(Configuration $configuration): self
     {
-        return $this->withLocalizationConfig($configuration->localization);
+        $clone = $this->withLocalizationConfig($configuration->localization);
+        $clone->configuration = $configuration;
+
+        return $clone;
     }
 
     /**
@@ -299,9 +304,16 @@ final class ApplicationBuilder
             }
         };
 
+        $translator = new Translator($loader, $this->defaultLocale);
+
+        if ($this->configuration !== null) {
+            App::setConfiguration($this->configuration);
+        }
+        App::setTranslator($translator);
+
         return new Application(
             kernel:           $this->kernelBuilder->build(),
-            translator:       new Translator($loader, $this->defaultLocale),
+            translator:       $translator,
             defaultLocale:    $this->defaultLocale,
             supportedLocales: $this->supportedLocales,
         );
