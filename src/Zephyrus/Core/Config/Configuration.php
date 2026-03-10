@@ -202,8 +202,8 @@ final readonly class Configuration
                 'jsonExtension' => $this->localization->jsonExtension,
             ],
             'database' => $this->database === null ? null : [
-                'driver' => $this->database->driver,
-                'host' => $this->database->host,
+                'driver'   => $this->database->driver,
+                'host'     => $this->database->host,
                 'port' => $this->database->port,
                 'database' => $this->database->database,
                 'username' => $this->database->username,

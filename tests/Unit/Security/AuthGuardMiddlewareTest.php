@@ -41,7 +41,7 @@ final class AuthGuardMiddlewareTest extends TestCase
 
         self::assertFalse($called);
         self::assertSame(401, $response->status);
-        self::assertStringContainsString('application/json', $response->headers['Content-Type'] ?? '');
+        self::assertStringContainsString('application/json', $response->headers['content-type'] ?? '');
         self::assertStringContainsString('Unauthorized', $response->body);
     }
 

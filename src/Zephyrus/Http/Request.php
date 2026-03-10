@@ -262,6 +262,9 @@ final readonly class Request
     }
 
     /**
+     * Return a new request with the given attributes merged into any existing
+     * attributes. New keys are added; existing keys are overwritten.
+     *
      * @param array<string, mixed> $attributes
      */
     public function withAttributes(array $attributes): self
@@ -273,7 +276,7 @@ final readonly class Request
             parsedBody: $this->parsedBody,
             headers:    $this->headers,
             cookies:    $this->cookies,
-            attributes: $attributes,
+            attributes: array_merge($this->attributes, $attributes),
             files:      $this->files,
             clientIp:   $this->clientIp,
         );

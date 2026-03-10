@@ -33,7 +33,7 @@ final class HttpExceptionResponderTest extends TestCase
 
         self::assertSame(405, $response->status);
         self::assertSame('Method Not Allowed', $response->body);
-        self::assertSame('GET, POST', $response->headers['Allow']);
+        self::assertSame('GET, POST', $response->headers['allow']);
     }
 
     public function testMapsUnknownExceptionsTo500(): void
@@ -59,7 +59,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
 
@@ -76,7 +76,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/problem+json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/problem+json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"type":"about:blank","title":"Not Found","status":404}', $response->body);
     }
 
@@ -93,7 +93,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
 
@@ -111,7 +111,7 @@ final class HttpExceptionResponderTest extends TestCase
 
         self::assertSame(404, $response->status);
         self::assertSame('Not Found', $response->body);
-        self::assertSame('text/plain; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('text/plain; charset=utf-8', $response->headers['content-type']);
     }
 
     public function testFormatsErrorUsingHighestWeightedJsonFamilyMediaType(): void
@@ -127,7 +127,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/problem+json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/problem+json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"type":"about:blank","title":"Not Found","status":404}', $response->body);
     }
 
@@ -144,7 +144,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
 
@@ -161,7 +161,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
 
@@ -197,7 +197,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(ValidationException::fromErrorBag($bag), $request);
 
         self::assertSame(422, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
 
         $decoded = json_decode($response->body, true);
         self::assertArrayHasKey('errors', $decoded);
@@ -221,7 +221,7 @@ final class HttpExceptionResponderTest extends TestCase
         $response = $responder->toResponse(ValidationException::fromErrorBag($bag), $request);
 
         self::assertSame(422, $response->status);
-        self::assertSame('application/problem+json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/problem+json; charset=utf-8', $response->headers['content-type']);
 
         $decoded = json_decode($response->body, true);
         self::assertSame('about:blank', $decoded['type']);

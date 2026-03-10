@@ -37,8 +37,8 @@ final class MiddlewarePipelineTest extends TestCase
         );
 
         self::assertSame('ok', $response->body);
-        self::assertSame('yes', $response->headers['X-First']);
-        self::assertSame('yes', $response->headers['X-Second']);
+        self::assertSame('yes', $response->headers['x-first']);
+        self::assertSame('yes', $response->headers['x-second']);
     }
 
     public function testPipeReturnsNewPipeline(): void
@@ -65,8 +65,8 @@ final class MiddlewarePipelineTest extends TestCase
         );
 
         self::assertNotSame($original, $extended);
-        self::assertArrayNotHasKey('X-Destination', $responseOriginal->headers);
-        self::assertSame('yes', $responseExtended->headers['X-Destination']);
+        self::assertArrayNotHasKey('x-destination', $responseOriginal->headers);
+        self::assertSame('yes', $responseExtended->headers['x-destination']);
     }
 
     public function testPipeManyAppendsMiddlewaresInOrder(): void
@@ -93,7 +93,7 @@ final class MiddlewarePipelineTest extends TestCase
             static fn (Request $request): Response => Response::text('ok'),
         );
 
-        self::assertSame('1', $response->headers['X-One']);
-        self::assertSame('2', $response->headers['X-Two']);
+        self::assertSame('1', $response->headers['x-one']);
+        self::assertSame('2', $response->headers['x-two']);
     }
 }

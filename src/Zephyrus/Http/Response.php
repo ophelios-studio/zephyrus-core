@@ -51,14 +51,14 @@ final readonly class Response
     public static function text(string $body, int $status = 200): self
     {
         return new self($body, $status, [
-            'Content-Type' => 'text/plain; charset=utf-8',
+            'content-type' => 'text/plain; charset=utf-8',
         ]);
     }
 
     public static function html(string $body, int $status = 200): self
     {
         return new self($body, $status, [
-            'Content-Type' => 'text/html; charset=utf-8',
+            'content-type' => 'text/html; charset=utf-8',
         ]);
     }
 
@@ -71,7 +71,7 @@ final readonly class Response
             body: (string) json_encode($payload, JSON_THROW_ON_ERROR),
             status: $status,
             headers: [
-                'Content-Type' => 'application/json; charset=utf-8',
+                'content-type' => 'application/json; charset=utf-8',
             ],
         );
     }
@@ -86,20 +86,20 @@ final readonly class Response
      * header and the body is empty.
      *
      * Default status is 302 Found. Common alternatives:
-     *   301  Moved Permanently  — cacheable, only safe to use for GET/HEAD.
-     *   303  See Other          — redirect-after-POST pattern.
-     *   307  Temporary Redirect — preserves request method.
-     *   308  Permanent Redirect — preserves request method, cacheable.
+     *   301  Moved Permanently  -- cacheable, only safe to use for GET/HEAD.
+     *   303  See Other          -- redirect-after-POST pattern.
+     *   307  Temporary Redirect -- preserves request method.
+     *   308  Permanent Redirect -- preserves request method, cacheable.
      */
     public static function redirect(string $url, int $status = 302): self
     {
-        return new self(body: '', status: $status, headers: ['Location' => $url]);
+        return new self(body: '', status: $status, headers: ['location' => $url]);
     }
 
     public function withHeader(string $name, string $value): self
     {
         $headers = $this->headers;
-        $headers[$name] = $value;
+        $headers[strtolower($name)] = $value;
 
         return new self(
             body: $this->body,
@@ -113,17 +113,22 @@ final readonly class Response
      */
     public function withHeaders(array $headers): self
     {
+        $normalized = $this->headers;
+        foreach ($headers as $name => $value) {
+            $normalized[strtolower($name)] = $value;
+        }
+
         return new self(
             body: $this->body,
             status: $this->status,
-            headers: [...$this->headers, ...$headers],
+            headers: $normalized,
         );
     }
 
     public function withoutHeader(string $name): self
     {
         $headers = $this->headers;
-        unset($headers[$name]);
+        unset($headers[strtolower($name)]);
 
         return new self(
             body: $this->body,

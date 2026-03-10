@@ -47,8 +47,8 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(308, $response->status);
-        self::assertStringContainsString('Location', implode("\n", $response->toHeaderLines()));
-        self::assertContains('Location: https://example.com/page', $response->toHeaderLines());
+        self::assertStringContainsString('location', implode("\n", $response->toHeaderLines()));
+        self::assertContains('location: https://example.com/page', $response->toHeaderLines());
     }
 
     public function testHttpRedirectPreservesPath(): void
@@ -57,7 +57,7 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(308, $response->status);
-        self::assertContains('Location: https://example.com/a/b/c?q=1&r=2', $response->toHeaderLines());
+        self::assertContains('location: https://example.com/a/b/c?q=1&r=2', $response->toHeaderLines());
     }
 
     public function testHttpRedirectStripsPort80(): void
@@ -66,7 +66,7 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(308, $response->status);
-        self::assertContains('Location: https://example.com/secure-me', $response->toHeaderLines());
+        self::assertContains('location: https://example.com/secure-me', $response->toHeaderLines());
     }
 
     public function testHttpRedirectStripsPort80WithoutPath(): void
@@ -75,7 +75,7 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(308, $response->status);
-        self::assertContains('Location: https://example.com', $response->toHeaderLines());
+        self::assertContains('location: https://example.com', $response->toHeaderLines());
     }
 
     public function testHttpRedirectPreservesNonStandardPort(): void
@@ -84,7 +84,7 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(308, $response->status);
-        self::assertContains('Location: https://example.com:8080/path', $response->toHeaderLines());
+        self::assertContains('location: https://example.com:8080/path', $response->toHeaderLines());
     }
 
     // ── inner handler not called on redirect ──────────────────────────────────

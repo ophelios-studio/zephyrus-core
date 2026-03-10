@@ -55,8 +55,8 @@ final class RouteDispatcherTest extends TestCase
         $response = $dispatcher->dispatch(Request::fromArray('GET', '/users/42?expand=roles'));
 
         self::assertSame(200, $response->status);
-        self::assertSame('on', $response->headers['X-Pipeline']);
-        self::assertSame('auth', $response->headers['X-Route-Middleware']);
+        self::assertSame('on', $response->headers['x-pipeline']);
+        self::assertSame('auth', $response->headers['x-route-middleware']);
         self::assertStringContainsString('"handler":"UserController@show"', $response->body);
         self::assertStringContainsString('"id":"42"', $response->body);
         self::assertStringContainsString('"requestId":"42"', $response->body);

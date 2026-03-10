@@ -512,7 +512,7 @@ final class HandlerResolverTest extends TestCase
         $response = $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
 
         self::assertSame('result', $response->body);
-        self::assertSame('decorated', $response->headers['X-After']);
+        self::assertSame('decorated', $response->headers['x-after']);
     }
 
     public function testBothHooksApplied(): void
@@ -522,7 +522,7 @@ final class HandlerResolverTest extends TestCase
 
         // before() passes, handler runs, after() stamps header.
         self::assertSame('dispatched', $response->body);
-        self::assertSame('yes', $response->headers['X-After']);
+        self::assertSame('yes', $response->headers['x-after']);
     }
 
     public function testBothHooksBeforeShortCircuitsSkipsAfter(): void
@@ -535,7 +535,7 @@ final class HandlerResolverTest extends TestCase
         // before() short-circuits → after() never decorates, no X-After header.
         self::assertSame(401, $response->status);
         self::assertSame('halted', $response->body);
-        self::assertArrayNotHasKey('X-After', $response->headers);
+        self::assertArrayNotHasKey('x-after', $response->headers);
     }
 
     // -- toFloat paths --------------------------------------------------------

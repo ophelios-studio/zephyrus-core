@@ -32,11 +32,11 @@ final class CompositeAuthGuardTest extends TestCase
         self::assertFalse($guard->isAuthorized(Request::fromArray('GET', '/secure')));
     }
 
-    public function testAnyAuthGuardWithNoGuardsRejectsByDefault(): void
+    public function testAnyAuthGuardWithNoGuardsThrowsException(): void
     {
-        $guard = new AnyAuthGuard([]);
-
-        self::assertFalse($guard->isAuthorized(Request::fromArray('GET', '/secure')));
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('At least one auth guard must be provided.');
+        new AnyAuthGuard([]);
     }
 
     public function testAllAuthGuardAllowsWhenAllGuardsPass(): void
@@ -59,11 +59,11 @@ final class CompositeAuthGuardTest extends TestCase
         self::assertFalse($guard->isAuthorized(Request::fromArray('GET', '/secure')));
     }
 
-    public function testAllAuthGuardWithNoGuardsAllowsByDefault(): void
+    public function testAllAuthGuardWithNoGuardsThrowsException(): void
     {
-        $guard = new AllAuthGuard([]);
-
-        self::assertTrue($guard->isAuthorized(Request::fromArray('GET', '/secure')));
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('At least one auth guard must be provided.');
+        new AllAuthGuard([]);
     }
 
     private function guard(bool $allowed): AuthGuardInterface

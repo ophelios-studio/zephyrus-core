@@ -73,7 +73,7 @@ final class HttpKernelTest extends TestCase
         ));
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
     }
 }

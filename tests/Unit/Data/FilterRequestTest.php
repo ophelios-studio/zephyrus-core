@@ -91,7 +91,7 @@ final class FilterRequestTest extends TestCase
             'email' => 'users.email',
         ]);
 
-        self::assertSame(' WHERE users.status = :f_status AND users.email = :f_email', $where['sql']);
+        self::assertSame(' WHERE "users"."status" = :f_status AND "users"."email" = :f_email', $where['sql']);
         self::assertSame([
             ':f_status' => 'active',
             ':f_email' => 'a@example.com',
@@ -106,7 +106,7 @@ final class FilterRequestTest extends TestCase
             'status' => 'users.status',
         ]);
 
-        self::assertSame(' WHERE users.status = :f_status', $where['sql']);
+        self::assertSame(' WHERE "users"."status" = :f_status', $where['sql']);
         self::assertSame([':f_status' => 'active'], $where['params']);
     }
 
@@ -120,7 +120,7 @@ final class FilterRequestTest extends TestCase
             'status' => 'users.status',
         ]);
 
-        self::assertSame(' WHERE users.status IN (:f_status_0, :f_status_1)', $where['sql']);
+        self::assertSame(' WHERE "users"."status" IN (:f_status_0, :f_status_1)', $where['sql']);
         self::assertSame([
             ':f_status_0' => 'active',
             ':f_status_1' => 'pending',
@@ -137,7 +137,7 @@ final class FilterRequestTest extends TestCase
             'deleted_at' => 'users.deleted_at',
         ]);
 
-        self::assertSame(' WHERE users.deleted_at IS NULL', $where['sql']);
+        self::assertSame(' WHERE "users"."deleted_at" IS NULL', $where['sql']);
         self::assertSame([], $where['params']);
     }
 
@@ -165,7 +165,7 @@ final class FilterRequestTest extends TestCase
             'deleted_at' => 'users.deleted_at',
         ]);
 
-        self::assertSame(' WHERE users.deleted_at IS NULL', $where['sql']);
+        self::assertSame(' WHERE "users"."deleted_at" IS NULL', $where['sql']);
         self::assertSame([], $where['params']);
     }
 
@@ -179,7 +179,7 @@ final class FilterRequestTest extends TestCase
             'status' => 'users.status',
         ]);
 
-        self::assertSame(' WHERE (users.status IN (:f_status_0, :f_status_1) OR users.status IS NULL)', $where['sql']);
+        self::assertSame(' WHERE ("users"."status" IN (:f_status_0, :f_status_1) OR "users"."status" IS NULL)', $where['sql']);
         self::assertSame([
             ':f_status_0' => 'active',
             ':f_status_1' => 'pending',
@@ -196,7 +196,7 @@ final class FilterRequestTest extends TestCase
             'user.status' => 'users.status',
         ]);
 
-        self::assertSame(' WHERE users.status = :f_user_status', $where['sql']);
+        self::assertSame(' WHERE "users"."status" = :f_user_status', $where['sql']);
         self::assertSame([':f_user_status' => 'active'], $where['params']);
     }
 

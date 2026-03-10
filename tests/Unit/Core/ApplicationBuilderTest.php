@@ -499,7 +499,7 @@ final class ApplicationBuilderTest extends TestCase
 
         $response = $app->handle(Request::fromArray('GET', '/health'));
 
-        self::assertSame('yes', $response->headers['X-App']);
+        self::assertSame('yes', $response->headers['x-app']);
     }
 }
 

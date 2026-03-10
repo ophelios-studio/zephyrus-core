@@ -28,7 +28,7 @@ final class Database
     }
 
     /**
-     * Build a Database instance by opening a MySQL/MariaDB connection described
+     * Build a Database instance by opening a PostgreSQL connection described
      * by the given DatabaseConfig.
      *
      * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
@@ -40,16 +40,14 @@ final class Database
     public static function fromConfig(DatabaseConfig $config, ?callable $pdoFactory = null): self
     {
         $dsn = sprintf(
-            'mysql:host=%s;port=%d;dbname=%s;charset=%s',
+            'pgsql:host=%s;port=%d;dbname=%s',
             $config->host,
             $config->port,
             $config->database,
-            $config->charset,
         );
 
         $options = [
             PDO::ATTR_PERSISTENT => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES {$config->charset}",
         ];
 
         $factory = $pdoFactory ?? static fn (string $dsn, string $username, string $password, array $options): PDO
@@ -61,7 +59,16 @@ final class Database
             throw DatabaseException::connectionFailed($dsn, $e->getMessage());
         }
 
-        return new self($pdo);
+        $db = new self($pdo);
+
+        // Set client encoding for the connection.
+        try {
+            $db->query(sprintf("SET client_encoding TO '%s'", $config->charset));
+        } catch (DatabaseException) {
+            // Encoding already set or not critical; proceed.
+        }
+
+        return $db;
     }
 
     /**
@@ -115,9 +122,12 @@ final class Database
      */
     public function selectValue(string $sql, array $params = [], mixed $default = null): mixed
     {
-        $value = $this->query($sql, $params)->fetchColumn();
+        $row = $this->query($sql, $params)->fetch();
+        if ($row === false) {
+            return $default;
+        }
 
-        return $value === false ? $default : $value;
+        return reset($row);
     }
 
     /**

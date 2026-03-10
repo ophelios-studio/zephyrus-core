@@ -162,7 +162,7 @@ final class KernelBuilderTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/ping'));
 
         self::assertSame(200, $response->status);
-        self::assertSame('yes', $response->headers['X-Global']);
+        self::assertSame('yes', $response->headers['x-global']);
     }
 
     public function testMultipleGlobalMiddlewaresAreAllApplied(): void
@@ -177,8 +177,8 @@ final class KernelBuilderTest extends TestCase
 
         $response = $kernel->handle(Request::fromArray('GET', '/ping'));
 
-        self::assertSame('a', $response->headers['X-First']);
-        self::assertSame('b', $response->headers['X-Second']);
+        self::assertSame('a', $response->headers['x-first']);
+        self::assertSame('b', $response->headers['x-second']);
     }
 
     // -- Named route middleware -----------------------------------------------
@@ -198,7 +198,7 @@ final class KernelBuilderTest extends TestCase
 
         $response = $kernel->handle(Request::fromArray('GET', '/protected'));
 
-        self::assertSame('passed', $response->headers['X-Auth']);
+        self::assertSame('passed', $response->headers['x-auth']);
     }
 
     public function testUnknownNamedRouteMiddlewareYields500Response(): void

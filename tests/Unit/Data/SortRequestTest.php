@@ -14,7 +14,21 @@ final class SortRequestTest extends TestCase
     {
         $sort = new SortRequest('name', 'desc');
 
-        self::assertSame(' ORDER BY name DESC', $sort->toSql());
+        self::assertSame(' ORDER BY "name" DESC', $sort->toSql());
+    }
+
+    public function testToSqlQuotesDottedColumnName(): void
+    {
+        $sort = new SortRequest('users.name', 'ASC');
+
+        self::assertSame(' ORDER BY "users"."name" ASC', $sort->toSql());
+    }
+
+    public function testDirectionIsNormalizedToUppercase(): void
+    {
+        $sort = new SortRequest('name', 'desc');
+
+        self::assertSame('DESC', $sort->direction);
     }
 
     public function testFromArrayReadsSnakeAndCamelKeys(): void

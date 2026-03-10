@@ -56,7 +56,7 @@ final class HttpKernelWiringTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/status'));
 
         self::assertSame(200, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertStringContainsString('"up":true', $response->body);
     }
 
@@ -157,7 +157,7 @@ final class HttpKernelWiringTest extends TestCase
         $response = $kernel->handle(Request::fromArray('POST', '/resource'));
 
         self::assertSame(405, $response->status);
-        self::assertNotEmpty($response->headers['Allow']);
+        self::assertNotEmpty($response->headers['allow']);
     }
 
     public function testRouteNotFoundWithJsonAcceptYieldsJsonError(): void
@@ -169,7 +169,7 @@ final class HttpKernelWiringTest extends TestCase
         );
 
         self::assertSame(404, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertStringContainsString('"status":404', $response->body);
     }
 
@@ -189,8 +189,8 @@ final class HttpKernelWiringTest extends TestCase
         $r1 = $kernel->handle(Request::fromArray('GET', '/ping'));
         $r2 = $kernel->handle(Request::fromArray('GET', '/status'));
 
-        self::assertSame('Zephyrus', $r1->headers['X-Powered-By']);
-        self::assertSame('Zephyrus', $r2->headers['X-Powered-By']);
+        self::assertSame('Zephyrus', $r1->headers['x-powered-by']);
+        self::assertSame('Zephyrus', $r2->headers['x-powered-by']);
     }
 
     public function testGlobalMiddlewareOrderIsPreserved(): void
@@ -266,7 +266,7 @@ final class HttpKernelWiringTest extends TestCase
 
         $response = $kernel->handle(Request::fromArray('GET', '/admin'));
 
-        self::assertSame('ok', $response->headers['X-Auth']);
+        self::assertSame('ok', $response->headers['x-auth']);
     }
 
     public function testNamedRouteMiddlewareOnlyAppliesOnMatchingRoutes(): void
@@ -283,8 +283,8 @@ final class HttpKernelWiringTest extends TestCase
         $publicResponse  = $kernel->handle(Request::fromArray('GET', '/public'));
         $privateResponse = $kernel->handle(Request::fromArray('GET', '/private'));
 
-        self::assertArrayNotHasKey('X-Auth', $publicResponse->headers);
-        self::assertSame('ok', $privateResponse->headers['X-Auth']);
+        self::assertArrayNotHasKey('x-auth', $publicResponse->headers);
+        self::assertSame('ok', $privateResponse->headers['x-auth']);
     }
 
     public function testGlobalAndRouteMiddlewareBothApply(): void
@@ -300,8 +300,8 @@ final class HttpKernelWiringTest extends TestCase
 
         $response = $kernel->handle(Request::fromArray('GET', '/guarded'));
 
-        self::assertSame('yes', $response->headers['X-Global']);
-        self::assertSame('ok', $response->headers['X-Auth']);
+        self::assertSame('yes', $response->headers['x-global']);
+        self::assertSame('ok', $response->headers['x-auth']);
     }
 
     public function testAuthGuardMiddlewareRejectsUnauthorizedRequest(): void
@@ -608,8 +608,8 @@ final class HttpKernelWiringTest extends TestCase
         $dashboard = $kernel->handle(Request::fromArray('GET', '/admin/dashboard'));
         $users     = $kernel->handle(Request::fromArray('GET', '/admin/users'));
 
-        self::assertSame('ok', $dashboard->headers['X-Auth']);
-        self::assertSame('ok', $users->headers['X-Auth']);
+        self::assertSame('ok', $dashboard->headers['x-auth']);
+        self::assertSame('ok', $users->headers['x-auth']);
     }
 
     public function testMiddlewareGroupAliasAppliesToGroupedRoutes(): void
@@ -632,13 +632,13 @@ final class HttpKernelWiringTest extends TestCase
         $home = $kernel->handle(Request::fromArray('GET', '/app/home'));
         $profile = $kernel->handle(Request::fromArray('GET', '/app/profile'));
 
-        self::assertSame('on', $home->headers['X-Session']);
-        self::assertSame('ok', $home->headers['X-Csrf']);
-        self::assertArrayNotHasKey('X-Auth', $home->headers);
+        self::assertSame('on', $home->headers['x-session']);
+        self::assertSame('ok', $home->headers['x-csrf']);
+        self::assertArrayNotHasKey('x-auth', $home->headers);
 
-        self::assertSame('on', $profile->headers['X-Session']);
-        self::assertSame('ok', $profile->headers['X-Csrf']);
-        self::assertSame('ok', $profile->headers['X-Auth']);
+        self::assertSame('on', $profile->headers['x-session']);
+        self::assertSame('ok', $profile->headers['x-csrf']);
+        self::assertSame('ok', $profile->headers['x-auth']);
     }
 
     // -- Controller lifecycle hooks -------------------------------------------
@@ -682,7 +682,7 @@ final class HttpKernelWiringTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/stamp'));
 
         self::assertSame(200, $response->status);
-        self::assertSame('stamped', $response->headers['X-Stamp']);
+        self::assertSame('stamped', $response->headers['x-stamp']);
     }
 
     public function testAfterHookDoesNotRunWhenBeforeShortCircuits(): void
@@ -698,7 +698,7 @@ final class HttpKernelWiringTest extends TestCase
         );
 
         self::assertSame(403, $response->status);
-        self::assertArrayNotHasKey('X-Combo', $response->headers);
+        self::assertArrayNotHasKey('x-combo', $response->headers);
     }
 
     public function testAfterHookRunsWhenBeforePassesThrough(): void
@@ -711,7 +711,7 @@ final class HttpKernelWiringTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/combo'));
 
         self::assertSame(200, $response->status);
-        self::assertSame('yes', $response->headers['X-Combo']);
+        self::assertSame('yes', $response->headers['x-combo']);
     }
 
     // -- Container integration (withContainer) --------------------------------

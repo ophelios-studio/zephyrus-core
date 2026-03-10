@@ -103,7 +103,8 @@ final class FilterRequest implements \JsonSerializable
                 continue;
             }
 
-            $column = $columnMap[$key];
+            $rawColumn = $columnMap[$key];
+            $column = self::quoteIdentifier($rawColumn);
             $baseParamName = $this->normalizeParameterName($key);
 
             if ($value === null) {
@@ -169,6 +170,18 @@ final class FilterRequest implements \JsonSerializable
             'sql' => ' WHERE ' . implode(' AND ', $parts),
             'params' => $params,
         ];
+    }
+
+    /**
+     * Quote a column identifier for safe SQL interpolation (PostgreSQL double-quote style).
+     * Supports dot-separated qualified names (e.g. "table"."column").
+     */
+    private static function quoteIdentifier(string $identifier): string
+    {
+        return implode('.', array_map(
+            static fn (string $part): string => '"' . str_replace('"', '""', $part) . '"',
+            explode('.', $identifier),
+        ));
     }
 
     private function normalizeParameterName(string $key): string

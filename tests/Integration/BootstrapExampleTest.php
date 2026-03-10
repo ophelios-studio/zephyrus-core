@@ -59,7 +59,7 @@ final class BootstrapExampleTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/health'));
 
         self::assertSame(200, $response->status);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertStringContainsString('"status":"ok"', $response->body);
         self::assertStringContainsString('"framework":"zephyrus2"', $response->body);
         self::assertStringContainsString('"message":"System healthy"', $response->body);
@@ -85,10 +85,10 @@ final class BootstrapExampleTest extends TestCase
         $r1 = $kernel->handle(Request::fromArray('GET', '/health'));
         $r2 = $kernel->handle(Request::fromArray('GET', '/articles'));
 
-        self::assertArrayHasKey('X-Request-Id', $r1->headers);
-        self::assertArrayHasKey('X-Request-Id', $r2->headers);
+        self::assertArrayHasKey('x-request-id', $r1->headers);
+        self::assertArrayHasKey('x-request-id', $r2->headers);
         // Each request gets its own unique ID.
-        self::assertNotSame($r1->headers['X-Request-Id'], $r2->headers['X-Request-Id']);
+        self::assertNotSame($r1->headers['x-request-id'], $r2->headers['x-request-id']);
     }
 
     // -- Auth guard (before() hook) -------------------------------------------
@@ -122,7 +122,7 @@ final class BootstrapExampleTest extends TestCase
             Request::fromArray('GET', '/users', headers: ['X-Api-Key' => 'key']),
         );
 
-        self::assertSame('DENY', $response->headers['X-Frame-Options']);
+        self::assertSame('DENY', $response->headers['x-frame-options']);
     }
 
     // -- Route parameter injection (int $id) ----------------------------------
@@ -153,7 +153,7 @@ final class BootstrapExampleTest extends TestCase
         );
 
         self::assertSame(303, $response->status);
-        self::assertStringContainsString('/users/', $response->headers['Location']);
+        self::assertStringContainsString('/users/', $response->headers['location']);
     }
 
     // -- Public controller — no auth guard ------------------------------------
@@ -192,7 +192,7 @@ final class BootstrapExampleTest extends TestCase
         $response = $kernel->handle(Request::fromArray('DELETE', '/health'));
 
         self::assertSame(405, $response->status);
-        self::assertNotEmpty($response->headers['Allow']);
+        self::assertNotEmpty($response->headers['allow']);
     }
 
     // -- Response::redirect() factory (standalone) ----------------------------
@@ -202,7 +202,7 @@ final class BootstrapExampleTest extends TestCase
         $response = Response::redirect('/login');
 
         self::assertSame(302, $response->status);
-        self::assertSame('/login', $response->headers['Location']);
+        self::assertSame('/login', $response->headers['location']);
         self::assertSame('', $response->body);
     }
 
@@ -211,7 +211,7 @@ final class BootstrapExampleTest extends TestCase
         $response = Response::redirect('/new', 301);
 
         self::assertSame(301, $response->status);
-        self::assertSame('/new', $response->headers['Location']);
+        self::assertSame('/new', $response->headers['location']);
     }
 
     public function testRedirectResponseCanBeDecoratedWithAdditionalHeaders(): void
@@ -220,8 +220,8 @@ final class BootstrapExampleTest extends TestCase
             ->withHeader('X-Reason', 'post-complete');
 
         self::assertSame(303, $response->status);
-        self::assertSame('/dashboard', $response->headers['Location']);
-        self::assertSame('post-complete', $response->headers['X-Reason']);
+        self::assertSame('/dashboard', $response->headers['location']);
+        self::assertSame('post-complete', $response->headers['x-reason']);
     }
 }
 
