@@ -780,6 +780,46 @@ final class HttpKernelWiringTest extends TestCase
         self::assertSame(200, $response->status);
         self::assertSame('Howdy', $response->body);
     }
+
+    // -- Custom exception handler via KernelBuilder ---------------------------
+
+    public function testWithExceptionHandlerOverridesBuiltIn404(): void
+    {
+        $router = (new Router())
+            ->get('/exists', WiringPingController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withExceptionHandler(
+                \Zephyrus\Routing\Exception\RouteNotFoundException::class,
+                fn (\Throwable $e, ?Request $r) => Response::text('Custom 404 page', 404),
+            )
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/does-not-exist'));
+
+        self::assertSame(404, $response->status);
+        self::assertSame('Custom 404 page', $response->body);
+    }
+
+    public function testWithExceptionHandlerDoesNotAffectMatchedRoutes(): void
+    {
+        $router = (new Router())
+            ->get('/ping', WiringPingController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withExceptionHandler(
+                \Zephyrus\Routing\Exception\RouteNotFoundException::class,
+                fn (\Throwable $e, ?Request $r) => Response::text('Custom 404', 404),
+            )
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/ping'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('pong', $response->body);
+    }
 }
 
 // ===========================================================================
