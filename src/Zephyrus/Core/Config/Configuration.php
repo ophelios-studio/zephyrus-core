@@ -234,6 +234,7 @@ final readonly class Configuration
                 'allowedHosts' => $this->security->allowedHosts,
                 'maxBodySize' => $this->security->maxBodySize,
                 'trustedProxies' => $this->security->trustedProxies,
+                'encryptionKey' => $this->security->encryptionKey,
             ],
             'localization' => [
                 'locale' => $this->localization->locale,
