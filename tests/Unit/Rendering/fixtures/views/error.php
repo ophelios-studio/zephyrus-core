@@ -1,3 +1,2 @@
 <?php
-/** @noinspection PhpUndefinedVariableInspection */
-echo $undefined->method();
+throw new RuntimeException('render failure fixture');
