@@ -24,7 +24,7 @@ use NumberFormatter;
  *   $fmt->ordinal(3);            // "3rd"
  *   $fmt->spellOut(42);          // "forty-two"
  *   $fmt->date(new DateTime());  // "Mar 10, 2026"
- *   $fmt->relativeTime(time() - 3600);  // "1 hour ago"
+ *   $fmt->timeago(time() - 3600);  // "1 hour ago"
  *   $fmt->filesize(1536000);     // "1.5 MB"
  *   $fmt->duration(7830);        // "2h 10m 30s"
  *   $fmt->list(['a', 'b', 'c']); // "a, b, and c"
@@ -243,7 +243,7 @@ final class Formatter
      *
      * @param mixed $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
      */
-    public function relativeTime(mixed $datetime): string
+    public function timeago(mixed $datetime): string
     {
         $timestamp = $this->toTimestamp($datetime);
         $now = time();
