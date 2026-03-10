@@ -47,6 +47,31 @@ final class Uploader
     }
 
     /**
+     * Persists multiple uploads in order and returns their relative paths.
+     *
+     * Each file is validated and stored via `store()`, sharing the same optional
+     * `$subDirectory`.  Processing stops immediately on the first failure and the
+     * same `UploadException` is re-thrown, leaving previously stored files in place.
+     *
+     * @param list<FileUpload> $files       Uploads to persist.
+     * @param string|null      $subDirectory Optional sub-path applied to every file.
+     *
+     * @return list<string> Relative paths in the same order as `$files`.
+     *
+     * @throws UploadException On the first validation or move failure.
+     */
+    public function storeMany(array $files, ?string $subDirectory = null): array
+    {
+        $paths = [];
+
+        foreach ($files as $file) {
+            $paths[] = $this->store($file, $subDirectory);
+        }
+
+        return $paths;
+    }
+
+    /**
      * Persists the upload to disk and returns its path relative to `$destinationRoot`.
      *
      * @param FileUpload  $file         The validated upload value object.

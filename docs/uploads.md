@@ -38,6 +38,21 @@ $relativePath = $uploader->store($upload, 'avatars');
 
 `store()` returns a path relative to the destination root (for example `avatars/a1b2c3...jpg`).
 
+### Batch upload
+
+`storeMany()` accepts a `list<FileUpload>` and returns paths in the same order.
+Processing stops on the first failure and throws the same `UploadException` as `store()`.
+
+```php
+/** @var list<string> $paths */
+$paths = $uploader->storeMany(
+    FileUpload::listFromPhpArray($_FILES['photos']),
+    'photos',
+);
+```
+
+An empty list returns an empty array immediately.
+
 ## Request normalization
 
 `Request::fromGlobals()` normalizes `$_FILES` entries into `FileUpload` objects:

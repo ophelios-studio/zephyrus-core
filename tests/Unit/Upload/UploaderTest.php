@@ -385,4 +385,60 @@ final class UploaderTest extends TestCase
             $this->removeDir($dest);
         }
     }
+
+    // ------------------------------------------------------------------
+    // storeMany
+    // ------------------------------------------------------------------
+
+    public function test_store_many_returns_empty_array_for_empty_input(): void
+    {
+        $dest = $this->makeTempDir();
+
+        $paths = (new Uploader($dest))->storeMany([]);
+
+        self::assertSame([], $paths);
+
+        $this->removeDir($dest);
+    }
+
+    public function test_store_many_returns_relative_paths_in_order(): void
+    {
+        $dest = $this->makeTempDir();
+        $files = [
+            $this->makeValidFile('a.txt'),
+            $this->makeValidFile('b.txt'),
+            $this->makeValidFile('c.txt'),
+        ];
+
+        $paths = (new Uploader($dest))->storeMany($files, 'batch');
+
+        self::assertCount(3, $paths);
+        foreach ($paths as $path) {
+            self::assertStringStartsWith('batch/', $path);
+            self::assertFileExists($dest . '/' . $path);
+        }
+        self::assertCount(3, array_unique($paths), 'Each file should receive a unique name.');
+
+        $this->removeDir($dest);
+    }
+
+    public function test_store_many_stops_on_first_invalid_file(): void
+    {
+        $dest = $this->makeTempDir();
+        $files = [
+            $this->makeValidFile('first.txt'),
+            new FileUpload('bad.txt', '', '/tmp/bad', 0, UPLOAD_ERR_NO_FILE),
+            $this->makeValidFile('third.txt'),
+        ];
+
+        try {
+            $this->expectException(UploadException::class);
+            (new Uploader($dest))->storeMany($files);
+        } finally {
+            // Only the first file should have been written.
+            $stored = glob($dest . '/*');
+            self::assertCount(1, $stored ?: []);
+            $this->removeDir($dest);
+        }
+    }
 }
