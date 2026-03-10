@@ -24,6 +24,7 @@ final class SecurityConfigTest extends TestCase
         self::assertSame([], $config->csrfExceptions);
         self::assertSame([], $config->allowedHosts);
         self::assertSame(2_097_152, $config->maxBodySize);
+        self::assertNull($config->encryptionKey);
     }
 
     // -------------------------------------------------------------------------
@@ -217,5 +218,106 @@ final class SecurityConfigTest extends TestCase
         ]);
 
         self::assertSame(['10.0.0.1', '10.0.0.2'], $config->trustedProxies);
+    }
+
+    // ── Nested CSRF section ──────────────────────────────────────────
+
+    public function testNestedCsrfSectionTakesPrecedenceOverFlatKeys(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'csrfEnabled' => true,  // flat key
+            'csrf' => [
+                'enabled' => false,  // nested takes precedence
+                'autoHtml' => true,
+                'exceptions' => ['#^/api/#'],
+            ],
+        ]);
+
+        self::assertFalse($config->csrfEnabled);
+        self::assertTrue($config->csrfAutoHtml);
+        self::assertSame(['#^/api/#'], $config->csrfExceptions);
+    }
+
+    public function testNestedCsrfSectionWithSnakeCaseKeys(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'csrf' => [
+                'auto_html' => true,
+            ],
+        ]);
+
+        self::assertTrue($config->csrfAutoHtml);
+    }
+
+    public function testNestedCsrfSectionDefaults(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'csrf' => [],
+        ]);
+
+        self::assertTrue($config->csrfEnabled);
+        self::assertFalse($config->csrfAutoHtml);
+        self::assertSame([], $config->csrfExceptions);
+    }
+
+    // ── Encryption section ──────────────────────────────────────────
+
+    public function testEncryptionKeyFromNestedSection(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'encryption' => [
+                'key' => 'my-secret-key-32-chars-long!!!!!',
+            ],
+        ]);
+
+        self::assertSame('my-secret-key-32-chars-long!!!!!', $config->encryptionKey);
+    }
+
+    public function testEncryptionKeyFromFlatCamelCase(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'encryptionKey' => 'flat-key-value',
+        ]);
+
+        self::assertSame('flat-key-value', $config->encryptionKey);
+    }
+
+    public function testEncryptionKeyFromFlatSnakeCase(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'encryption_key' => 'snake-key-value',
+        ]);
+
+        self::assertSame('snake-key-value', $config->encryptionKey);
+    }
+
+    public function testEncryptionKeyNestedTakesPrecedenceOverFlat(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'encryptionKey' => 'flat-value',
+            'encryption' => [
+                'key' => 'nested-value',
+            ],
+        ]);
+
+        self::assertSame('nested-value', $config->encryptionKey);
+    }
+
+    public function testEncryptionKeyEmptyStringNormalizesToNull(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'encryption' => ['key' => '   '],
+        ]);
+
+        self::assertNull($config->encryptionKey);
+    }
+
+    public function testEncryptionKeyNonStringNormalizesToNull(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'encryption' => ['key' => 123],
+        ]);
+
+        self::assertNull($config->encryptionKey);
     }
 }
