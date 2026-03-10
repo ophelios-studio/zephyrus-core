@@ -236,10 +236,11 @@ final readonly class Configuration
                 'trustedProxies' => $this->security->trustedProxies,
             ],
             'localization' => [
-                'defaultLocale' => $this->localization->defaultLocale,
+                'locale' => $this->localization->locale,
                 'supportedLocales' => $this->localization->supportedLocales,
-                'jsonLocalePaths' => $this->localization->jsonLocalePaths,
-                'jsonExtension' => $this->localization->jsonExtension,
+                'localePath' => $this->localization->localePath,
+                'timezone' => $this->localization->timezone,
+                'currency' => $this->localization->currency,
             ],
             'database' => $this->database === null ? null : [
                 'driver'   => $this->database->driver,

@@ -47,24 +47,24 @@ final class ApplicationBuilderTest extends TestCase
         ApplicationBuilder::create()
             ->withConfigurationArray([
                 'localization' => [
-                    'default_locale' => 'en',
+                    'locale' => 'en',
                     'supported_locales' => ['en', 'fr'],
-                    'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+                    'locale_path' => __DIR__ . '/../../Fixtures/locales',
                 ],
             ])
             ->build();
 
         self::assertNotNull(App::getConfiguration());
-        self::assertSame('en', config('localization', 'defaultLocale'));
+        self::assertSame('en', config('localization', 'locale'));
     }
 
     public function testFromConfigurationFactoryAppliesLocalizationConfig(): void
     {
         $builder = ApplicationBuilder::fromConfiguration(Configuration::fromArray([
             'localization' => [
-                'defaultLocale' => 'en',
+                'locale' => 'en',
                 'supportedLocales' => ['en', 'fr'],
-                'jsonLocalePaths' => [__DIR__ . '/../../Fixtures/locales'],
+                'localePath' => __DIR__ . '/../../Fixtures/locales',
             ],
         ]));
 
@@ -80,9 +80,9 @@ final class ApplicationBuilderTest extends TestCase
     {
         $app = ApplicationBuilder::fromConfigurationArray([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+                'locale_path' => __DIR__ . '/../../Fixtures/locales',
             ],
         ])->build();
 
@@ -96,9 +96,9 @@ final class ApplicationBuilderTest extends TestCase
     {
         $app = ApplicationBuilder::buildFromConfiguration(Configuration::fromArray([
             'localization' => [
-                'defaultLocale' => 'en',
+                'locale' => 'en',
                 'supportedLocales' => ['en', 'fr'],
-                'jsonLocalePaths' => [__DIR__ . '/../../Fixtures/locales'],
+                'localePath' => __DIR__ . '/../../Fixtures/locales',
             ],
         ]));
 
@@ -113,9 +113,9 @@ final class ApplicationBuilderTest extends TestCase
     {
         $app = ApplicationBuilder::buildFromConfigurationArray([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+                'locale_path' => __DIR__ . '/../../Fixtures/locales',
             ],
         ]);
 
@@ -231,14 +231,13 @@ final class ApplicationBuilderTest extends TestCase
         self::assertSame('Hola Alice', $app->trans('greet', ['name' => 'Alice'], 'es'));
     }
 
-    public function testWithLocalizationConfigWiresJsonPathsAndSupportedLocales(): void
+    public function testWithLocalizationConfigWiresLocalePathAndSupportedLocales(): void
     {
         $app = ApplicationBuilder::create()
             ->withLocalizationConfig(new LocalizationConfig(
-                defaultLocale: 'en',
+                locale: 'en',
                 supportedLocales: ['en', 'fr'],
-                jsonLocalePaths: [__DIR__ . '/../../Fixtures/locales'],
-                jsonExtension: 'json',
+                localePath: __DIR__ . '/../../Fixtures/locales',
             ))
             ->build();
 
@@ -248,14 +247,12 @@ final class ApplicationBuilderTest extends TestCase
         ));
     }
 
-    public function testWithLocalizationConfigWithoutPathsUsesRequestedDefaultLocale(): void
+    public function testWithLocalizationConfigWithoutPathUsesRequestedDefaultLocale(): void
     {
         $app = ApplicationBuilder::create()
             ->withLocalizationConfig(new LocalizationConfig(
-                defaultLocale: 'fr',
+                locale: 'fr',
                 supportedLocales: [],
-                jsonLocalePaths: [],
-                jsonExtension: 'json',
             ))
             ->build();
 
@@ -267,9 +264,9 @@ final class ApplicationBuilderTest extends TestCase
     {
         $configuration = Configuration::fromArray([
             'localization' => [
-                'defaultLocale' => 'en',
+                'locale' => 'en',
                 'supportedLocales' => ['en', 'fr'],
-                'jsonLocalePaths' => [__DIR__ . '/../../Fixtures/locales'],
+                'localePath' => __DIR__ . '/../../Fixtures/locales',
             ],
         ]);
 
@@ -288,9 +285,9 @@ final class ApplicationBuilderTest extends TestCase
         $app = ApplicationBuilder::create()
             ->withConfigurationArray([
                 'localization' => [
-                    'default_locale' => 'en',
+                    'locale' => 'en',
                     'supported_locales' => ['en', 'fr'],
-                    'json_locale_paths' => [__DIR__ . '/../../Fixtures/locales'],
+                    'locale_path' => __DIR__ . '/../../Fixtures/locales',
                 ],
             ])
             ->build();
@@ -307,9 +304,9 @@ final class ApplicationBuilderTest extends TestCase
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($path, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 
@@ -333,9 +330,9 @@ final class ApplicationBuilderTest extends TestCase
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($path, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 
@@ -357,9 +354,9 @@ final class ApplicationBuilderTest extends TestCase
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($path, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 
@@ -383,9 +380,9 @@ final class ApplicationBuilderTest extends TestCase
 
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 
@@ -418,9 +415,9 @@ final class ApplicationBuilderTest extends TestCase
 
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 
@@ -449,9 +446,9 @@ final class ApplicationBuilderTest extends TestCase
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 
@@ -477,9 +474,9 @@ final class ApplicationBuilderTest extends TestCase
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
             'localization' => [
-                'default_locale' => 'en',
+                'locale' => 'en',
                 'supported_locales' => ['en', 'fr'],
-                'json_locale_paths' => [$fixturePath],
+                'locale_path' => $fixturePath,
             ],
         ], true) . ";\n");
 

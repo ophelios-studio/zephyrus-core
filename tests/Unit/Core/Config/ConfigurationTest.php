@@ -39,7 +39,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame($defaults->application->environment,   $empty->application->environment);
         self::assertSame($defaults->session->name,              $empty->session->name);
         self::assertSame($defaults->security->csrfEnabled,      $empty->security->csrfEnabled);
-        self::assertSame($defaults->localization->defaultLocale, $empty->localization->defaultLocale);
+        self::assertSame($defaults->localization->locale,        $empty->localization->locale);
         self::assertNull($empty->database);
     }
 
@@ -124,23 +124,30 @@ final class ConfigurationTest extends TestCase
     {
         $config = Configuration::fromArray([
             'localization' => [
-                'defaultLocale' => 'fr',
+                'locale' => 'fr',
                 'supportedLocales' => ['fr', 'en'],
-                'jsonLocalePaths' => ['/app/locales'],
+                'localePath' => '/app/locales',
+                'timezone' => 'America/Montreal',
+                'currency' => 'CAD',
             ],
         ]);
 
-        self::assertSame('fr', $config->localization->defaultLocale);
+        self::assertSame('fr', $config->localization->locale);
         self::assertSame(['fr', 'en'], $config->localization->supportedLocales);
-        self::assertSame(['/app/locales'], $config->localization->jsonLocalePaths);
+        self::assertSame('/app/locales', $config->localization->localePath);
+        self::assertSame('America/Montreal', $config->localization->timezone);
+        self::assertSame('CAD', $config->localization->currency);
     }
 
     public function testMissingLocalizationSectionUsesDefaults(): void
     {
         $config = Configuration::fromArray([]);
 
-        self::assertSame('en', $config->localization->defaultLocale);
+        self::assertSame('en', $config->localization->locale);
         self::assertSame([], $config->localization->supportedLocales);
+        self::assertNull($config->localization->localePath);
+        self::assertSame('UTC', $config->localization->timezone);
+        self::assertNull($config->localization->currency);
     }
 
     // -------------------------------------------------------------------------
@@ -183,7 +190,7 @@ final class ConfigurationTest extends TestCase
                 'csrfAutoHtml' => true,
                 'csrfExceptions' => ['#^/webhooks/#'],
             ],
-            'localization' => ['defaultLocale' => 'fr', 'supportedLocales' => ['fr', 'en']],
+            'localization' => ['locale' => 'fr', 'supportedLocales' => ['fr', 'en']],
             'database'    => ['database' => 'mydb', 'username' => 'user', 'password' => 's3cr3t'],
         ]);
 
@@ -194,7 +201,7 @@ final class ConfigurationTest extends TestCase
         self::assertTrue($config->security->forceHttps);
         self::assertTrue($config->security->csrfAutoHtml);
         self::assertSame(['#^/webhooks/#'], $config->security->csrfExceptions);
-        self::assertSame('fr', $config->localization->defaultLocale);
+        self::assertSame('fr', $config->localization->locale);
         self::assertSame('mydb', $config->database->database);
         self::assertSame('s3cr3t', $config->database->password);
     }
@@ -228,20 +235,20 @@ final class ConfigurationTest extends TestCase
     {
         $this->expectException(ConfigurationException::class);
 
-        Configuration::fromArray(['localization' => ['defaultLocale' => '']]);
+        Configuration::fromArray(['localization' => ['locale' => '']]);
     }
 
     public function testFromFileLoadsAndHydratesConfiguration(): void
     {
         $path = sys_get_temp_dir() . '/zephyrus-config-' . uniqid('', true) . '.php';
         file_put_contents($path, "<?php\nreturn " . var_export([
-            'localization' => ['defaultLocale' => 'fr'],
+            'localization' => ['locale' => 'fr'],
             'security' => ['forceHttps' => true],
         ], true) . ";\n");
 
         try {
             $config = Configuration::fromFile($path);
-            self::assertSame('fr', $config->localization->defaultLocale);
+            self::assertSame('fr', $config->localization->locale);
             self::assertTrue($config->security->forceHttps);
         } finally {
             @unlink($path);
@@ -276,9 +283,9 @@ final class ConfigurationTest extends TestCase
         file_put_contents($basePath, "<?php\nreturn " . var_export([
             'application' => ['environment' => 'production', 'debug' => false],
             'localization' => [
-                'defaultLocale' => 'en',
+                'locale' => 'en',
                 'supportedLocales' => ['en'],
-                'jsonLocalePaths' => ['/base/locales'],
+                'localePath' => '/base/locales',
             ],
         ], true) . ";\n");
 
@@ -286,7 +293,7 @@ final class ConfigurationTest extends TestCase
             'application' => ['debug' => true],
             'localization' => [
                 'supportedLocales' => ['en', 'fr'],
-                'jsonLocalePaths' => ['/env/locales'],
+                'localePath' => '/env/locales',
             ],
         ], true) . ";\n");
 
@@ -296,7 +303,7 @@ final class ConfigurationTest extends TestCase
             self::assertTrue($config->application->debug);
             self::assertSame('production', $config->application->environment->value);
             self::assertSame(['en', 'fr'], $config->localization->supportedLocales);
-            self::assertSame(['/env/locales'], $config->localization->jsonLocalePaths);
+            self::assertSame('/env/locales', $config->localization->localePath);
         } finally {
             @unlink($basePath);
             @unlink($envPath);
@@ -307,7 +314,7 @@ final class ConfigurationTest extends TestCase
     {
         $config = Configuration::fromArray([
             'application' => ['environment' => 'production', 'debug' => false],
-            'localization' => ['defaultLocale' => 'fr', 'supportedLocales' => ['fr']],
+            'localization' => ['locale' => 'fr', 'supportedLocales' => ['fr']],
         ]);
 
         $export = $config->toArray();
@@ -319,21 +326,23 @@ final class ConfigurationTest extends TestCase
         self::assertArrayHasKey('database', $export);
         self::assertArrayHasKey('csrfAutoHtml', $export['security']);
         self::assertArrayHasKey('csrfExceptions', $export['security']);
-        self::assertSame('fr', $export['localization']['defaultLocale']);
+        self::assertSame('fr', $export['localization']['locale']);
+        self::assertArrayHasKey('timezone', $export['localization']);
+        self::assertArrayHasKey('currency', $export['localization']);
     }
 
     public function testFromOptionalFilesSkipsMissingOverrides(): void
     {
         $basePath = sys_get_temp_dir() . '/zephyrus-config-optional-base-' . uniqid('', true) . '.php';
         file_put_contents($basePath, "<?php\nreturn " . var_export([
-            'localization' => ['defaultLocale' => 'fr'],
+            'localization' => ['locale' => 'fr'],
         ], true) . ";\n");
 
         $missingPath = sys_get_temp_dir() . '/zephyrus-config-optional-missing-' . uniqid('', true) . '.php';
 
         try {
             $config = Configuration::fromOptionalFiles([$basePath, $missingPath]);
-            self::assertSame('fr', $config->localization->defaultLocale);
+            self::assertSame('fr', $config->localization->locale);
         } finally {
             @unlink($basePath);
         }
@@ -371,12 +380,12 @@ final class ConfigurationTest extends TestCase
     {
         $path = sys_get_temp_dir() . '/zephyrus-config-dedupe-' . uniqid('', true) . '.php';
         file_put_contents($path, "<?php\nreturn " . var_export([
-            'localization' => ['defaultLocale' => 'fr'],
+            'localization' => ['locale' => 'fr'],
         ], true) . ";\n");
 
         try {
             $config = Configuration::fromFiles([$path, $path]);
-            self::assertSame('fr', $config->localization->defaultLocale);
+            self::assertSame('fr', $config->localization->locale);
         } finally {
             @unlink($path);
         }
