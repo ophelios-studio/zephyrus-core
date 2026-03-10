@@ -18,7 +18,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     {
         $path = $this->resolvePath($locale);
 
-        if (!is_file($path)) {
+        if ($path === null) {
             return [];
         }
 
@@ -44,9 +44,24 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
         return $flat;
     }
 
-    private function resolvePath(string $locale): string
+    private function resolvePath(string $locale): ?string
     {
-        return rtrim($this->basePath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $locale . '.' . ltrim($this->extension, '.');
+        $base = rtrim($this->basePath, DIRECTORY_SEPARATOR);
+        $extension = ltrim($this->extension, '.');
+
+        $candidates = [$locale];
+        if (str_contains($locale, '-')) {
+            $candidates[] = str_replace('-', '_', $locale);
+        }
+
+        foreach (array_values(array_unique($candidates)) as $candidate) {
+            $path = $base . DIRECTORY_SEPARATOR . $candidate . '.' . $extension;
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /**
