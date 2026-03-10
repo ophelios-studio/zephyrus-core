@@ -1,0 +1,18 @@
+application:
+  environment: development
+  debug: true
+
+session:
+  name: ZEPHYRUS_SID
+  lifetime: 3600
+
+security:
+  force_https: false
+  csrf_enabled: true
+
+database:
+  host: localhost
+  port: 5432
+  database: test_db
+  username: test_user
+  password: secret123

@@ -1,0 +1,5 @@
+application:
+  debug: false
+
+database:
+  host: production-host

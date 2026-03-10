@@ -1,0 +1,10 @@
+application:
+  environment: testing
+
+custom_app:
+  name: TestApp
+  version: "2.0"
+  maintenance: false
+  features:
+    dark_mode: true
+    api_rate_limit: 100

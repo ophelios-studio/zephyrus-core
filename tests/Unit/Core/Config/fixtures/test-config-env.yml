@@ -1,0 +1,5 @@
+database:
+  host: !env TEST_DB_HOST, fallback-host
+  database: !env TEST_DB_NAME
+  username: !env TEST_DB_USER, default_user
+  password: !env TEST_DB_PASS, default_pass
