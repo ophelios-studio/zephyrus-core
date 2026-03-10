@@ -15,6 +15,9 @@
     "tracy/tracy": "^2.10",
     "phpmailer/phpmailer": "^6.9"
   },
+  "suggest": {
+    "ext-apcu": "For locale catalog caching via CachedLocaleLoader"
+  },
   "require-dev": {
     "phpunit/phpunit": "^11.0"
   },
