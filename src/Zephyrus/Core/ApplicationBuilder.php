@@ -245,8 +245,10 @@ final class ApplicationBuilder
     /**
      * Apply a full typed Configuration tree to application bootstrap.
      *
-     * Current wiring scope:
-     * - localization section
+     * Wiring scope:
+     * - localization section (locale loader, supported locales)
+     * - application.debug → Tracy Debugger initialization (in build())
+     * - localization.timezone → date_default_timezone_set() (in build())
      */
     public function withConfiguration(Configuration $configuration): self
     {
@@ -296,6 +298,16 @@ final class ApplicationBuilder
 
     public function build(): Application
     {
+        // Wire debug mode (Tracy) and timezone before anything else
+        if ($this->configuration !== null) {
+            DebugIntegration::initialize($this->configuration->application->debug);
+
+            $timezone = $this->configuration->localization->timezone;
+            if ($timezone !== '') {
+                date_default_timezone_set($timezone);
+            }
+        }
+
         $loader = $this->localeLoader ?? new class implements LocaleLoaderInterface {
             public function load(string $locale): array
             {

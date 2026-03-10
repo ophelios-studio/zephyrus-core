@@ -514,6 +514,23 @@ final class ApplicationBuilderTest extends TestCase
         }
     }
 
+    public function testBuildWiresTimezoneFromConfiguration(): void
+    {
+        $originalTz = date_default_timezone_get();
+
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray([
+                    'localization' => ['timezone' => 'America/New_York'],
+                ])
+                ->build();
+
+            self::assertSame('America/New_York', date_default_timezone_get());
+        } finally {
+            date_default_timezone_set($originalTz);
+        }
+    }
+
     public function testWithMiddlewarePassesThroughToKernelBuilder(): void
     {
         $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health');
