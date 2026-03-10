@@ -256,62 +256,62 @@ final class FormatterTest extends TestCase
 
     public function testRelativeTimeSecondsAgo(): void
     {
-        $result = $this->formatter->relativeTime(time() - 30);
+        $result = $this->formatter->timeago(time() - 30);
         self::assertStringContainsString('second', $result);
         self::assertStringContainsString('ago', $result);
     }
 
     public function testRelativeTimeMinutesAgo(): void
     {
-        $result = $this->formatter->relativeTime(time() - 300);
+        $result = $this->formatter->timeago(time() - 300);
         self::assertStringContainsString('minute', $result);
         self::assertStringContainsString('ago', $result);
     }
 
     public function testRelativeTimeHoursAgo(): void
     {
-        $result = $this->formatter->relativeTime(time() - 7200);
+        $result = $this->formatter->timeago(time() - 7200);
         self::assertStringContainsString('hour', $result);
         self::assertStringContainsString('ago', $result);
     }
 
     public function testRelativeTimeDaysAgo(): void
     {
-        $result = $this->formatter->relativeTime(time() - 172800);
+        $result = $this->formatter->timeago(time() - 172800);
         self::assertStringContainsString('day', $result);
         self::assertStringContainsString('ago', $result);
     }
 
     public function testRelativeTimeFuture(): void
     {
-        $result = $this->formatter->relativeTime(time() + 7200);
+        $result = $this->formatter->timeago(time() + 7200);
         self::assertStringContainsString('in', $result);
         self::assertStringContainsString('hour', $result);
     }
 
     public function testRelativeTimeJustNow(): void
     {
-        $result = $this->formatter->relativeTime(time());
+        $result = $this->formatter->timeago(time());
         self::assertSame('just now', $result);
     }
 
     public function testRelativeTimeAcceptsDateTime(): void
     {
         $past = new DateTime('-2 hours');
-        $result = $this->formatter->relativeTime($past);
+        $result = $this->formatter->timeago($past);
         self::assertStringContainsString('hour', $result);
     }
 
     public function testRelativeTimeMonthsAgo(): void
     {
-        $result = $this->formatter->relativeTime(time() - (60 * 86400));
+        $result = $this->formatter->timeago(time() - (60 * 86400));
         self::assertStringContainsString('month', $result);
         self::assertStringContainsString('ago', $result);
     }
 
     public function testRelativeTimeYearsAgo(): void
     {
-        $result = $this->formatter->relativeTime(time() - (400 * 86400));
+        $result = $this->formatter->timeago(time() - (400 * 86400));
         self::assertStringContainsString('year', $result);
         self::assertStringContainsString('ago', $result);
     }
