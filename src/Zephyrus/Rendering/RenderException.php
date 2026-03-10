@@ -11,7 +11,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  *
  * Covers missing templates, engine misconfiguration, and render-time errors.
  */
-class RenderException extends ZephyrusRuntimeException
+final class RenderException extends ZephyrusRuntimeException
 {
     /**
      * The template could not be found on disk.

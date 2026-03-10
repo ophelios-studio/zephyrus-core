@@ -9,7 +9,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 /**
  * Thrown when a cryptographic operation fails.
  */
-class CryptographyException extends ZephyrusRuntimeException
+final class CryptographyException extends ZephyrusRuntimeException
 {
     public static function encryptionFailed(?\Throwable $previous = null): self
     {
@@ -37,5 +37,10 @@ class CryptographyException extends ZephyrusRuntimeException
     public static function hashFailed(string $reason, ?\Throwable $previous = null): self
     {
         return new self(sprintf('Hashing failed: %s', $reason), previous: $previous);
+    }
+
+    public static function invalidArgument(string $reason): self
+    {
+        return new self($reason);
     }
 }

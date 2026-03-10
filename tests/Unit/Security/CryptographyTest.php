@@ -261,7 +261,7 @@ final class CryptographyTest extends TestCase
 
     public function testRandomStringThrowsForZeroLength(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(CryptographyException::class);
         Cryptography::randomString(0);
     }
 
@@ -273,7 +273,7 @@ final class CryptographyTest extends TestCase
 
     public function testRandomBytesThrowsForZeroLength(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(CryptographyException::class);
         Cryptography::randomBytes(0);
     }
 
@@ -292,7 +292,7 @@ final class CryptographyTest extends TestCase
 
     public function testRandomHexThrowsForZeroLength(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(CryptographyException::class);
         Cryptography::randomHex(0);
     }
 

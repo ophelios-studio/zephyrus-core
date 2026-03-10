@@ -9,7 +9,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 /**
  * Thrown when a mail operation fails.
  */
-class MailerException extends ZephyrusRuntimeException
+final class MailerException extends ZephyrusRuntimeException
 {
     public static function sendFailed(string $reason, ?\Throwable $previous = null): self
     {

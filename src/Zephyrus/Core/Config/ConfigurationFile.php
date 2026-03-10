@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-use RuntimeException;
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 
@@ -88,20 +87,13 @@ final class ConfigurationFile
         }
 
         if (!is_file($this->path)) {
-            throw new RuntimeException(sprintf(
-                'Configuration file not found: %s',
-                $this->path,
-            ));
+            throw ConfigurationException::fileNotFound($this->path);
         }
 
         try {
             $parsed = Yaml::parseFile($this->path, Yaml::PARSE_CUSTOM_TAGS);
         } catch (\Throwable $e) {
-            throw new RuntimeException(sprintf(
-                'Failed to parse configuration file [%s]: %s',
-                $this->path,
-                $e->getMessage(),
-            ), previous: $e);
+            throw ConfigurationException::parseFailed($this->path, $e);
         }
 
         if (!is_array($parsed)) {

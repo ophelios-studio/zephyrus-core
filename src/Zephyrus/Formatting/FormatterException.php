@@ -9,7 +9,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 /**
  * Thrown when a formatting operation fails.
  */
-class FormatterException extends ZephyrusRuntimeException
+final class FormatterException extends ZephyrusRuntimeException
 {
     public static function formattingFailed(string $type, string $reason, ?\Throwable $previous = null): self
     {

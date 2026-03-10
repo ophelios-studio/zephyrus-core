@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Bootstrap;
 
-use RuntimeException;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
+use Zephyrus\Core\Config\ConfigurationException;
 
 final class ApplicationBootstrap
 {
@@ -115,12 +115,12 @@ final class ApplicationBootstrap
     {
         $required = $paths['required'] ?? '';
         if (!is_string($required) || trim($required) === '') {
-            throw new RuntimeException('Resolved config paths must include a non-empty "required" entry.');
+            throw ConfigurationException::invalidPath('Resolved config paths must include a non-empty "required" entry.');
         }
 
         $optional = $paths['optional'] ?? [];
         if (!is_array($optional)) {
-            throw new RuntimeException('Resolved config "optional" entry must be an array of file paths.');
+            throw ConfigurationException::invalidPath('Resolved config "optional" entry must be an array of file paths.');
         }
 
         return self::fromConfigFiles(
@@ -142,7 +142,7 @@ final class ApplicationBootstrap
     ): array {
         $configDir = trim($configDir);
         if ($configDir === '') {
-            throw new RuntimeException('Config directory must not be empty.');
+            throw ConfigurationException::invalidPath('Config directory must not be empty.');
         }
 
         $baseName = self::normalizeBaseName($baseName);
@@ -180,11 +180,11 @@ final class ApplicationBootstrap
     {
         $baseName = trim($baseName);
         if ($baseName === '') {
-            throw new RuntimeException('Config base name must not be empty.');
+            throw ConfigurationException::invalidPath('Config base name must not be empty.');
         }
 
         if (str_contains($baseName, '/') || str_contains($baseName, '\\')) {
-            throw new RuntimeException('Config base name must not contain path separators.');
+            throw ConfigurationException::invalidPath('Config base name must not contain path separators.');
         }
 
         return $baseName;
@@ -200,16 +200,16 @@ final class ApplicationBootstrap
 
         foreach ($optionalNames as $index => $name) {
             if (!is_string($name)) {
-                throw new RuntimeException(sprintf('Optional config name at index %d must be a string.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Optional config name at index %d must be a string.', $index));
             }
 
             $trimmed = trim($name);
             if ($trimmed === '') {
-                throw new RuntimeException(sprintf('Optional config name at index %d must not be empty.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Optional config name at index %d must not be empty.', $index));
             }
 
             if (str_contains($trimmed, '/') || str_contains($trimmed, '\\')) {
-                throw new RuntimeException(sprintf('Optional config name at index %d must not contain path separators.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Optional config name at index %d must not contain path separators.', $index));
             }
 
             if (in_array($trimmed, $normalized, true)) {
@@ -232,12 +232,12 @@ final class ApplicationBootstrap
 
         foreach ($optional as $index => $path) {
             if (!is_string($path)) {
-                throw new RuntimeException(sprintf('Resolved optional path at index %d must be a string.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Resolved optional path at index %d must be a string.', $index));
             }
 
             $trimmed = trim($path);
             if ($trimmed === '') {
-                throw new RuntimeException(sprintf('Resolved optional path at index %d must not be empty.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Resolved optional path at index %d must not be empty.', $index));
             }
 
             $normalized[] = $trimmed;

@@ -7,7 +7,7 @@ namespace Zephyrus\Core\Config;
 use Zephyrus\Exceptions\ZephyrusException;
 
 /**
- * Thrown when a configuration section receives an invalid or missing required value.
+ * Thrown when configuration loading, parsing, or validation fails.
  *
  * Use the named factory methods for consistent, contextual messages.
  */
@@ -31,5 +31,37 @@ final class ConfigurationException extends ZephyrusException
                 $reason,
             ),
         );
+    }
+
+    public static function fileNotFound(string $path): self
+    {
+        return new self(sprintf('Configuration file not found: %s', $path));
+    }
+
+    public static function loadFailed(string $path, ?\Throwable $previous = null): self
+    {
+        return new self(
+            sprintf('Configuration file failed to load: %s', $path),
+            previous: $previous,
+        );
+    }
+
+    public static function parseFailed(string $path, ?\Throwable $previous = null): self
+    {
+        $message = sprintf('Failed to parse configuration file [%s]', $path);
+        if ($previous !== null) {
+            $message .= ': ' . $previous->getMessage();
+        }
+        return new self($message, previous: $previous);
+    }
+
+    public static function invalidFormat(string $path, string $reason = 'must return an array'): self
+    {
+        return new self(sprintf('Configuration file %s: %s', $path, $reason));
+    }
+
+    public static function invalidPath(string $reason): self
+    {
+        return new self($reason);
     }
 }

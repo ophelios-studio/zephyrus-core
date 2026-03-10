@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Unit\Localization;
 
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 use Zephyrus\Localization\JsonLocaleLoader;
+use Zephyrus\Localization\LocalizationException;
 
 final class JsonLocaleLoaderTest extends TestCase
 {
@@ -36,7 +36,7 @@ final class JsonLocaleLoaderTest extends TestCase
         $loader = new JsonLocaleLoader($tempDir);
 
         try {
-            $this->expectException(RuntimeException::class);
+            $this->expectException(LocalizationException::class);
             $this->expectExceptionMessage('Invalid JSON in locale file');
             $loader->load('en');
         } finally {

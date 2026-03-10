@@ -255,7 +255,7 @@ final class Cryptography
     public static function randomString(int $length): string
     {
         if ($length < 1) {
-            throw new \InvalidArgumentException('Length must be at least 1.');
+            throw CryptographyException::invalidArgument('Length must be at least 1.');
         }
 
         // Generate enough random bytes, encode, and truncate to requested length.
@@ -274,7 +274,7 @@ final class Cryptography
     public static function randomBytes(int $length): string
     {
         if ($length < 1) {
-            throw new \InvalidArgumentException('Length must be at least 1.');
+            throw CryptographyException::invalidArgument('Length must be at least 1.');
         }
 
         return random_bytes($length);
@@ -289,7 +289,7 @@ final class Cryptography
     public static function randomHex(int $length): string
     {
         if ($length < 1) {
-            throw new \InvalidArgumentException('Length must be at least 1.');
+            throw CryptographyException::invalidArgument('Length must be at least 1.');
         }
 
         $bytesNeeded = (int) ceil($length / 2);
