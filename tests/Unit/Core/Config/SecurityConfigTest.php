@@ -166,4 +166,56 @@ final class SecurityConfigTest extends TestCase
 
         SecurityConfig::fromArray(['csrfExceptions' => [123]]);
     }
+
+    // ── Trusted Proxies ──────────────────────────────────────────────
+
+    public function testTrustedProxiesDefaultsToEmpty(): void
+    {
+        $config = SecurityConfig::fromArray([]);
+        self::assertSame([], $config->trustedProxies);
+    }
+
+    public function testTrustedProxiesAcceptsCamelCase(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trustedProxies' => ['127.0.0.1', '10.0.0.0/8'],
+        ]);
+
+        self::assertSame(['127.0.0.1', '10.0.0.0/8'], $config->trustedProxies);
+    }
+
+    public function testTrustedProxiesAcceptsSnakeCase(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trusted_proxies' => ['127.0.0.1'],
+        ]);
+
+        self::assertSame(['127.0.0.1'], $config->trustedProxies);
+    }
+
+    public function testTrustedProxiesWildcard(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trustedProxies' => ['*'],
+        ]);
+
+        self::assertSame(['*'], $config->trustedProxies);
+    }
+
+    public function testThrowsForEmptyStringInTrustedProxies(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('trustedProxies');
+
+        SecurityConfig::fromArray(['trustedProxies' => ['127.0.0.1', '']]);
+    }
+
+    public function testTrustedProxiesAreReindexed(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trustedProxies' => [5 => '10.0.0.1', 10 => '10.0.0.2'],
+        ]);
+
+        self::assertSame(['10.0.0.1', '10.0.0.2'], $config->trustedProxies);
+    }
 }

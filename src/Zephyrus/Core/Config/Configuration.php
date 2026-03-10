@@ -236,6 +236,7 @@ final readonly class Configuration
                 'csrfExceptions' => $this->security->csrfExceptions,
                 'allowedHosts' => $this->security->allowedHosts,
                 'maxBodySize' => $this->security->maxBodySize,
+                'trustedProxies' => $this->security->trustedProxies,
             ],
             'localization' => [
                 'defaultLocale' => $this->localization->defaultLocale,

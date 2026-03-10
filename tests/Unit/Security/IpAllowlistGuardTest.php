@@ -18,10 +18,10 @@ final class IpAllowlistGuardTest extends TestCase
         self::assertTrue($guard->isAuthorized($request));
     }
 
-    public function testAuthorizesFromForwardedHeaderFirstIp(): void
+    public function testAuthorizesFromClientIpProperty(): void
     {
         $guard = new IpAllowlistGuard(['10.0.0.2']);
-        $request = Request::fromArray('GET', '/secure', headers: ['X-Forwarded-For' => '10.0.0.2, 10.0.0.3']);
+        $request = new Request(method: 'GET', uri: '/secure', clientIp: '10.0.0.2');
 
         self::assertTrue($guard->isAuthorized($request));
     }
