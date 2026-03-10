@@ -166,9 +166,9 @@ final class ApplicationBuilder
         return $clone;
     }
 
-    public function withJsonLocales(string $basePath, string $defaultLocale = 'en', string $extension = 'json'): self
+    public function withJsonLocales(string $basePath, string $defaultLocale = 'en'): self
     {
-        return $this->withLocaleLoader(new JsonLocaleLoader($basePath, $extension), $defaultLocale);
+        return $this->withLocaleLoader(new JsonLocaleLoader($basePath), $defaultLocale);
     }
 
     /**
@@ -177,10 +177,10 @@ final class ApplicationBuilder
      *
      * @param string[] $basePaths
      */
-    public function withJsonLocaleLayers(array $basePaths, string $defaultLocale = 'en', string $extension = 'json'): self
+    public function withJsonLocaleLayers(array $basePaths, string $defaultLocale = 'en'): self
     {
         $loaders = array_values(array_map(
-            static fn (string $basePath): JsonLocaleLoader => new JsonLocaleLoader($basePath, $extension),
+            static fn (string $basePath): JsonLocaleLoader => new JsonLocaleLoader($basePath),
             $basePaths,
         ));
 
@@ -225,11 +225,10 @@ final class ApplicationBuilder
     {
         $builder = $this;
 
-        if ($config->jsonLocalePaths !== []) {
-            $builder = $builder->withJsonLocaleLayers(
-                basePaths: $config->jsonLocalePaths,
-                defaultLocale: $config->defaultLocale,
-                extension: $config->jsonExtension,
+        if ($config->localePath !== null) {
+            $builder = $builder->withJsonLocales(
+                basePath: $config->localePath,
+                defaultLocale: $config->locale,
             );
         } else {
             $builder = $builder->withLocaleLoader(new class implements LocaleLoaderInterface {
@@ -237,7 +236,7 @@ final class ApplicationBuilder
                 {
                     return [];
                 }
-            }, $config->defaultLocale);
+            }, $config->locale);
         }
 
         return $builder->withSupportedLocales($config->supportedLocales);

@@ -175,11 +175,11 @@ final class FunctionsTest extends TestCase
     public function testConfigReturnsLocalizationSection(): void
     {
         $config = Configuration::fromArray([
-            'localization' => ['defaultLocale' => 'fr'],
+            'localization' => ['locale' => 'fr'],
         ]);
         App::setConfiguration($config);
 
-        self::assertSame('fr', config('localization', 'defaultLocale'));
+        self::assertSame('fr', config('localization', 'locale'));
     }
 
     // ─── session() ────────────────────────────────────────────────────

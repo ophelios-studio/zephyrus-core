@@ -7,22 +7,23 @@ namespace Zephyrus\Core\Config;
 /**
  * Immutable localization bootstrap config.
  *
- * - defaultLocale: translator default locale token.
+ * - locale: translator default locale token (e.g. 'en', 'fr-CA').
  * - supportedLocales: explicit locale allowlist for request negotiation.
- * - jsonLocalePaths: ordered JSON catalog directories (last path wins on key conflict).
- * - jsonExtension: locale file extension (default "json").
+ * - localePath: single directory containing locale subdirectories or files (optional).
+ * - timezone: application timezone, applied via date_default_timezone_set() (default 'UTC').
+ * - currency: default currency code for Formatter::money() (nullable).
  */
 final readonly class LocalizationConfig
 {
     /**
      * @param string[] $supportedLocales
-     * @param string[] $jsonLocalePaths
      */
     public function __construct(
-        public string $defaultLocale,
+        public string $locale,
         public array $supportedLocales,
-        public array $jsonLocalePaths,
-        public string $jsonExtension = 'json',
+        public ?string $localePath = null,
+        public string $timezone = 'UTC',
+        public ?string $currency = null,
     ) {
     }
 
@@ -31,32 +32,66 @@ final readonly class LocalizationConfig
      */
     public static function fromArray(array $values): self
     {
-        $defaultLocale = trim((string) ($values['defaultLocale'] ?? $values['default_locale'] ?? 'en'));
+        // Support both new ('locale') and legacy ('defaultLocale', 'default_locale') keys
+        $locale = trim((string) ($values['locale'] ?? $values['defaultLocale'] ?? $values['default_locale'] ?? 'en'));
         $supportedLocales = (array) ($values['supportedLocales'] ?? $values['supported_locales'] ?? []);
-        $jsonLocalePaths = (array) ($values['jsonLocalePaths'] ?? $values['json_locale_paths'] ?? []);
-        $jsonExtension = trim((string) ($values['jsonExtension'] ?? $values['json_extension'] ?? 'json'));
 
-        if ($defaultLocale === '') {
-            throw ConfigurationException::invalidValue('localization', 'defaultLocale', $defaultLocale, 'must be non-empty');
+        // Support both new ('localePath') and legacy ('jsonLocalePaths', 'json_locale_paths') keys.
+        // Legacy accepted an array; we take the last non-empty path from it.
+        $localePath = self::resolveLocalePath($values);
+
+        $timezone = trim((string) ($values['timezone'] ?? 'UTC'));
+        $currency = isset($values['currency']) ? trim((string) $values['currency']) : null;
+
+        if ($locale === '') {
+            throw ConfigurationException::invalidValue('localization', 'locale', $locale, 'must be non-empty');
         }
 
-        if ($jsonExtension === '') {
-            throw ConfigurationException::invalidValue('localization', 'jsonExtension', $jsonExtension, 'must be non-empty');
+        if ($timezone === '') {
+            throw ConfigurationException::invalidValue('localization', 'timezone', $timezone, 'must be non-empty');
+        }
+
+        if ($currency === '') {
+            $currency = null;
         }
 
         $supportedLocales = array_values(array_filter(array_map(static function (mixed $locale): string {
             return strtolower(trim((string) $locale));
         }, $supportedLocales), static fn (string $locale): bool => $locale !== ''));
 
-        $jsonLocalePaths = array_values(array_filter(array_map(static function (mixed $path): string {
-            return trim((string) $path);
-        }, $jsonLocalePaths), static fn (string $path): bool => $path !== ''));
+        $localePath = ($localePath !== null && $localePath !== '') ? $localePath : null;
 
         return new self(
-            defaultLocale: strtolower($defaultLocale),
+            locale: strtolower($locale),
             supportedLocales: $supportedLocales,
-            jsonLocalePaths: $jsonLocalePaths,
-            jsonExtension: ltrim(strtolower($jsonExtension), '.'),
+            localePath: $localePath,
+            timezone: $timezone,
+            currency: $currency,
         );
+    }
+
+    /**
+     * Resolve the locale path from new or legacy config keys.
+     *
+     * @param array<string, mixed> $values
+     */
+    private static function resolveLocalePath(array $values): ?string
+    {
+        // New key takes precedence
+        if (isset($values['localePath']) || isset($values['locale_path'])) {
+            $path = trim((string) ($values['localePath'] ?? $values['locale_path'] ?? ''));
+            return $path !== '' ? $path : null;
+        }
+
+        // Legacy: jsonLocalePaths / json_locale_paths (array) — take last non-empty
+        $legacyPaths = $values['jsonLocalePaths'] ?? $values['json_locale_paths'] ?? null;
+        if ($legacyPaths !== null && is_array($legacyPaths)) {
+            $filtered = array_values(array_filter(array_map(static function (mixed $p): string {
+                return trim((string) $p);
+            }, $legacyPaths), static fn (string $p): bool => $p !== ''));
+            return $filtered !== [] ? end($filtered) : null;
+        }
+
+        return null;
     }
 }
