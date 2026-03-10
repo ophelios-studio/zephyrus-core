@@ -8,17 +8,19 @@ namespace Zephyrus\Core\Config;
  * Immutable configuration section for HTTP security behaviour.
  *
  * Defaults are conservative yet development-friendly:
- *   - forceHttps:   false (must be explicitly enabled in production)
- *   - csrfEnabled:  true  (on by default)
- *   - csrfAutoHtml: false (disabled by default)
- *   - csrfExceptions: []  (no excluded paths by default)
- *   - allowedHosts: []    (empty = any host; populate for production lockdown)
- *   - maxBodySize:  2097152 (2 MB; 0 = unlimited)
+ *   - forceHttps:     false (must be explicitly enabled in production)
+ *   - csrfEnabled:    true  (on by default)
+ *   - csrfAutoHtml:   false (disabled by default)
+ *   - csrfExceptions: []    (no excluded paths by default)
+ *   - allowedHosts:   []    (empty = any host; populate for production lockdown)
+ *   - maxBodySize:    2097152 (2 MB; 0 = unlimited)
+ *   - trustedProxies: []    (empty = trust no proxies; forwarded headers ignored)
  *
  * Validation rules:
  *   - maxBodySize must be 0 or greater.
  *   - Each allowedHost entry must be a non-empty string.
  *   - Each csrfExceptions entry must be a non-empty string.
+ *   - Each trustedProxies entry must be a non-empty string (IP or CIDR).
  */
 final readonly class SecurityConfig
 {
@@ -29,6 +31,9 @@ final readonly class SecurityConfig
      * @param string[] $csrfExceptions  Regex path patterns excluded from CSRF validation.
      * @param string[] $allowedHosts    Restrict accepted Host headers; empty allows all.
      * @param int      $maxBodySize     Maximum request body in bytes (0 = unlimited).
+     * @param string[] $trustedProxies  IP addresses/CIDR ranges whose forwarded headers
+     *                                  are trusted. Empty = trust no proxies (safe default).
+     *                                  Use ['*'] to trust all proxies (development only).
      */
     public function __construct(
         public bool $forceHttps,
@@ -37,6 +42,7 @@ final readonly class SecurityConfig
         public array $csrfExceptions,
         public array $allowedHosts,
         public int $maxBodySize,
+        public array $trustedProxies = [],
     ) {
     }
 
@@ -64,6 +70,7 @@ final readonly class SecurityConfig
         );
         $allowedHosts = (array) ($values['allowedHosts'] ?? $values['allowed_hosts'] ?? []);
         $maxBodySize = (int) ($values['maxBodySize'] ?? $values['max_body_size'] ?? 2_097_152);
+        $trustedProxies = (array) ($values['trustedProxies'] ?? $values['trusted_proxies'] ?? []);
 
         if ($maxBodySize < 0) {
             throw ConfigurationException::invalidValue(
@@ -96,6 +103,17 @@ final readonly class SecurityConfig
             }
         }
 
+        foreach ($trustedProxies as $i => $proxy) {
+            if (!is_string($proxy) || trim($proxy) === '') {
+                throw ConfigurationException::invalidValue(
+                    'security',
+                    "trustedProxies[$i]",
+                    $proxy,
+                    'each entry must be a non-empty string (IP address or CIDR)',
+                );
+            }
+        }
+
         return new self(
             forceHttps: $forceHttps,
             csrfEnabled: $csrfEnabled,
@@ -103,6 +121,7 @@ final readonly class SecurityConfig
             csrfExceptions: array_values($csrfExceptions),
             allowedHosts: array_values($allowedHosts),
             maxBodySize: $maxBodySize,
+            trustedProxies: array_values($trustedProxies),
         );
     }
 }

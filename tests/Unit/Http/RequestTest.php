@@ -201,12 +201,30 @@ final class RequestTest extends TestCase
                 'REQUEST_METHOD' => 'GET',
                 'HTTP_HOST'      => 'example.com',
                 'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '10.0.0.1',
                 'HTTP_FORWARDED' => 'for=203.0.113.10:1234;proto=https;host=app.example.com',
             ],
+            trustedProxies: ['10.0.0.1'],
         );
 
         self::assertSame('203.0.113.10', $request->clientIp());
         self::assertSame('203.0.113.10', $request->clientIp);
+    }
+
+    public function testFromGlobalsIgnoresForwardedHeaderWithoutTrustedProxy(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '198.51.100.5',
+                'HTTP_FORWARDED' => 'for=203.0.113.10:1234;proto=https;host=app.example.com',
+            ],
+        );
+
+        // Without trusted proxies, forwarded headers are ignored.
+        self::assertSame('198.51.100.5', $request->clientIp());
     }
 
     public function testFromGlobalsClientIpFallsBackToRemoteAddress(): void
@@ -223,23 +241,23 @@ final class RequestTest extends TestCase
         self::assertSame('192.0.2.9', $request->clientIp());
     }
 
-    public function testClientIpResolvesFromSyntheticForwardedHeader(): void
+    public function testClientIpFromConstructorProperty(): void
     {
-        $request = Request::fromArray(
+        $request = new Request(
             method: 'GET',
             uri: '/secure',
-            headers: ['Forwarded' => 'for="[2001:db8::1]:4711"'],
+            clientIp: '2001:db8::1',
         );
 
         self::assertSame('2001:db8::1', $request->clientIp());
     }
 
-    public function testClientIpResolvesFromForwardedForHeader(): void
+    public function testClientIpFromAttribute(): void
     {
         $request = Request::fromArray(
             method: 'GET',
             uri: '/secure',
-            headers: ['X-Forwarded-For' => '10.0.0.2, 10.0.0.3'],
+            attributes: ['client_ip' => '10.0.0.2'],
         );
 
         self::assertSame('10.0.0.2', $request->clientIp());
@@ -291,33 +309,55 @@ final class RequestTest extends TestCase
         self::assertTrue($request->isSecure());
     }
 
-    public function testFromGlobalsHonorsForwardedProtoAndHost(): void
+    public function testFromGlobalsHonorsForwardedProtoAndHostWhenTrusted(): void
     {
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'         => 'GET',
                 'HTTP_HOST'              => 'app.internal',
                 'REQUEST_URI'            => '/reports',
+                'REMOTE_ADDR'            => '10.0.0.1',
                 'HTTP_X_FORWARDED_PROTO' => 'https',
                 'HTTP_X_FORWARDED_HOST'  => 'public.example.com',
             ],
+            trustedProxies: ['10.0.0.1'],
         );
 
         self::assertSame('https://public.example.com/reports', $request->uri);
         self::assertTrue($request->isSecure());
     }
 
-    public function testFromGlobalsForwardedHeaderTakesPriority(): void
+    public function testFromGlobalsIgnoresForwardedProtoAndHostWhenNotTrusted(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.internal',
+                'REQUEST_URI'            => '/reports',
+                'REMOTE_ADDR'            => '203.0.113.50',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_HOST'  => 'evil.example.com',
+            ],
+        );
+
+        // Without trusted proxies, forwarded proto/host are ignored.
+        self::assertSame('http://app.internal/reports', $request->uri);
+        self::assertFalse($request->isSecure());
+    }
+
+    public function testFromGlobalsForwardedHeaderTakesPriorityWhenTrusted(): void
     {
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'         => 'GET',
                 'HTTP_HOST'              => 'app.internal',
                 'REQUEST_URI'            => '/api',
+                'REMOTE_ADDR'            => '10.0.0.1',
                 'HTTP_FORWARDED'         => 'for=1.2.3.4;proto=https;host=api.example.com',
                 'HTTP_X_FORWARDED_HOST'  => 'ignored.example.com',
                 'HTTP_X_FORWARDED_PROTO' => 'http',
             ],
+            trustedProxies: ['*'],
         );
 
         self::assertSame('https://api.example.com/api', $request->uri);

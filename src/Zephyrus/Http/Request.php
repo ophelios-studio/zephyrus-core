@@ -49,7 +49,9 @@ final readonly class Request
      * @param array<string, mixed>|null  $post
      * @param array<string, string>|null $cookie
      * @param array<string, mixed>|null   $files
-     * @param string|null                $rawBody  Injected for testing; defaults to php://input.
+     * @param string|null                $rawBody        Injected for testing; defaults to php://input.
+     * @param string[]                   $trustedProxies IP addresses/CIDR ranges whose forwarded
+     *                                                   headers are trusted. Use ['*'] for all.
      */
     public static function fromGlobals(
         ?array $server = null,
@@ -58,6 +60,7 @@ final readonly class Request
         ?array $cookie = null,
         ?array $files = null,
         ?string $rawBody = null,
+        array $trustedProxies = [],
     ): self {
         $server = $server ?? $_SERVER;
         $get    = $get    ?? $_GET;
@@ -67,8 +70,10 @@ final readonly class Request
 
         $method  = strtoupper($server['REQUEST_METHOD'] ?? 'GET');
         $headers = self::extractHeadersFromServer($server);
-        $uri     = self::buildUri($server);
-        $clientIp = self::resolveClientIp($server, $headers);
+        $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
+        $trustForwarded = self::isProxyTrusted($remoteAddr, $trustedProxies);
+        $uri     = self::buildUri($server, $trustForwarded);
+        $clientIp = self::resolveClientIp($server, $headers, $trustForwarded);
 
         $parsedBody = self::parseBody($method, $headers, $post, $rawBody);
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
@@ -222,11 +227,7 @@ final readonly class Request
             return $this->clientIp;
         }
 
-        $headerIp = self::resolveClientIpFromHeaders($this->headers);
-        if ($headerIp !== null) {
-            return $headerIp;
-        }
-
+        // Check attribute (set by middleware, e.g. from a load balancer SDK).
         $attributeValue = $this->attributes['client_ip'] ?? null;
         if (is_string($attributeValue)) {
             $normalized = self::normalizeIp($attributeValue);
@@ -325,8 +326,9 @@ final readonly class Request
      * Path + query: taken verbatim from REQUEST_URI (already URL-encoded by PHP).
      *
      * @param array<string, mixed> $server
+     * @param bool $trustForwarded Whether to honor forwarded headers.
      */
-    private static function buildUri(array $server): string
+    private static function buildUri(array $server, bool $trustForwarded = false): string
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
@@ -335,22 +337,38 @@ final readonly class Request
             return $requestUri;
         }
 
-        $forwardedHeader = isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null;
-        $forwarded = self::parseForwardedHeader($forwardedHeader);
+        $forwarded = [];
+        if ($trustForwarded) {
+            $forwardedHeader = isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null;
+            $forwarded = self::parseForwardedHeader($forwardedHeader);
+        }
 
         $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
-        $scheme = $forwarded['proto']
-            ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null)
-            ?? ($https ? 'https' : 'http');
 
-        $host = $forwarded['host']
-            ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
-            ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
+        if ($trustForwarded) {
+            $scheme = $forwarded['proto']
+                ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null)
+                ?? ($https ? 'https' : 'http');
+        } else {
+            $scheme = $https ? 'https' : 'http';
+        }
+
+        if ($trustForwarded) {
+            $host = $forwarded['host']
+                ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
+                ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
+        } else {
+            $host = (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
+        }
 
         if (!str_contains($host, ':')) {
-            $port = $forwarded['port']
-                ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null)
-                ?? (isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
+            if ($trustForwarded) {
+                $port = $forwarded['port']
+                    ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null)
+                    ?? (isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
+            } else {
+                $port = isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null;
+            }
 
             if ($port !== null && $port !== '' && !self::isDefaultPortForScheme($scheme, $port)) {
                 $host .= ':' . $port;
@@ -450,18 +468,21 @@ final readonly class Request
     /**
      * @param array<string, mixed>  $server
      * @param array<string, string> $headers
+     * @param bool $trustForwarded Whether to honor forwarded headers.
      */
-    private static function resolveClientIp(array $server, array $headers): ?string
+    private static function resolveClientIp(array $server, array $headers, bool $trustForwarded = false): ?string
     {
-        $forwarded = self::parseForwardedHeader(isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null);
-        $forwardedIp = self::normalizeIp($forwarded['for'] ?? null);
-        if ($forwardedIp !== null) {
-            return $forwardedIp;
-        }
+        if ($trustForwarded) {
+            $forwarded = self::parseForwardedHeader(isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null);
+            $forwardedIp = self::normalizeIp($forwarded['for'] ?? null);
+            if ($forwardedIp !== null) {
+                return $forwardedIp;
+            }
 
-        $headerIp = self::resolveClientIpFromHeaders($headers);
-        if ($headerIp !== null) {
-            return $headerIp;
+            $headerIp = self::resolveClientIpFromHeaders($headers);
+            if ($headerIp !== null) {
+                return $headerIp;
+            }
         }
 
         return self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
@@ -529,6 +550,72 @@ final readonly class Request
         }
 
         return null;
+    }
+
+    /**
+     * Check if the remote address is in the trusted proxies list.
+     *
+     * Supports exact IP matching and CIDR notation. The special value '*'
+     * trusts all proxies (useful in development).
+     *
+     * @param string|null $remoteAddr     The REMOTE_ADDR (already normalized).
+     * @param string[]    $trustedProxies Trusted IP addresses or CIDR ranges.
+     */
+    private static function isProxyTrusted(?string $remoteAddr, array $trustedProxies): bool
+    {
+        if ($trustedProxies === [] || $remoteAddr === null) {
+            return false;
+        }
+
+        foreach ($trustedProxies as $trusted) {
+            if ($trusted === '*') {
+                return true;
+            }
+
+            if (str_contains($trusted, '/')) {
+                if (self::ipInCidr($remoteAddr, $trusted)) {
+                    return true;
+                }
+            } elseif ($remoteAddr === $trusted) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if an IP address falls within a CIDR range.
+     */
+    private static function ipInCidr(string $ip, string $cidr): bool
+    {
+        [$subnet, $bits] = explode('/', $cidr, 2);
+        $bitsInt = (int) $bits;
+
+        $ipBin = @inet_pton($ip);
+        $subnetBin = @inet_pton($subnet);
+
+        if ($ipBin === false || $subnetBin === false) {
+            return false;
+        }
+
+        if (strlen($ipBin) !== strlen($subnetBin)) {
+            return false; // IPv4 vs IPv6 mismatch.
+        }
+
+        // Build mask.
+        $totalBits = strlen($ipBin) * 8;
+        if ($bitsInt < 0 || $bitsInt > $totalBits) {
+            return false;
+        }
+
+        $mask = str_repeat("\xff", (int) ($bitsInt / 8));
+        if ($bitsInt % 8 !== 0) {
+            $mask .= chr(0xff << (8 - ($bitsInt % 8)));
+        }
+        $mask = str_pad($mask, strlen($ipBin), "\x00");
+
+        return ($ipBin & $mask) === ($subnetBin & $mask);
     }
 
     private static function firstForwardedValue(mixed $value): ?string
