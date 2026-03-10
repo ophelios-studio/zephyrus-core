@@ -36,7 +36,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headers = $response->toHeaderLines();
 
-        self::assertContains('X-Frame-Options: SAMEORIGIN', $headers);
+        self::assertContains('x-frame-options: SAMEORIGIN', $headers);
     }
 
     public function testDefaultsEmitXContentTypeOptions(): void
@@ -44,7 +44,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $mw = new SecureHeadersMiddleware(SecureHeadersConfig::defaults());
         $response = $this->process($mw, $this->makeRequest());
 
-        self::assertContains('X-Content-Type-Options: nosniff', $response->toHeaderLines());
+        self::assertContains('x-content-type-options: nosniff', $response->toHeaderLines());
     }
 
     public function testDefaultsEmitReferrerPolicy(): void
@@ -52,7 +52,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $mw = new SecureHeadersMiddleware(SecureHeadersConfig::defaults());
         $response = $this->process($mw, $this->makeRequest());
 
-        self::assertContains('Referrer-Policy: strict-origin-when-cross-origin', $response->toHeaderLines());
+        self::assertContains('referrer-policy: strict-origin-when-cross-origin', $response->toHeaderLines());
     }
 
     public function testDefaultsEmitXssProtection(): void
@@ -60,7 +60,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $mw = new SecureHeadersMiddleware(SecureHeadersConfig::defaults());
         $response = $this->process($mw, $this->makeRequest());
 
-        self::assertContains('X-XSS-Protection: 0', $response->toHeaderLines());
+        self::assertContains('x-xss-protection: 0', $response->toHeaderLines());
     }
 
     public function testDefaultsDoNotEmitCsp(): void
@@ -69,7 +69,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('Content-Security-Policy', $headerString);
+        self::assertStringNotContainsString('content-security-policy', $headerString);
     }
 
     public function testDefaultsDoNotEmitPermissionsPolicy(): void
@@ -78,7 +78,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('Permissions-Policy', $headerString);
+        self::assertStringNotContainsString('permissions-policy', $headerString);
     }
 
     // ── HSTS only on HTTPS ────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest(secure: false));
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('Strict-Transport-Security', $headerString);
+        self::assertStringNotContainsString('strict-transport-security', $headerString);
     }
 
     public function testHstsEmittedOnHttps(): void
@@ -99,7 +99,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $mw = new SecureHeadersMiddleware($config);
         $response = $this->process($mw, $this->makeRequest(secure: true));
 
-        self::assertContains('Strict-Transport-Security: max-age=31536000', $response->toHeaderLines());
+        self::assertContains('strict-transport-security: max-age=31536000', $response->toHeaderLines());
     }
 
     public function testHstsWithIncludeSubdomainsOnHttps(): void
@@ -112,7 +112,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest(secure: true));
 
         self::assertContains(
-            'Strict-Transport-Security: max-age=31536000; includeSubDomains',
+            'strict-transport-security: max-age=31536000; includeSubDomains',
             $response->toHeaderLines(),
         );
     }
@@ -124,7 +124,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest(secure: true));
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('Strict-Transport-Security', $headerString);
+        self::assertStringNotContainsString('strict-transport-security', $headerString);
     }
 
     // ── optional headers emitted when configured ──────────────────────────────
@@ -135,7 +135,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $mw = new SecureHeadersMiddleware($config);
         $response = $this->process($mw, $this->makeRequest());
 
-        self::assertContains("Content-Security-Policy: default-src 'self'", $response->toHeaderLines());
+        self::assertContains("content-security-policy: default-src 'self'", $response->toHeaderLines());
     }
 
     public function testPermissionsPolicyEmittedWhenConfigured(): void
@@ -144,7 +144,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $mw = new SecureHeadersMiddleware($config);
         $response = $this->process($mw, $this->makeRequest());
 
-        self::assertContains('Permissions-Policy: camera=(), microphone=()', $response->toHeaderLines());
+        self::assertContains('permissions-policy: camera=(), microphone=()', $response->toHeaderLines());
     }
 
     // ── disabling individual headers ─────────────────────────────────────────
@@ -156,7 +156,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('X-Frame-Options', $headerString);
+        self::assertStringNotContainsString('x-frame-options', $headerString);
     }
 
     public function testXContentTypeOptionsSkippedWhenEmpty(): void
@@ -166,7 +166,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('X-Content-Type-Options', $headerString);
+        self::assertStringNotContainsString('x-content-type-options', $headerString);
     }
 
     public function testReferrerPolicySkippedWhenEmpty(): void
@@ -176,7 +176,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('Referrer-Policy', $headerString);
+        self::assertStringNotContainsString('referrer-policy', $headerString);
     }
 
     public function testXssProtectionSkippedWhenEmpty(): void
@@ -186,7 +186,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest());
         $headerString = implode("\n", $response->toHeaderLines());
 
-        self::assertStringNotContainsString('X-XSS-Protection', $headerString);
+        self::assertStringNotContainsString('x-xss-protection', $headerString);
     }
 
     // ── response is immutable — original not mutated ──────────────────────────
@@ -201,7 +201,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         // The captured inner response should still have no security headers.
         $headerString = implode("\n", $inner->toHeaderLines());
 
-        self::assertStringNotContainsString('X-Frame-Options', $headerString);
+        self::assertStringNotContainsString('x-frame-options', $headerString);
     }
 
     // ── full headers snapshot ────────────────────────────────────────────────
@@ -221,12 +221,12 @@ final class SecureHeadersMiddlewareTest extends TestCase
         $response = $this->process($mw, $this->makeRequest(secure: true));
         $headers = $response->toHeaderLines();
 
-        self::assertContains('X-Frame-Options: DENY', $headers);
-        self::assertContains('X-Content-Type-Options: nosniff', $headers);
-        self::assertContains('Referrer-Policy: no-referrer', $headers);
-        self::assertContains('X-XSS-Protection: 0', $headers);
-        self::assertContains("Content-Security-Policy: default-src 'none'", $headers);
-        self::assertContains('Permissions-Policy: camera=()', $headers);
-        self::assertContains('Strict-Transport-Security: max-age=86400; includeSubDomains', $headers);
+        self::assertContains('x-frame-options: DENY', $headers);
+        self::assertContains('x-content-type-options: nosniff', $headers);
+        self::assertContains('referrer-policy: no-referrer', $headers);
+        self::assertContains('x-xss-protection: 0', $headers);
+        self::assertContains("content-security-policy: default-src 'none'", $headers);
+        self::assertContains('permissions-policy: camera=()', $headers);
+        self::assertContains('strict-transport-security: max-age=86400; includeSubDomains', $headers);
     }
 }

@@ -138,7 +138,7 @@ final class HttpKernelEventsTest extends TestCase
         $kernel = $this->makeKernelWithRoute('/ping', fn (): Response => Response::text('pong'), $events);
         $response = $kernel->handle(Request::fromArray('GET', '/ping'));
 
-        self::assertSame('Zephyrus', $response->headers['X-Powered-By']);
+        self::assertSame('Zephyrus', $response->headers['x-powered-by']);
         self::assertSame('pong', $response->body);
     }
 

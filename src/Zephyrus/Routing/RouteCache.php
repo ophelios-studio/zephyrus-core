@@ -228,10 +228,6 @@ final class RouteCache
             throw new RouteCacheException('Unable to encode route cache payload', previous: $exception);
         }
 
-        if ($json === false) {
-            throw new RouteCacheException('Unable to encode route cache payload');
-        }
-
         $directory = dirname($this->cacheFile);
         if ($directory !== '' && $directory !== '.' && !is_dir($directory)) {
             $created = @mkdir($directory, 0777, true);

@@ -29,7 +29,7 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
         $policy = ContentSecurityPolicy::create()->withDirective('default-src', ["'self'"]);
         $response = $this->process(new ContentSecurityPolicyMiddleware($policy));
 
-        self::assertContains("Content-Security-Policy: default-src 'self'", $response->toHeaderLines());
+        self::assertContains("content-security-policy: default-src 'self'", $response->toHeaderLines());
     }
 
     public function testEmitsReportOnlyHeaderWhenEnabled(): void
@@ -37,9 +37,9 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
         $policy = ContentSecurityPolicy::create()->withDirective('default-src', ["'none'"]);
         $response = $this->process(new ContentSecurityPolicyMiddleware($policy, reportOnly: true));
 
-        self::assertContains("Content-Security-Policy-Report-Only: default-src 'none'", $response->toHeaderLines());
+        self::assertContains("content-security-policy-report-only: default-src 'none'", $response->toHeaderLines());
         self::assertStringNotContainsString(
-            'Content-Security-Policy: default-src',
+            'content-security-policy: default-src',
             implode("\n", $response->toHeaderLines()),
         );
     }
@@ -48,7 +48,7 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
     {
         $response = $this->process(new ContentSecurityPolicyMiddleware('   '));
 
-        self::assertStringNotContainsString('Content-Security-Policy', implode("\n", $response->toHeaderLines()));
+        self::assertStringNotContainsString('content-security-policy', implode("\n", $response->toHeaderLines()));
     }
 
     public function testEmitsHeaderFromRawPolicyString(): void
@@ -56,7 +56,7 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
         $response = $this->process(new ContentSecurityPolicyMiddleware("default-src 'self'; img-src https://cdn.example.com"));
 
         self::assertContains(
-            "Content-Security-Policy: default-src 'self'; img-src https://cdn.example.com",
+            "content-security-policy: default-src 'self'; img-src https://cdn.example.com",
             $response->toHeaderLines(),
         );
     }

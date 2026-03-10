@@ -6,9 +6,11 @@ namespace Zephyrus\Data;
 
 final class SortRequest implements \JsonSerializable
 {
+    public readonly string $direction;
+
     public function __construct(
         public readonly string $column,
-        public readonly string $direction = 'ASC',
+        string $direction = 'ASC',
     ) {
         if ($column === '' || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_\.]*$/', $column)) {
             throw DatabaseException::queryFailed('sorting', 'Invalid sort column');
@@ -18,6 +20,8 @@ final class SortRequest implements \JsonSerializable
         if (!in_array($normalized, ['ASC', 'DESC'], true)) {
             throw DatabaseException::queryFailed('sorting', 'Sort direction must be ASC or DESC');
         }
+
+        $this->direction = $normalized;
     }
 
     public static function fromArray(array $data, string $defaultColumn, string $defaultDirection = 'ASC'): self
@@ -53,7 +57,19 @@ final class SortRequest implements \JsonSerializable
 
     public function toSql(): string
     {
-        return sprintf(' ORDER BY %s %s', $this->column, strtoupper($this->direction));
+        return sprintf(' ORDER BY %s %s', self::quoteIdentifier($this->column), $this->direction);
+    }
+
+    /**
+     * Quote a column identifier for safe SQL interpolation (PostgreSQL double-quote style).
+     * Supports dot-separated qualified names (e.g. "table"."column").
+     */
+    private static function quoteIdentifier(string $identifier): string
+    {
+        return implode('.', array_map(
+            static fn (string $part): string => '"' . str_replace('"', '""', $part) . '"',
+            explode('.', $identifier),
+        ));
     }
 
     /** @return array{sort_by: string, sort_dir: string} */

@@ -21,7 +21,7 @@ final class ResponseTest extends TestCase
 
         self::assertSame(200, $response->status);
         self::assertSame('hello', $response->body);
-        self::assertSame('text/plain; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('text/plain; charset=utf-8', $response->headers['content-type']);
     }
 
     public function testHtmlFactoryBuildsHtmlResponse(): void
@@ -30,7 +30,7 @@ final class ResponseTest extends TestCase
 
         self::assertSame(202, $response->status);
         self::assertSame('<h1>Hello</h1>', $response->body);
-        self::assertSame('text/html; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('text/html; charset=utf-8', $response->headers['content-type']);
     }
 
     public function testJsonFactoryEncodesPayloadAndSetsContentTypeHeader(): void
@@ -39,7 +39,7 @@ final class ResponseTest extends TestCase
 
         self::assertSame(201, $response->status);
         self::assertSame('{"ok":true}', $response->body);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
     }
 
     public function testJsonFactoryAcceptsScalarPayloads(): void
@@ -47,7 +47,7 @@ final class ResponseTest extends TestCase
         $response = Response::json('ok');
 
         self::assertSame('"ok"', $response->body);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
     }
 
     public function testJsonFactoryAcceptsObjectPayloads(): void
@@ -55,7 +55,7 @@ final class ResponseTest extends TestCase
         $response = Response::json((object) ['id' => 7]);
 
         self::assertSame('{"id":7}', $response->body);
-        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
     }
 
     public function testNoContentFactoryBuilds204WithoutBody(): void
@@ -71,7 +71,7 @@ final class ResponseTest extends TestCase
         $response = Response::redirect('/login');
 
         self::assertSame(302, $response->status);
-        self::assertSame('/login', $response->headers['Location']);
+        self::assertSame('/login', $response->headers['location']);
         self::assertSame('', $response->body);
     }
 
@@ -80,7 +80,7 @@ final class ResponseTest extends TestCase
         $response = Response::redirect('/new-home', 301);
 
         self::assertSame(301, $response->status);
-        self::assertSame('/new-home', $response->headers['Location']);
+        self::assertSame('/new-home', $response->headers['location']);
     }
 
     public function testRedirectFactoryAllows303SeeOther(): void
@@ -88,7 +88,7 @@ final class ResponseTest extends TestCase
         $response = Response::redirect('/dashboard', 303);
 
         self::assertSame(303, $response->status);
-        self::assertSame('/dashboard', $response->headers['Location']);
+        self::assertSame('/dashboard', $response->headers['location']);
     }
 
     public function testRedirectFactoryAllows307TemporaryRedirect(): void
@@ -96,7 +96,7 @@ final class ResponseTest extends TestCase
         $response = Response::redirect('/retry', 307);
 
         self::assertSame(307, $response->status);
-        self::assertSame('/retry', $response->headers['Location']);
+        self::assertSame('/retry', $response->headers['location']);
     }
 
     public function testRedirectFactoryAllows308PermanentRedirectPreservingMethod(): void
@@ -104,7 +104,7 @@ final class ResponseTest extends TestCase
         $response = Response::redirect('/new-api', 308);
 
         self::assertSame(308, $response->status);
-        self::assertSame('/new-api', $response->headers['Location']);
+        self::assertSame('/new-api', $response->headers['location']);
     }
 
     public function testRedirectFactoryAcceptsAbsoluteUrl(): void
@@ -112,7 +112,7 @@ final class ResponseTest extends TestCase
         $response = Response::redirect('https://example.com/path?q=1');
 
         self::assertSame(302, $response->status);
-        self::assertSame('https://example.com/path?q=1', $response->headers['Location']);
+        self::assertSame('https://example.com/path?q=1', $response->headers['location']);
         self::assertSame('', $response->body);
     }
 
@@ -126,8 +126,8 @@ final class ResponseTest extends TestCase
         $updated = $initial->withHeader('X-Trace-Id', 'abc123');
 
         self::assertNotSame($initial, $updated);
-        self::assertArrayNotHasKey('X-Trace-Id', $initial->headers);
-        self::assertSame('abc123', $updated->headers['X-Trace-Id']);
+        self::assertArrayNotHasKey('x-trace-id', $initial->headers);
+        self::assertSame('abc123', $updated->headers['x-trace-id']);
     }
 
     public function testWithHeaderPreservesExistingHeadersAndBody(): void
@@ -137,8 +137,8 @@ final class ResponseTest extends TestCase
 
         self::assertSame($initial->body, $updated->body);
         self::assertSame($initial->status, $updated->status);
-        self::assertSame('application/json; charset=utf-8', $updated->headers['Content-Type']);
-        self::assertSame('r1', $updated->headers['X-Request-Id']);
+        self::assertSame('application/json; charset=utf-8', $updated->headers['content-type']);
+        self::assertSame('r1', $updated->headers['x-request-id']);
     }
 
     public function testWithHeadersMergesMultipleHeadersIntoNewInstance(): void
@@ -150,10 +150,10 @@ final class ResponseTest extends TestCase
         ]);
 
         self::assertNotSame($initial, $updated);
-        self::assertArrayNotHasKey('Cache-Control', $initial->headers);
-        self::assertSame('req-1', $updated->headers['X-Request-Id']);
-        self::assertSame('no-store', $updated->headers['Cache-Control']);
-        self::assertSame('trace-1', $updated->headers['X-Trace-Id']);
+        self::assertArrayNotHasKey('cache-control', $initial->headers);
+        self::assertSame('req-1', $updated->headers['x-request-id']);
+        self::assertSame('no-store', $updated->headers['cache-control']);
+        self::assertSame('trace-1', $updated->headers['x-trace-id']);
     }
 
     public function testWithHeadersOverwritesMatchingHeaderNames(): void
@@ -165,7 +165,7 @@ final class ResponseTest extends TestCase
 
         self::assertSame(
             'application/problem+json; charset=utf-8',
-            $updated->headers['Content-Type'],
+            $updated->headers['content-type'],
         );
     }
 
@@ -175,9 +175,9 @@ final class ResponseTest extends TestCase
         $updated = $initial->withoutHeader('X-Trace-Id');
 
         self::assertNotSame($initial, $updated);
-        self::assertArrayHasKey('X-Trace-Id', $initial->headers);
-        self::assertArrayNotHasKey('X-Trace-Id', $updated->headers);
-        self::assertArrayHasKey('Content-Type', $updated->headers);
+        self::assertArrayHasKey('x-trace-id', $initial->headers);
+        self::assertArrayNotHasKey('x-trace-id', $updated->headers);
+        self::assertArrayHasKey('content-type', $updated->headers);
     }
 
     public function testWithoutHeaderNoOpsWhenHeaderDoesNotExist(): void
@@ -378,7 +378,7 @@ final class ResponseTest extends TestCase
         $response = Response::json(['ok' => true]);
 
         self::assertSame(
-            ['Content-Type: application/json; charset=utf-8'],
+            ['content-type: application/json; charset=utf-8'],
             $response->toHeaderLines(),
         );
     }
@@ -391,9 +391,9 @@ final class ResponseTest extends TestCase
 
         self::assertSame(
             [
-                'Content-Type: application/json; charset=utf-8',
-                'X-Request-Id: abc-123',
-                'X-Powered-By: Zephyrus',
+                'content-type: application/json; charset=utf-8',
+                'x-request-id: abc-123',
+                'x-powered-by: Zephyrus',
             ],
             $response->toHeaderLines(),
         );
@@ -406,7 +406,7 @@ final class ResponseTest extends TestCase
             ->withHeader('Content-Type', 'text/plain; charset=utf-8');
 
         self::assertSame(
-            ['Allow: GET, POST', 'Content-Type: text/plain; charset=utf-8'],
+            ['allow: GET, POST', 'content-type: text/plain; charset=utf-8'],
             $response->toHeaderLines(),
         );
     }
@@ -481,6 +481,6 @@ final class ResponseTest extends TestCase
         self::assertSame(405, http_response_code());
         // Header content is validated via toHeaderLines(); SAPI header list is
         // only available in CGI/FPM contexts, not PHP CLI.
-        self::assertSame(['Allow: GET, POST'], $response->toHeaderLines());
+        self::assertSame(['allow: GET, POST'], $response->toHeaderLines());
     }
 }

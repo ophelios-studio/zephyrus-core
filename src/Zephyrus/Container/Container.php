@@ -244,7 +244,7 @@ final class Container implements ContainerInterface
         $constructor = $reflector->getConstructor();
 
         if ($constructor === null || $constructor->getNumberOfParameters() === 0) {
-            return $reflector->newInstanceWithoutConstructor();
+            return $reflector->newInstance();
         }
 
         $args = [];

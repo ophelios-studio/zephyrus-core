@@ -202,7 +202,7 @@ final class SapiEmitterTest extends TestCase
         self::assertSame(405, http_response_code());
         // Header values verified via toHeaderLines() — SAPI header list
         // is only inspectable in FPM/CGI contexts, not CLI.
-        self::assertSame(['Allow: GET, POST'], $response->toHeaderLines());
+        self::assertSame(['allow: GET, POST'], $response->toHeaderLines());
     }
 
     // -------------------------------------------------------------------------
@@ -222,7 +222,7 @@ final class SapiEmitterTest extends TestCase
         $response = Response::text('hello');
 
         self::assertSame(
-            ['Content-Type: text/plain; charset=utf-8'],
+            ['content-type: text/plain; charset=utf-8'],
             $response->toHeaderLines(),
         );
     }
@@ -232,7 +232,7 @@ final class SapiEmitterTest extends TestCase
         $response = Response::json(['a' => 1]);
 
         self::assertSame(
-            ['Content-Type: application/json; charset=utf-8'],
+            ['content-type: application/json; charset=utf-8'],
             $response->toHeaderLines(),
         );
     }

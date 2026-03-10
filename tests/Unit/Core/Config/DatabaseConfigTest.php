@@ -21,10 +21,11 @@ final class DatabaseConfigTest extends TestCase
             'username' => 'molt',
         ]);
 
-        self::assertSame('localhost', $config->host);
-        self::assertSame(3306,       $config->port);
-        self::assertSame('utf8mb4',  $config->charset);
-        self::assertSame('',         $config->password);
+        self::assertSame('pgsql',     $config->driver);
+        self::assertSame('localhost',  $config->host);
+        self::assertSame(5432,        $config->port);
+        self::assertSame('utf8',      $config->charset);
+        self::assertSame('',          $config->password);
     }
 
     // -------------------------------------------------------------------------
@@ -124,5 +125,47 @@ final class DatabaseConfigTest extends TestCase
         $this->expectException(ConfigurationException::class);
 
         DatabaseConfig::fromArray(['database' => 'db', 'username' => '']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Charset validation
+    // -------------------------------------------------------------------------
+
+    public function testThrowsForInvalidCharset(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('charset');
+
+        DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'charset'  => 'utf8; DROP TABLE users',
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Driver validation
+    // -------------------------------------------------------------------------
+
+    public function testThrowsForUnsupportedDriver(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('driver');
+
+        DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'driver'   => 'mysql',
+        ]);
+    }
+
+    public function testDefaultDriverIsPgsql(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+        ]);
+
+        self::assertSame('pgsql', $config->driver);
     }
 }

@@ -244,7 +244,7 @@ final class CsrfMiddlewareTest extends TestCase
         $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(403, $response->status);
-        self::assertStringContainsString('application/json', $response->headers['Content-Type'] ?? '');
+        self::assertStringContainsString('application/json', $response->headers['content-type'] ?? '');
         self::assertStringContainsString('error', $response->body);
     }
 

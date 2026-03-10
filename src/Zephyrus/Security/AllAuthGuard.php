@@ -10,9 +10,13 @@ final class AllAuthGuard implements AuthGuardInterface
 {
     /**
      * @param array<int, AuthGuardInterface> $guards
+     * @throws \InvalidArgumentException if $guards is empty.
      */
     public function __construct(private readonly array $guards)
     {
+        if ($guards === []) {
+            throw new \InvalidArgumentException('At least one auth guard must be provided.');
+        }
     }
 
     public function isAuthorized(Request $request): bool

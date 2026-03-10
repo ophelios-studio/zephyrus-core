@@ -142,7 +142,7 @@ final class ControllerTest extends TestCase
         $response = $this->controller->index();
 
         self::assertSame(200, $response->status);
-        self::assertStringContainsString('application/json', $response->headers['Content-Type']);
+        self::assertStringContainsString('application/json', $response->headers['content-type']);
         self::assertStringContainsString('"status":"ok"', $response->body);
     }
 
@@ -159,7 +159,7 @@ final class ControllerTest extends TestCase
         $response = $this->controller->ping();
 
         self::assertSame(200, $response->status);
-        self::assertStringContainsString('text/plain', $response->headers['Content-Type']);
+        self::assertStringContainsString('text/plain', $response->headers['content-type']);
         self::assertSame('pong', $response->body);
     }
 
@@ -185,7 +185,7 @@ final class ControllerTest extends TestCase
 
         self::assertSame(404, $response->status);
         self::assertStringContainsString('"error":"not found"', $response->body);
-        self::assertStringContainsString('application/json', $response->headers['Content-Type']);
+        self::assertStringContainsString('application/json', $response->headers['content-type']);
     }
 
     public function testControllerIsAbstract(): void
@@ -247,7 +247,7 @@ final class ControllerTest extends TestCase
 
         $decorated = $controller->after($request, $response);
 
-        self::assertSame('Zephyrus', $decorated->headers['X-Powered-By']);
+        self::assertSame('Zephyrus', $decorated->headers['x-powered-by']);
         self::assertSame('body', $decorated->body);
     }
 
@@ -262,7 +262,7 @@ final class ControllerTest extends TestCase
         $response  = $controller->act();
         $decorated = $controller->after($request, $response);
 
-        self::assertSame('yes', $decorated->headers['X-After']);
+        self::assertSame('yes', $decorated->headers['x-after']);
         self::assertSame('handled', $decorated->body);
     }
 

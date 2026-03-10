@@ -33,11 +33,11 @@ final class DatabaseTest extends TestCase
     {
         $config = DatabaseConfig::fromArray([
             'host' => 'db.internal',
-            'port' => 3307,
+            'port' => 5433,
             'database' => 'zephyrus',
             'username' => 'app',
             'password' => 'secret',
-            'charset' => 'utf8mb4',
+            'charset' => 'utf8',
         ]);
 
         $captured = [];
@@ -56,13 +56,11 @@ final class DatabaseTest extends TestCase
             },
         );
 
-        self::assertSame('mysql:host=db.internal;port=3307;dbname=zephyrus;charset=utf8mb4', $captured['dsn']);
+        self::assertSame('pgsql:host=db.internal;port=5433;dbname=zephyrus', $captured['dsn']);
         self::assertSame('app', $captured['username']);
         self::assertSame('secret', $captured['password']);
         self::assertArrayHasKey(PDO::ATTR_PERSISTENT, $captured['options']);
         self::assertFalse($captured['options'][PDO::ATTR_PERSISTENT]);
-        self::assertArrayHasKey(PDO::MYSQL_ATTR_INIT_COMMAND, $captured['options']);
-        self::assertSame('SET NAMES utf8mb4', $captured['options'][PDO::MYSQL_ATTR_INIT_COMMAND]);
         self::assertInstanceOf(Database::class, $database);
     }
 
@@ -74,7 +72,7 @@ final class DatabaseTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Database connection failed for DSN [mysql:host=localhost;port=3306;dbname=zephyrus;charset=utf8mb4]: factory boom');
+        $this->expectExceptionMessage('Database connection failed for DSN [pgsql:host=localhost;port=5432;dbname=zephyrus]: factory boom');
 
         Database::fromConfig(
             $config,
@@ -92,7 +90,7 @@ final class DatabaseTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Database connection failed for DSN [mysql:host=localhost;port=3306;dbname=zephyrus;charset=utf8mb4]: pdo boom');
+        $this->expectExceptionMessage('Database connection failed for DSN [pgsql:host=localhost;port=5432;dbname=zephyrus]: pdo boom');
 
         Database::fromConfig(
             $config,

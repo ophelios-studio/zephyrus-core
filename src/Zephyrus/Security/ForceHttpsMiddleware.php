@@ -54,11 +54,15 @@ final class ForceHttpsMiddleware implements MiddlewareInterface
      */
     private function buildHttpsUrl(string $uri): string
     {
+        if (!str_starts_with($uri, 'http://')) {
+            return $uri;
+        }
+
         $https = 'https://' . substr($uri, strlen('http://'));
 
         // Strip the default HTTP port from the authority component.
-        // "https://example.com:80/path" → "https://example.com/path"
-        // "https://example.com:80"      → "https://example.com"
+        // "https://example.com:80/path" -> "https://example.com/path"
+        // "https://example.com:80"      -> "https://example.com"
         return preg_replace('#^(https://[^/:]+):80(?=(?:[/?\#]|$))#', '$1', $https) ?? $https;
     }
 }

@@ -222,6 +222,6 @@ final class Translator
 
         $numeric = is_numeric($value) ? abs((float) $value) : 1.0;
 
-        return $numeric === 1.0 ? $singular : $plural;
+        return (abs($numeric - 1.0) < PHP_FLOAT_EPSILON) ? $singular : $plural;
     }
 }
