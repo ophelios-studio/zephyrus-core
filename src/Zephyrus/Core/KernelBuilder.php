@@ -64,6 +64,9 @@ final class KernelBuilder
 
     private ?EventDispatcher $eventDispatcher = null;
 
+    /** @var array<class-string<\Throwable>, callable(\Throwable, ?\Zephyrus\Http\Request): \Zephyrus\Http\Response> */
+    private array $exceptionHandlers = [];
+
     public static function create(): self
     {
         return new self();
@@ -168,6 +171,24 @@ final class KernelBuilder
     }
 
     /**
+     * Register a custom exception handler for a specific exception class.
+     *
+     * When the kernel catches an exception, registered handlers are checked
+     * before the built-in mappings (404, 405, 422, 500). The most-specific
+     * matching class wins via instanceof.
+     *
+     * @param class-string<\Throwable> $exceptionClass
+     * @param callable(\Throwable, ?\Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
+     */
+    public function withExceptionHandler(string $exceptionClass, callable $handler): self
+    {
+        $clone = clone $this;
+        $clone->exceptionHandlers[$exceptionClass] = $handler;
+
+        return $clone;
+    }
+
+    /**
      * Assembles and returns a fully wired HttpKernel.
      *
      * The builder itself is unchanged after this call and may be reused to
@@ -194,6 +215,11 @@ final class KernelBuilder
                 : null,
         );
 
-        return new HttpKernel($dispatcher, new HttpExceptionResponder(), $this->eventDispatcher);
+        $responder = new HttpExceptionResponder();
+        foreach ($this->exceptionHandlers as $class => $handler) {
+            $responder->registerHandler($class, $handler);
+        }
+
+        return new HttpKernel($dispatcher, $responder, $this->eventDispatcher);
     }
 }

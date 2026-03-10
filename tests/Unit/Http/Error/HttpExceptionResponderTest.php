@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
 use Zephyrus\Validation\ErrorBag;
@@ -228,5 +229,119 @@ final class HttpExceptionResponderTest extends TestCase
         self::assertSame('Unprocessable Entity', $decoded['title']);
         self::assertSame(422, $decoded['status']);
         self::assertSame(['Must be an integer.'], $decoded['errors']['age']);
+    }
+
+    // -----------------------------------------------------------------
+    // Custom exception handler registry
+    // -----------------------------------------------------------------
+
+    public function testCustomHandlerOverridesBuiltInMapping(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $responder->registerHandler(
+            RouteNotFoundException::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('Custom 404', 404),
+        );
+
+        $response = $responder->toResponse(new RouteNotFoundException('No route'));
+
+        self::assertSame(404, $response->status);
+        self::assertSame('Custom 404', $response->body);
+    }
+
+    public function testCustomHandlerForGenericException(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $responder->registerHandler(
+            RuntimeException::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('Custom: ' . $e->getMessage(), 503),
+        );
+
+        $response = $responder->toResponse(new RuntimeException('service down'));
+
+        self::assertSame(503, $response->status);
+        self::assertSame('Custom: service down', $response->body);
+    }
+
+    public function testMostSpecificCustomHandlerWins(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $responder->registerHandler(
+            \Throwable::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('generic', 500),
+        );
+        $responder->registerHandler(
+            RuntimeException::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('specific', 503),
+        );
+
+        $response = $responder->toResponse(new RuntimeException('boom'));
+
+        self::assertSame(503, $response->status);
+        self::assertSame('specific', $response->body);
+    }
+
+    public function testCustomHandlerForParentClassMatchesChildException(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $responder->registerHandler(
+            RuntimeException::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('caught runtime', 500),
+        );
+
+        // LogicException extends \Exception, not RuntimeException → should NOT match
+        $response = $responder->toResponse(new \LogicException('not a runtime'));
+        self::assertSame(500, $response->status);
+        self::assertSame('Internal Server Error', $response->body); // built-in fallback
+
+        // \InvalidArgumentException extends \LogicException → also NOT runtime
+        // But a custom subclass of RuntimeException should match
+        $response2 = $responder->toResponse(new \UnexpectedValueException('is runtime'));
+        self::assertSame(500, $response2->status);
+        self::assertSame('caught runtime', $response2->body);
+    }
+
+    public function testNoCustomHandlerFallsToBuiltIn(): void
+    {
+        $responder = new HttpExceptionResponder();
+        // Register handler for a class that won't match
+        $responder->registerHandler(
+            \InvalidArgumentException::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('never called', 999),
+        );
+
+        $response = $responder->toResponse(new RuntimeException('unhandled'));
+
+        self::assertSame(500, $response->status);
+        self::assertSame('Internal Server Error', $response->body);
+    }
+
+    public function testCustomHandlerReceivesRequest(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $responder->registerHandler(
+            RuntimeException::class,
+            function (\Throwable $e, ?Request $r): Response {
+                $path = $r?->uri ?? 'unknown';
+                return Response::text("Error on $path", 500);
+            },
+        );
+
+        $request = Request::fromArray('GET', '/api/test');
+        $response = $responder->toResponse(new RuntimeException('boom'), $request);
+
+        self::assertSame(500, $response->status);
+        self::assertSame('Error on /api/test', $response->body);
+    }
+
+    public function testRegisterHandlerReturnsSelf(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $result = $responder->registerHandler(
+            RuntimeException::class,
+            fn (\Throwable $e, ?Request $r) => Response::text('ok', 200),
+        );
+
+        self::assertSame($responder, $result);
     }
 }
