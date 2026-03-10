@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Localization;
 
+use Zephyrus\Core\App;
+use Zephyrus\Formatting\Formatter;
+
 final class Translator
 {
     /** @var array<string, array<string, mixed>> */
@@ -179,7 +182,7 @@ final class Translator
                 'truncate' => $this->applyTruncate($current, $pipeArgument),
                 'plural'   => $this->applyPlural($current, $pipeArgument),
                 'default'  => ($current === '' ? ($pipeArgument ?? '') : $current),
-                default    => $current,
+                default    => $this->applyFormatterPipe($pipeName, $current),
             };
         }
 
@@ -254,5 +257,39 @@ final class Translator
         $numeric = is_numeric($value) ? abs((float) $value) : 1.0;
 
         return (abs($numeric - 1.0) < PHP_FLOAT_EPSILON) ? $singular : $plural;
+    }
+
+    /**
+     * Delegate an unknown pipe to the Formatter registered in App.
+     *
+     * Supports both built-in Formatter methods (money, date, decimal, …) and
+     * custom formatters registered via Formatter::register().
+     *
+     * If no Formatter is available or the method/custom formatter does not
+     * exist, the value passes through unchanged.
+     */
+    private function applyFormatterPipe(string $pipeName, string $value): string
+    {
+        $formatter = App::getFormatter();
+        if ($formatter === null) {
+            return $value;
+        }
+
+        // Try built-in Formatter methods first (money, date, decimal, …).
+        if (method_exists($formatter, $pipeName)) {
+            try {
+                $castValue = is_numeric($value) ? (float) $value : $value;
+                return $formatter->$pipeName($castValue);
+            } catch (\Throwable) {
+                return $value;
+            }
+        }
+
+        // Try custom registered formatters.
+        try {
+            return $formatter->format($pipeName, $value);
+        } catch (\Throwable) {
+            return $value;
+        }
     }
 }

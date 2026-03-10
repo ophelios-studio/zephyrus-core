@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Unit\Localization;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
+use Zephyrus\Formatting\Formatter;
 use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\Translator;
 
@@ -318,6 +320,78 @@ final class TranslatorTest extends TestCase
 
         // trailing '|' splits into ['upper', ''] — the empty segment must be skipped
         self::assertSame('HELLO', $translator->trans('{v|upper|}', ['v' => 'hello']));
+    }
+
+    // -----------------------------------------------------------------
+    // applyPipes — Formatter bridge (custom formatters)
+    // -----------------------------------------------------------------
+
+    public function testUnknownPipeDelegatesToFormatterBuiltInMethod(): void
+    {
+        $formatter = new Formatter('en_US', 'USD');
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+        $result = $translator->trans('{amount|money}', ['amount' => '19.99']);
+
+        self::assertStringContainsString('$', $result);
+        self::assertStringContainsString('19.99', $result);
+
+        App::reset();
+    }
+
+    public function testUnknownPipeDelegatesToCustomRegisteredFormatter(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('wallet', function (string $wallet): string {
+            return substr($wallet, 0, 6) . '...' . substr($wallet, -4);
+        });
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+        $result = $translator->trans('{address|wallet}', ['address' => '0xABCDEF1234567890']);
+
+        self::assertSame('0xABCD...7890', $result);
+
+        App::reset();
+    }
+
+    public function testUnknownPipeReturnValueUnchangedWhenNoFormatterRegistered(): void
+    {
+        App::reset();
+
+        $translator = $this->buildTranslator();
+        $result = $translator->trans('{v|nonexistent}', ['v' => 'hello']);
+
+        self::assertSame('hello', $result);
+    }
+
+    public function testUnknownPipeReturnValueUnchangedWhenFormatterMethodFails(): void
+    {
+        $formatter = new Formatter('en_US');
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+        // 'ordinal' expects int, passing non-numeric string should not crash
+        $result = $translator->trans('{v|ordinal}', ['v' => 'not-a-number']);
+
+        // Should gracefully return the original value
+        self::assertSame('not-a-number', $result);
+
+        App::reset();
+    }
+
+    public function testFormatterPipeWorksWithDecimalType(): void
+    {
+        $formatter = new Formatter('en_US');
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+        $result = $translator->trans('Total: {amount|decimal}', ['amount' => '1234.5']);
+
+        self::assertSame('Total: 1,234.50', $result);
+
+        App::reset();
     }
 
     private function buildTranslator(): Translator

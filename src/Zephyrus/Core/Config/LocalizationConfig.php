@@ -12,6 +12,9 @@ namespace Zephyrus\Core\Config;
  * - localePath: single directory containing locale subdirectories or files (optional).
  * - timezone: application timezone, applied via date_default_timezone_set() (default 'UTC').
  * - currency: default currency code for Formatter::money() (nullable).
+ * - dateFormat: default ICU pattern or preset for Formatter::date() (default 'medium').
+ * - timeFormat: default ICU pattern or preset for Formatter::time() (default 'short').
+ * - datetimeFormat: default ICU pattern or preset for Formatter::datetime() (default 'medium').
  */
 final readonly class LocalizationConfig
 {
@@ -24,6 +27,9 @@ final readonly class LocalizationConfig
         public ?string $localePath = null,
         public string $timezone = 'UTC',
         public ?string $currency = null,
+        public string $dateFormat = 'medium',
+        public string $timeFormat = 'short',
+        public string $datetimeFormat = 'medium',
     ) {
     }
 
@@ -42,6 +48,9 @@ final readonly class LocalizationConfig
 
         $timezone = trim((string) ($values['timezone'] ?? 'UTC'));
         $currency = isset($values['currency']) ? trim((string) $values['currency']) : null;
+        $dateFormat = trim((string) ($values['dateFormat'] ?? $values['date_format'] ?? 'medium'));
+        $timeFormat = trim((string) ($values['timeFormat'] ?? $values['time_format'] ?? 'short'));
+        $datetimeFormat = trim((string) ($values['datetimeFormat'] ?? $values['datetime_format'] ?? 'medium'));
 
         if ($locale === '') {
             throw ConfigurationException::invalidValue('localization', 'locale', $locale, 'must be non-empty');
@@ -67,6 +76,9 @@ final readonly class LocalizationConfig
             localePath: $localePath,
             timezone: $timezone,
             currency: $currency,
+            dateFormat: $dateFormat !== '' ? $dateFormat : 'medium',
+            timeFormat: $timeFormat !== '' ? $timeFormat : 'short',
+            datetimeFormat: $datetimeFormat !== '' ? $datetimeFormat : 'medium',
         );
     }
 

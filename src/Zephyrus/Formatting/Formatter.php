@@ -32,13 +32,37 @@ use NumberFormatter;
 final class Formatter
 {
     private string $locale;
+    private ?string $defaultCurrency;
+    private string $defaultDatePattern;
+    private string $defaultTimePattern;
+    private string $defaultDatetimePattern;
 
     /** @var array<string, callable> */
     private array $customFormatters = [];
 
-    public function __construct(string $locale = 'en_US')
-    {
+    /**
+     * @param string      $locale                 ICU locale identifier (e.g. 'en', 'en_US', 'fr_CA').
+     * @param string|null $defaultCurrency         ISO 4217 currency code used by money() when no
+     *                                             explicit currency is given (e.g. 'USD', 'CAD').
+     *                                             If null, the locale's native currency is used.
+     * @param string      $defaultDatePattern      Default pattern for date(). ICU preset name
+     *                                             ('short', 'medium', 'long', 'full') or a custom
+     *                                             ICU pattern (e.g. 'yyyy-MM-dd').
+     * @param string      $defaultTimePattern      Default pattern for time().
+     * @param string      $defaultDatetimePattern  Default pattern for datetime().
+     */
+    public function __construct(
+        string $locale = 'en_US',
+        ?string $defaultCurrency = null,
+        string $defaultDatePattern = 'medium',
+        string $defaultTimePattern = 'short',
+        string $defaultDatetimePattern = 'medium',
+    ) {
         $this->locale = $locale;
+        $this->defaultCurrency = $defaultCurrency;
+        $this->defaultDatePattern = $defaultDatePattern;
+        $this->defaultTimePattern = $defaultTimePattern;
+        $this->defaultDatetimePattern = $defaultDatetimePattern;
     }
 
     /**
@@ -49,25 +73,59 @@ final class Formatter
         return $this->locale;
     }
 
+    /**
+     * Get the configured default currency, if any.
+     */
+    public function getDefaultCurrency(): ?string
+    {
+        return $this->defaultCurrency;
+    }
+
+    /**
+     * Get the configured default date pattern.
+     */
+    public function getDefaultDatePattern(): string
+    {
+        return $this->defaultDatePattern;
+    }
+
+    /**
+     * Get the configured default time pattern.
+     */
+    public function getDefaultTimePattern(): string
+    {
+        return $this->defaultTimePattern;
+    }
+
+    /**
+     * Get the configured default datetime pattern.
+     */
+    public function getDefaultDatetimePattern(): string
+    {
+        return $this->defaultDatetimePattern;
+    }
+
     // ─── Numeric ──────────────────────────────────────────────────────
 
     /**
-     * Format a monetary amount using the locale's currency symbol.
+     * Format a monetary amount.
+     *
+     * Resolution order for the currency code:
+     *  1. The explicit $currency argument.
+     *  2. The default currency set on this Formatter instance.
+     *  3. The locale's native currency (e.g. 'en_US' → 'USD').
      *
      * @param float       $amount   The monetary value.
      * @param string|null $currency ISO 4217 currency code (e.g. 'USD', 'EUR').
-     *                              If null, uses the locale default.
      */
     public function money(float $amount, ?string $currency = null): string
     {
         $fmt = new NumberFormatter($this->locale, NumberFormatter::CURRENCY);
-        if ($currency !== null) {
-            $result = $fmt->formatCurrency($amount, $currency);
-        } else {
-            // Derive default currency from locale.
-            $defaultCurrency = $fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE);
-            $result = $fmt->formatCurrency($amount, $defaultCurrency ?: 'USD');
-        }
+        $resolvedCurrency = $currency
+            ?? $this->defaultCurrency
+            ?? $fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE) ?: 'USD';
+
+        $result = $fmt->formatCurrency($amount, $resolvedCurrency);
 
         if ($result === false) {
             throw FormatterException::formattingFailed('money', $fmt->getErrorMessage());
@@ -145,36 +203,39 @@ final class Formatter
     /**
      * Format a date.
      *
-     * @param mixed  $date    A DateTimeInterface, Unix timestamp (int), or date string.
-     * @param string $pattern Preset: 'short', 'medium', 'long', 'full',
-     *                        or a custom ICU pattern (e.g. 'yyyy-MM-dd').
+     * When called without an explicit $pattern, the default configured via
+     * the constructor is used. Override per-call with any ICU preset
+     * ('short', 'medium', 'long', 'full') or a custom ICU pattern
+     * (e.g. 'yyyy-MM-dd', 'EEEE d MMMM yyyy').
+     *
+     * @param mixed       $date    A DateTimeInterface, Unix timestamp (int), or date string.
+     * @param string|null $pattern Preset or ICU pattern. Null uses the configured default.
      */
-    public function date(mixed $date, string $pattern = 'medium'): string
+    public function date(mixed $date, ?string $pattern = null): string
     {
-        return $this->formatDateTime($date, $pattern, dateOnly: true);
+        return $this->formatDateTime($date, $pattern ?? $this->defaultDatePattern, dateOnly: true);
     }
 
     /**
      * Format a time.
      *
-     * @param mixed  $time    A DateTimeInterface, Unix timestamp (int), or time string.
-     * @param string $pattern Preset: 'short', 'medium', 'long', 'full',
-     *                        or a custom ICU pattern.
+     * @param mixed       $time    A DateTimeInterface, Unix timestamp (int), or time string.
+     * @param string|null $pattern Preset or ICU pattern. Null uses the configured default.
      */
-    public function time(mixed $time, string $pattern = 'short'): string
+    public function time(mixed $time, ?string $pattern = null): string
     {
-        return $this->formatDateTime($time, $pattern, timeOnly: true);
+        return $this->formatDateTime($time, $pattern ?? $this->defaultTimePattern, timeOnly: true);
     }
 
     /**
      * Format a date and time.
      *
-     * @param mixed  $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
-     * @param string $pattern  Preset name or custom ICU pattern.
+     * @param mixed       $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
+     * @param string|null $pattern  Preset or ICU pattern. Null uses the configured default.
      */
-    public function datetime(mixed $datetime, string $pattern = 'medium'): string
+    public function datetime(mixed $datetime, ?string $pattern = null): string
     {
-        return $this->formatDateTime($datetime, $pattern);
+        return $this->formatDateTime($datetime, $pattern ?? $this->defaultDatetimePattern);
     }
 
     /**
