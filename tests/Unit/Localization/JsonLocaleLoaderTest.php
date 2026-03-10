@@ -27,6 +27,23 @@ final class JsonLocaleLoaderTest extends TestCase
         self::assertSame([], $loader->load('es'));
     }
 
+    public function testLoadSupportsUnderscoreLocaleFileFallback(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        mkdir($tempDir);
+        file_put_contents($tempDir . '/fr_CA.json', '{"messages":{"welcome":"Bienvenue {name}"}}');
+
+        $loader = new JsonLocaleLoader($tempDir);
+
+        try {
+            $catalog = $loader->load('fr-CA');
+            self::assertSame('Bienvenue {name}', $catalog['messages.welcome']);
+        } finally {
+            @unlink($tempDir . '/fr_CA.json');
+            @rmdir($tempDir);
+        }
+    }
+
     public function testLoadThrowsWhenJsonIsInvalid(): void
     {
         $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
