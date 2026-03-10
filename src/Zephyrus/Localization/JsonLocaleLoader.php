@@ -5,23 +5,95 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 use JsonException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 
+/**
+ * Loads locale catalogs from JSON files.
+ *
+ * Supports two modes:
+ *
+ * 1. **Directory mode** (preferred): Given a base path and locale "en", if a
+ *    directory `{basePath}/en/` exists, all `*.json` files inside it (including
+ *    subdirectories) are recursively discovered and merged into a single nested
+ *    array using `array_replace_recursive`. This allows splitting translations
+ *    across multiple files for organization:
+ *
+ *      locale/en/
+ *        strings.json      {"welcome": {"title": "Hello"}}
+ *        errors.json       {"errors": {"required": "Required"}}
+ *        admin/users.json  {"admin": {"users": {"title": "Users"}}}
+ *
+ * 2. **Single-file mode** (backward compat): If no directory exists, falls back
+ *    to looking for `{basePath}/{locale}.json` as a single file.
+ *
+ * The returned catalog is a **nested associative array** (not flattened).
+ * The Translator resolves dot-notation keys at lookup time by traversing
+ * the nesting levels.
+ */
 final class JsonLocaleLoader implements LocaleLoaderInterface
 {
     public function __construct(
         private readonly string $basePath,
-        private readonly string $extension = 'json'
     ) {
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function load(string $locale): array
     {
-        $path = $this->resolvePath($locale);
+        $base = rtrim($this->basePath, DIRECTORY_SEPARATOR);
+        $candidates = $this->localeCandidates($locale);
 
-        if ($path === null) {
-            return [];
+        // 1. Try directory mode: {basePath}/{locale}/
+        foreach ($candidates as $candidate) {
+            $dir = $base . DIRECTORY_SEPARATOR . $candidate;
+            if (is_dir($dir)) {
+                return $this->loadDirectory($dir);
+            }
         }
 
+        // 2. Fall back to single-file mode: {basePath}/{locale}.json
+        foreach ($candidates as $candidate) {
+            $file = $base . DIRECTORY_SEPARATOR . $candidate . '.json';
+            if (is_file($file)) {
+                return $this->loadFile($file);
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Recursively scan a directory for *.json files and merge them.
+     *
+     * Files are sorted alphabetically for deterministic merge order.
+     * Later files (alphabetically) override earlier files when keys conflict.
+     *
+     * @return array<string, mixed>
+     */
+    private function loadDirectory(string $directory): array
+    {
+        $merged = [];
+        $files = $this->findJsonFiles($directory);
+        sort($files, SORT_STRING);
+
+        foreach ($files as $file) {
+            $decoded = $this->loadFile($file);
+            $merged = array_replace_recursive($merged, $decoded);
+        }
+
+        return $merged;
+    }
+
+    /**
+     * Load and decode a single JSON file.
+     *
+     * @return array<string, mixed>
+     */
+    private function loadFile(string $path): array
+    {
         $content = file_get_contents($path);
         if ($content === false) {
             throw LocalizationException::unreadableFile($path);
@@ -38,50 +110,47 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
             throw LocalizationException::invalidFormat($path);
         }
 
-        $flat = [];
-        $this->flatten($decoded, '', $flat);
-
-        return $flat;
+        return $decoded;
     }
 
-    private function resolvePath(string $locale): ?string
+    /**
+     * Recursively find all *.json files in a directory.
+     *
+     * @return string[]
+     */
+    private function findJsonFiles(string $directory): array
     {
-        $base = rtrim($this->basePath, DIRECTORY_SEPARATOR);
-        $extension = ltrim($this->extension, '.');
+        $files = [];
 
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY,
+        );
+
+        /** @var \SplFileInfo $fileInfo */
+        foreach ($iterator as $fileInfo) {
+            if ($fileInfo->isFile() && strtolower($fileInfo->getExtension()) === 'json') {
+                $files[] = $fileInfo->getRealPath();
+            }
+        }
+
+        return $files;
+    }
+
+    /**
+     * Build locale directory/file name candidates.
+     *
+     * For "fr-CA" this returns ["fr-CA", "fr_CA"].
+     * For "en" this returns ["en"].
+     *
+     * @return string[]
+     */
+    private function localeCandidates(string $locale): array
+    {
         $candidates = [$locale];
         if (str_contains($locale, '-')) {
             $candidates[] = str_replace('-', '_', $locale);
         }
-
-        foreach (array_values(array_unique($candidates)) as $candidate) {
-            $path = $base . DIRECTORY_SEPARATOR . $candidate . '.' . $extension;
-            if (is_file($path)) {
-                return $path;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param array<mixed> $source
-     * @param array<string, string> $result
-     */
-    private function flatten(array $source, string $prefix, array &$result): void
-    {
-        foreach ($source as $key => $value) {
-            $segment = (string) $key;
-            $fullKey = $prefix === '' ? $segment : $prefix . '.' . $segment;
-
-            if (is_array($value)) {
-                $this->flatten($value, $fullKey, $result);
-                continue;
-            }
-
-            if (is_scalar($value) || $value === null) {
-                $result[$fullKey] = (string) $value;
-            }
-        }
+        return array_values(array_unique($candidates));
     }
 }
