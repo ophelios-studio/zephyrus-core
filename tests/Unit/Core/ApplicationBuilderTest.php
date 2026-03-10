@@ -69,6 +69,60 @@ final class ApplicationBuilderTest extends TestCase
         self::assertSame('fr', $formatter->getLocale());
     }
 
+    public function testBuildRegistersFormatterWithConfiguredCurrency(): void
+    {
+        ApplicationBuilder::create()
+            ->withConfigurationArray([
+                'localization' => [
+                    'locale' => 'en',
+                    'currency' => 'CAD',
+                    'locale_path' => __DIR__ . '/../../Fixtures/locales',
+                ],
+            ])
+            ->build();
+
+        $formatter = App::getFormatter();
+        self::assertNotNull($formatter);
+        self::assertSame('CAD', $formatter->getDefaultCurrency());
+    }
+
+    public function testBuildFormatterHasNullCurrencyWhenNotConfigured(): void
+    {
+        ApplicationBuilder::create()
+            ->withConfigurationArray([
+                'localization' => [
+                    'locale' => 'en',
+                    'locale_path' => __DIR__ . '/../../Fixtures/locales',
+                ],
+            ])
+            ->build();
+
+        $formatter = App::getFormatter();
+        self::assertNotNull($formatter);
+        self::assertNull($formatter->getDefaultCurrency());
+    }
+
+    public function testBuildFormatterUsesConfiguredDateTimeFormats(): void
+    {
+        ApplicationBuilder::create()
+            ->withConfigurationArray([
+                'localization' => [
+                    'locale' => 'en',
+                    'locale_path' => __DIR__ . '/../../Fixtures/locales',
+                    'date_format' => 'yyyy-MM-dd',
+                    'time_format' => 'HH:mm',
+                    'datetime_format' => 'long',
+                ],
+            ])
+            ->build();
+
+        $formatter = App::getFormatter();
+        self::assertNotNull($formatter);
+        self::assertSame('yyyy-MM-dd', $formatter->getDefaultDatePattern());
+        self::assertSame('HH:mm', $formatter->getDefaultTimePattern());
+        self::assertSame('long', $formatter->getDefaultDatetimePattern());
+    }
+
     public function testWithConfigurationResolvesRelativeLocalePathWithBasePath(): void
     {
         // The locale fixture directory is at tests/Fixtures/locales.

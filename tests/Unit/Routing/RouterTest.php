@@ -650,4 +650,104 @@ final class RouterTest extends TestCase
         self::assertSame('/users', $strict->routes()->match('GET', '/users')->route->path);
         self::assertSame('/users', $base->routes()->match('GET', '/users/')->route->path);
     }
+
+    // ─── discoverControllers ──────────────────────────────────────────
+
+    public function testDiscoverControllersFindsAllConcreteClassesWithRoutes(): void
+    {
+        $router = (new Router())->discoverControllers(
+            namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+            directory: __DIR__ . '/../../Fixtures/Controllers',
+        );
+
+        $paths = $router->routePaths();
+
+        // AlphaController: /alpha, BetaController: /beta (GET + POST),
+        // Sub/GammaController: /gamma, NoRoutesController: 0 routes.
+        // AbstractBaseController is skipped (abstract).
+        self::assertContains('/alpha', $paths);
+        self::assertContains('/beta', $paths);
+        self::assertContains('/gamma', $paths);
+
+        // 4 routes total: alpha(GET), beta(GET), beta(POST), gamma(GET).
+        self::assertCount(4, $router->routes()->all());
+    }
+
+    public function testDiscoverControllersSkipsAbstractClasses(): void
+    {
+        $router = (new Router())->discoverControllers(
+            namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+            directory: __DIR__ . '/../../Fixtures/Controllers',
+        );
+
+        $handlers = $router->routeHandlers();
+        foreach ($handlers as $handler) {
+            self::assertStringNotContainsString('AbstractBaseController', $handler);
+        }
+    }
+
+    public function testDiscoverControllersReturnsUnchangedRouterForMissingDirectory(): void
+    {
+        $router = (new Router())->discoverControllers(
+            namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+            directory: __DIR__ . '/../../Fixtures/NonExistent',
+        );
+
+        self::assertTrue($router->isEmpty());
+    }
+
+    public function testDiscoverControllersIsImmutable(): void
+    {
+        $base = new Router();
+        $discovered = $base->discoverControllers(
+            namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+            directory: __DIR__ . '/../../Fixtures/Controllers',
+        );
+
+        self::assertTrue($base->isEmpty());
+        self::assertFalse($discovered->isEmpty());
+    }
+
+    public function testDiscoverControllersWithParentClassFilter(): void
+    {
+        // Only AlphaController extends nothing, but we can filter by a class
+        // that none of them extend to prove the filter works.
+        $router = (new Router())->discoverControllers(
+            namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+            directory: __DIR__ . '/../../Fixtures/Controllers',
+            parentClass: \Zephyrus\Controller\Controller::class,
+        );
+
+        // None of our fixture controllers extend Controller.
+        self::assertTrue($router->isEmpty());
+    }
+
+    public function testDiscoverControllersCanCombineWithManualRegistration(): void
+    {
+        $router = (new Router())
+            ->get('/manual', 'ManualController@index')
+            ->discoverControllers(
+                namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+                directory: __DIR__ . '/../../Fixtures/Controllers',
+            );
+
+        $paths = $router->routePaths();
+        self::assertContains('/manual', $paths);
+        self::assertContains('/alpha', $paths);
+        self::assertContains('/beta', $paths);
+        self::assertContains('/gamma', $paths);
+        self::assertCount(5, $router->routes()->all());
+    }
+
+    public function testDiscoverControllersFindsSubdirectoryControllers(): void
+    {
+        $router = (new Router())->discoverControllers(
+            namespace: 'Zephyrus\\Tests\\Fixtures\\Controllers',
+            directory: __DIR__ . '/../../Fixtures/Controllers',
+        );
+
+        $handlers = $router->routeHandlers();
+        $gammaHandlers = array_filter($handlers, fn (string $h) => str_contains($h, 'GammaController'));
+        self::assertNotEmpty($gammaHandlers);
+    }
 }

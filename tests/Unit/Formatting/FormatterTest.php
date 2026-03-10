@@ -28,6 +28,19 @@ final class FormatterTest extends TestCase
         self::assertSame('fr_FR', $fr->getLocale());
     }
 
+    // ─── Default Currency ────────────────────────────────────────────
+
+    public function testGetDefaultCurrencyReturnsNullByDefault(): void
+    {
+        self::assertNull($this->formatter->getDefaultCurrency());
+    }
+
+    public function testGetDefaultCurrencyReturnsConfiguredCurrency(): void
+    {
+        $formatter = new Formatter('en', 'CAD');
+        self::assertSame('CAD', $formatter->getDefaultCurrency());
+    }
+
     // ─── Money ────────────────────────────────────────────────────────
 
     public function testMoneyFormatsWithCurrencySymbol(): void
@@ -53,6 +66,32 @@ final class FormatterTest extends TestCase
     {
         $result = $this->formatter->money(0.00, 'USD');
         self::assertStringContainsString('0.00', $result);
+    }
+
+    public function testMoneyUsesDefaultCurrencyWhenNoExplicitCurrency(): void
+    {
+        $formatter = new Formatter('en', 'CAD');
+        $result = $formatter->money(19.99);
+        self::assertStringContainsString('19.99', $result);
+        self::assertStringContainsString('CA$', $result);
+    }
+
+    public function testMoneyExplicitCurrencyOverridesDefault(): void
+    {
+        $formatter = new Formatter('en', 'CAD');
+        $result = $formatter->money(19.99, 'EUR');
+        self::assertStringContainsString('19.99', $result);
+        // Should use EUR, not CAD.
+        self::assertStringNotContainsString('CA$', $result);
+    }
+
+    public function testMoneyFallsBackToLocaleCurrencyWhenNoDefault(): void
+    {
+        // en_US locale has USD as its native currency.
+        $formatter = new Formatter('en_US');
+        $result = $formatter->money(19.99);
+        self::assertStringContainsString('$', $result);
+        self::assertStringContainsString('19.99', $result);
     }
 
     // ─── Decimal ──────────────────────────────────────────────────────
@@ -423,6 +462,73 @@ final class FormatterTest extends TestCase
         $this->expectException(FormatterException::class);
         $this->expectExceptionMessage('Unknown custom formatter');
         $this->formatter->format('nonexistent', 'value');
+    }
+
+    // ─── French Locale ────────────────────────────────────────────────
+
+    // ─── Default Date/Time Patterns ─────────────────────────────────
+
+    public function testDefaultDatePatternIsUsedWhenNoPatternGiven(): void
+    {
+        $formatter = new Formatter('en_US', defaultDatePattern: 'yyyy-MM-dd');
+        $result = $formatter->date(new DateTime('2026-03-10'));
+        self::assertSame('2026-03-10', $result);
+    }
+
+    public function testDefaultTimePatternIsUsedWhenNoPatternGiven(): void
+    {
+        $formatter = new Formatter('en_US', defaultTimePattern: 'HH:mm');
+        $result = $formatter->time(new DateTime('2026-03-10 14:30:00'));
+        self::assertSame('14:30', $result);
+    }
+
+    public function testDefaultDatetimePatternIsUsedWhenNoPatternGiven(): void
+    {
+        $formatter = new Formatter('en_US', defaultDatetimePattern: 'yyyy-MM-dd HH:mm');
+        $result = $formatter->datetime(new DateTime('2026-03-10 14:30:00'));
+        self::assertSame('2026-03-10 14:30', $result);
+    }
+
+    public function testExplicitPatternOverridesDefaultDatePattern(): void
+    {
+        $formatter = new Formatter('en_US', defaultDatePattern: 'yyyy-MM-dd');
+        $result = $formatter->date(new DateTime('2026-03-10'), 'full');
+        self::assertStringContainsString('Tuesday', $result);
+        self::assertStringContainsString('March', $result);
+    }
+
+    public function testExplicitPatternOverridesDefaultTimePattern(): void
+    {
+        $formatter = new Formatter('en_US', defaultTimePattern: 'HH:mm');
+        $result = $formatter->time(new DateTime('2026-03-10 14:30:00'), 'medium');
+        // Medium time includes seconds.
+        self::assertStringContainsString('30', $result);
+    }
+
+    public function testGetDefaultDatePatternReturnsConfiguredValue(): void
+    {
+        $formatter = new Formatter('en_US', defaultDatePattern: 'dd/MM/yyyy');
+        self::assertSame('dd/MM/yyyy', $formatter->getDefaultDatePattern());
+    }
+
+    public function testGetDefaultTimePatternReturnsConfiguredValue(): void
+    {
+        $formatter = new Formatter('en_US', defaultTimePattern: 'HH:mm:ss');
+        self::assertSame('HH:mm:ss', $formatter->getDefaultTimePattern());
+    }
+
+    public function testGetDefaultDatetimePatternReturnsConfiguredValue(): void
+    {
+        $formatter = new Formatter('en_US', defaultDatetimePattern: 'long');
+        self::assertSame('long', $formatter->getDefaultDatetimePattern());
+    }
+
+    public function testDefaultPatternsHaveSensibleDefaults(): void
+    {
+        $formatter = new Formatter('en_US');
+        self::assertSame('medium', $formatter->getDefaultDatePattern());
+        self::assertSame('short', $formatter->getDefaultTimePattern());
+        self::assertSame('medium', $formatter->getDefaultDatetimePattern());
     }
 
     // ─── French Locale ────────────────────────────────────────────────

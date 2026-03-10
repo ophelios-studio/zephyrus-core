@@ -125,4 +125,54 @@ final class LocalizationConfigTest extends TestCase
 
         self::assertNull($config->localePath);
     }
+
+    // ─── Date/Time Format Defaults ────────────────────────────────────
+
+    public function testFromArrayDefaultDateTimeFormats(): void
+    {
+        $config = LocalizationConfig::fromArray([]);
+
+        self::assertSame('medium', $config->dateFormat);
+        self::assertSame('short', $config->timeFormat);
+        self::assertSame('medium', $config->datetimeFormat);
+    }
+
+    public function testFromArrayCustomDateTimeFormatsWithCamelCaseKeys(): void
+    {
+        $config = LocalizationConfig::fromArray([
+            'dateFormat' => 'yyyy-MM-dd',
+            'timeFormat' => 'HH:mm:ss',
+            'datetimeFormat' => 'long',
+        ]);
+
+        self::assertSame('yyyy-MM-dd', $config->dateFormat);
+        self::assertSame('HH:mm:ss', $config->timeFormat);
+        self::assertSame('long', $config->datetimeFormat);
+    }
+
+    public function testFromArrayCustomDateTimeFormatsWithSnakeCaseKeys(): void
+    {
+        $config = LocalizationConfig::fromArray([
+            'date_format' => 'dd/MM/yyyy',
+            'time_format' => 'HH:mm',
+            'datetime_format' => 'full',
+        ]);
+
+        self::assertSame('dd/MM/yyyy', $config->dateFormat);
+        self::assertSame('HH:mm', $config->timeFormat);
+        self::assertSame('full', $config->datetimeFormat);
+    }
+
+    public function testFromArrayEmptyDateTimeFormatsFallBackToDefaults(): void
+    {
+        $config = LocalizationConfig::fromArray([
+            'date_format' => '',
+            'time_format' => '',
+            'datetime_format' => '',
+        ]);
+
+        self::assertSame('medium', $config->dateFormat);
+        self::assertSame('short', $config->timeFormat);
+        self::assertSame('medium', $config->datetimeFormat);
+    }
 }

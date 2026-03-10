@@ -334,7 +334,16 @@ final class ApplicationBuilder
         };
 
         $translator = new Translator($loader, $this->defaultLocale);
-        $formatter = new Formatter($this->defaultLocale);
+
+        $localizationConfig = $this->configuration?->localization;
+        $currency = $localizationConfig?->currency;
+        $formatter = new Formatter(
+            locale: $this->defaultLocale,
+            defaultCurrency: ($currency !== null && $currency !== '') ? $currency : null,
+            defaultDatePattern: $localizationConfig?->dateFormat ?? 'medium',
+            defaultTimePattern: $localizationConfig?->timeFormat ?? 'short',
+            defaultDatetimePattern: $localizationConfig?->datetimeFormat ?? 'medium',
+        );
 
         if ($this->configuration !== null) {
             App::setConfiguration($this->configuration);
