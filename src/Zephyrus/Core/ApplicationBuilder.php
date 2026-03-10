@@ -8,6 +8,7 @@ use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Event\EventDispatcher;
+use Zephyrus\Formatting\Formatter;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Localization\FallbackLocaleLoader;
 use Zephyrus\Localization\JsonLocaleLoader;
@@ -221,13 +222,26 @@ final class ApplicationBuilder
         return $clone;
     }
 
-    public function withLocalizationConfig(LocalizationConfig $config): self
+    /**
+     * Apply a LocalizationConfig to the builder.
+     *
+     * @param LocalizationConfig $config   The localization configuration section.
+     * @param string|null        $basePath Optional project root used to resolve
+     *                                     a relative locale_path. When provided,
+     *                                     a non-absolute locale_path is prefixed
+     *                                     with this directory.
+     */
+    public function withLocalizationConfig(LocalizationConfig $config, ?string $basePath = null): self
     {
         $builder = $this;
 
         if ($config->localePath !== null) {
+            $localePath = $config->localePath;
+            if ($basePath !== null && !str_starts_with($localePath, '/')) {
+                $localePath = rtrim($basePath, '/\\') . '/' . $localePath;
+            }
             $builder = $builder->withJsonLocales(
-                basePath: $config->localePath,
+                basePath: $localePath,
                 defaultLocale: $config->locale,
             );
         } else {
@@ -249,10 +263,14 @@ final class ApplicationBuilder
      * - localization section (locale loader, supported locales)
      * - application.debug → Tracy Debugger initialization (in build())
      * - localization.timezone → date_default_timezone_set() (in build())
+     *
+     * @param Configuration $configuration The full application configuration.
+     * @param string|null   $basePath      Optional project root for resolving
+     *                                     relative paths (e.g. locale_path).
      */
-    public function withConfiguration(Configuration $configuration): self
+    public function withConfiguration(Configuration $configuration, ?string $basePath = null): self
     {
-        $clone = $this->withLocalizationConfig($configuration->localization);
+        $clone = $this->withLocalizationConfig($configuration->localization, $basePath);
         $clone->configuration = $configuration;
 
         return $clone;
@@ -316,11 +334,13 @@ final class ApplicationBuilder
         };
 
         $translator = new Translator($loader, $this->defaultLocale);
+        $formatter = new Formatter($this->defaultLocale);
 
         if ($this->configuration !== null) {
             App::setConfiguration($this->configuration);
         }
         App::setTranslator($translator);
+        App::setFormatter($formatter);
 
         return new Application(
             kernel:           $this->kernelBuilder->build(),

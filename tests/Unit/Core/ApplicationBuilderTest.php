@@ -42,6 +42,88 @@ final class ApplicationBuilderTest extends TestCase
         self::assertSame('Hello', $app->trans('messages.plain', locale: 'en'));
     }
 
+    public function testBuildRegistersFormatterInAppRegistry(): void
+    {
+        ApplicationBuilder::create()
+            ->withJsonLocales(__DIR__ . '/../../Fixtures/locales', defaultLocale: 'en')
+            ->build();
+
+        $formatter = App::getFormatter();
+        self::assertNotNull($formatter);
+        self::assertSame('en', $formatter->getLocale());
+    }
+
+    public function testBuildRegistersFormatterWithConfiguredLocale(): void
+    {
+        ApplicationBuilder::create()
+            ->withConfigurationArray([
+                'localization' => [
+                    'locale' => 'fr',
+                    'locale_path' => __DIR__ . '/../../Fixtures/locales',
+                ],
+            ])
+            ->build();
+
+        $formatter = App::getFormatter();
+        self::assertNotNull($formatter);
+        self::assertSame('fr', $formatter->getLocale());
+    }
+
+    public function testWithConfigurationResolvesRelativeLocalePathWithBasePath(): void
+    {
+        // The locale fixture directory is at tests/Fixtures/locales.
+        // Pass a relative path and a basePath that makes it resolve correctly.
+        $fixturesDir = __DIR__ . '/../../Fixtures';
+
+        $app = ApplicationBuilder::create()
+            ->withConfiguration(
+                Configuration::fromArray([
+                    'localization' => [
+                        'locale' => 'en',
+                        'locale_path' => 'locales',
+                    ],
+                ]),
+                basePath: $fixturesDir,
+            )
+            ->build();
+
+        self::assertSame('Hello', $app->trans('messages.plain', locale: 'en'));
+    }
+
+    public function testWithLocalizationConfigResolvesRelativePathWithBasePath(): void
+    {
+        $fixturesDir = __DIR__ . '/../../Fixtures';
+
+        ApplicationBuilder::create()
+            ->withLocalizationConfig(
+                LocalizationConfig::fromArray([
+                    'locale' => 'fr',
+                    'locale_path' => 'locales',
+                ]),
+                basePath: $fixturesDir,
+            )
+            ->build();
+
+        self::assertSame('Bonjour', localize('messages.plain'));
+    }
+
+    public function testWithLocalizationConfigAbsolutePathIgnoresBasePath(): void
+    {
+        $absolutePath = __DIR__ . '/../../Fixtures/locales';
+
+        ApplicationBuilder::create()
+            ->withLocalizationConfig(
+                LocalizationConfig::fromArray([
+                    'locale' => 'en',
+                    'locale_path' => $absolutePath,
+                ]),
+                basePath: '/some/other/directory',
+            )
+            ->build();
+
+        self::assertSame('Hello', localize('messages.plain'));
+    }
+
     public function testBuildRegistersConfigurationInAppRegistryWhenProvided(): void
     {
         ApplicationBuilder::create()
