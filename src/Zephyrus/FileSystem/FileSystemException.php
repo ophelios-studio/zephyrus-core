@@ -9,7 +9,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 /**
  * Thrown when a filesystem operation fails.
  */
-class FileSystemException extends ZephyrusRuntimeException
+final class FileSystemException extends ZephyrusRuntimeException
 {
     public static function notFound(string $path): self
     {

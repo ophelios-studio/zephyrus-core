@@ -250,7 +250,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFileThrowsWhenFileMissing(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         Configuration::fromFile('/tmp/zephyrus-missing-' . uniqid('', true) . '.php');
     }
@@ -261,7 +261,7 @@ final class ConfigurationTest extends TestCase
         file_put_contents($path, "<?php return 'bad';");
 
         try {
-            $this->expectException(\RuntimeException::class);
+            $this->expectException(ConfigurationException::class);
             Configuration::fromFile($path);
         } finally {
             @unlink($path);
@@ -345,7 +345,7 @@ final class ConfigurationTest extends TestCase
         file_put_contents($path, "<?php return 'bad';");
 
         try {
-            $this->expectException(\RuntimeException::class);
+            $this->expectException(ConfigurationException::class);
             Configuration::fromOptionalFiles([$path]);
         } finally {
             @unlink($path);
@@ -354,7 +354,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFilesRejectsNonStringPathEntries(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         /** @phpstan-ignore-next-line */
         Configuration::fromFiles(['valid.php', 123]);
@@ -362,7 +362,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFilesRejectsEmptyPathEntries(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         Configuration::fromFiles(['   ']);
     }
@@ -390,8 +390,8 @@ final class ConfigurationTest extends TestCase
         try {
             try {
                 Configuration::fromFile($path);
-                self::fail('Expected RuntimeException was not thrown.');
-            } catch (\RuntimeException $exception) {
+                self::fail('Expected ConfigurationException was not thrown.');
+            } catch (ConfigurationException $exception) {
                 self::assertStringContainsString('failed to load', $exception->getMessage());
                 self::assertInstanceOf(\RuntimeException::class, $exception->getPrevious());
                 self::assertSame('boom', $exception->getPrevious()?->getMessage());

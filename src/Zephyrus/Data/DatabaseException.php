@@ -15,19 +15,19 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  */
 final class DatabaseException extends ZephyrusRuntimeException
 {
-    public static function connectionFailed(string $dsn, string $reason): self
+    public static function connectionFailed(string $dsn, string $reason, ?\Throwable $previous = null): self
     {
-        return new self("Database connection failed for DSN [{$dsn}]: {$reason}");
+        return new self("Database connection failed for DSN [{$dsn}]: {$reason}", previous: $previous);
     }
 
-    public static function queryFailed(string $sql, string $reason): self
+    public static function queryFailed(string $sql, string $reason, ?\Throwable $previous = null): self
     {
-        return new self("Query failed [{$sql}]: {$reason}");
+        return new self("Query failed [{$sql}]: {$reason}", previous: $previous);
     }
 
-    public static function transactionFailed(string $reason): self
+    public static function transactionFailed(string $reason, ?\Throwable $previous = null): self
     {
-        return new self("Transaction failed: {$reason}");
+        return new self("Transaction failed: {$reason}", previous: $previous);
     }
 
     public static function fromPdoException(PDOException $e, string $context = ''): self

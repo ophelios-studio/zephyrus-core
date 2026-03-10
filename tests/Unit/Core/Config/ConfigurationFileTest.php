@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 
 final class ConfigurationFileTest extends TestCase
@@ -115,7 +115,7 @@ final class ConfigurationFileTest extends TestCase
 
     public function testThrowsForMissingFile(): void
     {
-        $this->expectException(RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage('Configuration file not found');
 
         $file = new ConfigurationFile('/nonexistent/path/config.yml');

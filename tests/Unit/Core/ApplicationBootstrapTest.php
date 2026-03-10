@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Core;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\Bootstrap\ApplicationBootstrap;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\Request;
 
 final class ApplicationBootstrapTest extends TestCase
@@ -472,7 +473,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromResolvedPathsRejectsMissingRequiredEntry(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromResolvedPaths([
             'optional' => ['/tmp/app.local.php'],
@@ -481,7 +482,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromResolvedPathsRejectsNonArrayOptionalEntry(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromResolvedPaths([
             'required' => '/tmp/app.php',
@@ -491,7 +492,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromResolvedPathsRejectsNonStringOptionalEntries(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromResolvedPaths([
             'required' => '/tmp/app.php',
@@ -501,7 +502,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromResolvedPathsRejectsEmptyOptionalEntries(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromResolvedPaths([
             'required' => '/tmp/app.php',
@@ -522,7 +523,7 @@ final class ApplicationBootstrapTest extends TestCase
         putenv('APP_CONFIG_EXTRA=../secret');
 
         try {
-            $this->expectException(\RuntimeException::class);
+            $this->expectException(ConfigurationException::class);
             ApplicationBootstrap::fromEnvironment();
         } finally {
             putenv($originalDir === false ? 'APP_CONFIG_DIR' : 'APP_CONFIG_DIR=' . $originalDir);
@@ -534,35 +535,35 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigDirectoryRejectsOptionalNamesWithPathSeparators(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromConfigDirectory('/tmp', extraOptionalNames: ['../secret']);
     }
 
     public function testFromConfigDirectoryRejectsEmptyOptionalNames(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromConfigDirectory('/tmp', extraOptionalNames: ['']);
     }
 
     public function testFromConfigDirectoryRejectsEmptyDirectory(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromConfigDirectory('   ');
     }
 
     public function testFromConfigDirectoryRejectsEmptyBaseName(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '');
     }
 
     public function testFromConfigDirectoryRejectsBaseNameWithPathSeparator(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '../app');
     }

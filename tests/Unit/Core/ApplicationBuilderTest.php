@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -465,7 +466,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testWithConfigurationFileThrowsWhenFileMissing(): void
     {
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(ConfigurationException::class);
 
         ApplicationBuilder::create()->withConfigurationFile('/tmp/does-not-exist-' . uniqid('', true) . '.php');
     }
@@ -476,7 +477,7 @@ final class ApplicationBuilderTest extends TestCase
         file_put_contents($path, "<?php return 'invalid';");
 
         try {
-            $this->expectException(\RuntimeException::class);
+            $this->expectException(ConfigurationException::class);
             ApplicationBuilder::create()->withConfigurationFile($path);
         } finally {
             @unlink($path);

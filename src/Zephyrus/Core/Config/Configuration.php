@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-use RuntimeException;
+
 
 /**
  * Immutable top-level configuration tree.
@@ -144,21 +144,18 @@ final readonly class Configuration
         }
 
         if (!is_file($path)) {
-            throw new RuntimeException(sprintf('Configuration file not found: %s', $path));
+            throw ConfigurationException::fileNotFound($path);
         }
 
         try {
             /** @var mixed $loaded */
             $loaded = require $path;
         } catch (\Throwable $exception) {
-            throw new RuntimeException(
-                sprintf('Configuration file failed to load: %s', $path),
-                previous: $exception,
-            );
+            throw ConfigurationException::loadFailed($path, $exception);
         }
 
         if (!is_array($loaded)) {
-            throw new RuntimeException(sprintf('Configuration file must return an array: %s', $path));
+            throw ConfigurationException::invalidFormat($path);
         }
 
         return self::fromArray($loaded, $sectionFactories);
@@ -287,21 +284,18 @@ final readonly class Configuration
         }
 
         if (!is_file($path)) {
-            throw new RuntimeException(sprintf('Configuration file not found: %s', $path));
+            throw ConfigurationException::fileNotFound($path);
         }
 
         try {
             /** @var mixed $loaded */
             $loaded = require $path;
         } catch (\Throwable $exception) {
-            throw new RuntimeException(
-                sprintf('Configuration file failed to load: %s', $path),
-                previous: $exception,
-            );
+            throw ConfigurationException::loadFailed($path, $exception);
         }
 
         if (!is_array($loaded)) {
-            throw new RuntimeException(sprintf('Configuration file must return an array: %s', $path));
+            throw ConfigurationException::invalidFormat($path);
         }
 
         return $loaded;
@@ -337,12 +331,12 @@ final readonly class Configuration
 
         foreach ($paths as $index => $path) {
             if (!is_string($path)) {
-                throw new RuntimeException(sprintf('Configuration file path at index %d must be a string.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Configuration file path at index %d must be a string.', $index));
             }
 
             $trimmed = trim($path);
             if ($trimmed === '') {
-                throw new RuntimeException(sprintf('Configuration file path at index %d must not be empty.', $index));
+                throw ConfigurationException::invalidPath(sprintf('Configuration file path at index %d must not be empty.', $index));
             }
 
             if (in_array($trimmed, $normalized, true)) {
