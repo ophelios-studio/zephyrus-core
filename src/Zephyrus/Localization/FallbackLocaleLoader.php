@@ -37,14 +37,14 @@ final class FallbackLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, mixed>
      */
     public function load(string $locale): array
     {
         $catalog = [];
 
         foreach ($this->loaders as $loader) {
-            $catalog = array_merge($catalog, $loader->load($locale));
+            $catalog = array_replace_recursive($catalog, $loader->load($locale));
         }
 
         return $catalog;

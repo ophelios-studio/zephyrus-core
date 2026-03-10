@@ -6,7 +6,7 @@ namespace Zephyrus\Localization;
 
 final class Translator
 {
-    /** @var array<string, array<string, string>> */
+    /** @var array<string, array<string, mixed>> */
     private array $catalogCache = [];
 
     public function __construct(
@@ -22,8 +22,9 @@ final class Translator
     {
         foreach ($this->resolveLocaleChain($locale ?? $this->defaultLocale) as $candidateLocale) {
             $catalog = $this->catalog($candidateLocale);
-            if (array_key_exists($key, $catalog)) {
-                return $this->interpolate($catalog[$key], $parameters);
+            $value = $this->resolveKey($key, $catalog);
+            if ($value !== null) {
+                return $this->interpolate($value, $parameters);
             }
         }
 
@@ -87,7 +88,37 @@ final class Translator
     }
 
     /**
-     * @return array<string, string>
+     * Resolve a dot-notation key by traversing the nested catalog array.
+     *
+     * Returns the string value if found, or null if the key does not exist
+     * or resolves to a non-scalar value (e.g. an intermediate array node).
+     *
+     * @param array<string, mixed> $catalog
+     */
+    private function resolveKey(string $key, array $catalog): ?string
+    {
+        // Fast path: direct key match (for flat catalogs or top-level keys)
+        if (array_key_exists($key, $catalog)) {
+            $value = $catalog[$key];
+            return (is_scalar($value) || $value === null) ? (string) $value : null;
+        }
+
+        // Dot-notation traversal for nested catalogs
+        $segments = explode('.', $key);
+        $current = $catalog;
+
+        foreach ($segments as $segment) {
+            if (!is_array($current) || !array_key_exists($segment, $current)) {
+                return null;
+            }
+            $current = $current[$segment];
+        }
+
+        return (is_scalar($current) || $current === null) ? (string) $current : null;
+    }
+
+    /**
+     * @return array<string, mixed>
      */
     private function catalog(string $locale): array
     {

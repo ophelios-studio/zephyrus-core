@@ -7,7 +7,9 @@ namespace Zephyrus\Localization;
 interface LocaleLoaderInterface
 {
     /**
-     * @return array<string, string>
+     * Load a locale catalog as a nested associative array.
+     *
+     * @return array<string, mixed>
      */
     public function load(string $locale): array;
 }
