@@ -653,6 +653,126 @@ $router->group('/api/v1', fn ($r) => $r
 - Rejects empty values, standard Base64 (`+`, `/`, `=`), whitespace, and malformed inputs.
 - Added focused unit coverage in `RulesTest` for pass/fail/default-message scenarios.
 
+## Implemented: YAML Configuration with !env Tag Support
+- Replaced PHP array config files with YAML-only configuration using `symfony/yaml`.
+- Added `ConfigurationFile` with `!env VAR,default` custom tag for environment variable resolution at parse time.
+- Added `ConfigSection` abstract base class for user-extensible typed config sections with dot-notation access and type-coerced accessors (`getString`, `getInt`, `getBool`, `getFloat`, `getArray`).
+- Configuration supports custom section registration via `withSection()` / `section()` with snake_case to camelCase key normalization.
+- Added `vlucas/phpdotenv` integration and `env()` global helper.
+- Added 38 tests covering YAML parsing, `!env` tag resolution, custom sections, and key normalization.
+
+## Implemented: Template Rendering System (Latte + PHP)
+- Added `RenderEngine` interface with `render(page, args): string` and `exists(page): bool`.
+- Added `LatteEngine` wrapping Latte 3.x with configurable template/cache directories and cache modes.
+- Added `PhpEngine` for raw PHP templates using `extract()` + output buffering.
+- Added `RenderResponses` trait for Controller with `render()`, `renderPhp()`, and `html()` helpers.
+- Added `RenderConfig` extending `ConfigSection` for YAML-driven render configuration.
+- Added `RenderException` with named constructors: `templateNotFound()`, `renderFailed()`, `engineError()`.
+- Added `tracy/tracy` as a core dependency for development debugging.
+- Added 44 tests covering both engines, config, responses trait, and error paths.
+
+## Implemented: Cryptography Module (libsodium)
+- Added `Cryptography` class providing:
+  - Encryption/decryption: XChaCha20-Poly1305 AEAD with random nonces.
+  - Password hashing: Argon2id via `sodium_crypto_pwhash_str()` with optional pepper support.
+  - Hashing: BLAKE2b via `sodium_crypto_generichash()` with optional key and configurable length.
+  - Random generation: URL-safe strings, raw bytes, hex strings, integers.
+  - Key management: encryption key generation (XChaCha20), Ed25519 signing keypairs, base64url key encoding.
+- Added `CryptographyException` with named constructors for all failure paths.
+- Requires `ext-sodium`.
+- Added 48 tests covering encryption roundtrips, password hashing, key generation, and error paths.
+
+## Implemented: Formatter Module (ext-intl)
+- Added `Formatter` class with locale-aware formatting:
+  - Numeric: `money()`, `decimal()`, `percent()`, `ordinal()`, `spellOut()`.
+  - Temporal: `date()`, `time()`, `datetime()`, `relativeTime()`, `duration()`.
+  - Specialized: `filesize()`, `list()`, `truncate()`.
+  - Custom: `register()` / `format()` for user-defined formatters.
+- Added `FormatterException` with named constructors.
+- Requires `ext-intl`.
+- Added 66 tests covering all format types with locale variations.
+
+## Implemented: FileSystem Module
+- Added `FileSystemNode` abstract base with `path()`, `exists()`, `name()`, `parent()`, `permissions()`, `lastModified()`, `isReadable()`, `isWritable()`.
+- Added `File` class: `read()`, `write()`, `append()`, `size()`, `mimeType()`, `extension()`, `hash()`, `copy()`, `move()`, `delete()`, `lines()`, `File::create()`.
+- Added `Directory` class: `files()`, `directories()`, `glob()`, `recursiveGlob()`, `create()`, `delete()`, `size()`, `isEmpty()`, `Directory::ensure()`.
+- Added `FileSystemException` with named constructors.
+- Added 59 tests covering file and directory operations.
+
+## Implemented: Asset Management
+- Added `Asset` class for cache-busted URLs via content hashing with in-memory hash cache.
+- `url(path)` returns `/path?v={hash}`, `embed(path)` returns inline file contents, `exists(path)` checks file presence.
+- Configurable hash algorithm (default `md5` for speed).
+- Added 11 tests.
+
+## Implemented: Mailer System (PHPMailer)
+- Added `Mailer` class wrapping PHPMailer with fluent API: `to()`, `cc()`, `bcc()`, `replyTo()`, `subject()`, `html()`, `text()`, `template()`, `attach()`, `send()`.
+- Template rendering uses the configured `RenderEngine` (Latte/PHP).
+- Added `MailerConfig` extending `ConfigSection` for SMTP configuration from YAML.
+- Added `MailerException` with named constructors: `sendFailed()`, `invalidAddress()`, `attachmentNotFound()`, `configurationMissing()`.
+- Added `phpmailer/phpmailer` as a core dependency.
+- Added 27 tests covering configuration, fluent API, template rendering, and error paths.
+
+## Implemented: Trusted Proxy Support
+- Added `trustedProxies` property to `SecurityConfig` for YAML configuration.
+- Modified `Request::fromGlobals()` to gate `X-Forwarded-*` header trust based on `REMOTE_ADDR` matching the trusted proxy list.
+- Supports CIDR notation (e.g. `10.0.0.0/8`) for proxy range matching.
+- Added 14 tests covering proxy trust, CIDR matching, and untrusted request handling.
+
+## Implemented: Session Middleware
+- Added `SessionMiddleware` implementing `MiddlewareInterface` for automatic session management.
+- Injects `SessionManager` into request attributes for downstream access.
+- Added 7 tests.
+
+## Implemented: App Registry and Global Helpers
+- Added `App` static registry class holding references to `Configuration`, `SessionManager`, `Formatter`, `Asset`, `Translator`, and CSP nonce.
+- Expanded `functions.php` with global helpers:
+  - `config(section, property?, default?)` — reads configuration with built-in and custom section support.
+  - `session(key|array, default?)` — session read/write shorthand.
+  - `localize(key, params?, locale?)` / `i18n()` — translation helper.
+  - `format(type, ...args)` — formatter delegation.
+  - `asset(path)` / `embed(path)` — cache-busted URLs and inline embedding.
+  - `nonce()` — CSP nonce generation (once per request).
+- Added 48 tests covering App registry and all helper functions.
+
+## Implemented: Exception Cleanup & Audit
+- Made 5 exception classes `final`: `CryptographyException`, `RenderException`, `FileSystemException`, `FormatterException`, `MailerException`.
+- Replaced raw `\RuntimeException` throws in `Configuration`, `ConfigurationFile`, `ApplicationBootstrap` with typed `ConfigurationException` using new named constructors: `fileNotFound()`, `loadFailed()`, `parseFailed()`, `invalidFormat()`, `invalidPath()`.
+- Created `LocalizationException` with named constructors: `unreadableFile()`, `invalidJson()`, `invalidFormat()`.
+- Replaced `\InvalidArgumentException` in `Cryptography` with `CryptographyException::invalidArgument()`.
+- Added `$previous` parameter to `DatabaseException::connectionFailed()`, `queryFailed()`, `transactionFailed()`.
+- Added named constructors to `RouteCacheException`: `fileSystemError()`, `encodingFailed()`, `invalidPayloadStructure()`, `invalidMetadata()`, `integrityCheckFailed()`, `invalidRouteEntry()`, `staleCache()`.
+- Added named constructors to `RouteUrlGenerationException`: `unknownRoute()`, `missingParameter()`, `unexpectedParameter()`, `constraintViolation()`, `invalidTtl()`, `signatureUnavailable()`.
+- Updated all tests to expect typed framework exceptions instead of raw PHP exceptions.
+- Added 32 new tests for exception named constructors.
+
+## Current Module Structure
+
+```
+src/Zephyrus/
+  Container/          DI container with auto-wiring
+  Controller/         Base controller with response helpers
+  Core/               Kernel, app lifecycle, configuration
+    Bootstrap/        ApplicationBootstrap entry points
+    Config/           Typed config sections (YAML + !env)
+  Data/               Database (PostgreSQL), Broker, pagination
+  Event/              Event dispatcher
+  Exceptions/         ZephyrusException hierarchy
+  FileSystem/         File and Directory wrappers
+  Formatting/         Locale-aware Formatter (ext-intl)
+  Http/               Request/Response, middleware pipeline
+    Error/            HTTP exception responder
+  Localization/       Translator, JSON locale loader
+  Mailer/             PHPMailer wrapper
+  Rendering/          Latte/PHP template engines, Asset manager
+  Routing/            Attribute-first routes, cache, URL generation
+  Security/           CSRF, auth guards, CSP, crypto, secure headers
+  Session/            Session manager and middleware
+  Upload/             File upload handling
+  Validation/         Form validator, rule engine
+  functions.php       Global helpers (env, config, session, etc.)
+```
+
 ## Non-goals for v2 core
 - Full ORM
 - IDS subsystem
