@@ -40,4 +40,22 @@ final class RuleTest extends TestCase
         self::assertTrue($rule->test('3.14'));
         self::assertFalse($rule->test('abc'));
     }
+
+    public function testTagDefaultsToNull(): void
+    {
+        $rule = Rule::of(fn (mixed $v) => true, 'OK.');
+        self::assertNull($rule->tag());
+    }
+
+    public function testCustomTagIsStored(): void
+    {
+        $rule = Rule::of(fn (mixed $v) => true, 'OK.', 'custom');
+        self::assertSame('custom', $rule->tag());
+    }
+
+    public function testRequiredTagViaConstructor(): void
+    {
+        $rule = new Rule(fn (mixed $v) => $v !== null, 'Required.', 'required');
+        self::assertSame('required', $rule->tag());
+    }
 }

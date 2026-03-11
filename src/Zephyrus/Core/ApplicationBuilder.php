@@ -158,6 +158,24 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Register a custom exception handler for a specific exception class.
+     *
+     * When the kernel catches an exception, registered handlers are checked
+     * before the built-in mappings (404, 405, 422, 500). The most-specific
+     * matching class wins via instanceof.
+     *
+     * @param class-string<\Throwable> $exceptionClass
+     * @param callable(\Throwable, ?\Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
+     */
+    public function withExceptionHandler(string $exceptionClass, callable $handler): self
+    {
+        $clone = clone $this;
+        $clone->kernelBuilder = $this->kernelBuilder->withExceptionHandler($exceptionClass, $handler);
+
+        return $clone;
+    }
+
     public function withLocaleLoader(LocaleLoaderInterface $loader, string $defaultLocale = 'en'): self
     {
         $clone = clone $this;

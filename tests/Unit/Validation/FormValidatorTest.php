@@ -6,7 +6,6 @@ namespace Zephyrus\Tests\Unit\Validation;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Validation\ErrorBag;
-use Zephyrus\Validation\FieldValidator;
 use Zephyrus\Validation\FormValidator;
 use Zephyrus\Validation\Rules;
 use Zephyrus\Validation\ValidationException;
@@ -23,8 +22,8 @@ final class FormValidatorTest extends TestCase
     public function testValidPayloadProducesEmptyBag(): void
     {
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
-            'age'   => FieldValidator::withRules(Rules::required(), Rules::integer()),
+            'email' => [Rules::required(), Rules::email()],
+            'age'   => [Rules::required(), Rules::integer()],
         ]);
 
         $bag = $form->validate(['email' => 'user@example.com', 'age' => '25']);
@@ -34,7 +33,7 @@ final class FormValidatorTest extends TestCase
     public function testMissingFieldTreatedAsNull(): void
     {
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required()),
+            'email' => [Rules::required()],
         ]);
 
         $bag = $form->validate([]); // no 'email' key
@@ -45,8 +44,8 @@ final class FormValidatorTest extends TestCase
     public function testMultipleFieldErrors(): void
     {
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
-            'name'  => FieldValidator::withRules(Rules::required(), Rules::minLength(2)),
+            'email' => [Rules::required(), Rules::email()],
+            'name'  => [Rules::required(), Rules::minLength(2)],
         ]);
 
         $bag = $form->validate(['email' => 'bad', 'name' => 'a']);
@@ -62,9 +61,9 @@ final class FormValidatorTest extends TestCase
     public function testWithFieldImmutable(): void
     {
         $form1 = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required()),
+            'email' => [Rules::required()],
         ]);
-        $form2 = $form1->withField('name', FieldValidator::withRules(Rules::required()));
+        $form2 = $form1->withField('name', [Rules::required()]);
 
         self::assertNotSame($form1, $form2);
         self::assertCount(1, $form1->fields());
@@ -74,22 +73,22 @@ final class FormValidatorTest extends TestCase
     public function testWithFieldOverridesExisting(): void
     {
         $form = new FormValidator([
-            'age' => FieldValidator::withRules(Rules::required()),
+            'age' => [Rules::required()],
         ]);
-        $form2 = $form->withField('age', FieldValidator::withRules(Rules::required(), Rules::integer()));
+        $form2 = $form->withField('age', [Rules::required(), Rules::integer()]);
 
-        self::assertCount(2, $form2->fields()['age']->rules());
+        self::assertCount(2, $form2->fields()['age']);
     }
 
-    public function testWithFieldsIsImmutableAndMergesValidators(): void
+    public function testWithFieldsIsImmutableAndMergesRules(): void
     {
         $form1 = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required()),
+            'email' => [Rules::required()],
         ]);
 
         $form2 = $form1->withFields([
-            'name' => FieldValidator::withRules(Rules::required(), Rules::minLength(2)),
-            'age'  => FieldValidator::withRules(Rules::integer(), Rules::min(18)),
+            'name' => [Rules::required(), Rules::minLength(2)],
+            'age'  => [Rules::integer(), Rules::min(18)],
         ]);
 
         self::assertNotSame($form1, $form2);
@@ -103,23 +102,23 @@ final class FormValidatorTest extends TestCase
     public function testWithFieldsOverridesExistingKeys(): void
     {
         $form = new FormValidator([
-            'age' => FieldValidator::withRules(Rules::required()),
+            'age' => [Rules::required()],
         ]);
 
         $form2 = $form->withFields([
-            'age' => FieldValidator::withRules(Rules::required(), Rules::integer()),
+            'age' => [Rules::required(), Rules::integer()],
         ]);
 
-        self::assertCount(1, $form->fields()['age']->rules());
-        self::assertCount(2, $form2->fields()['age']->rules());
+        self::assertCount(1, $form->fields()['age']);
+        self::assertCount(2, $form2->fields()['age']);
     }
 
     public function testWithFieldsIntegratesIntoValidationFlow(): void
     {
         $form = (new FormValidator())
             ->withFields([
-                'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
-                'age'   => FieldValidator::withRules(Rules::required(), Rules::integer(), Rules::min(18)),
+                'email' => [Rules::required(), Rules::email()],
+                'age'   => [Rules::required(), Rules::integer(), Rules::min(18)],
             ]);
 
         self::assertFalse($form->validate(['email' => 'user@example.com', 'age' => '21'])->hasErrors());
@@ -132,7 +131,7 @@ final class FormValidatorTest extends TestCase
     public function testExtraFieldsInDataAreIgnored(): void
     {
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required()),
+            'email' => [Rules::required()],
         ]);
 
         $bag = $form->validate([
@@ -152,9 +151,9 @@ final class FormValidatorTest extends TestCase
     public function testAllFieldErrorsCollected(): void
     {
         $form = new FormValidator([
-            'email'    => FieldValidator::withRules(Rules::required(), Rules::email()),
-            'password' => FieldValidator::withRules(Rules::required(), Rules::minLength(8)),
-            'age'      => FieldValidator::withRules(Rules::required(), Rules::integer(), Rules::min(18)),
+            'email'    => [Rules::required(), Rules::email()],
+            'password' => [Rules::required(), Rules::minLength(8)],
+            'age'      => [Rules::required(), Rules::integer(), Rules::min(18)],
         ]);
 
         $bag = $form->validate(['email' => '', 'password' => 'abc', 'age' => '15']);
@@ -167,11 +166,11 @@ final class FormValidatorTest extends TestCase
     public function testBetweenRuleIntegration(): void
     {
         $form = new FormValidator([
-            'score' => FieldValidator::withRules(
+            'score' => [
                 Rules::required(),
                 Rules::integer(),
                 Rules::between(0, 100),
-            ),
+            ],
         ]);
 
         self::assertFalse($form->validate(['score' => '50'])->hasErrors());
@@ -181,10 +180,10 @@ final class FormValidatorTest extends TestCase
     public function testInRuleIntegration(): void
     {
         $form = new FormValidator([
-            'role' => FieldValidator::withRules(
+            'role' => [
                 Rules::required(),
                 Rules::in(['admin', 'editor', 'viewer']),
-            ),
+            ],
         ]);
 
         self::assertFalse($form->validate(['role' => 'editor'])->hasErrors());
@@ -201,7 +200,7 @@ final class FormValidatorTest extends TestCase
     public function testDotPathFieldResolvesNestedValue(): void
     {
         $form = new FormValidator([
-            'user.name' => FieldValidator::withRules(Rules::required()),
+            'user.name' => [Rules::required()],
         ]);
 
         self::assertFalse($form->validate(['user' => ['name' => 'Alice']])->hasErrors());
@@ -214,7 +213,7 @@ final class FormValidatorTest extends TestCase
     public function testDotPathMissingParentKeyTreatedAsNull(): void
     {
         $form = new FormValidator([
-            'user.name' => FieldValidator::withRules(Rules::required()),
+            'user.name' => [Rules::required()],
         ]);
 
         // 'user' key is entirely absent — resolves to null
@@ -225,7 +224,7 @@ final class FormValidatorTest extends TestCase
     public function testDotPathMissingLeafKeyTreatedAsNull(): void
     {
         $form = new FormValidator([
-            'user.email' => FieldValidator::withRules(Rules::required()),
+            'user.email' => [Rules::required()],
         ]);
 
         // parent key exists but leaf 'email' is absent
@@ -236,7 +235,7 @@ final class FormValidatorTest extends TestCase
     public function testDotPathDeepNesting(): void
     {
         $form = new FormValidator([
-            'billing.address.city' => FieldValidator::withRules(Rules::required(), Rules::minLength(2)),
+            'billing.address.city' => [Rules::required(), Rules::minLength(2)],
         ]);
 
         self::assertFalse($form->validate([
@@ -254,7 +253,7 @@ final class FormValidatorTest extends TestCase
     {
         // 'user' is a string, not an array — should yield null for user.name
         $form = new FormValidator([
-            'user.name' => FieldValidator::withRules(Rules::required()),
+            'user.name' => [Rules::required()],
         ]);
 
         $bag = $form->validate(['user' => 'not-an-array']);
@@ -264,11 +263,11 @@ final class FormValidatorTest extends TestCase
     public function testWithNestedMergesSubValidatorWithPrefix(): void
     {
         $addressValidator = (new FormValidator())
-            ->withField('city', FieldValidator::withRules(Rules::required()))
-            ->withField('zip',  FieldValidator::withRules(Rules::required()));
+            ->withField('city', [Rules::required()])
+            ->withField('zip',  [Rules::required()]);
 
         $form = (new FormValidator())
-            ->withField('name', FieldValidator::withRules(Rules::required()))
+            ->withField('name', [Rules::required()])
             ->withNested('address', $addressValidator);
 
         self::assertCount(3, $form->fields());
@@ -280,11 +279,11 @@ final class FormValidatorTest extends TestCase
     public function testWithNestedValidatesCorrectly(): void
     {
         $addressValidator = (new FormValidator())
-            ->withField('city', FieldValidator::withRules(Rules::required()))
-            ->withField('zip',  FieldValidator::withRules(Rules::required(), Rules::minLength(5)));
+            ->withField('city', [Rules::required()])
+            ->withField('zip',  [Rules::required(), Rules::minLength(5)]);
 
         $form = (new FormValidator())
-            ->withField('name', FieldValidator::withRules(Rules::required()))
+            ->withField('name', [Rules::required()])
             ->withNested('address', $addressValidator);
 
         $bag = $form->validate([
@@ -302,7 +301,7 @@ final class FormValidatorTest extends TestCase
     public function testWithNestedIsImmutable(): void
     {
         $addressValidator = (new FormValidator())
-            ->withField('city', FieldValidator::withRules(Rules::required()));
+            ->withField('city', [Rules::required()]);
 
         $form1 = new FormValidator();
         $form2 = $form1->withNested('address', $addressValidator);
@@ -315,11 +314,11 @@ final class FormValidatorTest extends TestCase
     public function testWithNestedFullValidPayloadPasses(): void
     {
         $contactValidator = (new FormValidator())
-            ->withField('email', FieldValidator::withRules(Rules::required(), Rules::email()))
-            ->withField('phone', FieldValidator::withRules(Rules::required()));
+            ->withField('email', [Rules::required(), Rules::email()])
+            ->withField('phone', [Rules::required()]);
 
         $form = (new FormValidator())
-            ->withField('username', FieldValidator::withRules(Rules::required()))
+            ->withField('username', [Rules::required()])
             ->withNested('contact', $contactValidator);
 
         $bag = $form->validate([
@@ -333,7 +332,7 @@ final class FormValidatorTest extends TestCase
     public function testValidateOrFailReturnsBagWhenValid(): void
     {
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+            'email' => [Rules::required(), Rules::email()],
         ]);
 
         $bag = $form->validateOrFail(['email' => 'ok@example.com']);
@@ -345,7 +344,7 @@ final class FormValidatorTest extends TestCase
     public function testValidateOrFailThrowsValidationExceptionWhenInvalid(): void
     {
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+            'email' => [Rules::required(), Rules::email()],
         ]);
 
         try {
@@ -358,16 +357,16 @@ final class FormValidatorTest extends TestCase
         }
     }
 
-    // ---- optional fields in FormValidator ----
+    // ---- optional fields (no required() rule = optional) ----
 
     public function testOptionalFieldAbsentFromPayloadProducesNoError(): void
     {
         $form = new FormValidator([
-            'name'    => FieldValidator::withRules(Rules::required()),
-            'website' => FieldValidator::optional(Rules::url()),
+            'name'    => [Rules::required()],
+            'website' => [Rules::url()],
         ]);
 
-        // website omitted entirely → no error
+        // website omitted entirely → no error (no required rule = optional)
         $bag = $form->validate(['name' => 'Alice']);
         self::assertFalse($bag->hasErrors());
     }
@@ -375,11 +374,11 @@ final class FormValidatorTest extends TestCase
     public function testOptionalFieldEmptyStringProducesNoError(): void
     {
         $form = new FormValidator([
-            'name'    => FieldValidator::withRules(Rules::required()),
-            'website' => FieldValidator::optional(Rules::url()),
+            'name'    => [Rules::required()],
+            'website' => [Rules::url()],
         ]);
 
-        // website present as empty string → skipped
+        // website present as empty string → skipped (optional)
         $bag = $form->validate(['name' => 'Alice', 'website' => '']);
         self::assertFalse($bag->hasErrors());
     }
@@ -387,7 +386,7 @@ final class FormValidatorTest extends TestCase
     public function testOptionalFieldWithValidValuePassesRules(): void
     {
         $form = new FormValidator([
-            'website' => FieldValidator::optional(Rules::url()),
+            'website' => [Rules::url()],
         ]);
 
         $bag = $form->validate(['website' => 'https://example.com']);
@@ -397,7 +396,7 @@ final class FormValidatorTest extends TestCase
     public function testOptionalFieldWithInvalidValueFailsRules(): void
     {
         $form = new FormValidator([
-            'website' => FieldValidator::optional(Rules::url()),
+            'website' => [Rules::url()],
         ]);
 
         $bag = $form->validate(['website' => 'not-a-url']);
@@ -407,18 +406,57 @@ final class FormValidatorTest extends TestCase
     public function testOptionalNestedFieldSkippedWhenAbsent(): void
     {
         $profileValidator = (new FormValidator())
-            ->withField('bio', FieldValidator::optional(Rules::maxLength(200)));
+            ->withField('bio', [Rules::maxLength(200)]);
 
         $form = (new FormValidator())
-            ->withField('name', FieldValidator::withRules(Rules::required()))
+            ->withField('name', [Rules::required()])
             ->withNested('profile', $profileValidator);
 
-        // bio absent → no error
+        // bio absent → no error (optional)
         $bag = $form->validate(['name' => 'Alice', 'profile' => []]);
         self::assertFalse($bag->hasErrors());
 
         // bio too long → error
         $bag = $form->validate(['name' => 'Alice', 'profile' => ['bio' => str_repeat('x', 201)]]);
         self::assertTrue($bag->hasErrorsFor('profile.bio'));
+    }
+
+    // ---- tag-based optional detection ----
+
+    public function testFieldWithRequiredTagIsAlwaysValidated(): void
+    {
+        $form = new FormValidator([
+            'email' => [Rules::required(), Rules::email()],
+        ]);
+
+        // null value → required rule fails
+        $bag = $form->validate([]);
+        self::assertTrue($bag->hasErrorsFor('email'));
+    }
+
+    public function testFieldWithoutRequiredTagSkipsNullValues(): void
+    {
+        $form = new FormValidator([
+            'email' => [Rules::email()],
+        ]);
+
+        // null value → skipped since no required tag
+        $bag = $form->validate([]);
+        self::assertFalse($bag->hasErrors());
+    }
+
+    public function testFieldWithoutRequiredTagValidatesPresentValues(): void
+    {
+        $form = new FormValidator([
+            'email' => [Rules::email()],
+        ]);
+
+        // present but invalid → fails
+        $bag = $form->validate(['email' => 'not-valid']);
+        self::assertTrue($bag->hasErrorsFor('email'));
+
+        // present and valid → passes
+        $bag = $form->validate(['email' => 'a@b.com']);
+        self::assertFalse($bag->hasErrors());
     }
 }

@@ -6,11 +6,11 @@ namespace Zephyrus\Validation;
 
 final class FormValidator
 {
-    /** @var array<string, FieldValidator> */
+    /** @var array<string, Rule[]> */
     private array $fields;
 
     /**
-     * @param array<string, FieldValidator> $fields
+     * @param array<string, Rule[]> $fields
      */
     public function __construct(array $fields = [])
     {
@@ -18,25 +18,27 @@ final class FormValidator
     }
 
     /**
-     * Adds or replaces the FieldValidator for the given field name (immutable).
+     * Adds or replaces the rules for the given field name (immutable).
+     *
+     * @param Rule[] $rules
      */
-    public function withField(string $name, FieldValidator $validator): self
+    public function withField(string $name, array $rules): self
     {
         $clone = clone $this;
-        $clone->fields[$name] = $validator;
+        $clone->fields[$name] = $rules;
         return $clone;
     }
 
     /**
-     * Adds or replaces multiple field validators (immutable).
+     * Adds or replaces multiple field rule sets (immutable).
      *
-     * @param array<string, FieldValidator> $fields
+     * @param array<string, Rule[]> $fields
      */
     public function withFields(array $fields): self
     {
         $clone = clone $this;
-        foreach ($fields as $name => $validator) {
-            $clone->fields[$name] = $validator;
+        foreach ($fields as $name => $rules) {
+            $clone->fields[$name] = $rules;
         }
         return $clone;
     }
@@ -51,14 +53,18 @@ final class FormValidator
     public function withNested(string $prefix, self $sub): self
     {
         $clone = clone $this;
-        foreach ($sub->fields as $name => $validator) {
-            $clone->fields["{$prefix}.{$name}"] = $validator;
+        foreach ($sub->fields as $name => $rules) {
+            $clone->fields["{$prefix}.{$name}"] = $rules;
         }
         return $clone;
     }
 
     /**
-     * Validates $data against all registered field validators.
+     * Validates $data against all registered field rules.
+     *
+     * Fields whose rule list does not contain a required() rule are treated
+     * as optional: when the value is null or an empty string, all rules are
+     * skipped and no errors are reported.
      *
      * Field names containing "." are resolved as dot-paths into nested arrays
      * (e.g. "address.city" → $data['address']['city']).  Missing keys at any
@@ -69,12 +75,19 @@ final class FormValidator
     public function validate(array $data): ErrorBag
     {
         $bag = new ErrorBag();
-        foreach ($this->fields as $field => $validator) {
+        foreach ($this->fields as $field => $rules) {
             $value = str_contains($field, '.')
                 ? $this->resolveDotPath($data, $field)
                 : ($data[$field] ?? null);
-            foreach ($validator->validate($value) as $message) {
-                $bag->add($field, $message);
+
+            if (!$this->hasRequiredRule($rules) && ($value === null || $value === '')) {
+                continue;
+            }
+
+            foreach ($rules as $rule) {
+                if (!$rule->test($value)) {
+                    $bag->add($field, $rule->errorMessage());
+                }
             }
         }
         return $bag;
@@ -99,11 +112,26 @@ final class FormValidator
     }
 
     /**
-     * @return array<string, FieldValidator>
+     * @return array<string, Rule[]>
      */
     public function fields(): array
     {
         return $this->fields;
+    }
+
+    /**
+     * Check whether the given rule set contains a required() rule.
+     *
+     * @param Rule[] $rules
+     */
+    private function hasRequiredRule(array $rules): bool
+    {
+        foreach ($rules as $rule) {
+            if ($rule->tag() === 'required') {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

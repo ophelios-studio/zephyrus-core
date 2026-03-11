@@ -10,7 +10,6 @@ use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Validation\ErrorBag;
-use Zephyrus\Validation\FieldValidator;
 use Zephyrus\Validation\FormValidator;
 use Zephyrus\Validation\Rules;
 use Zephyrus\Validation\ValidationException;
@@ -284,7 +283,7 @@ final class ControllerTest extends TestCase
     {
         $controller = new ValidatingController();
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
+            'email' => [Rules::required(), Rules::email()],
         ]);
 
         $bag = $controller->runValidate($form, ['email' => 'alice@example.com']);
@@ -297,8 +296,8 @@ final class ControllerTest extends TestCase
     {
         $controller = new ValidatingController();
         $form = new FormValidator([
-            'email' => FieldValidator::withRules(Rules::required(), Rules::email()),
-            'name'  => FieldValidator::withRules(Rules::required()),
+            'email' => [Rules::required(), Rules::email()],
+            'name'  => [Rules::required()],
         ]);
 
         $this->expectException(ValidationException::class);
@@ -311,7 +310,7 @@ final class ControllerTest extends TestCase
     {
         $controller = new ValidatingController();
         $form = new FormValidator([
-            'age' => FieldValidator::withRules(Rules::required(), Rules::integer()),
+            'age' => [Rules::required(), Rules::integer()],
         ]);
 
         try {
