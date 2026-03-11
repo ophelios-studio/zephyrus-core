@@ -11,6 +11,7 @@ final class Rules
         return Rule::of(
             fn (mixed $v) => $v !== null && $v !== '' && $v !== [],
             $message,
+            'required',
         );
     }
 
