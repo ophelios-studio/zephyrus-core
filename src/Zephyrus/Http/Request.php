@@ -7,48 +7,63 @@ namespace Zephyrus\Http;
 use Zephyrus\Upload\FileUpload;
 use Zephyrus\Upload\UploadException;
 
+/**
+ * Immutable HTTP request value object.
+ *
+ * Composes structured sub-objects for the major HTTP concerns:
+ *   - uri()     → Uri          (parsed URL components)
+ *   - body()    → RequestBody  (parsed body data + raw content)
+ *   - headers() → HeaderBag    (case-insensitive header lookup)
+ *   - cookies() → CookieJar    (cookie value lookup)
+ *
+ * Query parameters, uploaded files, route attributes, and client IP remain
+ * as flat properties with convenience accessors.
+ */
 final readonly class Request
 {
+    private Uri $uri;
+    private RequestBody $body;
+    private HeaderBag $headerBag;
+    private CookieJar $cookieJar;
+
     /**
      * @param array<string, mixed> $query
-     * @param array<string, mixed> $parsedBody
-     * @param array<string, string> $headers
-     * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
      * @param array<string, FileUpload|array<int, FileUpload>> $files
      */
     public function __construct(
         public string $method,
-        public string $uri,
+        Uri|string $uri,
+        RequestBody|array $body = [],
         public array $query = [],
-        public array $parsedBody = [],
-        public array $headers = [],
-        public array $cookies = [],
+        HeaderBag|array $headers = [],
+        CookieJar|array $cookies = [],
         public array $attributes = [],
         public array $files = [],
         public ?string $clientIp = null,
+        string $rawBody = '',
     ) {
+        $this->uri = $uri instanceof Uri ? $uri : new Uri($uri);
+        $this->body = $body instanceof RequestBody
+            ? $body
+            : new RequestBody($body, $rawBody);
+        $this->headerBag = $headers instanceof HeaderBag
+            ? $headers
+            : new HeaderBag(self::normalizeHeaders($headers));
+        $this->cookieJar = $cookies instanceof CookieJar
+            ? $cookies
+            : new CookieJar($cookies);
     }
 
     /**
      * Build a Request from PHP superglobals. This is the primary entry point
-     * for production use in public/index.php. All superglobal arrays may be
-     * overridden for testing without touching the real superglobals.
-     *
-     * Method override is applied when the raw method is POST:
-     *   1. X-Http-Method-Override request header (highest priority).
-     *   2. `_method` field in the parsed request body.
-     *
-     * Body parsing rules:
-     *   - application/json  → JSON-decodes $rawBody (defaults to php://input).
-     *   - form content types → uses $post directly.
-     *   - GET / HEAD        → always empty (no body by spec).
+     * for production use in public/index.php.
      *
      * @param array<string, mixed>|null  $server
      * @param array<string, mixed>|null  $get
      * @param array<string, mixed>|null  $post
      * @param array<string, string>|null $cookie
-     * @param array<string, mixed>|null   $files
+     * @param array<string, mixed>|null  $files
      * @param string|null                $rawBody        Injected for testing; defaults to php://input.
      * @param string[]                   $trustedProxies IP addresses/CIDR ranges whose forwarded
      *                                                   headers are trusted. Use ['*'] for all.
@@ -75,16 +90,17 @@ final readonly class Request
         $uri     = self::buildUri($server, $trustForwarded);
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded);
 
-        $parsedBody = self::parseBody($method, $headers, $post, $rawBody);
+        $raw = $rawBody ?? (string) file_get_contents('php://input');
+        $parsedBody = self::parseBody($method, $headers, $post, $raw);
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
 
         return new self(
             method:     $method,
-            uri:        $uri,
+            uri:        new Uri($uri),
+            body:       new RequestBody($parsedBody, $raw),
             query:      $get,
-            parsedBody: $parsedBody,
-            headers:    $headers,
-            cookies:    $cookie,
+            headers:    new HeaderBag($headers),
+            cookies:    new CookieJar($cookie),
             attributes: [],
             files:      self::normalizeFileUploads($files),
             clientIp:   $clientIp,
@@ -92,8 +108,11 @@ final readonly class Request
     }
 
     /**
+     * Convenience factory for testing. Accepts plain arrays for all parameters
+     * and constructs sub-objects internally.
+     *
+     * @param array<string, mixed> $body
      * @param array<string, mixed> $query
-     * @param array<string, mixed> $parsedBody
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
@@ -102,70 +121,59 @@ final readonly class Request
     public static function fromArray(
         string $method,
         string $uri,
+        array $body = [],
         array $query = [],
-        array $parsedBody = [],
         array $headers = [],
         array $cookies = [],
         array $attributes = [],
         array $files = [],
         ?string $clientIp = null,
+        string $rawBody = '',
     ): self {
         return new self(
             method:     strtoupper($method),
-            uri:        $uri,
+            uri:        new Uri($uri),
+            body:       new RequestBody($body, $rawBody),
             query:      $query,
-            parsedBody: $parsedBody,
-            headers:    self::normalizeHeaders($headers),
-            cookies:    $cookies,
+            headers:    new HeaderBag(self::normalizeHeaders($headers)),
+            cookies:    new CookieJar($cookies),
             attributes: $attributes,
             files:      $files,
             clientIp:   $clientIp,
         );
     }
 
+    // ------------------------------------------------------------------
+    // Sub-object accessors
+    // ------------------------------------------------------------------
+
+    public function uri(): Uri
+    {
+        return $this->uri;
+    }
+
+    public function body(): RequestBody
+    {
+        return $this->body;
+    }
+
+    public function headers(): HeaderBag
+    {
+        return $this->headerBag;
+    }
+
+    public function cookies(): CookieJar
+    {
+        return $this->cookieJar;
+    }
+
+    // ------------------------------------------------------------------
+    // Flat accessors (query, files, attributes, method, client IP)
+    // ------------------------------------------------------------------
+
     public function query(string $key, mixed $default = null): mixed
     {
         return $this->query[$key] ?? $default;
-    }
-
-    public function input(string $key, mixed $default = null): mixed
-    {
-        return $this->parsedBody[$key] ?? $default;
-    }
-
-    public function header(string $name, ?string $default = null): ?string
-    {
-        return $this->headers[strtolower($name)] ?? $default;
-    }
-
-    public function bearerToken(string $headerName = 'Authorization', string $prefix = 'Bearer '): ?string
-    {
-        $value = $this->header($headerName);
-        if ($value === null) {
-            return null;
-        }
-
-        $trimmed = trim($value);
-        if ($trimmed === '') {
-            return null;
-        }
-
-        $normalizedPrefix = trim($prefix);
-        if ($normalizedPrefix === '') {
-            return $trimmed;
-        }
-
-        if (strncasecmp($trimmed, $normalizedPrefix, strlen($normalizedPrefix)) === 0) {
-            $token = trim(substr($trimmed, strlen($normalizedPrefix)));
-            return $token === '' ? null : $token;
-        }
-
-        return $trimmed;
-    }
-
-    public function cookie(string $name, ?string $default = null): ?string
-    {
-        return $this->cookies[$name] ?? $default;
     }
 
     public function file(string $field): ?FileUpload
@@ -201,24 +209,14 @@ final readonly class Request
         return [];
     }
 
-    public function path(): string
+    public function attribute(string $key, mixed $default = null): mixed
     {
-        return (string) parse_url($this->uri, PHP_URL_PATH);
+        return $this->attributes[$key] ?? $default;
     }
 
     public function isMethod(string $method): bool
     {
         return $this->method === strtoupper($method);
-    }
-
-    public function isJson(): bool
-    {
-        return self::isJsonContentType($this->headers['content-type'] ?? '');
-    }
-
-    public function isSecure(): bool
-    {
-        return str_starts_with($this->uri, 'https://');
     }
 
     public function clientIp(?string $default = null): ?string
@@ -227,7 +225,6 @@ final readonly class Request
             return $this->clientIp;
         }
 
-        // Check attribute (set by middleware, e.g. from a load balancer SDK).
         $attributeValue = $this->attributes['client_ip'] ?? null;
         if (is_string($attributeValue)) {
             $normalized = self::normalizeIp($attributeValue);
@@ -239,10 +236,9 @@ final readonly class Request
         return $default;
     }
 
-    public function attribute(string $key, mixed $default = null): mixed
-    {
-        return $this->attributes[$key] ?? $default;
-    }
+    // ------------------------------------------------------------------
+    // Immutable attribute mutation
+    // ------------------------------------------------------------------
 
     public function withAttribute(string $key, mixed $value): self
     {
@@ -252,10 +248,10 @@ final readonly class Request
         return new self(
             method:     $this->method,
             uri:        $this->uri,
+            body:       $this->body,
             query:      $this->query,
-            parsedBody: $this->parsedBody,
-            headers:    $this->headers,
-            cookies:    $this->cookies,
+            headers:    $this->headerBag,
+            cookies:    $this->cookieJar,
             attributes: $attributes,
             files:      $this->files,
             clientIp:   $this->clientIp,
@@ -263,9 +259,6 @@ final readonly class Request
     }
 
     /**
-     * Return a new request with the given attributes merged into any existing
-     * attributes. New keys are added; existing keys are overwritten.
-     *
      * @param array<string, mixed> $attributes
      */
     public function withAttributes(array $attributes): self
@@ -273,24 +266,21 @@ final readonly class Request
         return new self(
             method:     $this->method,
             uri:        $this->uri,
+            body:       $this->body,
             query:      $this->query,
-            parsedBody: $this->parsedBody,
-            headers:    $this->headers,
-            cookies:    $this->cookies,
+            headers:    $this->headerBag,
+            cookies:    $this->cookieJar,
             attributes: array_merge($this->attributes, $attributes),
             files:      $this->files,
             clientIp:   $this->clientIp,
         );
     }
 
+    // ------------------------------------------------------------------
+    // Private: fromGlobals helpers
+    // ------------------------------------------------------------------
+
     /**
-     * Extract HTTP headers from a $_SERVER-style array.
-     *
-     * PHP surfaces request headers in $_SERVER with the HTTP_ prefix and
-     * underscores replacing hyphens (e.g. X-Request-Id → HTTP_X_REQUEST_ID).
-     * A small set of headers (Content-Type, Content-Length, Content-Md5) appear
-     * without the prefix. All names are lowercased for case-insensitive lookup.
-     *
      * @param  array<string, mixed> $server
      * @return array<string, string>
      */
@@ -298,7 +288,6 @@ final readonly class Request
     {
         $headers = [];
 
-        // Headers that PHP does not prefix with HTTP_
         $unprefixed = ['CONTENT_TYPE', 'CONTENT_LENGTH', 'CONTENT_MD5'];
         foreach ($unprefixed as $key) {
             if (isset($server[$key]) && $server[$key] !== '') {
@@ -307,7 +296,6 @@ final readonly class Request
             }
         }
 
-        // All HTTP_ prefixed entries
         foreach ($server as $key => $value) {
             if (str_starts_with($key, 'HTTP_')) {
                 $name = strtolower(str_replace('_', '-', substr($key, 5)));
@@ -319,20 +307,12 @@ final readonly class Request
     }
 
     /**
-     * Construct a full URI string from a $_SERVER-style array.
-     *
-     * Scheme detection: HTTPS key present and not 'off' → https, else http.
-     * Host: HTTP_HOST preferred; falls back to SERVER_NAME then 'localhost'.
-     * Path + query: taken verbatim from REQUEST_URI (already URL-encoded by PHP).
-     *
      * @param array<string, mixed> $server
-     * @param bool $trustForwarded Whether to honor forwarded headers.
      */
     private static function buildUri(array $server, bool $trustForwarded = false): string
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
-        // When behind a reverse proxy, REQUEST_URI may already be absolute
         if (str_starts_with($requestUri, 'http://') || str_starts_with($requestUri, 'https://')) {
             return $requestUri;
         }
@@ -379,13 +359,6 @@ final readonly class Request
     }
 
     /**
-     * Parse the request body into an associative array.
-     *
-     * - GET and HEAD never have a body.
-     * - application/json → JSON-decoded from $rawBody (or php://input).
-     * - form content types → $post passed through directly.
-     * - Any other method with no content-type → $post if non-empty, else empty.
-     *
      * @param  array<string, string> $headers
      * @param  array<string, mixed>  $post
      * @return array<string, mixed>
@@ -394,7 +367,7 @@ final readonly class Request
         string $method,
         array $headers,
         array $post,
-        ?string $rawBody,
+        string $rawBody,
     ): array {
         if (in_array($method, ['GET', 'HEAD'], true)) {
             return [];
@@ -403,13 +376,12 @@ final readonly class Request
         $contentType = $headers['content-type'] ?? '';
 
         if (self::isJsonContentType($contentType)) {
-            $body = $rawBody ?? (string) file_get_contents('php://input');
-            if ($body === '') {
+            if ($rawBody === '') {
                 return [];
             }
 
             try {
-                $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+                $decoded = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
             } catch (\JsonException) {
                 return [];
             }
@@ -424,20 +396,10 @@ final readonly class Request
             return $post;
         }
 
-        // Fallback: use $_POST if populated (PHP may have parsed the body already)
         return $post;
     }
 
     /**
-     * Resolve an HTTP method override for POST requests.
-     *
-     * HTML forms can only send GET and POST; this convention lets them tunnel
-     * PUT, PATCH, or DELETE by specifying the desired method via:
-     *   - X-Http-Method-Override header (highest priority, used by AJAX clients).
-     *   - `_method` hidden field in the request body.
-     *
-     * Only applies when the raw method is POST. The override value is uppercased.
-     *
      * @param array<string, string> $headers
      * @param array<string, mixed>  $parsedBody
      */
@@ -468,7 +430,6 @@ final readonly class Request
     /**
      * @param array<string, mixed>  $server
      * @param array<string, string> $headers
-     * @param bool $trustForwarded Whether to honor forwarded headers.
      */
     private static function resolveClientIp(array $server, array $headers, bool $trustForwarded = false): ?string
     {
@@ -553,13 +514,7 @@ final readonly class Request
     }
 
     /**
-     * Check if the remote address is in the trusted proxies list.
-     *
-     * Supports exact IP matching and CIDR notation. The special value '*'
-     * trusts all proxies (useful in development).
-     *
-     * @param string|null $remoteAddr     The REMOTE_ADDR (already normalized).
-     * @param string[]    $trustedProxies Trusted IP addresses or CIDR ranges.
+     * @param string[] $trustedProxies
      */
     private static function isProxyTrusted(?string $remoteAddr, array $trustedProxies): bool
     {
@@ -584,9 +539,6 @@ final readonly class Request
         return false;
     }
 
-    /**
-     * Check if an IP address falls within a CIDR range.
-     */
     private static function ipInCidr(string $ip, string $cidr): bool
     {
         [$subnet, $bits] = explode('/', $cidr, 2);
@@ -600,10 +552,9 @@ final readonly class Request
         }
 
         if (strlen($ipBin) !== strlen($subnetBin)) {
-            return false; // IPv4 vs IPv6 mismatch.
+            return false;
         }
 
-        // Build mask.
         $totalBits = strlen($ipBin) * 8;
         if ($bitsInt < 0 || $bitsInt > $totalBits) {
             return false;

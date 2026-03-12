@@ -147,7 +147,7 @@ final class BootstrapExampleTest extends TestCase
             Request::fromArray(
                 'POST',
                 '/users',
-                parsedBody: ['name' => 'Carol'],
+                body: ['name' => 'Carol'],
                 headers: ['X-Api-Key' => 'key'],
             ),
         );
@@ -254,7 +254,7 @@ final class BootstrapUserController extends Controller
 
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Api-Key') === null) {
+        if ($request->headers()->get('X-Api-Key') === null) {
             return $this->respond(['error' => 'API key required'], 401);
         }
 
@@ -328,7 +328,7 @@ final class BootstrapLocaleMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $next): Response
     {
-        $header = $request->header('Accept-Language', '');
+        $header = $request->headers()->get('Accept-Language', '');
         $locale = str_starts_with(strtolower($header), 'fr') ? 'fr' : 'en';
 
         return $next($request->withAttribute('locale', $locale));

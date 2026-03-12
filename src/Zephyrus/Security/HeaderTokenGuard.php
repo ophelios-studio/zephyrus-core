@@ -17,7 +17,7 @@ final class HeaderTokenGuard implements AuthGuardInterface
 
     public function isAuthorized(Request $request): bool
     {
-        $token = $request->bearerToken($this->headerName, $this->bearerPrefix);
+        $token = $request->headers()->bearerToken($this->headerName, $this->bearerPrefix);
         if ($token === null || $token === '') {
             return false;
         }

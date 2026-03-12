@@ -73,7 +73,7 @@ final class UserController extends Controller
     // Require before() to pass (no auth header → 401).
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Api-Key') === null) {
+        if ($request->headers()->get('X-Api-Key') === null) {
             return $this->respond(['error' => 'API key required'], 401);
         }
 
@@ -106,7 +106,7 @@ final class UserController extends Controller
     #[Route('/users', 'POST', name: 'users.store')]
     public function store(Request $request): Response
     {
-        $name = (string) ($request->input('name') ?? 'Anonymous');
+        $name = (string) ($request->body()->get('name') ?? 'Anonymous');
 
         // Redirect-after-POST: 303 See Other to the new resource URL.
         // The created ID would normally come from the database insert.
@@ -161,7 +161,7 @@ final class LocaleMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $next): Response
     {
-        $header = $request->header('Accept-Language', '');
+        $header = $request->headers()->get('Accept-Language', '');
         $locale = str_starts_with(strtolower($header), 'fr') ? 'fr' : 'en';
 
         return $next($request->withAttribute('locale', $locale));

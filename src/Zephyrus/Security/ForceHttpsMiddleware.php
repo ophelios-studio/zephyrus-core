@@ -38,12 +38,12 @@ final class ForceHttpsMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $next): Response
     {
-        if ($request->isSecure()) {
+        if ($request->uri()->isSecure()) {
             /** @var Response */
             return $next($request);
         }
 
-        return Response::redirect($this->buildHttpsUrl($request->uri), 308);
+        return Response::redirect($this->buildHttpsUrl($request->uri()->full()), 308);
     }
 
     /**

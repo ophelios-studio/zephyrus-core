@@ -38,7 +38,7 @@ final class RouteDispatcherTest extends TestCase
                 'handler' => $match->route->handler,
                 'id' => $match->parameter('id'),
                 'requestId' => $request->attribute('id'),
-                'path' => $request->path(),
+                'path' => $request->uri()->path(),
             ]),
             routeMiddlewareResolver: static fn (string $name): MiddlewareInterface => new class($name) implements MiddlewareInterface {
                 public function __construct(private string $name)

@@ -112,7 +112,7 @@ final class HttpKernelWiringTest extends TestCase
         $kernel = KernelBuilder::create()->withRouter($router)->build();
 
         $response = $kernel->handle(
-            Request::fromArray('POST', '/items', parsedBody: ['name' => 'Widget', 'qty' => 3]),
+            Request::fromArray('POST', '/items', body: ['name' => 'Widget', 'qty' => 3]),
         );
 
         self::assertSame(201, $response->status);
@@ -128,7 +128,7 @@ final class HttpKernelWiringTest extends TestCase
         $kernel = KernelBuilder::create()->withRouter($router)->build();
 
         $response = $kernel->handle(
-            Request::fromArray('PUT', '/users/7', parsedBody: ['name' => 'Alice']),
+            Request::fromArray('PUT', '/users/7', body: ['name' => 'Alice']),
         );
 
         self::assertSame(200, $response->status);
@@ -454,7 +454,7 @@ final class HttpKernelWiringTest extends TestCase
         $router = (new Router())
             ->get('/predicate-guarded', WiringPingController::class . '@ping', middlewares: ['auth.guard']);
 
-        $guard = new PredicateAuthGuard(static fn (Request $request): bool => $request->header('X-Role') === 'admin');
+        $guard = new PredicateAuthGuard(static fn (Request $request): bool => $request->headers()->get('X-Role') === 'admin');
 
         $kernel = KernelBuilder::create()
             ->withRouter($router)
@@ -851,7 +851,7 @@ final class WiringUserController extends Controller
 
     public function update(int $id, Request $request): Response
     {
-        return $this->json(['id' => $id, 'name' => $request->input('name')]);
+        return $this->json(['id' => $id, 'name' => $request->body()->get('name')]);
     }
 }
 
@@ -876,8 +876,8 @@ final class WiringItemController extends Controller
     public function store(Request $request): Response
     {
         return $this->created([
-            'name' => $request->input('name'),
-            'qty'  => $request->input('qty'),
+            'name' => $request->body()->get('name'),
+            'qty'  => $request->body()->get('qty'),
         ]);
     }
 }
@@ -947,7 +947,7 @@ final class WiringSecuredController extends Controller
 {
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Token') !== 'valid') {
+        if ($request->headers()->get('X-Token') !== 'valid') {
             return $this->respond(['error' => 'Unauthorized'], 401);
         }
 
@@ -979,7 +979,7 @@ final class WiringComboController extends Controller
 {
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Halt') === '1') {
+        if ($request->headers()->get('X-Halt') === '1') {
             return Response::text('halted', 403);
         }
 

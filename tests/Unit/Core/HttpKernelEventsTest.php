@@ -45,7 +45,7 @@ final class HttpKernelEventsTest extends TestCase
         $received = null;
         $events = new EventDispatcher();
         $events->addListener(RequestEvent::class, function (RequestEvent $e) use (&$received): void {
-            $received = $e->getRequest()->uri;
+            $received = $e->getRequest()->uri()->full();
         });
 
         $kernel = $this->makeKernelWithRoute('/hello', fn (): Response => Response::text('hi'), $events);

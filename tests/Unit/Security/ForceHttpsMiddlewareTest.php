@@ -32,7 +32,7 @@ final class ForceHttpsMiddlewareTest extends TestCase
 
     public function testSecurePostRequestPassesThrough(): void
     {
-        $request  = new Request('POST', 'https://example.com/submit', parsedBody: ['x' => '1']);
+        $request  = new Request('POST', 'https://example.com/submit', body: ['x' => '1']);
         $inner    = Response::json(['ok' => true]);
         $response = $this->mw->process($request, fn (Request $r): Response => $inner);
 

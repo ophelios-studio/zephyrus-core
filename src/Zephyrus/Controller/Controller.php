@@ -33,7 +33,7 @@ use Zephyrus\Validation\ValidationException;
  *
  *     public function store(Request $request): Response
  *     {
- *         $name = $request->input('name');
+ *         $name = $request->body()->get('name');
  *         return $this->created(['name' => $name]);
  *     }
  * }
