@@ -9,6 +9,7 @@ use Zephyrus\Controller\Controller;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\HandlerResolverException;
+use Zephyrus\Routing\Exception\RouteParameterException;
 use Zephyrus\Routing\HandlerResolver;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteMatch;
@@ -29,7 +30,7 @@ final class PlainHandlerController
 
     public function withRequest(Request $request): Response
     {
-        return Response::text($request->path());
+        return Response::text($request->uri()->path());
     }
 
     public function withIntParam(int $id): Response
@@ -54,7 +55,7 @@ final class PlainHandlerController
 
     public function withMixed(Request $request, int $id): Response
     {
-        return Response::json(['path' => $request->path(), 'id' => $id]);
+        return Response::json(['path' => $request->uri()->path(), 'id' => $id]);
     }
 
     public function withNullable(?int $id): Response
@@ -133,7 +134,7 @@ final class BeforeGuardController extends Controller
 
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Block') === '1') {
+        if ($request->headers()->get('X-Block') === '1') {
             return Response::text('blocked', 403);
         }
 
@@ -171,7 +172,7 @@ final class BothLifecycleController extends Controller
 {
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Block') === '1') {
+        if ($request->headers()->get('X-Block') === '1') {
             return Response::text('halted', 401);
         }
 
@@ -206,7 +207,7 @@ final class ExtendedHandlerController extends Controller
 
     public function store(Request $request): Response
     {
-        return $this->created(['name' => $request->input('name')]);
+        return $this->created(['name' => $request->body()->get('name')]);
     }
 }
 
@@ -382,7 +383,7 @@ final class HandlerResolverTest extends TestCase
 
         $response = $this->resolver->resolve(
             $match,
-            Request::fromArray('POST', '/items', parsedBody: ['name' => 'Widget']),
+            Request::fromArray('POST', '/items', body: ['name' => 'Widget']),
         );
 
         self::assertSame(201, $response->status);
@@ -462,7 +463,7 @@ final class HandlerResolverTest extends TestCase
 
     public function testInvalidScalarValueThrowsExplicitTypeError(): void
     {
-        $this->expectException(HandlerResolverException::class);
+        $this->expectException(RouteParameterException::class);
         $this->expectExceptionMessageMatches('/expected bool, got string/');
 
         $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
@@ -554,7 +555,7 @@ final class HandlerResolverTest extends TestCase
 
     public function testFloatInvalidAttributeThrows(): void
     {
-        $this->expectException(HandlerResolverException::class);
+        $this->expectException(RouteParameterException::class);
         $this->expectExceptionMessageMatches('/expected float/');
 
         $match = $this->makeMatch('GET', '/scores/{score}', PlainHandlerController::class . '@withFloatParam');
@@ -631,7 +632,7 @@ final class HandlerResolverTest extends TestCase
 
     public function testStringArrayAttributeThrows(): void
     {
-        $this->expectException(HandlerResolverException::class);
+        $this->expectException(RouteParameterException::class);
         $this->expectExceptionMessageMatches('/expected string/');
 
         $match = $this->makeMatch('GET', '/items/{label}', PlainHandlerController::class . '@withStringCoerce');
@@ -646,7 +647,7 @@ final class HandlerResolverTest extends TestCase
 
     public function testUnionTypeAllCastsFailThrows(): void
     {
-        $this->expectException(HandlerResolverException::class);
+        $this->expectException(RouteParameterException::class);
         $this->expectExceptionMessageMatches('/expected int\|float/');
 
         $match = $this->makeMatch('GET', '/vals/{val}', PlainHandlerController::class . '@withUnionStrict');
@@ -676,7 +677,7 @@ final class HandlerResolverTest extends TestCase
 
     public function testNullForNonNullableNamedTypeThrows(): void
     {
-        $this->expectException(HandlerResolverException::class);
+        $this->expectException(RouteParameterException::class);
         $this->expectExceptionMessageMatches('/expected int/');
 
         $match = $this->makeMatch('GET', '/items/{id}', PlainHandlerController::class . '@withIntParam');

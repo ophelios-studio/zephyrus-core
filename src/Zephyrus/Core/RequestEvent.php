@@ -22,7 +22,7 @@ use Zephyrus\Http\Response;
  * Example:
  *
  *   $dispatcher->addListener(RequestEvent::class, function (RequestEvent $e): void {
- *       if ($e->getRequest()->header('X-Maintenance-Key') !== 'secret') {
+ *       if ($e->getRequest()->headers()->get('X-Maintenance-Key') !== 'secret') {
  *           $e->setResponse(Response::text('Down for maintenance', status: 503));
  *       }
  *   });

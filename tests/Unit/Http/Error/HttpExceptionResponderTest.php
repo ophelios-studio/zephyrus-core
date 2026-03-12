@@ -11,6 +11,7 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RouteParameterException;
 use Zephyrus\Validation\ErrorBag;
 use Zephyrus\Validation\ValidationException;
 
@@ -322,7 +323,7 @@ final class HttpExceptionResponderTest extends TestCase
         $responder->registerHandler(
             RuntimeException::class,
             function (\Throwable $e, ?Request $r): Response {
-                $path = $r?->uri ?? 'unknown';
+                $path = $r?->uri()->full() ?? 'unknown';
                 return Response::text("Error on $path", 500);
             },
         );
@@ -343,5 +344,12 @@ final class HttpExceptionResponderTest extends TestCase
         );
 
         self::assertSame($responder, $result);
+    }
+
+    public function testRouteParameterExceptionYieldsNotFound(): void
+    {
+        $exception = new RouteParameterException('Ctrl', 'show', 'id', 'int', 'abc');
+        $response = (new HttpExceptionResponder())->toResponse($exception);
+        self::assertSame(404, $response->status);
     }
 }

@@ -61,9 +61,9 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
 
     private function resolveRequestHost(Request $request): ?string
     {
-        $rawHost = $request->header('host');
+        $rawHost = $request->headers()->get('host');
         if (!is_string($rawHost) || trim($rawHost) === '') {
-            $rawHost = parse_url($request->uri, PHP_URL_HOST);
+            $rawHost = $request->uri()->host();
         }
 
         if (!is_string($rawHost) || trim($rawHost) === '') {

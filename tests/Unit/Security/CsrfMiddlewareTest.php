@@ -123,7 +123,7 @@ final class CsrfMiddlewareTest extends TestCase
     public function testPostWithValidBodyTokenPasses(): void
     {
         $mw      = $this->makeMiddleware();
-        $request = new Request('POST', 'https://example.com/submit', parsedBody: [
+        $request = new Request('POST', 'https://example.com/submit', body: [
             '_csrf_token' => self::VALID_TOKEN,
             'name'        => 'Alice',
         ]);
@@ -136,7 +136,7 @@ final class CsrfMiddlewareTest extends TestCase
     public function testPutWithValidBodyTokenPasses(): void
     {
         $mw      = $this->makeMiddleware();
-        $request = new Request('PUT', 'https://example.com/resource/1', parsedBody: [
+        $request = new Request('PUT', 'https://example.com/resource/1', body: [
             '_csrf_token' => self::VALID_TOKEN,
         ]);
         $response = $mw->process($request, fn (Request $r): Response => Response::text('updated'));
@@ -173,7 +173,7 @@ final class CsrfMiddlewareTest extends TestCase
     public function testPostWithWrongBodyTokenReturnsForbidden(): void
     {
         $mw      = $this->makeMiddleware();
-        $request = new Request('POST', 'https://example.com/submit', parsedBody: [
+        $request = new Request('POST', 'https://example.com/submit', body: [
             '_csrf_token' => 'bad-token',
         ]);
         $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
@@ -200,7 +200,7 @@ final class CsrfMiddlewareTest extends TestCase
         $request = new Request(
             'POST',
             'https://example.com/submit',
-            parsedBody: ['_csrf_token' => self::VALID_TOKEN],  // body: valid
+            body: ['_csrf_token' => self::VALID_TOKEN],  // body: valid
             headers:    ['x-csrf-token' => 'bad-header'],       // header: bad
         );
         // Body wins → should pass
@@ -215,7 +215,7 @@ final class CsrfMiddlewareTest extends TestCase
     {
         $config  = new CsrfConfig(bodyField: '_token');
         $mw      = new CsrfMiddleware($this->makeManager(), $config);
-        $request = new Request('POST', 'https://example.com/submit', parsedBody: [
+        $request = new Request('POST', 'https://example.com/submit', body: [
             '_token' => self::VALID_TOKEN,
         ]);
         $response = $mw->process($request, fn (Request $r): Response => Response::text('ok'));
@@ -347,7 +347,7 @@ final class CsrfMiddlewareTest extends TestCase
     {
         $config   = new CsrfConfig(excludedPathPatterns: ['#^/hooks/#']);
         $mw       = new CsrfMiddleware($this->makeManager(), $config);
-        $request  = new Request('PUT', 'https://example.com/hooks/deploy', parsedBody: ['ref' => 'main']);
+        $request  = new Request('PUT', 'https://example.com/hooks/deploy', body: ['ref' => 'main']);
         $received = null;
 
         $mw->process($request, function (Request $r) use (&$received): Response {

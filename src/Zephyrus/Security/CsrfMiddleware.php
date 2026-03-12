@@ -110,7 +110,7 @@ final class CsrfMiddleware implements MiddlewareInterface
             return false;
         }
 
-        $path = $request->path();
+        $path = $request->uri()->path();
         foreach ($this->config->excludedPathPatterns as $pattern) {
             if (@preg_match($pattern, $path) === 1) {
                 return true;
@@ -127,8 +127,8 @@ final class CsrfMiddleware implements MiddlewareInterface
     private function isTokenValid(Request $request): bool
     {
         // Body field takes precedence over the header.
-        $submitted = $request->input($this->config->bodyField)
-            ?? $request->header($this->config->headerName);
+        $submitted = $request->body()->get($this->config->bodyField)
+            ?? $request->headers()->get($this->config->headerName);
 
         if ($submitted === null || !is_string($submitted) || $submitted === '') {
             return false;

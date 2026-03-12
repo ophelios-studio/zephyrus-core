@@ -79,7 +79,7 @@ final readonly class Application
             return null;
         }
 
-        $acceptLanguage = $request?->header('accept-language');
+        $acceptLanguage = $request?->headers()->get('accept-language');
         $resolver       = new LocaleResolver();
 
         return $resolver->resolve(

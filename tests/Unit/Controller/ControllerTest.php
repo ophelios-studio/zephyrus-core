@@ -64,7 +64,7 @@ final class GuardedController extends Controller
 
     public function before(Request $request): ?Response
     {
-        if ($request->header('X-Token') !== 'secret') {
+        if ($request->headers()->get('X-Token') !== 'secret') {
             return Response::json(['error' => 'Unauthorized'], 401);
         }
 

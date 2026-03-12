@@ -15,6 +15,7 @@ use Zephyrus\Controller\ControllerLifecycleInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\HandlerResolverException;
+use Zephyrus\Routing\Exception\RouteParameterException;
 
 /**
  * Resolves ClassName@method handler strings into Response values.
@@ -179,12 +180,12 @@ final class HandlerResolver
             foreach ($type->getTypes() as $candidate) {
                 try {
                     return $this->castToNamedType($value, $candidate, $class, $method, $parameter);
-                } catch (HandlerResolverException) {
+                } catch (RouteParameterException) {
                     continue;
                 }
             }
 
-            throw HandlerResolverException::invalidParameterValue(
+            throw new RouteParameterException(
                 $class,
                 $method,
                 $parameter,
@@ -210,7 +211,7 @@ final class HandlerResolver
                 return null;
             }
 
-            throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, $typeName, $value);
+            throw new RouteParameterException($class, $method, $parameter, $typeName, $value);
         }
 
         return match ($typeName) {
@@ -232,7 +233,7 @@ final class HandlerResolver
             return (int) $value;
         }
 
-        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'int', $value);
+        throw new RouteParameterException($class, $method, $parameter, 'int', $value);
     }
 
     private function toFloat(mixed $value, string $class, string $method, string $parameter): float
@@ -245,7 +246,7 @@ final class HandlerResolver
             return (float) $value;
         }
 
-        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'float', $value);
+        throw new RouteParameterException($class, $method, $parameter, 'float', $value);
     }
 
     private function toBool(mixed $value, string $class, string $method, string $parameter): bool
@@ -265,7 +266,7 @@ final class HandlerResolver
             }
         }
 
-        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'bool', $value);
+        throw new RouteParameterException($class, $method, $parameter, 'bool', $value);
     }
 
     private function toString(mixed $value, string $class, string $method, string $parameter): string
@@ -278,7 +279,7 @@ final class HandlerResolver
             return (string) $value;
         }
 
-        throw HandlerResolverException::invalidParameterValue($class, $method, $parameter, 'string', $value);
+        throw new RouteParameterException($class, $method, $parameter, 'string', $value);
     }
 
     private function describeType(ReflectionType $type): string

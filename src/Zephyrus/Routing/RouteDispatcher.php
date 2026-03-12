@@ -42,7 +42,7 @@ final readonly class RouteDispatcher
 
     public function dispatch(Request $request): Response
     {
-        $match = $this->routes->match($request->method, $request->path());
+        $match = $this->routes->match($request->method, $request->uri()->path());
         $request = $request->withAttributes($match->parameters);
 
         $routeMiddlewares = $this->resolveRouteMiddlewares($match->route->middlewares);

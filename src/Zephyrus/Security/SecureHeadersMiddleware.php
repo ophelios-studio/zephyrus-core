@@ -15,7 +15,7 @@ use Zephyrus\Http\Response;
  *   - Calls $next to obtain the inner response first.
  *   - Appends each configured security header via Response::withHeader().
  *   - Headers with an empty string value in the config are skipped (not emitted).
- *   - Strict-Transport-Security is only emitted on HTTPS requests ($request->isSecure()).
+ *   - Strict-Transport-Security is only emitted on HTTPS requests ($request->uri()->isSecure()).
  *
  * Usage:
  *
@@ -73,7 +73,7 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
 
         $hstsValue = $this->config->hstsHeaderValue();
 
-        if ($hstsValue !== '' && $request->isSecure()) {
+        if ($hstsValue !== '' && $request->uri()->isSecure()) {
             $response = $response->withHeader('Strict-Transport-Security', $hstsValue);
         }
 

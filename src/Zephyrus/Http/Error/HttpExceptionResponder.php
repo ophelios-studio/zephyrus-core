@@ -9,6 +9,7 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RouteParameterException;
 use Zephyrus\Validation\ValidationException;
 
 /**
@@ -16,6 +17,7 @@ use Zephyrus\Validation\ValidationException;
  *
  * Built-in mappings:
  *   - RouteNotFoundException        → 404 Not Found
+ *   - RouteParameterException       → 404 Not Found (type mismatch in URL segment)
  *   - MethodNotAllowedException     → 405 Method Not Allowed (+ Allow header)
  *   - ValidationException           → 422 Unprocessable Entity (+ field errors)
  *   - Any other Throwable           → 500 Internal Server Error
@@ -75,7 +77,7 @@ class HttpExceptionResponder
             )->withHeader('Allow', implode(', ', $exception->allowedMethods));
         }
 
-        if ($exception instanceof RouteNotFoundException) {
+        if ($exception instanceof RouteNotFoundException || $exception instanceof RouteParameterException) {
             return $this->format(
                 payload: new HttpErrorPayload(404, 'Not Found'),
                 request: $request,
@@ -173,7 +175,7 @@ class HttpExceptionResponder
             return self::FORMAT_TEXT;
         }
 
-        $acceptHeader = $request->header('accept', '');
+        $acceptHeader = $request->headers()->get('accept', '');
         $ranges = $this->parseAcceptHeader($acceptHeader);
 
         if ($ranges === []) {

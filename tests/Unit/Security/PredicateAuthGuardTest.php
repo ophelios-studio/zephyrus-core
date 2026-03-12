@@ -26,7 +26,7 @@ final class PredicateAuthGuardTest extends TestCase
 
     public function testPredicateCanUseRequestData(): void
     {
-        $guard = new PredicateAuthGuard(static fn (Request $request): bool => $request->header('X-Role') === 'admin');
+        $guard = new PredicateAuthGuard(static fn (Request $request): bool => $request->headers()->get('X-Role') === 'admin');
 
         $allowed = Request::fromArray('GET', '/secure', headers: ['X-Role' => 'admin']);
         $denied = Request::fromArray('GET', '/secure', headers: ['X-Role' => 'teacher']);

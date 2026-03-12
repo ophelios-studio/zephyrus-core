@@ -23,7 +23,7 @@ final class RequestTest extends TestCase
         );
 
         self::assertSame('POST', $request->method);
-        self::assertSame('application/json', $request->header('content-type'));
+        self::assertSame('application/json', $request->headers()->get('content-type'));
     }
 
     public function testQueryAndInputHelpersReturnDefaultWhenMissing(): void
@@ -32,14 +32,14 @@ final class RequestTest extends TestCase
             method: 'GET',
             uri: '/search',
             query: ['q' => 'zephyrus'],
-            parsedBody: ['name' => 'molt'],
+            body: ['name' => 'molt'],
         );
 
         self::assertSame('zephyrus', $request->query('q'));
         self::assertSame('fallback', $request->query('missing', 'fallback'));
 
-        self::assertSame('molt', $request->input('name'));
-        self::assertNull($request->input('missing'));
+        self::assertSame('molt', $request->body()->get('name'));
+        self::assertNull($request->body()->get('missing'));
     }
 
     public function testPathAndMethodHelpers(): void
@@ -49,7 +49,7 @@ final class RequestTest extends TestCase
             uri: '/users/42?expand=roles',
         );
 
-        self::assertSame('/users/42', $request->path());
+        self::assertSame('/users/42', $request->uri()->path());
         self::assertTrue($request->isMethod('POST'));
         self::assertFalse($request->isMethod('GET'));
     }
@@ -74,10 +74,10 @@ final class RequestTest extends TestCase
             cookies: ['session' => 'abc123', 'theme' => 'dark'],
         );
 
-        self::assertSame('abc123', $request->cookie('session'));
-        self::assertSame('dark', $request->cookie('theme'));
-        self::assertNull($request->cookie('missing'));
-        self::assertSame('fallback', $request->cookie('missing', 'fallback'));
+        self::assertSame('abc123', $request->cookies()->get('session'));
+        self::assertSame('dark', $request->cookies()->get('theme'));
+        self::assertNull($request->cookies()->get('missing'));
+        self::assertSame('fallback', $request->cookies()->get('missing', 'fallback'));
     }
 
     public function testWithAttributesPreservesCookies(): void
@@ -90,7 +90,7 @@ final class RequestTest extends TestCase
 
         $updated = $request->withAttributes(['role' => 'admin']);
 
-        self::assertSame('xyz', $updated->cookie('token'));
+        self::assertSame('xyz', $updated->cookies()->get('token'));
         self::assertSame('admin', $updated->attribute('role'));
     }
 
@@ -104,7 +104,7 @@ final class RequestTest extends TestCase
 
         $updated = $request->withAttribute('userId', 7);
 
-        self::assertSame('fr', $updated->cookie('lang'));
+        self::assertSame('fr', $updated->cookies()->get('lang'));
         self::assertSame(7, $updated->attribute('userId'));
     }
 
@@ -116,7 +116,7 @@ final class RequestTest extends TestCase
             headers: ['Authorization' => 'bearer secret-token'],
         );
 
-        self::assertSame('secret-token', $request->bearerToken());
+        self::assertSame('secret-token', $request->headers()->bearerToken());
     }
 
     public function testBearerTokenReturnsRawHeaderWhenPrefixDoesNotMatch(): void
@@ -127,7 +127,7 @@ final class RequestTest extends TestCase
             headers: ['Authorization' => 'raw-token'],
         );
 
-        self::assertSame('raw-token', $request->bearerToken());
+        self::assertSame('raw-token', $request->headers()->bearerToken());
     }
 
     public function testBearerTokenReturnsNullWhenHeaderIsMissingOrEmpty(): void
@@ -135,8 +135,8 @@ final class RequestTest extends TestCase
         $missing = Request::fromArray(method: 'GET', uri: '/admin');
         $empty = Request::fromArray(method: 'GET', uri: '/admin', headers: ['Authorization' => '   ']);
 
-        self::assertNull($missing->bearerToken());
-        self::assertNull($empty->bearerToken());
+        self::assertNull($missing->headers()->bearerToken());
+        self::assertNull($empty->headers()->bearerToken());
     }
 
     public function testFromArrayProvidesFileUploadHelper(): void
@@ -160,7 +160,7 @@ final class RequestTest extends TestCase
             headers: ['Content-Type' => 'application/json; charset=utf-8'],
         );
 
-        self::assertTrue($request->isJson());
+        self::assertTrue($request->headers()->isJson());
     }
 
     public function testIsJsonReturnsFalseForFormContentType(): void
@@ -171,7 +171,7 @@ final class RequestTest extends TestCase
             headers: ['Content-Type' => 'application/x-www-form-urlencoded'],
         );
 
-        self::assertFalse($request->isJson());
+        self::assertFalse($request->headers()->isJson());
     }
 
     public function testIsJsonReturnsTrueForJsonSuffixMediaType(): void
@@ -182,7 +182,7 @@ final class RequestTest extends TestCase
             headers: ['Content-Type' => 'application/problem+json'],
         );
 
-        self::assertTrue($request->isJson());
+        self::assertTrue($request->headers()->isJson());
     }
 
     public function testIsSecureDetectsHttpsUri(): void
@@ -190,8 +190,8 @@ final class RequestTest extends TestCase
         $secure  = Request::fromArray('GET', 'https://example.com/page');
         $plain   = Request::fromArray('GET', 'http://example.com/page');
 
-        self::assertTrue($secure->isSecure());
-        self::assertFalse($plain->isSecure());
+        self::assertTrue($secure->uri()->isSecure());
+        self::assertFalse($plain->uri()->isSecure());
     }
 
     public function testFromGlobalsResolvesClientIpFromForwardedHeader(): void
@@ -289,8 +289,8 @@ final class RequestTest extends TestCase
             get: ['foo' => 'bar'],
         );
 
-        self::assertSame('http://example.com/hello?foo=bar', $request->uri);
-        self::assertSame('/hello', $request->path());
+        self::assertSame('http://example.com/hello?foo=bar', $request->uri()->full());
+        self::assertSame('/hello', $request->uri()->path());
         self::assertSame('bar', $request->query('foo'));
     }
 
@@ -305,8 +305,8 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('https://secure.example.com/dashboard', $request->uri);
-        self::assertTrue($request->isSecure());
+        self::assertSame('https://secure.example.com/dashboard', $request->uri()->full());
+        self::assertTrue($request->uri()->isSecure());
     }
 
     public function testFromGlobalsHonorsForwardedProtoAndHostWhenTrusted(): void
@@ -323,8 +323,8 @@ final class RequestTest extends TestCase
             trustedProxies: ['10.0.0.1'],
         );
 
-        self::assertSame('https://public.example.com/reports', $request->uri);
-        self::assertTrue($request->isSecure());
+        self::assertSame('https://public.example.com/reports', $request->uri()->full());
+        self::assertTrue($request->uri()->isSecure());
     }
 
     public function testFromGlobalsIgnoresForwardedProtoAndHostWhenNotTrusted(): void
@@ -341,8 +341,8 @@ final class RequestTest extends TestCase
         );
 
         // Without trusted proxies, forwarded proto/host are ignored.
-        self::assertSame('http://app.internal/reports', $request->uri);
-        self::assertFalse($request->isSecure());
+        self::assertSame('http://app.internal/reports', $request->uri()->full());
+        self::assertFalse($request->uri()->isSecure());
     }
 
     public function testFromGlobalsForwardedHeaderTakesPriorityWhenTrusted(): void
@@ -360,7 +360,7 @@ final class RequestTest extends TestCase
             trustedProxies: ['*'],
         );
 
-        self::assertSame('https://api.example.com/api', $request->uri);
+        self::assertSame('https://api.example.com/api', $request->uri()->full());
     }
 
     public function testFromGlobalsHttpsKeyOf1AlsoTriggersSecure(): void
@@ -374,7 +374,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertTrue($request->isSecure());
+        self::assertTrue($request->uri()->isSecure());
     }
 
     public function testFromGlobalsHttpsOffKeyIsNotSecure(): void
@@ -388,7 +388,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertFalse($request->isSecure());
+        self::assertFalse($request->uri()->isSecure());
     }
 
     public function testFromGlobalsFallsBackToServerNameWhenHostMissing(): void
@@ -401,14 +401,14 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('http://internal.host/probe', $request->uri);
+        self::assertSame('http://internal.host/probe', $request->uri()->full());
     }
 
     public function testFromGlobalsDefaultsToLocalhostAndSlashWhenMinimal(): void
     {
         $request = Request::fromGlobals(server: ['REQUEST_METHOD' => 'GET']);
 
-        self::assertSame('http://localhost/', $request->uri);
+        self::assertSame('http://localhost/', $request->uri()->full());
     }
 
     public function testFromGlobalsIncludesNonDefaultServerPortInUri(): void
@@ -422,7 +422,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('http://localhost:8080/health', $request->uri);
+        self::assertSame('http://localhost:8080/health', $request->uri()->full());
     }
 
     public function testFromGlobalsOmitsDefaultHttpsPortFromUri(): void
@@ -437,7 +437,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('https://secure.example.com/health', $request->uri);
+        self::assertSame('https://secure.example.com/health', $request->uri()->full());
     }
 
     public function testFromGlobalsDefaultsMethodToGetWhenAbsent(): void
@@ -464,9 +464,9 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('application/json', $request->header('accept'));
-        self::assertSame('abc-123', $request->header('x-request-id'));
-        self::assertSame('Bearer token', $request->header('authorization'));
+        self::assertSame('application/json', $request->headers()->get('accept'));
+        self::assertSame('abc-123', $request->headers()->get('x-request-id'));
+        self::assertSame('Bearer token', $request->headers()->get('authorization'));
     }
 
     public function testFromGlobalsExtractsContentTypeWithoutHttpPrefix(): void
@@ -481,8 +481,8 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('multipart/form-data', $request->header('content-type'));
-        self::assertSame('1024', $request->header('content-length'));
+        self::assertSame('multipart/form-data', $request->headers()->get('content-type'));
+        self::assertSame('1024', $request->headers()->get('content-length'));
     }
 
     public function testFromGlobalsHeaderLookupIsCaseInsensitive(): void
@@ -496,8 +496,8 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('value', $request->header('X-Custom-Hdr'));
-        self::assertSame('value', $request->header('x-custom-hdr'));
+        self::assertSame('value', $request->headers()->get('X-Custom-Hdr'));
+        self::assertSame('value', $request->headers()->get('x-custom-hdr'));
     }
 
     public function testFromGlobalsEmptyContentTypeIsNotExtracted(): void
@@ -511,7 +511,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertNull($request->header('content-type'));
+        self::assertNull($request->headers()->get('content-type'));
     }
 
     // -------------------------------------------------------------------------
@@ -530,9 +530,9 @@ final class RequestTest extends TestCase
             rawBody: '{"title":"Widget","price":9.99}',
         );
 
-        self::assertTrue($request->isJson());
-        self::assertSame('Widget', $request->input('title'));
-        self::assertSame(9.99, $request->input('price'));
+        self::assertTrue($request->headers()->isJson());
+        self::assertSame('Widget', $request->body()->get('title'));
+        self::assertSame(9.99, $request->body()->get('price'));
     }
 
     public function testFromGlobalsJsonBodyWithCharsetParameterParsed(): void
@@ -547,7 +547,7 @@ final class RequestTest extends TestCase
             rawBody: '{"status":"active"}',
         );
 
-        self::assertSame('active', $request->input('status'));
+        self::assertSame('active', $request->body()->get('status'));
     }
 
     public function testFromGlobalsJsonSuffixMediaTypeBodyIsParsed(): void
@@ -562,7 +562,7 @@ final class RequestTest extends TestCase
             rawBody: '{"type":"about:blank","title":"Bad Request"}',
         );
 
-        self::assertSame('Bad Request', $request->input('title'));
+        self::assertSame('Bad Request', $request->body()->get('title'));
     }
 
     public function testFromGlobalsEmptyJsonBodyReturnsEmptyParsedBody(): void
@@ -577,7 +577,7 @@ final class RequestTest extends TestCase
             rawBody: '',
         );
 
-        self::assertSame([], $request->parsedBody);
+        self::assertSame([], $request->body()->all());
     }
 
     public function testFromGlobalsInvalidJsonBodyReturnsEmptyParsedBody(): void
@@ -592,7 +592,7 @@ final class RequestTest extends TestCase
             rawBody: '{"title":"broken"',
         );
 
-        self::assertSame([], $request->parsedBody);
+        self::assertSame([], $request->body()->all());
     }
 
     public function testFromGlobalsFormBodyUsesPostArray(): void
@@ -607,8 +607,8 @@ final class RequestTest extends TestCase
             post: ['username' => 'alice', 'password' => 's3cr3t'],
         );
 
-        self::assertSame('alice', $request->input('username'));
-        self::assertSame('s3cr3t', $request->input('password'));
+        self::assertSame('alice', $request->body()->get('username'));
+        self::assertSame('s3cr3t', $request->body()->get('password'));
     }
 
     public function testFromGlobalsMultipartFormUsesPostArray(): void
@@ -623,7 +623,7 @@ final class RequestTest extends TestCase
             post: ['field' => 'value'],
         );
 
-        self::assertSame('value', $request->input('field'));
+        self::assertSame('value', $request->body()->get('field'));
     }
 
     public function testFromGlobalsGetRequestHasNoParsedBody(): void
@@ -637,7 +637,7 @@ final class RequestTest extends TestCase
             post: ['should' => 'be ignored'],
         );
 
-        self::assertSame([], $request->parsedBody);
+        self::assertSame([], $request->body()->all());
     }
 
     public function testFromGlobalsHeadRequestHasNoParsedBody(): void
@@ -651,7 +651,7 @@ final class RequestTest extends TestCase
             post: ['ignored' => 'yes'],
         );
 
-        self::assertSame([], $request->parsedBody);
+        self::assertSame([], $request->body()->all());
     }
 
     // -------------------------------------------------------------------------
@@ -671,8 +671,8 @@ final class RequestTest extends TestCase
         );
 
         self::assertSame('DELETE', $request->method);
-        // Override field stays in parsedBody (controller may inspect it)
-        self::assertSame('DELETE', $request->input('_method'));
+        // Override field stays in body (controller may inspect it)
+        self::assertSame('DELETE', $request->body()->get('_method'));
     }
 
     public function testFromGlobalsMethodOverrideViaPutPostField(): void
@@ -768,9 +768,9 @@ final class RequestTest extends TestCase
             cookie: ['session_id' => 'xyz789', 'pref_lang' => 'en'],
         );
 
-        self::assertSame('xyz789', $request->cookie('session_id'));
-        self::assertSame('en', $request->cookie('pref_lang'));
-        self::assertNull($request->cookie('nonexistent'));
+        self::assertSame('xyz789', $request->cookies()->get('session_id'));
+        self::assertSame('en', $request->cookies()->get('pref_lang'));
+        self::assertNull($request->cookies()->get('nonexistent'));
     }
 
     public function testFromGlobalsNormalizesSingleFileUpload(): void
@@ -932,7 +932,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('https://real.example.com/api/v1/users', $request->uri);
+        self::assertSame('https://real.example.com/api/v1/users', $request->uri()->full());
     }
 
     // -------------------------------------------------------------------------
@@ -952,7 +952,7 @@ final class RequestTest extends TestCase
         );
 
         self::assertSame('DELETE', $request->method);
-        self::assertSame([1, 2, 3], $request->input('ids'));
+        self::assertSame([1, 2, 3], $request->body()->get('ids'));
     }
 
     public function testFromGlobalsPatchWithJsonBodyIsParsed(): void
@@ -967,7 +967,7 @@ final class RequestTest extends TestCase
             rawBody: '{"active":true,"score":4.5}',
         );
 
-        self::assertSame(true, $request->input('active'));
-        self::assertSame(4.5, $request->input('score'));
+        self::assertSame(true, $request->body()->get('active'));
+        self::assertSame(4.5, $request->body()->get('score'));
     }
 }
