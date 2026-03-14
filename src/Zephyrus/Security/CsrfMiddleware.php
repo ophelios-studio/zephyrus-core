@@ -173,7 +173,7 @@ final class CsrfMiddleware implements MiddlewareInterface
                 return preg_replace(
                     '/<form\b[^>]*>/i',
                     sprintf(
-                        '$0\n<input type="hidden" name="%s" value="%s">',
+                        "\$0\n" . '<input type="hidden" name="%s" value="%s">',
                         $field,
                         $token,
                     ),
