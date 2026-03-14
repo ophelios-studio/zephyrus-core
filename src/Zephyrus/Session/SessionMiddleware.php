@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Session;
 
+use Zephyrus\Core\App;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -49,6 +50,9 @@ final class SessionMiddleware implements MiddlewareInterface
     {
         $this->session->start($this->config);
 
+        // Make the session available both via request attribute and the
+        // global App facade so that the session() helper works everywhere.
+        App::setSession($this->session);
         $request = $request->withAttribute('session', $this->session);
 
         return $next($request);
