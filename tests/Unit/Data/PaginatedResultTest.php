@@ -13,8 +13,8 @@ final class PaginatedResultTest extends TestCase
     {
         $result = PaginatedResult::fromArray([
             'items' => [
-                ['id' => 1, 'name' => 'Alice'],
-                ['id' => 2, 'name' => 'Bob'],
+                (object) ['id' => 1, 'name' => 'Alice'],
+                (object) ['id' => 2, 'name' => 'Bob'],
             ],
             'total' => 5,
             'page' => 2,
@@ -37,7 +37,7 @@ final class PaginatedResultTest extends TestCase
     public function testToArrayReturnsOriginalEnvelopeShape(): void
     {
         $result = new PaginatedResult(
-            items: [['id' => 10, 'name' => 'X']],
+            items: [(object) ['id' => 10, 'name' => 'X']],
             total: 1,
             page: 1,
             perPage: 10,
@@ -46,8 +46,8 @@ final class PaginatedResultTest extends TestCase
             hasNext: false,
         );
 
-        self::assertSame([
-            'items' => [['id' => 10, 'name' => 'X']],
+        self::assertEquals([
+            'items' => [(object) ['id' => 10, 'name' => 'X']],
             'total' => 1,
             'page' => 1,
             'per_page' => 10,
@@ -71,8 +71,8 @@ final class PaginatedResultTest extends TestCase
     {
         $result = new PaginatedResult(
             items: [
-                ['id' => 1, 'name' => 'Alice'],
-                ['id' => 2, 'name' => 'Bob'],
+                (object) ['id' => 1, 'name' => 'Alice'],
+                (object) ['id' => 2, 'name' => 'Bob'],
             ],
             total: 2,
             page: 1,
@@ -82,16 +82,16 @@ final class PaginatedResultTest extends TestCase
             hasNext: false,
         );
 
-        self::assertSame('Alice', $result->firstItem()['name']);
-        self::assertSame('Bob', $result->lastItem()['name']);
+        self::assertSame('Alice', $result->firstItem()->name);
+        self::assertSame('Bob', $result->lastItem()->name);
     }
 
     public function testMapItemsReturnsTransformedResult(): void
     {
         $result = new PaginatedResult(
             items: [
-                ['id' => 1, 'name' => 'alpha'],
-                ['id' => 2, 'name' => 'beta'],
+                (object) ['id' => 1, 'name' => 'alpha'],
+                (object) ['id' => 2, 'name' => 'beta'],
             ],
             total: 2,
             page: 1,
@@ -101,20 +101,20 @@ final class PaginatedResultTest extends TestCase
             hasNext: false,
         );
 
-        $mapped = $result->mapItems(static fn (array $row): array => [
-            ...$row,
-            'name' => strtoupper((string) $row['name']),
+        $mapped = $result->mapItems(static fn (\stdClass $row): \stdClass => (object) [
+            ...(array) $row,
+            'name' => strtoupper((string) $row->name),
         ]);
 
-        self::assertSame('ALPHA', $mapped->items[0]['name']);
-        self::assertSame('BETA', $mapped->items[1]['name']);
+        self::assertSame('ALPHA', $mapped->items[0]->name);
+        self::assertSame('BETA', $mapped->items[1]->name);
         self::assertSame(2, $mapped->total);
     }
 
     public function testJsonSerializeMatchesArrayEnvelope(): void
     {
         $result = new PaginatedResult(
-            items: [['id' => 10, 'name' => 'X']],
+            items: [(object) ['id' => 10, 'name' => 'X']],
             total: 1,
             page: 1,
             perPage: 10,
@@ -129,7 +129,7 @@ final class PaginatedResultTest extends TestCase
     public function testPageNavigationHelpersExposeState(): void
     {
         $result = new PaginatedResult(
-            items: [['id' => 10, 'name' => 'X']],
+            items: [(object) ['id' => 10, 'name' => 'X']],
             total: 30,
             page: 2,
             perPage: 10,
@@ -147,7 +147,7 @@ final class PaginatedResultTest extends TestCase
     public function testToPaginationRequestCreatesEquivalentRequest(): void
     {
         $result = new PaginatedResult(
-            items: [['id' => 10, 'name' => 'X']],
+            items: [(object) ['id' => 10, 'name' => 'X']],
             total: 1,
             page: 3,
             perPage: 15,

@@ -14,7 +14,7 @@ namespace Zephyrus\Data;
  * Design rules:
  *   - All SQL lives inside the broker subclass, not in controllers or
  *     service objects.
- *   - Every method accepts and returns plain PHP arrays or scalars;
+ *   - Every method accepts and returns stdClass objects or scalars;
  *     no ORM magic, no ActiveRecord coupling.
  *   - Transactions are composable via the transaction() helper.
  *
@@ -22,7 +22,7 @@ namespace Zephyrus\Data;
  *
  *   final class UserBroker extends Broker
  *   {
- *       public function findById(int $id): ?array
+ *       public function findById(int $id): ?\stdClass
  *       {
  *           return $this->selectOne('SELECT * FROM users WHERE id = ?', [$id]);
  *       }
@@ -50,10 +50,10 @@ abstract class Broker
 
     /**
      * Execute a SELECT (or any multi-row query) and return all rows as
-     * an array of associative arrays.
+     * an array of stdClass objects.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      * @throws DatabaseException on query failure.
      */
     protected function select(string $sql, array $params = []): array
@@ -65,10 +65,9 @@ abstract class Broker
      * Execute a query and return the first row, or null when no rows match.
      *
      * @param array<int|string, mixed> $params
-     * @return array<string, mixed>|null
      * @throws DatabaseException on query failure.
      */
-    protected function selectOne(string $sql, array $params = []): ?array
+    protected function selectOne(string $sql, array $params = []): ?\stdClass
     {
         return $this->db->selectOne($sql, $params);
     }
@@ -142,7 +141,7 @@ abstract class Broker
      * Execute a paginated SELECT query by applying LIMIT/OFFSET.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     protected function selectPage(string $sql, int $page, int $perPage, array $params = []): array
     {
@@ -153,7 +152,7 @@ abstract class Broker
      * Execute a paginated SELECT query using a PaginationRequest.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     protected function selectPageWith(string $sql, PaginationRequest $pagination, array $params = []): array
     {
@@ -164,7 +163,7 @@ abstract class Broker
      * Execute a sorted SELECT query.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     protected function selectSorted(string $sql, SortRequest $sort, array $params = []): array
     {
@@ -176,7 +175,7 @@ abstract class Broker
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     protected function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, array $params = []): array
     {
@@ -188,7 +187,7 @@ abstract class Broker
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     protected function selectFilteredSorted(
         string $sql,
@@ -204,7 +203,7 @@ abstract class Broker
      * Execute a sorted paginated SELECT query.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     protected function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, array $params = []): array
     {
@@ -215,7 +214,7 @@ abstract class Broker
      * Execute coordinated count + paginated data queries.
      *
      * @param array<int|string, mixed> $params
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     protected function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
     {
@@ -226,7 +225,7 @@ abstract class Broker
      * Execute coordinated count + paginated data queries with PaginationRequest.
      *
      * @param array<int|string, mixed> $params
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     protected function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
     {
@@ -237,7 +236,7 @@ abstract class Broker
      * Execute coordinated count + sorted paginated data queries.
      *
      * @param array<int|string, mixed> $params
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     protected function paginateSortedWith(
         string $dataSql,
@@ -272,7 +271,7 @@ abstract class Broker
     /**
      * Execute paginated query and map each item through a transformer.
      *
-     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param callable(\stdClass): mixed $mapper
      * @param array<int|string, mixed> $params
      */
     protected function paginateResultMapped(
@@ -289,7 +288,7 @@ abstract class Broker
     /**
      * Execute paginated query using PaginationRequest and map each item.
      *
-     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param callable(\stdClass): mixed $mapper
      * @param array<int|string, mixed> $params
      */
     protected function paginateResultMappedWith(
