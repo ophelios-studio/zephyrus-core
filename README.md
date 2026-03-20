@@ -1,7 +1,7 @@
 # Zephyrus
 
-[![CI](https://github.com/dadajuice/zephyrus2/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/dadajuice/zephyrus2/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/dadajuice/zephyrus2/graph/badge.svg)](https://codecov.io/gh/dadajuice/zephyrus2)
+[![CI](https://github.com/zephyrus-framework/core/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/zephyrus-framework/core/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zephyrus-framework/core/graph/badge.svg)](https://codecov.io/gh/zephyrus-framework/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A cohesive PHP 8.4+ framework core. Attribute-based routing, immutable HTTP objects, typed configuration, and a full security middleware stack — with ~98% test coverage throughout.
@@ -13,7 +13,7 @@ A cohesive PHP 8.4+ framework core. Attribute-based routing, immutable HTTP obje
 The fastest way to start a new project is the official application template:
 
 ```bash
-composer create-project dadajuice/zephyrus2-framework my-app
+composer create-project zephyrus-framework/core-framework my-app
 cd my-app
 composer dev
 ```
@@ -23,7 +23,7 @@ This gives you a working application structure with controllers, views, config, 
 To use the core library directly in an existing project:
 
 ```bash
-composer require dadajuice/zephyrus2
+composer require zephyrus-framework/core
 ```
 
 ---
@@ -201,8 +201,8 @@ Runtime dependencies: `symfony/yaml`, `vlucas/phpdotenv`, `latte/latte`, `tracy/
 ## Development
 
 ```bash
-git clone https://github.com/dadajuice/zephyrus2
-cd zephyrus2
+git clone https://github.com/zephyrus-framework/core zephyrus-core
+cd zephyrus-core
 composer install
 ```
 
