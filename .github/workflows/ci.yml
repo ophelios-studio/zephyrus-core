@@ -2,16 +2,33 @@ name: CI
 
 on:
   push:
+    branches: [dev, main]
   pull_request:
+    branches: [dev, main]
 
 jobs:
   tests:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          coverage: none
+          extensions: mbstring, pdo, pdo_sqlite, intl, sodium
+          coverage: xdebug
+
       - run: composer install --no-interaction --prefer-dist
-      - run: composer test
+
+      - name: Run tests with coverage
+        run: php vendor/bin/phpunit --coverage-clover coverage.xml
+
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
