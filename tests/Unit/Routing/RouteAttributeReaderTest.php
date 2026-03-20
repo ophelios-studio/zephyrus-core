@@ -14,6 +14,7 @@ use Zephyrus\Routing\Attribute\Options as OptionsAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
+use Zephyrus\Routing\Attribute\Root as RootAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\RouteAttributeReader;
@@ -117,6 +118,71 @@ class MiddlewareGroupAttributedController
     #[MiddlewareGroupAttribute('audit-group')]
     #[PostAttribute('/profile', middlewares: ['auth'])]
     public function updateProfile(): void {}
+}
+
+// Root attribute fixtures
+#[RootAttribute('/admin')]
+class RootedController
+{
+    #[GetAttribute('/users')]
+    public function index(): void {}
+
+    #[PostAttribute('/users')]
+    public function store(): void {}
+}
+
+#[RootAttribute('/admin')]
+class RootParentController
+{
+    #[GetAttribute('/base')]
+    public function base(): void {}
+}
+
+#[RootAttribute('/users')]
+class RootChildController extends RootParentController
+{
+    #[GetAttribute('/add')]
+    public function add(): void {}
+}
+
+class RootInheritedOnlyChildController extends RootParentController
+{
+    #[GetAttribute('/detail')]
+    public function detail(): void {}
+}
+
+#[RootAttribute('/admin')]
+class RootGrandparentController
+{
+    #[GetAttribute('/home')]
+    public function home(): void {}
+}
+
+#[RootAttribute('/panel')]
+class RootMidController extends RootGrandparentController
+{
+    #[GetAttribute('/dashboard')]
+    public function dashboard(): void {}
+}
+
+class RootDeepChildController extends RootMidController
+{
+    #[GetAttribute('/settings')]
+    public function settings(): void {}
+}
+
+#[RootAttribute('/')]
+class RootSlashOnlyController
+{
+    #[GetAttribute('/ping')]
+    public function ping(): void {}
+}
+
+#[RootAttribute('/trailing/')]
+class RootTrailingSlashController
+{
+    #[GetAttribute('/test')]
+    public function test(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +400,66 @@ final class RouteAttributeReaderTest extends TestCase
         /** @var class-string $nonExistent */
         $nonExistent = 'DoesNotExist\\Controller';
         $this->reader->read($nonExistent);
+    }
+
+    // Root attribute tests ---------------------------------------------------
+
+    public function testRootPrefixPrependedToAllRoutes(): void
+    {
+        $routes = $this->reader->read(RootedController::class);
+
+        self::assertCount(2, $routes);
+        $paths = array_map(fn ($r) => $r->path, $routes);
+        self::assertContains('/admin/users', $paths);
+    }
+
+    public function testRootPrefixOnChildCombinesWithParentPrefix(): void
+    {
+        $routes = $this->reader->read(RootChildController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/admin/users/add', $routes[0]->path);
+    }
+
+    public function testChildInheritsParentRootPrefixWithoutOwnRoot(): void
+    {
+        $routes = $this->reader->read(RootInheritedOnlyChildController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/admin/detail', $routes[0]->path);
+    }
+
+    public function testMultiLevelInheritanceCombinesPrefixes(): void
+    {
+        $routes = $this->reader->read(RootDeepChildController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/admin/panel/settings', $routes[0]->path);
+    }
+
+    public function testNoRootAttributeLeavesPathUnchanged(): void
+    {
+        $routes = $this->reader->read(SimpleController::class);
+
+        $index = $this->findByHandler($routes, SimpleController::class . '@index');
+        self::assertNotNull($index);
+        self::assertSame('/users', $index->path);
+    }
+
+    public function testRootSlashOnlyTreatedAsEmpty(): void
+    {
+        $routes = $this->reader->read(RootSlashOnlyController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/ping', $routes[0]->path);
+    }
+
+    public function testRootTrailingSlashTrimmed(): void
+    {
+        $routes = $this->reader->read(RootTrailingSlashController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/trailing/test', $routes[0]->path);
     }
 
     // -----------------------------------------------------------------------
