@@ -13,7 +13,7 @@ A cohesive PHP 8.4+ framework core. Attribute-based routing, immutable HTTP obje
 The fastest way to start a new project is the official application template:
 
 ```bash
-composer create-project zephyrus-framework/core-framework my-app
+composer create-project zephyrus-framework/framework my-app
 cd my-app
 composer dev
 ```
