@@ -16,6 +16,7 @@ use Zephyrus\Routing\Attribute\Options as OptionsAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
+use Zephyrus\Routing\Attribute\RequiresEnv as RequiresEnvAttribute;
 use Zephyrus\Routing\Attribute\Root as RootAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
@@ -44,6 +45,10 @@ final class RouteAttributeReader
             throw RouteAttributeException::unresolvableClass($className, $e);
         }
 
+        if (!$this->satisfiesEnvRequirements($reflection->getAttributes(RequiresEnvAttribute::class))) {
+            return [];
+        }
+
         $routes = [];
         $seenRouteNames = [];
         $rootPrefix = $this->resolveRootPrefix($reflection);
@@ -55,6 +60,10 @@ final class RouteAttributeReader
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() !== $className) {
+                continue;
+            }
+
+            if (!$this->satisfiesEnvRequirements($method->getAttributes(RequiresEnvAttribute::class))) {
                 continue;
             }
 
@@ -203,6 +212,27 @@ final class RouteAttributeReader
         }
 
         return $combined;
+    }
+
+    /**
+     * Checks that all #[RequiresEnv] attributes are satisfied by the
+     * current environment. Returns false if any requirement fails.
+     *
+     * @param list<\ReflectionAttribute<RequiresEnvAttribute>> $attributes
+     */
+    private function satisfiesEnvRequirements(array $attributes): bool
+    {
+        foreach ($attributes as $attributeRef) {
+            /** @var RequiresEnvAttribute $attr */
+            $attr = $attributeRef->newInstance();
+            $actual = $_ENV[$attr->variable] ?? getenv($attr->variable) ?: null;
+
+            if ($actual !== $attr->value) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function joinPath(string $prefix, string $path): string
