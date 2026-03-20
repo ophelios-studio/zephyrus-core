@@ -16,6 +16,7 @@ use Zephyrus\Routing\Attribute\Options as OptionsAttribute;
 use Zephyrus\Routing\Attribute\Patch as PatchAttribute;
 use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
+use Zephyrus\Routing\Attribute\Root as RootAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 
@@ -45,6 +46,7 @@ final class RouteAttributeReader
 
         $routes = [];
         $seenRouteNames = [];
+        $rootPrefix = $this->resolveRootPrefix($reflection);
 
         $classMiddlewares = [
             ...$this->readMiddlewareAttributes($reflection->getAttributes(MiddlewareAttribute::class)),
@@ -71,7 +73,7 @@ final class RouteAttributeReader
 
                 $routes[] = Route::define(
                     method: $attr['method'],
-                    path: $attr['path'],
+                    path: $this->joinPath($rootPrefix, $attr['path']),
                     handler: $handler,
                     constraints: $attr['constraints'],
                     middlewares: $attr['middlewares'],
@@ -166,5 +168,60 @@ final class RouteAttributeReader
         }
 
         return $middlewares;
+    }
+
+    /**
+     * Walks the class hierarchy (parent-first) collecting #[Root] prefixes,
+     * then appends the current class prefix. Returns the combined prefix string.
+     */
+    private function resolveRootPrefix(ReflectionClass $reflection): string
+    {
+        $segments = [];
+
+        $ancestors = [];
+        $parent = $reflection->getParentClass();
+        while ($parent !== false) {
+            $ancestors[] = $parent;
+            $parent = $parent->getParentClass();
+        }
+
+        foreach (array_reverse($ancestors) as $ancestor) {
+            $attrs = $ancestor->getAttributes(RootAttribute::class);
+            if ($attrs !== []) {
+                $segments[] = $attrs[0]->newInstance()->prefix;
+            }
+        }
+
+        $attrs = $reflection->getAttributes(RootAttribute::class);
+        if ($attrs !== []) {
+            $segments[] = $attrs[0]->newInstance()->prefix;
+        }
+
+        $combined = '';
+        foreach ($segments as $segment) {
+            $combined = $this->joinPath($combined, $segment);
+        }
+
+        return $combined;
+    }
+
+    private function joinPath(string $prefix, string $path): string
+    {
+        $left = trim($prefix, '/');
+        $right = trim($path, '/');
+
+        if ($left === '' && $right === '') {
+            return '/';
+        }
+
+        if ($left === '') {
+            return '/' . $right;
+        }
+
+        if ($right === '') {
+            return '/' . $left;
+        }
+
+        return '/' . $left . '/' . $right;
     }
 }
