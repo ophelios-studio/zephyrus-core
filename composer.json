@@ -1,6 +1,6 @@
 {
-  "name": "dadajuice/zephyrus2",
-  "description": "Cohesive PHP 8.4+ framework core",
+  "name": "zephyrus-framework/core",
+  "description": "Cohesive PHP 8.4+ framework — attribute routing, immutable HTTP, typed config, and security middleware out of the box.",
   "type": "library",
   "license": "MIT",
   "require": {
