@@ -6,6 +6,7 @@ namespace Zephyrus\Rendering;
 
 use Latte\Engine;
 use Latte\Extension;
+use Zephyrus\Formatting\Formatter;
 
 /**
  * Latte 3.x template rendering engine.
@@ -79,6 +80,33 @@ final class LatteEngine implements RenderEngine
     public function addExtension(Extension $extension): void
     {
         $this->latte->addExtension($extension);
+    }
+
+    /**
+     * Register all Formatter methods (built-in and custom) as Latte filters.
+     *
+     * After calling this, templates can use pipe syntax such as
+     * `{$price|money}`, `{$date|date}`, or `{$value|phone}` for any
+     * custom formatter registered on the Formatter instance.
+     *
+     * Built-in formatters: money, date, datetime, time, filesize, percent,
+     * decimal, timeago, duration, list, ordinal, spellOut, truncate.
+     */
+    public function registerFormatterFilters(Formatter $formatter): void
+    {
+        $builtInFilters = [
+            'money', 'date', 'datetime', 'time', 'filesize', 'percent',
+            'decimal', 'timeago', 'duration', 'list', 'ordinal', 'spellOut',
+            'truncate',
+        ];
+
+        foreach ($builtInFilters as $name) {
+            $this->latte->addFilter($name, $formatter->$name(...));
+        }
+
+        foreach ($formatter->getCustomFormatterNames() as $name) {
+            $this->latte->addFilter($name, fn (mixed ...$args): string => $formatter->format($name, ...$args));
+        }
     }
 
     /**

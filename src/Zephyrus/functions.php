@@ -175,6 +175,9 @@ if (!function_exists('format')) {
         if ($formatter === null) {
             return (string) ($args[0] ?? '');
         }
+        if ($formatter->hasCustomFormatter($type)) {
+            return $formatter->format($type, ...$args);
+        }
         return $formatter->$type(...$args);
     }
 }
