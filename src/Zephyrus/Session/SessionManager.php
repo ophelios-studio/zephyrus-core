@@ -56,6 +56,21 @@ final class SessionManager
     // -------------------------------------------------------------------------
 
     /**
+     * Register a custom session save handler.
+     *
+     * Must be called **before** start() so that PHP uses the handler when
+     * opening the session. No-op in override-storage (test) mode.
+     */
+    public function setHandler(\SessionHandlerInterface $handler): void
+    {
+        if ($this->overrideStorage !== null) {
+            return;
+        }
+
+        session_set_save_handler($handler, true);
+    }
+
+    /**
      * Configure PHP session parameters and start the session.
      *
      * Safe to call multiple times — returns immediately if a session is already
