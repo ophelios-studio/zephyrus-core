@@ -24,7 +24,7 @@ final class UserBroker extends Broker
         return $this->select('SELECT * FROM users ORDER BY id');
     }
 
-    public function findById(int $id): ?array
+    public function findById(int $id): ?\stdClass
     {
         return $this->selectOne('SELECT * FROM users WHERE id = ?', [$id]);
     }
@@ -129,10 +129,7 @@ final class UserBroker extends Broker
             'SELECT COUNT(*) FROM users',
             $page,
             $perPage,
-            static fn (array $row): array => [
-                ...$row,
-                'name' => strtoupper((string) $row['name']),
-            ],
+            static fn (\stdClass $row): \stdClass => (object) [...(array) $row, 'name' => strtoupper($row->name)],
         );
     }
 
@@ -142,10 +139,7 @@ final class UserBroker extends Broker
             'SELECT * FROM users ORDER BY id',
             'SELECT COUNT(*) FROM users',
             $pagination,
-            static fn (array $row): array => [
-                ...$row,
-                'name' => strtoupper((string) $row['name']),
-            ],
+            static fn (\stdClass $row): \stdClass => (object) [...(array) $row, 'name' => strtoupper($row->name)],
         );
     }
 
@@ -262,8 +256,8 @@ final class BrokerTest extends TestCase
 
         $rows = $this->broker->findAll();
         self::assertCount(2, $rows);
-        self::assertSame('Alice', $rows[0]['name']);
-        self::assertSame('Bob', $rows[1]['name']);
+        self::assertSame('Alice', $rows[0]->name);
+        self::assertSame('Bob', $rows[1]->name);
     }
 
     // ── selectOne ────────────────────────────────────────────────────────────
@@ -279,8 +273,8 @@ final class BrokerTest extends TestCase
         $row = $this->broker->findById($id);
 
         self::assertNotNull($row);
-        self::assertSame('Carol', $row['name']);
-        self::assertSame('carol@example.com', $row['email']);
+        self::assertSame('Carol', $row->name);
+        self::assertSame('carol@example.com', $row->email);
     }
 
     // ── selectCount ──────────────────────────────────────────────────────────
@@ -360,7 +354,7 @@ final class BrokerTest extends TestCase
         $rows = $this->broker->listPage(2, 1);
 
         self::assertCount(1, $rows);
-        self::assertSame('B', $rows[0]['name']);
+        self::assertSame('B', $rows[0]->name);
     }
 
     public function testPaginateReturnsMetadataAndItems(): void
@@ -378,7 +372,7 @@ final class BrokerTest extends TestCase
         self::assertTrue($page['has_previous']);
         self::assertFalse($page['has_next']);
         self::assertCount(1, $page['items']);
-        self::assertSame('C', $page['items'][0]['name']);
+        self::assertSame('C', $page['items'][0]->name);
     }
 
     public function testPaginateResultReturnsObjectEnvelope(): void
@@ -409,7 +403,7 @@ final class BrokerTest extends TestCase
 
         $rows = $this->broker->listPageWith($pagination);
         self::assertCount(1, $rows);
-        self::assertSame('C', $rows[0]['name']);
+        self::assertSame('C', $rows[0]->name);
 
         $page = $this->broker->paginateUsersWith($pagination);
         self::assertSame(3, $page['total']);
@@ -426,11 +420,11 @@ final class BrokerTest extends TestCase
         $this->broker->insert('gamma', 'c@example.com');
 
         $mapped = $this->broker->paginateUsersNamesMapped(1, 2);
-        self::assertSame('ALPHA', $mapped->items[0]['name']);
-        self::assertSame('BETA', $mapped->items[1]['name']);
+        self::assertSame('ALPHA', $mapped->items[0]->name);
+        self::assertSame('BETA', $mapped->items[1]->name);
 
         $mappedWith = $this->broker->paginateUsersNamesMappedWith(new PaginationRequest(2, 2));
-        self::assertSame('GAMMA', $mappedWith->items[0]['name']);
+        self::assertSame('GAMMA', $mappedWith->items[0]->name);
     }
 
     public function testPaginateFromQueryBuildsBoundedPaginationRequest(): void
@@ -444,7 +438,7 @@ final class BrokerTest extends TestCase
         self::assertSame(2, $page->page);
         self::assertSame(2, $page->perPage);
         self::assertSame(1, $page->itemCount());
-        self::assertSame('c@example.com', $page->firstItem()['email']);
+        self::assertSame('c@example.com', $page->firstItem()->email);
     }
 
     public function testSortedBrokerHelpersApplyOrderingAndPagination(): void
@@ -454,16 +448,16 @@ final class BrokerTest extends TestCase
         $this->broker->insert('bravo', 'b@example.com');
 
         $sorted = $this->broker->listSortedByNameDesc();
-        self::assertSame('charlie', $sorted[0]['name']);
-        self::assertSame('bravo', $sorted[1]['name']);
-        self::assertSame('alice', $sorted[2]['name']);
+        self::assertSame('charlie', $sorted[0]->name);
+        self::assertSame('bravo', $sorted[1]->name);
+        self::assertSame('alice', $sorted[2]->name);
 
         $page = $this->broker->paginateSortedByName(new PaginationRequest(1, 2));
-        self::assertSame('alice', $page['items'][0]['name']);
-        self::assertSame('bravo', $page['items'][1]['name']);
+        self::assertSame('alice', $page['items'][0]->name);
+        self::assertSame('bravo', $page['items'][1]->name);
 
         $typed = $this->broker->paginateSortedResultByName(new PaginationRequest(2, 2));
-        self::assertSame('charlie', $typed->firstItem()['name']);
+        self::assertSame('charlie', $typed->firstItem()->name);
     }
 
     public function testFilteredBrokerHelpersApplyWhereAndSortedPagination(): void
@@ -474,11 +468,11 @@ final class BrokerTest extends TestCase
 
         $filtered = $this->broker->filterByEmail('b@example.com');
         self::assertCount(1, $filtered);
-        self::assertSame('beta', $filtered[0]['name']);
+        self::assertSame('beta', $filtered[0]->name);
 
         $typed = $this->broker->filterSortAndPaginateByName('alpha', new PaginationRequest(1, 1));
         self::assertSame(2, $typed->total);
-        self::assertSame('a@example.com', $typed->firstItem()['email']);
+        self::assertSame('a@example.com', $typed->firstItem()->email);
     }
 
     // ── execute (insert/update/delete) ───────────────────────────────────────
@@ -498,7 +492,7 @@ final class BrokerTest extends TestCase
         $affected = $this->broker->update($id, 'Harold');
 
         self::assertSame(1, $affected);
-        self::assertSame('Harold', $this->broker->findById($id)['name']);
+        self::assertSame('Harold', $this->broker->findById($id)->name);
     }
 
     public function testUpdateNonExistentRowReturnsZero(): void

@@ -114,10 +114,10 @@ final class DatabaseTest extends TestCase
         );
     }
 
-    public function testFetchModeIsAssoc(): void
+    public function testFetchModeIsObj(): void
     {
         self::assertSame(
-            PDO::FETCH_ASSOC,
+            PDO::FETCH_OBJ,
             $this->db->pdo()->getAttribute(PDO::ATTR_DEFAULT_FETCH_MODE),
         );
     }
@@ -135,7 +135,7 @@ final class DatabaseTest extends TestCase
         $this->db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Alice', 'alice@example.com']);
         $stmt = $this->db->query('SELECT * FROM users WHERE name = ?', ['Alice']);
         $row = $stmt->fetch();
-        self::assertSame('Alice', $row['name']);
+        self::assertSame('Alice', $row->name);
     }
 
     public function testQueryWithNamedParams(): void
@@ -146,7 +146,7 @@ final class DatabaseTest extends TestCase
         ]);
         $stmt = $this->db->query('SELECT * FROM users WHERE name = :name', [':name' => 'Bob']);
         $row = $stmt->fetch();
-        self::assertSame('Bob', $row['name']);
+        self::assertSame('Bob', $row->name);
     }
 
     public function testQueryThrowsOnInvalidSql(): void
@@ -165,8 +165,8 @@ final class DatabaseTest extends TestCase
         $rows = $this->db->select('SELECT * FROM users ORDER BY id');
 
         self::assertCount(2, $rows);
-        self::assertSame('Alice', $rows[0]['name']);
-        self::assertSame('Bob', $rows[1]['name']);
+        self::assertSame('Alice', $rows[0]->name);
+        self::assertSame('Bob', $rows[1]->name);
     }
 
     public function testSelectOneReturnsNullWhenNoRows(): void
@@ -181,7 +181,7 @@ final class DatabaseTest extends TestCase
         $row = $this->db->selectOne('SELECT * FROM users WHERE name = ?', ['Cara']);
 
         self::assertNotNull($row);
-        self::assertSame('cara@example.com', $row['email']);
+        self::assertSame('cara@example.com', $row->email);
     }
 
     public function testSelectValueReturnsDefaultWhenNoRows(): void
@@ -229,7 +229,7 @@ final class DatabaseTest extends TestCase
         $rows = $this->db->selectPage('SELECT * FROM users ORDER BY id', 2, 1);
 
         self::assertCount(1, $rows);
-        self::assertSame('B', $rows[0]['name']);
+        self::assertSame('B', $rows[0]->name);
     }
 
     public function testPaginateReturnsExpectedEnvelope(): void
@@ -252,7 +252,7 @@ final class DatabaseTest extends TestCase
         self::assertTrue($page['has_previous']);
         self::assertFalse($page['has_next']);
         self::assertCount(1, $page['items']);
-        self::assertSame('C', $page['items'][0]['name']);
+        self::assertSame('C', $page['items'][0]->name);
     }
 
     public function testPaginateResultReturnsTypedEnvelope(): void
@@ -288,7 +288,7 @@ final class DatabaseTest extends TestCase
 
         $rows = $this->db->selectPageWith('SELECT * FROM users ORDER BY id', $pagination);
         self::assertCount(1, $rows);
-        self::assertSame('C', $rows[0]['name']);
+        self::assertSame('C', $rows[0]->name);
 
         $page = $this->db->paginateWith('SELECT * FROM users ORDER BY id', 'SELECT COUNT(*) FROM users', $pagination);
         self::assertSame(3, $page['total']);
@@ -309,18 +309,18 @@ final class DatabaseTest extends TestCase
             'SELECT COUNT(*) FROM users',
             1,
             2,
-            static fn (array $row): array => [...$row, 'name' => strtoupper((string) $row['name'])],
+            static fn (\stdClass $row): \stdClass => (object) [...(array) $row, 'name' => strtoupper($row->name)],
         );
-        self::assertSame('ALPHA', $mapped->items[0]['name']);
-        self::assertSame('BETA', $mapped->items[1]['name']);
+        self::assertSame('ALPHA', $mapped->items[0]->name);
+        self::assertSame('BETA', $mapped->items[1]->name);
 
         $mappedWith = $this->db->paginateResultMappedWith(
             'SELECT * FROM users ORDER BY id',
             'SELECT COUNT(*) FROM users',
             new PaginationRequest(2, 2),
-            static fn (array $row): array => [...$row, 'name' => strtoupper((string) $row['name'])],
+            static fn (\stdClass $row): \stdClass => (object) [...(array) $row, 'name' => strtoupper($row->name)],
         );
-        self::assertSame('GAMMA', $mappedWith->items[0]['name']);
+        self::assertSame('GAMMA', $mappedWith->items[0]->name);
     }
 
     public function testPaginateResultFromQueryBuildsBoundedRequest(): void
@@ -340,7 +340,7 @@ final class DatabaseTest extends TestCase
         self::assertSame(2, $page->page);
         self::assertSame(2, $page->perPage);
         self::assertSame(1, $page->itemCount());
-        self::assertSame('gamma', strtolower((string) $page->firstItem()['name']));
+        self::assertSame('gamma', strtolower((string) $page->firstItem()->name));
     }
 
     public function testSortedDatabaseHelpersApplyOrderingAndPagination(): void
@@ -352,13 +352,13 @@ final class DatabaseTest extends TestCase
         $sort = new SortRequest('name', 'ASC');
 
         $sorted = $this->db->selectSorted('SELECT * FROM users', $sort);
-        self::assertSame('alice', $sorted[0]['name']);
-        self::assertSame('bravo', $sorted[1]['name']);
-        self::assertSame('charlie', $sorted[2]['name']);
+        self::assertSame('alice', $sorted[0]->name);
+        self::assertSame('bravo', $sorted[1]->name);
+        self::assertSame('charlie', $sorted[2]->name);
 
         $page = $this->db->selectPageSorted('SELECT * FROM users', $sort, new PaginationRequest(2, 2));
         self::assertCount(1, $page);
-        self::assertSame('charlie', $page[0]['name']);
+        self::assertSame('charlie', $page[0]->name);
 
         $typed = $this->db->paginateSortedResultWith(
             'SELECT * FROM users',
@@ -366,7 +366,7 @@ final class DatabaseTest extends TestCase
             $sort,
             new PaginationRequest(1, 2),
         );
-        self::assertSame('alice', $typed->firstItem()['name']);
+        self::assertSame('alice', $typed->firstItem()->name);
     }
 
     public function testFilteredAndFilteredSortedQueriesApplyWhereBindings(): void
@@ -383,7 +383,7 @@ final class DatabaseTest extends TestCase
             ['email' => 'email'],
         );
         self::assertCount(1, $filtered);
-        self::assertSame('alice', $filtered[0]['name']);
+        self::assertSame('alice', $filtered[0]->name);
 
         $filteredSorted = $this->db->selectFilteredSorted(
             'SELECT * FROM users',
@@ -392,7 +392,7 @@ final class DatabaseTest extends TestCase
             new SortRequest('name', 'DESC'),
         );
         self::assertCount(1, $filteredSorted);
-        self::assertSame('charlie', $filteredSorted[0]['name']);
+        self::assertSame('charlie', $filteredSorted[0]->name);
     }
 
     public function testPaginateFilteredSortedResultWithCombinesFilterSortAndPaging(): void
@@ -411,7 +411,7 @@ final class DatabaseTest extends TestCase
         );
 
         self::assertSame(2, $result->total);
-        self::assertSame('a@example.com', $result->firstItem()['email']);
+        self::assertSame('a@example.com', $result->firstItem()->email);
     }
 
     public function testSelectPageThrowsOnInvalidPaginationArguments(): void

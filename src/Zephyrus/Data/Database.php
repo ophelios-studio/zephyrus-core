@@ -24,7 +24,7 @@ final class Database
     public function __construct(private readonly PDO $pdo)
     {
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
     }
 
     /**
@@ -90,10 +90,10 @@ final class Database
     }
 
     /**
-     * Execute a SELECT and return all rows as associative arrays.
+     * Execute a SELECT and return all rows as stdClass objects.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function select(string $sql, array $params = []): array
     {
@@ -104,9 +104,8 @@ final class Database
      * Execute a query and return the first row or null when no rows match.
      *
      * @param array<int|string, mixed> $params
-     * @return array<string, mixed>|null
      */
-    public function selectOne(string $sql, array $params = []): ?array
+    public function selectOne(string $sql, array $params = []): ?\stdClass
     {
         $row = $this->query($sql, $params)->fetch();
 
@@ -122,12 +121,9 @@ final class Database
      */
     public function selectValue(string $sql, array $params = [], mixed $default = null): mixed
     {
-        $row = $this->query($sql, $params)->fetch();
-        if ($row === false) {
-            return $default;
-        }
+        $value = $this->query($sql, $params)->fetchColumn();
 
-        return reset($row);
+        return $value === false ? $default : $value;
     }
 
     /**
@@ -186,7 +182,7 @@ final class Database
      * Execute a paginated SELECT query by applying LIMIT/OFFSET.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function selectPage(string $sql, int $page, int $perPage, array $params = []): array
     {
@@ -197,7 +193,7 @@ final class Database
      * Execute a paginated SELECT query using a PaginationRequest.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function selectPageWith(string $sql, PaginationRequest $pagination, array $params = []): array
     {
@@ -211,7 +207,7 @@ final class Database
      * Execute a sorted SELECT query.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function selectSorted(string $sql, SortRequest $sort, array $params = []): array
     {
@@ -223,7 +219,7 @@ final class Database
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, array $params = []): array
     {
@@ -240,7 +236,7 @@ final class Database
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function selectFilteredSorted(
         string $sql,
@@ -261,7 +257,7 @@ final class Database
      * Execute a sorted paginated SELECT query.
      *
      * @param array<int|string, mixed> $params
-     * @return array<int, array<string, mixed>>
+     * @return \stdClass[]
      */
     public function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, array $params = []): array
     {
@@ -272,7 +268,7 @@ final class Database
      * Execute coordinated count + paginated data queries.
      *
      * @param array<int|string, mixed> $params
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     public function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
     {
@@ -283,7 +279,7 @@ final class Database
      * Execute coordinated count + paginated data queries with PaginationRequest.
      *
      * @param array<int|string, mixed> $params
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     public function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
     {
@@ -306,7 +302,7 @@ final class Database
      * Execute coordinated count + sorted paginated data queries.
      *
      * @param array<int|string, mixed> $params
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     public function paginateSortedWith(
         string $dataSql,
@@ -356,7 +352,7 @@ final class Database
      * Execute paginated query and map each returned item through a transformer.
      *
      * @param array<int|string, mixed> $params
-     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param callable(\stdClass): mixed $mapper
      */
     public function paginateResultMapped(
         string $dataSql,
@@ -374,7 +370,7 @@ final class Database
      * Execute paginated query with PaginationRequest and map each returned item.
      *
      * @param array<int|string, mixed> $params
-     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param callable(\stdClass): mixed $mapper
      */
     public function paginateResultMappedWith(
         string $dataSql,

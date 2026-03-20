@@ -7,12 +7,12 @@ namespace Zephyrus\Data;
 /**
  * Immutable pagination envelope for list-style queries.
  *
- * @template T of array<string, mixed>
+ * @template T of \stdClass
  */
 final class PaginatedResult implements \JsonSerializable
 {
     /**
-     * @param array<int, array<string, mixed>> $items
+     * @param \stdClass[] $items
      */
     public function __construct(
         public readonly array $items,
@@ -26,7 +26,7 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @param array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool} $data
+     * @param array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool} $data
      */
     public static function fromArray(array $data): self
     {
@@ -42,7 +42,7 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     public function toArray(): array
     {
@@ -68,17 +68,17 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @return null|array<string, mixed>
+     * @return null|\stdClass
      */
-    public function firstItem(): ?array
+    public function firstItem(): ?\stdClass
     {
         return $this->items[0] ?? null;
     }
 
     /**
-     * @return null|array<string, mixed>
+     * @return null|\stdClass
      */
-    public function lastItem(): ?array
+    public function lastItem(): ?\stdClass
     {
         if ($this->items === []) {
             return null;
@@ -88,7 +88,7 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @param callable(array<string, mixed>): array<string, mixed> $mapper
+     * @param callable(\stdClass): \stdClass $mapper
      */
     public function mapItems(callable $mapper): self
     {
@@ -129,7 +129,7 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @return array{items: array<int, array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
     public function jsonSerialize(): array
     {
