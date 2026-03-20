@@ -382,6 +382,24 @@ final class Formatter
     }
 
     /**
+     * Check whether a custom formatter with the given name has been registered.
+     */
+    public function hasCustomFormatter(string $name): bool
+    {
+        return isset($this->customFormatters[$name]);
+    }
+
+    /**
+     * Get the names of all registered custom formatters.
+     *
+     * @return string[]
+     */
+    public function getCustomFormatterNames(): array
+    {
+        return array_keys($this->customFormatters);
+    }
+
+    /**
      * Apply a named custom formatter.
      *
      * @throws FormatterException if the formatter is not registered.

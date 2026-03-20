@@ -464,6 +464,29 @@ final class FormatterTest extends TestCase
         $this->formatter->format('nonexistent', 'value');
     }
 
+    public function testHasCustomFormatterReturnsFalseWhenNotRegistered(): void
+    {
+        self::assertFalse($this->formatter->hasCustomFormatter('phone'));
+    }
+
+    public function testHasCustomFormatterReturnsTrueWhenRegistered(): void
+    {
+        $this->formatter->register('phone', fn (string $n) => $n);
+        self::assertTrue($this->formatter->hasCustomFormatter('phone'));
+    }
+
+    public function testGetCustomFormatterNamesReturnsEmptyByDefault(): void
+    {
+        self::assertSame([], $this->formatter->getCustomFormatterNames());
+    }
+
+    public function testGetCustomFormatterNamesReturnsRegisteredNames(): void
+    {
+        $this->formatter->register('phone', fn (string $n) => $n);
+        $this->formatter->register('slug', fn (string $s) => $s);
+        self::assertSame(['phone', 'slug'], $this->formatter->getCustomFormatterNames());
+    }
+
     // ─── French Locale ────────────────────────────────────────────────
 
     // ─── Default Date/Time Patterns ─────────────────────────────────
