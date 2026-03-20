@@ -970,4 +970,84 @@ final class RequestTest extends TestCase
         self::assertSame(true, $request->body()->get('active'));
         self::assertSame(4.5, $request->body()->get('score'));
     }
+
+    // -------------------------------------------------------------------------
+    // getParameter / getParameters / getHeader convenience methods
+    // -------------------------------------------------------------------------
+
+    public function testGetParameterPrefersBodyOverQuery(): void
+    {
+        $request = Request::fromArray(
+            method: 'POST',
+            uri: '/update',
+            body: ['name' => 'from-body'],
+            query: ['name' => 'from-query', 'page' => '2'],
+        );
+
+        self::assertSame('from-body', $request->getParameter('name'));
+        self::assertSame('2', $request->getParameter('page'));
+    }
+
+    public function testGetParameterFallsBackToQueryWhenBodyMissing(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/search',
+            query: ['q' => 'zephyrus'],
+        );
+
+        self::assertSame('zephyrus', $request->getParameter('q'));
+    }
+
+    public function testGetParameterReturnsDefaultWhenNotFound(): void
+    {
+        $request = Request::fromArray(method: 'GET', uri: '/empty');
+
+        self::assertNull($request->getParameter('missing'));
+        self::assertSame('fallback', $request->getParameter('missing', 'fallback'));
+    }
+
+    public function testGetParametersMergesQueryAndBody(): void
+    {
+        $request = Request::fromArray(
+            method: 'POST',
+            uri: '/submit',
+            body: ['name' => 'Alice', 'role' => 'admin'],
+            query: ['page' => '1', 'name' => 'from-query'],
+        );
+
+        $params = $request->getParameters();
+
+        // Body overwrites query for shared keys (array_merge behavior)
+        self::assertSame('Alice', $params['name']);
+        self::assertSame('admin', $params['role']);
+        self::assertSame('1', $params['page']);
+    }
+
+    public function testGetParametersReturnsEmptyWhenNonePresent(): void
+    {
+        $request = Request::fromArray(method: 'GET', uri: '/empty');
+
+        self::assertSame([], $request->getParameters());
+    }
+
+    public function testGetHeaderReturnsHeaderValue(): void
+    {
+        $request = Request::fromArray(
+            method: 'GET',
+            uri: '/api',
+            headers: ['X-Request-Id' => 'abc-123', 'Accept' => 'application/json'],
+        );
+
+        self::assertSame('abc-123', $request->getHeader('X-Request-Id'));
+        self::assertSame('application/json', $request->getHeader('accept'));
+    }
+
+    public function testGetHeaderReturnsDefaultWhenMissing(): void
+    {
+        $request = Request::fromArray(method: 'GET', uri: '/api');
+
+        self::assertNull($request->getHeader('X-Missing'));
+        self::assertSame('text/html', $request->getHeader('Accept', 'text/html'));
+    }
 }

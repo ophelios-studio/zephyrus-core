@@ -237,6 +237,37 @@ final readonly class Request
     }
 
     // ------------------------------------------------------------------
+    // Convenience accessors
+    // ------------------------------------------------------------------
+
+    /**
+     * Get a parameter from the request body first, then query string.
+     */
+    public function getParameter(string $name, mixed $default = null): mixed
+    {
+        if ($this->body->has($name)) {
+            return $this->body->get($name);
+        }
+        return $this->query[$name] ?? $default;
+    }
+
+    /**
+     * Get all parameters merged from body and query.
+     */
+    public function getParameters(): array
+    {
+        return array_merge($this->query, $this->body->all());
+    }
+
+    /**
+     * Get a header value by name.
+     */
+    public function getHeader(string $name, ?string $default = null): ?string
+    {
+        return $this->headerBag->get($name, $default);
+    }
+
+    // ------------------------------------------------------------------
     // Immutable attribute mutation
     // ------------------------------------------------------------------
 
