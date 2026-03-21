@@ -68,13 +68,23 @@ use Zephyrus\Validation\ValidationException;
 abstract class Controller implements ControllerLifecycleInterface
 {
     /**
-     * Pre-dispatch hook — no-op by default.
+     * The current request, automatically set before each handler invocation.
+     *
+     * Available in handler methods and after() without needing to declare a
+     * Request parameter. Set by the default before() implementation.
+     */
+    protected Request $request;
+
+    /**
+     * Pre-dispatch hook — stores the request and returns null by default.
      *
      * Override to short-circuit dispatch (e.g. auth guard): return a Response
      * to halt immediately, or return null to continue to the handler method.
+     * Always call parent::before($request) when overriding to keep $this->request.
      */
     public function before(Request $request): ?Response
     {
+        $this->request = $request;
         return null;
     }
 
@@ -130,6 +140,32 @@ abstract class Controller implements ControllerLifecycleInterface
      * @param array<mixed> $payload
      */
     protected function respond(array $payload, int $status): Response
+    {
+        return Response::json($payload, $status);
+    }
+
+    /**
+     * Returns a redirect response.
+     */
+    protected function redirect(string $url, int $status = 302): Response
+    {
+        return Response::redirect($url, $status);
+    }
+
+    /**
+     * Returns an abort response with the given status code and body.
+     */
+    protected function abort(int $status, string $body = ''): Response
+    {
+        return Response::html($body, $status);
+    }
+
+    /**
+     * Returns an abort JSON response with the given status code.
+     *
+     * @param array<mixed> $payload
+     */
+    protected function abortJson(int $status, array $payload): Response
     {
         return Response::json($payload, $status);
     }
