@@ -16,6 +16,7 @@ use Zephyrus\Data\Database;
  *   CREATE TABLE <table> (
  *       session_id VARCHAR PRIMARY KEY,
  *       access     INTEGER NOT NULL,
+ *       expire     INTEGER NOT NULL,
  *       data       TEXT NOT NULL DEFAULT ''
  *   );
  *
@@ -54,6 +55,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface
     public function write(string $id, string $data): bool
     {
         $access = time();
+        $expire = $access + (int) ini_get('session.gc_maxlifetime');
         $existing = $this->database->selectOne(
             "SELECT {$this->idColumn} FROM {$this->table} WHERE {$this->idColumn} = ?",
             [$id],
@@ -61,13 +63,13 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface
 
         if ($existing !== null) {
             $this->database->execute(
-                "UPDATE {$this->table} SET access = ?, data = ? WHERE {$this->idColumn} = ?",
-                [$access, $data, $id],
+                "UPDATE {$this->table} SET access = ?, expire = ?, data = ? WHERE {$this->idColumn} = ?",
+                [$access, $expire, $data, $id],
             );
         } else {
             $this->database->execute(
-                "INSERT INTO {$this->table} ({$this->idColumn}, access, data) VALUES (?, ?, ?)",
-                [$id, $access, $data],
+                "INSERT INTO {$this->table} ({$this->idColumn}, access, expire, data) VALUES (?, ?, ?, ?)",
+                [$id, $access, $expire, $data],
             );
         }
 
