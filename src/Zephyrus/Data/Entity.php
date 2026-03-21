@@ -103,7 +103,11 @@ abstract class Entity implements JsonSerializable
                         );
                     }
                 } elseif ($innerReflection->isSubclassOf(self::class)) {
-                    $instance->$name = $className::build($value);
+                    if ($value instanceof stdClass) {
+                        $instance->$name = $className::build($value);
+                    }
+                    // Skip non-stdClass values (e.g. flat row columns that
+                    // happen to share a name with a nested entity property).
                 }
             }
         }
