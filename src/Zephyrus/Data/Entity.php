@@ -105,9 +105,14 @@ abstract class Entity implements JsonSerializable
                 } elseif ($innerReflection->isSubclassOf(self::class)) {
                     if ($value instanceof stdClass) {
                         $instance->$name = $className::build($value);
+                    } elseif (is_string($value)) {
+                        // JSONB columns arrive as JSON strings from PDO —
+                        // decode and build the nested entity if valid JSON.
+                        $decoded = json_decode($value);
+                        if ($decoded instanceof stdClass) {
+                            $instance->$name = $className::build($decoded);
+                        }
                     }
-                    // Skip non-stdClass values (e.g. flat row columns that
-                    // happen to share a name with a nested entity property).
                 }
             }
         }
