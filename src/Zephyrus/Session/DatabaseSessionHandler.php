@@ -14,9 +14,9 @@ use Zephyrus\Data\Database;
  * Expected table schema:
  *
  *   CREATE TABLE <table> (
- *       id    VARCHAR PRIMARY KEY,
- *       access INTEGER NOT NULL,
- *       data   TEXT NOT NULL DEFAULT ''
+ *       session_id VARCHAR PRIMARY KEY,
+ *       access     INTEGER NOT NULL,
+ *       data       TEXT NOT NULL DEFAULT ''
  *   );
  *
  * Register before calling session_start():
@@ -28,6 +28,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface
     public function __construct(
         private readonly Database $database,
         private readonly string $table = 'public.session',
+        private readonly string $idColumn = 'session_id',
     ) {}
 
     public function open(string $path, string $name): bool
@@ -43,7 +44,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface
     public function read(string $id): string|false
     {
         $row = $this->database->selectOne(
-            "SELECT data FROM {$this->table} WHERE id = ?",
+            "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ?",
             [$id],
         );
 
@@ -54,18 +55,18 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface
     {
         $access = time();
         $existing = $this->database->selectOne(
-            "SELECT id FROM {$this->table} WHERE id = ?",
+            "SELECT {$this->idColumn} FROM {$this->table} WHERE {$this->idColumn} = ?",
             [$id],
         );
 
         if ($existing !== null) {
             $this->database->execute(
-                "UPDATE {$this->table} SET access = ?, data = ? WHERE id = ?",
+                "UPDATE {$this->table} SET access = ?, data = ? WHERE {$this->idColumn} = ?",
                 [$access, $data, $id],
             );
         } else {
             $this->database->execute(
-                "INSERT INTO {$this->table} (id, access, data) VALUES (?, ?, ?)",
+                "INSERT INTO {$this->table} ({$this->idColumn}, access, data) VALUES (?, ?, ?)",
                 [$id, $access, $data],
             );
         }
@@ -76,7 +77,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface
     public function destroy(string $id): bool
     {
         $this->database->execute(
-            "DELETE FROM {$this->table} WHERE id = ?",
+            "DELETE FROM {$this->table} WHERE {$this->idColumn} = ?",
             [$id],
         );
 
