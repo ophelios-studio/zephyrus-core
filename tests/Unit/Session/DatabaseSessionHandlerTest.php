@@ -21,7 +21,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     protected function setUp(): void
     {
         $pdo = new PDO('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, data TEXT NOT NULL DEFAULT "")');
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, data TEXT NOT NULL DEFAULT "")');
         $this->database = new Database($pdo);
         $this->handler = new DatabaseSessionHandler($this->database, 'session');
     }
@@ -56,7 +56,7 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame('second', $this->handler->read('sess_1'));
 
         // Ensure only one row exists.
-        $count = $this->database->count('SELECT COUNT(*) FROM session WHERE id = ?', ['sess_1']);
+        $count = $this->database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', ['sess_1']);
         self::assertSame(1, $count);
     }
 
@@ -80,7 +80,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     {
         // Insert a row with an old access timestamp.
         $this->database->execute(
-            'INSERT INTO session (id, access, data) VALUES (?, ?, ?)',
+            'INSERT INTO session (session_id, access, data) VALUES (?, ?, ?)',
             ['old_sess', time() - 7200, 'old_data'],
         );
         $this->handler->write('fresh_sess', 'fresh_data');
