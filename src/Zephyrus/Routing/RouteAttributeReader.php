@@ -45,7 +45,7 @@ final class RouteAttributeReader
             throw RouteAttributeException::unresolvableClass($className, $e);
         }
 
-        if (!$this->satisfiesEnvRequirements($reflection->getAttributes(RequiresEnvAttribute::class))) {
+        if (!$this->satisfiesInheritedEnvRequirements($reflection)) {
             return [];
         }
 
@@ -53,10 +53,7 @@ final class RouteAttributeReader
         $seenRouteNames = [];
         $rootPrefix = $this->resolveRootPrefix($reflection);
 
-        $classMiddlewares = [
-            ...$this->readMiddlewareAttributes($reflection->getAttributes(MiddlewareAttribute::class)),
-            ...$this->readMiddlewareGroupAttributes($reflection->getAttributes(MiddlewareGroupAttribute::class)),
-        ];
+        $classMiddlewares = $this->readInheritedMiddlewares($reflection);
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() !== $className) {
@@ -146,6 +143,33 @@ final class RouteAttributeReader
     }
 
     /**
+     * Collect middleware names from #[Middleware] and #[MiddlewareGroup] attributes
+     * on the given class AND all its parent classes (parent-first order).
+     *
+     * @return list<string>
+     */
+    private function readInheritedMiddlewares(ReflectionClass $reflection): array
+    {
+        $chain = [];
+        $current = $reflection;
+        while ($current !== false) {
+            $chain[] = $current;
+            $current = $current->getParentClass();
+        }
+
+        $middlewares = [];
+        foreach (array_reverse($chain) as $class) {
+            array_push(
+                $middlewares,
+                ...$this->readMiddlewareAttributes($class->getAttributes(MiddlewareAttribute::class)),
+                ...$this->readMiddlewareGroupAttributes($class->getAttributes(MiddlewareGroupAttribute::class)),
+            );
+        }
+
+        return $middlewares;
+    }
+
+    /**
      * @param list<\ReflectionAttribute<MiddlewareAttribute>> $attributes
      * @return list<string>
      */
@@ -232,6 +256,21 @@ final class RouteAttributeReader
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Check #[RequiresEnv] on the class and all its parents.
+     */
+    private function satisfiesInheritedEnvRequirements(ReflectionClass $reflection): bool
+    {
+        $current = $reflection;
+        while ($current !== false) {
+            if (!$this->satisfiesEnvRequirements($current->getAttributes(RequiresEnvAttribute::class))) {
+                return false;
+            }
+            $current = $current->getParentClass();
+        }
         return true;
     }
 
