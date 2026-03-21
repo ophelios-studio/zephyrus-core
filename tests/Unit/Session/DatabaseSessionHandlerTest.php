@@ -21,7 +21,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     protected function setUp(): void
     {
         $pdo = new PDO('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, data TEXT NOT NULL DEFAULT "")');
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
         $this->database = new Database($pdo);
         $this->handler = new DatabaseSessionHandler($this->database, 'session');
     }
@@ -80,8 +80,8 @@ final class DatabaseSessionHandlerTest extends TestCase
     {
         // Insert a row with an old access timestamp.
         $this->database->execute(
-            'INSERT INTO session (session_id, access, data) VALUES (?, ?, ?)',
-            ['old_sess', time() - 7200, 'old_data'],
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['old_sess', time() - 7200, time() - 3600, 'old_data'],
         );
         $this->handler->write('fresh_sess', 'fresh_data');
 
