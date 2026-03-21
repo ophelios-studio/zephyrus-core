@@ -118,6 +118,11 @@ final class HandlerResolver
 
         $args = [];
 
+        // Build positional list of route attribute values for fallback
+        // when parameter names don't match placeholder names.
+        $positionalAttributes = array_values($request->attributes);
+        $positionalIndex = 0;
+
         foreach ($reflection->getParameters() as $param) {
             $type = $param->getType();
             $name = $param->getName();
@@ -133,6 +138,16 @@ final class HandlerResolver
             if (array_key_exists($name, $request->attributes)) {
                 $attrValue = $request->attributes[$name];
                 $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
+                $positionalIndex++;
+                continue;
+            }
+
+            // Positional fallback: inject route attributes by position
+            // when the parameter name doesn't match any placeholder name.
+            if ($positionalIndex < count($positionalAttributes)) {
+                $attrValue = $positionalAttributes[$positionalIndex];
+                $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
+                $positionalIndex++;
                 continue;
             }
 
