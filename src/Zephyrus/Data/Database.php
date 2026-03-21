@@ -21,10 +21,25 @@ use Zephyrus\Core\Config\DatabaseConfig;
  */
 final class Database
 {
+    /** @var array<string, callable(string): mixed> */
+    private array $typeConversions = [];
+
     public function __construct(private readonly PDO $pdo)
     {
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+    }
+
+    /**
+     * Register a callback to convert values from a PostgreSQL column type
+     * (e.g. 'JSONB', 'JSON') before rows are returned from select methods.
+     *
+     * @param string $typeName PostgreSQL type name (case-insensitive, matched via pg_field_type).
+     * @param callable(string): mixed $converter Receives the raw string value, returns converted value.
+     */
+    public function registerTypeConversion(string $typeName, callable $converter): void
+    {
+        $this->typeConversions[strtoupper($typeName)] = $converter;
     }
 
     /**
@@ -97,7 +112,17 @@ final class Database
      */
     public function select(string $sql, array $params = []): array
     {
-        return $this->query($sql, $params)->fetchAll();
+        $stmt = $this->query($sql, $params);
+        $rows = $stmt->fetchAll();
+
+        if ($this->typeConversions !== []) {
+            $columnTypes = $this->resolveColumnTypes($stmt);
+            foreach ($rows as $row) {
+                $this->applyTypeConversions($row, $columnTypes);
+            }
+        }
+
+        return $rows;
     }
 
     /**
@@ -107,9 +132,19 @@ final class Database
      */
     public function selectOne(string $sql, array $params = []): ?\stdClass
     {
-        $row = $this->query($sql, $params)->fetch();
+        $stmt = $this->query($sql, $params);
+        $row = $stmt->fetch();
 
-        return $row === false ? null : $row;
+        if ($row === false) {
+            return null;
+        }
+
+        if ($this->typeConversions !== []) {
+            $columnTypes = $this->resolveColumnTypes($stmt);
+            $this->applyTypeConversions($row, $columnTypes);
+        }
+
+        return $row;
     }
 
     /**
@@ -593,5 +628,45 @@ final class Database
     public function pdo(): PDO
     {
         return $this->pdo;
+    }
+
+    /**
+     * Build a column-index → type-name map for columns whose types have
+     * registered converters.
+     *
+     * @return array<string, callable> column name → converter
+     */
+    private function resolveColumnTypes(PDOStatement $stmt): array
+    {
+        $map = [];
+        $columnCount = $stmt->columnCount();
+
+        for ($i = 0; $i < $columnCount; $i++) {
+            $meta = $stmt->getColumnMeta($i);
+            if ($meta === false) {
+                continue;
+            }
+
+            $nativeType = strtoupper($meta['native_type'] ?? '');
+            if (isset($this->typeConversions[$nativeType])) {
+                $map[$meta['name']] = $this->typeConversions[$nativeType];
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Apply registered type conversions to a fetched row in-place.
+     *
+     * @param array<string, callable> $columnTypes column name → converter
+     */
+    private function applyTypeConversions(\stdClass $row, array $columnTypes): void
+    {
+        foreach ($columnTypes as $column => $converter) {
+            if (isset($row->$column) && is_string($row->$column)) {
+                $row->$column = $converter($row->$column);
+            }
+        }
     }
 }

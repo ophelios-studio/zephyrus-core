@@ -79,16 +79,6 @@ abstract class Entity implements JsonSerializable
                 continue;
             }
 
-            // JSONB columns arrive as JSON strings from PDO. Decode them
-            // early so that downstream type coercion (array, stdClass,
-            // nested entities) receives native PHP values.
-            if (is_string($value) && $value !== '' && ($value[0] === '{' || $value[0] === '[')) {
-                $decoded = json_decode($value);
-                if ($decoded !== null) {
-                    $value = $decoded;
-                }
-            }
-
             // No type hint — assign directly.
             if ($reflectionType === null) {
                 $instance->$name = $value;
