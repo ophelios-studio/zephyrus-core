@@ -24,10 +24,33 @@ final class Database
     /** @var array<string, callable(string): mixed> */
     private array $typeConversions = [];
 
+    /**
+     * Built-in PostgreSQL native type conversions matching v1 DatabaseStatement behavior.
+     * Integer types → intval, float/decimal types → floatval, boolean → boolval,
+     * JSONB/JSON → json_decode, PostgreSQL arrays → PHP arrays.
+     */
+    private const BUILTIN_TYPE_CONVERSIONS = [
+        // Integer types
+        'INT2' => 'intval',
+        'INT4' => 'intval',
+        'INT8' => 'intval',
+        'LONG' => 'intval',
+        'LONGLONG' => 'intval',
+        // Float/decimal types
+        'FLOAT4' => 'floatval',
+        'FLOAT8' => 'floatval',
+        'NUMERIC' => 'floatval',
+        'DECIMAL' => 'floatval',
+        'NEWDECIMAL' => 'floatval',
+        // Boolean
+        'BOOL' => 'boolval',
+    ];
+
     public function __construct(private readonly PDO $pdo)
     {
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+        $this->registerBuiltinTypeConversions();
     }
 
     /**
@@ -650,6 +673,12 @@ final class Database
             $nativeType = strtoupper($meta['native_type'] ?? '');
             if (isset($this->typeConversions[$nativeType])) {
                 $map[$meta['name']] = $this->typeConversions[$nativeType];
+            } elseif (str_starts_with($nativeType, '_')) {
+                // PostgreSQL array types (e.g. _INT4, _TEXT) → PHP arrays.
+                $map[$meta['name']] = static function (string $value): array {
+                    $inner = str_replace(['{', '}'], '', $value);
+                    return $inner === '' ? [] : explode(',', $inner);
+                };
             }
         }
 
@@ -668,5 +697,25 @@ final class Database
                 $row->$column = $converter($row->$column);
             }
         }
+    }
+
+    /**
+     * Register built-in PostgreSQL type conversions (int, float, bool, JSON,
+     * arrays) matching v1 DatabaseStatement auto-coercion behavior.
+     */
+    private function registerBuiltinTypeConversions(): void
+    {
+        foreach (self::BUILTIN_TYPE_CONVERSIONS as $type => $fn) {
+            $this->typeConversions[$type] = $fn;
+        }
+
+        // JSONB / JSON → decoded PHP value (stdClass or array).
+        $jsonDecoder = static fn (string $v): mixed => json_decode($v);
+        $this->typeConversions['JSONB'] = $jsonDecoder;
+        $this->typeConversions['JSON'] = $jsonDecoder;
+
+        // PostgreSQL array types (e.g. _int4, _text) → PHP arrays.
+        // These are handled dynamically in resolveColumnTypes() via
+        // the underscore prefix check, not registered statically.
     }
 }
