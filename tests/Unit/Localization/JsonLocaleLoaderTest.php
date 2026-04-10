@@ -48,6 +48,23 @@ final class JsonLocaleLoaderTest extends TestCase
         }
     }
 
+    public function testLoadSupportsLowercaseRegionLocaleFileFallback(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        mkdir($tempDir);
+        file_put_contents($tempDir . '/fr_ca.json', '{"messages":{"welcome":"Salut {name}"}}');
+
+        $loader = new JsonLocaleLoader($tempDir);
+
+        try {
+            $catalog = $loader->load('fr-CA');
+            self::assertSame('Salut {name}', $catalog['messages']['welcome']);
+        } finally {
+            @unlink($tempDir . '/fr_ca.json');
+            @rmdir($tempDir);
+        }
+    }
+
     public function testLoadThrowsWhenJsonIsInvalid(): void
     {
         $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
