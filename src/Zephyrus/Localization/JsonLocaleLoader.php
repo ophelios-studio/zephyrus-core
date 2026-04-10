@@ -140,17 +140,37 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     /**
      * Build locale directory/file name candidates.
      *
-     * For "fr-CA" this returns ["fr-CA", "fr_CA"].
+     * For "fr-CA" this returns variants such as:
+     *   ["fr-CA", "fr_CA", "fr-ca", "fr_ca"]
+     * so projects can use either canonical or lowercase region casing.
      * For "en" this returns ["en"].
      *
      * @return string[]
      */
     private function localeCandidates(string $locale): array
     {
-        $candidates = [$locale];
-        if (str_contains($locale, '-')) {
-            $candidates[] = str_replace('-', '_', $locale);
+        $locale = trim($locale);
+        if ($locale === '') {
+            return [];
         }
+
+        $candidates = [$locale];
+
+        if (str_contains($locale, '-')) {
+            [$language, $region] = array_pad(explode('-', $locale, 2), 2, '');
+            $languageLower = strtolower($language);
+            $regionUpper = strtoupper($region);
+            $regionLower = strtolower($region);
+
+            $canonical = $region === '' ? $languageLower : $languageLower . '-' . $regionUpper;
+            $canonicalLowerRegion = $region === '' ? $languageLower : $languageLower . '-' . $regionLower;
+
+            $candidates[] = $canonical;
+            $candidates[] = str_replace('-', '_', $canonical);
+            $candidates[] = $canonicalLowerRegion;
+            $candidates[] = str_replace('-', '_', $canonicalLowerRegion);
+        }
+
         return array_values(array_unique($candidates));
     }
 }
