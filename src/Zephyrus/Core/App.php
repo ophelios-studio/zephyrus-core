@@ -6,6 +6,8 @@ namespace Zephyrus\Core;
 
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Formatting\Formatter;
+use Zephyrus\Http\Request;
+use Zephyrus\Inertia\InertiaRenderer;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
 use Zephyrus\Session\SessionManager;
@@ -35,14 +37,14 @@ final class App
     private static ?Formatter $formatter = null;
     private static ?Asset $asset = null;
     private static ?Translator $translator = null;
+    private static ?Request $request = null;
+    private static ?InertiaRenderer $inertia = null;
     private static ?string $nonce = null;
 
     /**
      * Prevent instantiation.
      */
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 
     // ─── Configuration ────────────────────────────────────────────────
 
@@ -104,6 +106,30 @@ final class App
         return self::$translator;
     }
 
+    // ─── Current Request ──────────────────────────────────────────────
+
+    public static function setRequest(?Request $request): void
+    {
+        self::$request = $request;
+    }
+
+    public static function getRequest(): ?Request
+    {
+        return self::$request;
+    }
+
+    // ─── Inertia ──────────────────────────────────────────────────────
+
+    public static function setInertia(InertiaRenderer $inertia): void
+    {
+        self::$inertia = $inertia;
+    }
+
+    public static function getInertia(): ?InertiaRenderer
+    {
+        return self::$inertia;
+    }
+
     // ─── CSP Nonce ────────────────────────────────────────────────────
 
     /**
@@ -139,6 +165,8 @@ final class App
         self::$formatter = null;
         self::$asset = null;
         self::$translator = null;
+        self::$request = null;
+        self::$inertia = null;
         self::$nonce = null;
     }
 }

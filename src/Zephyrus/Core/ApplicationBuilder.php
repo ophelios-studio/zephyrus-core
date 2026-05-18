@@ -10,6 +10,8 @@ use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Inertia\InertiaMiddleware;
+use Zephyrus\Inertia\InertiaRenderer;
 use Zephyrus\Localization\FallbackLocaleLoader;
 use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\LocaleLoaderInterface;
@@ -28,6 +30,8 @@ final class ApplicationBuilder
     private array $supportedLocales = [];
 
     private ?Configuration $configuration = null;
+
+    private ?InertiaRenderer $inertia = null;
 
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
@@ -154,6 +158,32 @@ final class ApplicationBuilder
     {
         $clone = clone $this;
         $clone->kernelBuilder = $this->kernelBuilder->withContainer($container);
+
+        return $clone;
+    }
+
+    /**
+     * Configure the global Inertia renderer used by Inertia::render().
+     * In generated real apps this function is used in the Application Kernel 
+     * When creating the ApplicationBuilder 
+     *  
+     * @param string $rootView Absolute path to the Inertia root PHP view.
+     * @param string|null $version Optional asset version sent with every page payload.
+     * @param array<string, mixed> $shared Props included with every rendered page.
+     */
+    public function withInertia(string $rootView, ?string $version = null, array $shared = []): self
+    {
+        return $this->withInertiaRenderer(new InertiaRenderer($rootView, $version, $shared));
+    }
+
+    /**
+     * Configure the global Inertia renderer from an existing renderer instance.
+     */
+    public function withInertiaRenderer(InertiaRenderer $renderer): self
+    {
+        $clone = clone $this;
+        $clone->inertia = $renderer;
+        $clone->kernelBuilder = $this->kernelBuilder->withMiddleware(new InertiaMiddleware($renderer));
 
         return $clone;
     }
@@ -365,6 +395,9 @@ final class ApplicationBuilder
 
         if ($this->configuration !== null) {
             App::setConfiguration($this->configuration);
+        }
+        if ($this->inertia !== null) {
+            App::setInertia($this->inertia);
         }
         App::setTranslator($translator);
         App::setFormatter($formatter);
