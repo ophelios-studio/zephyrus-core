@@ -14,6 +14,7 @@ use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Inertia\InertiaRenderer;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Routing\Router;
 
@@ -685,6 +686,29 @@ final class ApplicationBuilderTest extends TestCase
 
         self::assertSame('yes', $response->headers['x-app']);
     }
+
+    public function testWithInertiaRendererRegistersPrebuiltRendererAndMiddleware(): void
+    {
+        $renderer = new InertiaRenderer(__DIR__ . '/../Inertia/fixtures/app.php', 'build-1', [
+            'appName' => 'Zephyrus',
+        ]);
+        $router = (new Router())->put('/profile', ApplicationBuilderFixtureController::class . '@update');
+
+        $app = ApplicationBuilder::create()
+            ->withRouter($router)
+            ->withInertiaRenderer($renderer)
+            ->build();
+
+        self::assertSame($renderer, App::getInertia());
+
+        $response = $app->handle(Request::fromArray('PUT', 'https://example.test/profile', headers: [
+            'X-Inertia' => 'true',
+        ]));
+
+        self::assertSame(303, $response->status);
+        self::assertSame('/profile', $response->headers['location']);
+        self::assertSame('X-Inertia', $response->headers['vary']);
+    }
 }
 
 final class ApplicationBuilderFixtureController
@@ -692,5 +716,10 @@ final class ApplicationBuilderFixtureController
     public function health(): Response
     {
         return Response::text('ok');
+    }
+
+    public function update(): Response
+    {
+        return Response::redirect('/profile');
     }
 }
