@@ -10,6 +10,7 @@ declare(strict_types=1);
  */
 
 use Zephyrus\Core\App;
+use Zephyrus\Inertia\InertiaView;
 
 if (!function_exists('env')) {
     /**
@@ -224,5 +225,29 @@ if (!function_exists('nonce')) {
     function nonce(): string
     {
         return App::nonce();
+    }
+}
+
+if (!function_exists('inertia_app')) {
+    /**
+     * Render the Inertia root element.
+     *
+     * @param array<string, mixed>|null $page
+     */
+    function inertia_app(string $id = 'app', ?array $page = null): string
+    {
+        return InertiaView::app($page, $id);
+    }
+}
+
+if (!function_exists('inertia_head')) {
+    /**
+     * Render Inertia-managed head content.
+     *
+     * @param array<string, mixed>|null $page
+     */
+    function inertia_head(?array $page = null): string
+    {
+        return InertiaView::head($page);
     }
 }

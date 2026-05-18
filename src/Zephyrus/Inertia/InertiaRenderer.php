@@ -268,6 +268,8 @@ final class InertiaRenderer
         ob_start();
 
         try {
+            InertiaView::setPage($page);
+
             (static function (string $__path__, array $__data__): void {
                 extract($__data__, EXTR_SKIP);
                 include $__path__;
@@ -280,6 +282,8 @@ final class InertiaRenderer
             }
 
             throw RenderException::renderFailed('inertia root view', $e);
+        } finally {
+            InertiaView::clearPage();
         }
     }
 }
