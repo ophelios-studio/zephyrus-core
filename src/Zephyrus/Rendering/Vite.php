@@ -15,13 +15,49 @@ final class Vite
     /**
      * Render Vite script and stylesheet tags for one or more entrypoints.
      *
-     * Supported options:
+     * Development output includes the Vite client and one module script tag per
+     * entrypoint, using the dev server URL. Production output reads the Vite
+     * manifest and emits stylesheet tags followed by module script tags for the
+     * hashed build assets.
+     *
+     * Supported options, with snake_case and camelCase aliases:
      * - environment: Environment|string
-     * - dev_server/devServer: string
-     * - public_directory/publicDirectory: string
-     * - build_directory/buildDirectory: string
-     * - manifest_path/manifestPath: string
-     * - asset_url/assetUrl: string
+     *   Current application environment. Development values are "dev",
+     *   "development", and "local". Environment::Development is also accepted.
+     *   When omitted, the value is resolved from config('application',
+     *   'environment'), then APP_ENV, then defaults to production.
+     *
+     * - dev_server / devServer: string
+     *   Vite dev server base URL used in development. When omitted, the value
+     *   is resolved from VITE_DEV_SERVER, then VITE_DEV_SERVER_URL, then
+     *   defaults to "http://localhost:5173".
+     *
+     * - public_directory / publicDirectory: string
+     *   Absolute path to the public directory used to find the production
+     *   manifest. When omitted, the value is resolved from VITE_PUBLIC_DIRECTORY,
+     *   then VITE_PUBLIC_DIR, then defaults to getcwd() . "/public".
+     *
+     * - build_directory / buildDirectory: string
+     *   Build directory relative to the public directory. When omitted, the
+     *   value is resolved from VITE_BUILD_DIRECTORY, then VITE_BUILD_DIR, then
+     *   defaults to "build".
+     *
+     * - manifest_path / manifestPath: string
+     *   Explicit absolute path to the Vite manifest. When omitted, production
+     *   checks "<public_directory>/<build_directory>/manifest.json" and then
+     *   "<public_directory>/<build_directory>/.vite/manifest.json".
+     *
+     * - asset_url / assetUrl: string
+     *   Public URL prefix used for production asset URLs. When omitted, the
+     *   value is resolved from VITE_ASSET_URL, then defaults to
+     *   "/" . build_directory.
+     *
+     * Example:
+     *   Vite::render('resources/js/app.js', [
+     *       'environment' => 'production',
+     *       'public_directory' => __DIR__ . '/../public',
+     *       'build_directory' => 'build',
+     *   ]);
      *
      * @param string|string[]       $entry
      * @param array<string, mixed>  $options
