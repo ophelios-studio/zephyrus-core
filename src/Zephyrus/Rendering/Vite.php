@@ -232,9 +232,18 @@ final class Vite
      */
     private static function publicDirectory(array $options): string
     {
-        return self::stringOption($options, 'public_directory', 'publicDirectory')
-            ?? self::firstEnvironmentValue(['VITE_PUBLIC_DIRECTORY', 'VITE_PUBLIC_DIR'])
-            ?? rtrim((string) getcwd(), '/\\') . '/public';
+        $explicit = self::stringOption($options, 'public_directory', 'publicDirectory')
+            ?? self::firstEnvironmentValue(['VITE_PUBLIC_DIRECTORY', 'VITE_PUBLIC_DIR']);
+
+        if ($explicit !== null) {
+            return rtrim($explicit, '/\\');
+        }
+
+        $cwd = rtrim((string) getcwd(), '/\\');
+
+        return basename($cwd) === 'public'
+            ? $cwd
+            : $cwd . '/public';
     }
 
     /**
