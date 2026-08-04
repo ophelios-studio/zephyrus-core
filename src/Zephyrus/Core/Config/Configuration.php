@@ -244,13 +244,14 @@ final readonly class Configuration
                 'currency' => $this->localization->currency,
             ],
             'database' => $this->database === null ? null : [
-                'driver'   => $this->database->driver,
-                'host'     => $this->database->host,
-                'port'     => $this->database->port,
-                'database' => $this->database->database,
-                'username' => $this->database->username,
-                'password' => $this->database->password,
-                'charset'  => $this->database->charset,
+                'driver'           => $this->database->driver,
+                'host'             => $this->database->host,
+                'port'             => $this->database->port,
+                'database'         => $this->database->database,
+                'username'         => $this->database->username,
+                'password'         => $this->database->password,
+                'charset'          => $this->database->charset,
+                'emulate_prepares' => $this->database->emulatePrepares,
             ],
         ];
 

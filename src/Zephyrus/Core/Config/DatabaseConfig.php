@@ -15,6 +15,18 @@ namespace Zephyrus\Core\Config;
  *   - port must be in the valid TCP range 1-65535.
  *   - charset must be alphanumeric (safe for SQL SET client_encoding).
  *   - driver must be 'pgsql' (only PostgreSQL is supported).
+ *
+ * Performance note (emulatePrepares):
+ *   PostgreSQL server-side prepared statements cost three network round-trips
+ *   per query (Parse, Bind/Describe, Execute). Over a non-local DB link that
+ *   dominates query latency. Setting PDO::ATTR_EMULATE_PREPARES collapses each
+ *   query to a single round-trip by interpolating parameters client-side.
+ *
+ *   This is a trade-off: emulated prepares lose server-side plan caching and
+ *   typed server-side binding, and PostgreSQL is stricter about parameter
+ *   types under emulation (e.g. integer LIMIT/OFFSET, typed casts). It is
+ *   therefore OPT-IN and defaults to false, preserving native prepares and the
+ *   behavior of every existing application.
  */
 final readonly class DatabaseConfig
 {
@@ -26,6 +38,7 @@ final readonly class DatabaseConfig
         public string $username,
         public string $password,
         public string $charset,
+        public bool $emulatePrepares = false,
     ) {
     }
 
@@ -44,6 +57,10 @@ final readonly class DatabaseConfig
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
+        // Opt-in client-side parameter emulation. Accepts both a camelCase key
+        // and the canonical snake_case config key, mirroring the mixed-case
+        // key handling used across the other configuration sections.
+        $emulatePrepares = (bool) ($values['emulatePrepares'] ?? $values['emulate_prepares'] ?? false);
 
         if (trim($database) === '') {
             throw ConfigurationException::missingRequired('database', 'database');
@@ -81,13 +98,14 @@ final readonly class DatabaseConfig
         }
 
         return new self(
-            driver:   $driver,
-            host:     $host,
-            port:     $port,
-            database: $database,
-            username: $username,
-            password: $password,
-            charset:  $charset,
+            driver:          $driver,
+            host:            $host,
+            port:            $port,
+            database:        $database,
+            username:        $username,
+            password:        $password,
+            charset:         $charset,
+            emulatePrepares: $emulatePrepares,
         );
     }
 }
