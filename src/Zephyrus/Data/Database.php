@@ -25,6 +25,21 @@ final class Database
     private array $typeConversions = [];
 
     /**
+     * Memoized column-type resolutions keyed by SQL string.
+     *
+     * getColumnMeta() triggers backend metadata lookups on PostgreSQL
+     * (a pg_class query per column, plus a pg_type query for non-builtin
+     * OIDs), so resolving the same statement shape on every select() would
+     * fire hundreds of identical round-trips over a request. The column
+     * layout (name + native type) of a given SQL string is stable for the
+     * connection lifetime, so the resolution is computed once per distinct
+     * query and reused thereafter.
+     *
+     * @var array<string, array<string, callable(string): mixed>>
+     */
+    private array $columnTypeCache = [];
+
+    /**
      * Built-in PostgreSQL native type conversions matching v1 DatabaseStatement behavior.
      * Integer types → intval, float/decimal types → floatval, boolean → boolval,
      * JSONB/JSON → json_decode, PostgreSQL arrays → PHP arrays.
@@ -63,6 +78,11 @@ final class Database
     public function registerTypeConversion(string $typeName, callable $converter): void
     {
         $this->typeConversions[strtoupper($typeName)] = $converter;
+
+        // A newly registered converter can change how already-seen column
+        // shapes resolve, so drop the memoized resolutions to stay correct.
+        // Registration happens at setup, not in hot paths, so this is cheap.
+        $this->columnTypeCache = [];
     }
 
     /**
@@ -139,7 +159,7 @@ final class Database
         $rows = $stmt->fetchAll();
 
         if ($this->typeConversions !== []) {
-            $columnTypes = $this->resolveColumnTypes($stmt);
+            $columnTypes = $this->resolveColumnTypes($sql, $stmt);
             foreach ($rows as $row) {
                 $this->applyTypeConversions($row, $columnTypes);
             }
@@ -163,7 +183,7 @@ final class Database
         }
 
         if ($this->typeConversions !== []) {
-            $columnTypes = $this->resolveColumnTypes($stmt);
+            $columnTypes = $this->resolveColumnTypes($sql, $stmt);
             $this->applyTypeConversions($row, $columnTypes);
         }
 
@@ -654,13 +674,24 @@ final class Database
     }
 
     /**
-     * Build a column-index → type-name map for columns whose types have
+     * Build a column-name → converter map for columns whose types have
      * registered converters.
      *
-     * @return array<string, callable> column name → converter
+     * The result is memoized per SQL string: getColumnMeta() (and the
+     * PostgreSQL metadata round-trips it triggers) runs only the first time
+     * a given query shape is seen, then is reused for every subsequent
+     * execution on this connection. This is transparent — a fixed SQL
+     * statement always yields the same column layout for the connection
+     * lifetime, so the cached converter map is identical to a fresh one.
+     *
+     * @return array<string, callable(string): mixed> column name → converter
      */
-    private function resolveColumnTypes(PDOStatement $stmt): array
+    private function resolveColumnTypes(string $sql, PDOStatement $stmt): array
     {
+        if (isset($this->columnTypeCache[$sql])) {
+            return $this->columnTypeCache[$sql];
+        }
+
         $map = [];
         $columnCount = $stmt->columnCount();
 
@@ -682,7 +713,7 @@ final class Database
             }
         }
 
-        return $map;
+        return $this->columnTypeCache[$sql] = $map;
     }
 
     /**
