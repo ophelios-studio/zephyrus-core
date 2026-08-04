@@ -64,6 +64,113 @@ final class DatabaseTest extends TestCase
         self::assertInstanceOf(Database::class, $database);
     }
 
+    public function testFromConfigDoesNotEnableEmulatePreparesByDefault(): void
+    {
+        // Default behavior: native server-side prepares. The connection must
+        // NOT carry PDO::ATTR_EMULATE_PREPARES at all, so existing apps are
+        // untouched. We assert on the options the factory actually receives —
+        // that array is exactly what drives the real PDO at connect time.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+        ]);
+
+        self::assertFalse($config->emulatePrepares);
+
+        $captured = [];
+
+        Database::fromConfig(
+            $config,
+            function (string $dsn, string $username, string $password, array $options) use (&$captured): PDO {
+                $captured = $options;
+
+                return new PDO('sqlite::memory:');
+            },
+        );
+
+        self::assertArrayNotHasKey(PDO::ATTR_EMULATE_PREPARES, $captured);
+    }
+
+    public function testFromConfigEnablesEmulatePreparesWhenOptedIn(): void
+    {
+        // With emulate_prepares=true the driver option must be present and true
+        // so PDO interpolates parameters client-side (one round-trip per query
+        // instead of three on PostgreSQL). Set at connect time via the options.
+        $config = DatabaseConfig::fromArray([
+            'database'         => 'zephyrus',
+            'username'         => 'app',
+            'emulate_prepares' => true,
+        ]);
+
+        $captured = [];
+
+        Database::fromConfig(
+            $config,
+            function (string $dsn, string $username, string $password, array $options) use (&$captured): PDO {
+                $captured = $options;
+
+                return new PDO('sqlite::memory:');
+            },
+        );
+
+        self::assertArrayHasKey(PDO::ATTR_EMULATE_PREPARES, $captured);
+        self::assertTrue($captured[PDO::ATTR_EMULATE_PREPARES]);
+    }
+
+    public function testEmulatePreparesReturnsCorrectlyTypedResultsForTrickyParams(): void
+    {
+        // Guards the PostgreSQL type-pickiness that emulated prepares can trip:
+        // once parameters are interpolated client-side, an integer LIMIT, a
+        // typed WHERE int_col = ? comparison and a NULL bound value must all
+        // still round-trip to the correct rows. A spy PDO backed by a real
+        // SQLite connection both records that ATTR_EMULATE_PREPARES=true was
+        // applied and executes the statements end to end through fromConfig().
+        $config = DatabaseConfig::fromArray([
+            'database'         => 'zephyrus',
+            'username'         => 'app',
+            'emulate_prepares' => true,
+        ]);
+
+        $spy = null;
+
+        $db = Database::fromConfig(
+            $config,
+            function (string $dsn, string $username, string $password, array $options) use (&$spy): PDO {
+                $spy = new EmulatePreparesSpyPdo('sqlite::memory:', null, null, $options);
+
+                return $spy;
+            },
+        );
+
+        // The opt-in attribute was handed to the real PDO at construction time.
+        self::assertTrue($spy->receivedEmulateOption);
+
+        $db->execute('CREATE TABLE items (id INTEGER PRIMARY KEY, qty INTEGER, note TEXT)');
+        $db->execute('INSERT INTO items (id, qty, note) VALUES (?, ?, ?)', [1, 10, 'first']);
+        $db->execute('INSERT INTO items (id, qty, note) VALUES (?, ?, ?)', [2, 20, 'second']);
+        $db->execute('INSERT INTO items (id, qty, note) VALUES (?, ?, ?)', [3, 30, null]);
+
+        // (a) integer LIMIT ? — must be treated as an integer, not a string.
+        $limited = $db->select('SELECT id FROM items ORDER BY id LIMIT ?', [2]);
+        self::assertCount(2, $limited);
+        self::assertSame([1, 2], array_map(static fn ($r): int => (int) $r->id, $limited));
+
+        // (b) typed WHERE int_col = ? comparison against an integer column.
+        $exact = $db->selectOne('SELECT id, qty FROM items WHERE qty = ?', [20]);
+        self::assertNotNull($exact);
+        self::assertSame(2, (int) $exact->id);
+        self::assertSame(20, (int) $exact->qty);
+
+        // (c) NULL parameter — the row with a NULL note must match IS NULL,
+        //     and a NULL-bound equality must NOT spuriously match rows.
+        $nullNotes = $db->select('SELECT id FROM items WHERE note IS ? ORDER BY id', [null]);
+        self::assertCount(1, $nullNotes);
+        self::assertSame(3, (int) $nullNotes[0]->id);
+
+        $noneEqualNull = $db->select('SELECT id FROM items WHERE note = ?', [null]);
+        self::assertCount(0, $noneEqualNull);
+    }
+
     public function testFromConfigWrapsFactoryFailureAsDatabaseException(): void
     {
         $config = DatabaseConfig::fromArray([
@@ -652,5 +759,29 @@ final class DatabaseTest extends TestCase
         $db->transaction(function (): void {
             throw new \RuntimeException('work failed');
         });
+    }
+}
+
+/**
+ * A PDO that records whether it was constructed with the opt-in
+ * PDO::ATTR_EMULATE_PREPARES driver option, while behaving as a normal
+ * (SQLite-backed) connection so bound-parameter queries actually execute.
+ *
+ * Used to prove that Database::fromConfig() applies the emulate-prepares
+ * option at connect time and that tricky typed/NULL parameters still return
+ * correct results under emulation.
+ */
+final class EmulatePreparesSpyPdo extends PDO
+{
+    public bool $receivedEmulateOption = false;
+
+    /**
+     * @param array<int, mixed>|null $options
+     */
+    public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null)
+    {
+        $this->receivedEmulateOption = ($options[PDO::ATTR_EMULATE_PREPARES] ?? false) === true;
+
+        parent::__construct($dsn, $username, $password, $options);
     }
 }

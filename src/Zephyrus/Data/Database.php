@@ -108,6 +108,16 @@ final class Database
             PDO::ATTR_PERSISTENT => false,
         ];
 
+        // Opt-in only: enabling ATTR_EMULATE_PREPARES interpolates parameters
+        // client-side, collapsing PostgreSQL's three round-trips per query
+        // (Parse, Bind/Describe, Execute) down to one — a large win over a
+        // non-local DB link. It must be set at connect time via the driver
+        // options. Absent or false, the key is not added at all, so the PDO
+        // keeps its native server-side prepares and existing apps are unchanged.
+        if ($config->emulatePrepares) {
+            $options[PDO::ATTR_EMULATE_PREPARES] = true;
+        }
+
         $factory = $pdoFactory ?? static fn (string $dsn, string $username, string $password, array $options): PDO
             => new PDO($dsn, $username, $password, $options);
 

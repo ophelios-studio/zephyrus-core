@@ -168,4 +168,51 @@ final class DatabaseConfigTest extends TestCase
 
         self::assertSame('pgsql', $config->driver);
     }
+
+    // -------------------------------------------------------------------------
+    // emulatePrepares (opt-in PDO::ATTR_EMULATE_PREPARES)
+    // -------------------------------------------------------------------------
+
+    public function testEmulatePreparesDefaultsToFalse(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+        ]);
+
+        self::assertFalse($config->emulatePrepares);
+    }
+
+    public function testEmulatePreparesSnakeCaseKeyEnablesIt(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'         => 'db',
+            'username'         => 'u',
+            'emulate_prepares' => true,
+        ]);
+
+        self::assertTrue($config->emulatePrepares);
+    }
+
+    public function testEmulatePreparesCamelCaseKeyEnablesIt(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'        => 'db',
+            'username'        => 'u',
+            'emulatePrepares' => true,
+        ]);
+
+        self::assertTrue($config->emulatePrepares);
+    }
+
+    public function testEmulatePreparesFalseKeyKeepsNativePrepares(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'         => 'db',
+            'username'         => 'u',
+            'emulate_prepares' => false,
+        ]);
+
+        self::assertFalse($config->emulatePrepares);
+    }
 }
