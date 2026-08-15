@@ -25,7 +25,8 @@ final class Database
     private array $typeConversions = [];
 
     /**
-     * Memoized column-type resolutions keyed by SQL string.
+     * Memoized column-type resolutions for THIS instance, keyed by SQL string
+     * plus the statement's column count.
      *
      * getColumnMeta() triggers backend metadata lookups on PostgreSQL
      * (a pg_class query per column, plus a pg_type query for non-builtin
@@ -35,9 +36,76 @@ final class Database
      * connection lifetime, so the resolution is computed once per distinct
      * query and reused thereafter.
      *
+     * This layer holds the DERIVED callable map, built from this instance's
+     * own conversion registry, which is why registerTypeConversion() drops it.
+     *
      * @var array<string, array<string, callable(string): mixed>>
      */
     private array $columnTypeCache = [];
+
+    /**
+     * Process-wide cache of resolved column SHAPES, keyed by
+     * sha1(dsn . '|' . sql) . '|' . columnCount.
+     *
+     * The per-instance memo above dies with the Database instance, while the
+     * PDO handle underneath it may well be persistent, so every new instance
+     * re-pays the full metadata cost on a connection that already knows the
+     * answer. This layer survives for the lifetime of the PHP process instead.
+     *
+     * Three deliberate choices make it safe:
+     *
+     *   1. It stores PLAIN DATA (a column count and a column name => native
+     *      type name map), never the converters themselves. The converters are
+     *      closures, so caching them would be unserializable, and, worse, would
+     *      let one instance's registry leak into another.
+     *   2. The callable map is rebuilt from THIS instance's typeConversions on
+     *      every hit, so an instance can only ever apply its own converters.
+     *      That matters: the built-in NUMERIC conversion is floatval, and an
+     *      application that overrides it with a string passthrough to protect
+     *      money precision must never be served the framework default.
+     *   3. The key carries the column count, which PDOStatement::columnCount()
+     *      reports client side (PQnfields) for zero round-trips. Any column
+     *      added to or dropped from a SELECT * therefore changes the key and
+     *      self-invalidates, with no deploy hook to forget.
+     *
+     * Only connections opened through fromConfig() take part: a directly
+     * injected PDO has no knowable identity, so those instances keep the
+     * per-instance memo alone and behave exactly as before.
+     *
+     * KNOWN LIMIT: a column that changes TYPE while keeping BOTH its name and
+     * the statement's column count (int4 to numeric, say) is invisible to this
+     * key, and a long-lived process would keep applying the previous converter.
+     * A request-per-process SAPI never sees it because the store dies with the
+     * request. A worker, a CLI loop or a persistent worker SAPI must be
+     * restarted after such a migration, or call flushSharedColumnMetadata().
+     *
+     * @var array<string, array{count: int, types: array<string, string>}>
+     */
+    private static array $sharedColumnMetadata = [];
+
+    /**
+     * Whether the process-wide layer above is consulted and populated.
+     * On by default; see setSharedColumnMetadataEnabled().
+     */
+    private static bool $sharedColumnMetadataEnabled = true;
+
+    /**
+     * DSN of the connection this instance wraps, set by fromConfig().
+     *
+     * Null when a PDO was injected through the constructor: the connection
+     * identity is then unknown, and two unrelated databases must never share
+     * a shape, so the process-wide layer is bypassed entirely.
+     */
+    private ?string $connectionDsn = null;
+
+    /**
+     * Hard ceiling on the process-wide store, so a long-running process that
+     * generates unbounded distinct SQL (dynamic IN lists, generated filters)
+     * cannot grow it forever. Reaching it resets the store wholesale rather
+     * than carrying LRU bookkeeping on the hot path; a process that trips this
+     * is producing far more query shapes than any cache can help with.
+     */
+    private const MAX_SHARED_COLUMN_SHAPES = 2048;
 
     /**
      * Built-in PostgreSQL native type conversions matching v1 DatabaseStatement behavior.
@@ -82,7 +150,46 @@ final class Database
         // A newly registered converter can change how already-seen column
         // shapes resolve, so drop the memoized resolutions to stay correct.
         // Registration happens at setup, not in hot paths, so this is cheap.
+        //
+        // The process-wide shape cache is deliberately NOT cleared: registering
+        // a converter changes how a type is converted, never what type a column
+        // is. The next resolve rebuilds the callable map from the cached shape
+        // against the updated registry, so the new converter takes effect
+        // immediately without re-asking the backend.
         $this->columnTypeCache = [];
+    }
+
+    /**
+     * Turn the process-wide column shape cache on or off (on by default).
+     *
+     * Escape hatch for a deployment where a long-lived process must never hold
+     * a schema snapshot, and for tests that need a clean slate. Turning it off
+     * also flushes it, since entries that can no longer be read are only
+     * holding memory; turning it back on simply re-warms on the next query.
+     *
+     * Correctness never depends on this: the per-instance memo and the live
+     * conversion registry produce the same rows either way.
+     */
+    public static function setSharedColumnMetadataEnabled(bool $enabled): void
+    {
+        self::$sharedColumnMetadataEnabled = $enabled;
+
+        if (!$enabled) {
+            self::$sharedColumnMetadata = [];
+        }
+    }
+
+    /**
+     * Drop every cached column shape held by this process.
+     *
+     * Needed only in the one case the cache key cannot detect: a column that
+     * changed TYPE while keeping both its name and the statement's column
+     * count. Restarting the process has the same effect, and a
+     * request-per-process SAPI gets it for free.
+     */
+    public static function flushSharedColumnMetadata(): void
+    {
+        self::$sharedColumnMetadata = [];
     }
 
     /**
@@ -128,6 +235,11 @@ final class Database
         }
 
         $db = new self($pdo);
+
+        // Record the connection identity so resolved column shapes can be
+        // shared across instances opened against the SAME database, and only
+        // those. The DSN carries no credentials (PDO takes those separately).
+        $db->connectionDsn = $dsn;
 
         // Set client encoding for the connection.
         try {
@@ -687,23 +799,89 @@ final class Database
      * Build a column-name → converter map for columns whose types have
      * registered converters.
      *
-     * The result is memoized per SQL string: getColumnMeta() (and the
-     * PostgreSQL metadata round-trips it triggers) runs only the first time
-     * a given query shape is seen, then is reused for every subsequent
-     * execution on this connection. This is transparent — a fixed SQL
-     * statement always yields the same column layout for the connection
-     * lifetime, so the cached converter map is identical to a fresh one.
+     * Two caches back this, in order:
+     *
+     *   1. The per-instance memo of the finished callable map, which costs a
+     *      single array lookup on a hit.
+     *   2. The process-wide shape cache, which on a hit skips every
+     *      getColumnMeta() call (and the PostgreSQL backend round-trips they
+     *      trigger) while still rebuilding the callable map from THIS
+     *      instance's converters.
+     *
+     * Both are transparent: a fixed SQL statement yields the same column layout
+     * for the connection lifetime, so a cached resolution is identical to a
+     * fresh one.
      *
      * @return array<string, callable(string): mixed> column name → converter
      */
     private function resolveColumnTypes(string $sql, PDOStatement $stmt): array
     {
-        if (isset($this->columnTypeCache[$sql])) {
-            return $this->columnTypeCache[$sql];
+        // columnCount() reads PQnfields off the already-fetched result: client
+        // side, zero round-trips. It is part of both keys so that adding or
+        // dropping a column on a SELECT * self-invalidates.
+        $columnCount = $stmt->columnCount();
+        $localKey = $sql . '|' . $columnCount;
+
+        if (isset($this->columnTypeCache[$localKey])) {
+            return $this->columnTypeCache[$localKey];
+        }
+
+        $shared = $this->connectionDsn !== null && self::$sharedColumnMetadataEnabled;
+        $sharedKey = $shared ? sha1($this->connectionDsn . '|' . $sql) . '|' . $columnCount : '';
+        $shape = $shared ? self::$sharedColumnMetadata[$sharedKey] ?? null : null;
+
+        // The width is in the key already; re-checking it here costs one
+        // integer compare and denies a hash collision any chance of serving a
+        // shape of the wrong width.
+        if ($shape === null || $shape['count'] !== $columnCount) {
+            $shape = self::describeColumns($stmt, $columnCount);
+
+            if ($shared) {
+                if (count(self::$sharedColumnMetadata) >= self::MAX_SHARED_COLUMN_SHAPES) {
+                    self::$sharedColumnMetadata = [];
+                }
+
+                self::$sharedColumnMetadata[$sharedKey] = $shape;
+            }
         }
 
         $map = [];
-        $columnCount = $stmt->columnCount();
+
+        foreach ($shape['types'] as $name => $nativeType) {
+            if (isset($this->typeConversions[$nativeType])) {
+                $map[$name] = $this->typeConversions[$nativeType];
+            } elseif (str_starts_with($nativeType, '_')) {
+                // PostgreSQL array types (e.g. _INT4, _TEXT) → PHP arrays.
+                $map[$name] = static function (string $value): array {
+                    $inner = str_replace(['{', '}'], '', $value);
+                    return $inner === '' ? [] : explode(',', $inner);
+                };
+            }
+        }
+
+        return $this->columnTypeCache[$localKey] = $map;
+    }
+
+    /**
+     * Read the column layout off an executed statement: the statement width
+     * plus a column name → native type name map.
+     *
+     * This is the only place getColumnMeta() is called, and it deliberately
+     * records EVERY column rather than only the ones the calling instance has
+     * a converter for. A shape narrowed by one registry would be wrong for any
+     * other instance reading it back: a converter registered only by the second
+     * instance would silently never fire, because the column it targets was
+     * dropped from the shape before it was cached.
+     *
+     * Recording every column also settles duplicate result column names the way
+     * the fetched row does. PDO::FETCH_OBJ keeps the LAST such column's value,
+     * so the last one's type is the one that applies here too.
+     *
+     * @return array{count: int, types: array<string, string>}
+     */
+    private static function describeColumns(PDOStatement $stmt, int $columnCount): array
+    {
+        $types = [];
 
         for ($i = 0; $i < $columnCount; $i++) {
             $meta = $stmt->getColumnMeta($i);
@@ -711,19 +889,10 @@ final class Database
                 continue;
             }
 
-            $nativeType = strtoupper($meta['native_type'] ?? '');
-            if (isset($this->typeConversions[$nativeType])) {
-                $map[$meta['name']] = $this->typeConversions[$nativeType];
-            } elseif (str_starts_with($nativeType, '_')) {
-                // PostgreSQL array types (e.g. _INT4, _TEXT) → PHP arrays.
-                $map[$meta['name']] = static function (string $value): array {
-                    $inner = str_replace(['{', '}'], '', $value);
-                    return $inner === '' ? [] : explode(',', $inner);
-                };
-            }
+            $types[$meta['name']] = strtoupper($meta['native_type'] ?? '');
         }
 
-        return $this->columnTypeCache[$sql] = $map;
+        return ['count' => $columnCount, 'types' => $types];
     }
 
     /**
