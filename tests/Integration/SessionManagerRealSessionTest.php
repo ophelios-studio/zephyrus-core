@@ -46,6 +46,32 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     #[RunInSeparateProcess]
+    public function testStartEnablesStrictSessionIdMode(): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray([]));
+
+        self::assertSame('1', ini_get('session.use_strict_mode'));
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartRefusesToAdoptAClientSuppliedSessionId(): void
+    {
+        // PHP defaults use_strict_mode to 0, which adopts and persists whatever
+        // ID the client sends. That lets an unauthenticated caller seed session
+        // IDs at will, and it is what makes session fixation possible.
+        $planted = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        session_id($planted);
+
+        $session = new SessionManager();
+        $session->start(SessionConfig::fromArray([]));
+
+        self::assertNotSame($planted, session_id(), 'an unknown client-supplied id must be discarded');
+        self::assertNotSame('', session_id());
+    }
+
+    #[RunInSeparateProcess]
     public function testStartIsIdempotentWhenSessionAlreadyActive(): void
     {
         session_start();
