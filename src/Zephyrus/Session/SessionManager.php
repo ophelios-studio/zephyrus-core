@@ -75,6 +75,14 @@ final class SessionManager
      *
      * Safe to call multiple times — returns immediately if a session is already
      * active. No-op when an override storage is active (test mode).
+     *
+     * Strict mode is forced on. PHP defaults session.use_strict_mode to 0,
+     * which makes it ADOPT any session ID the client sends and persist a record
+     * under it. That lets an unauthenticated caller seed session IDs of its own
+     * choosing, one stored record per request, and it is the enabling condition
+     * for session fixation: an attacker plants a known ID, gets the victim to
+     * use it, and the ID survives login. With strict mode on, an ID that does
+     * not already exist is discarded and a fresh one is generated instead.
      */
     public function start(SessionConfig $config): void
     {
@@ -86,6 +94,7 @@ final class SessionManager
             return;
         }
 
+        ini_set('session.use_strict_mode', '1');
         session_name($config->name);
         session_set_cookie_params([
             'lifetime' => $config->lifetime,
