@@ -208,11 +208,113 @@ final class RequestPathCanonicalizationTest extends TestCase
 
     public function testAbsoluteFormTargetsAreLeftAlone(): void
     {
-        // An absolute-form target starts with a scheme, never "//", so the
-        // canonicalisation must not touch it.
+        // An ordinary absolute URL has nothing to collapse, and the "//" that
+        // separates the scheme from the authority must survive untouched.
         $request = Request::fromArray('GET', 'http://example.com/admin/secret');
 
         self::assertSame('/admin/secret', $request->path());
+        self::assertSame('example.com', $request->uri()->host());
+        self::assertSame('http', $request->uri()->scheme());
+    }
+
+    // -- Every construction path must agree ----------------------------------
+
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function absoluteUrlProvider(): array
+    {
+        return [
+            'double slash prefix'     => ['https://h//x/admin/secret', '/x/admin/secret'],
+            'double slash single seg' => ['https://h//admin', '/admin'],
+            'triple slash'            => ['https://h///x/admin', '/x/admin'],
+            'bypass shape'            => ['https://h//webhooks/account/close', '/webhooks/account/close'],
+            'with query'              => ['https://h//x/admin?q=1', '/x/admin'],
+            'with port'               => ['https://h:8443//x/admin', '/x/admin'],
+            'ordinary absolute'       => ['https://h/admin/secret', '/admin/secret'],
+            'no path at all'          => ['https://h', '/'],
+        ];
+    }
+
+    /**
+     * The residual inconsistency: fromArray() given a FULL URL skipped
+     * canonicalisation, so uri()->path() reported "//x/admin/secret" while
+     * path() reported "/x/admin/secret". Production was never affected, but two
+     * construction paths disagreeing about the same request is the exact shape
+     * of the original bug, and a consumer test built this way could appear to
+     * demonstrate a vulnerability that does not exist.
+     */
+    #[DataProvider('absoluteUrlProvider')]
+    public function testAbsoluteUrlsAreCanonicalizedToo(string $url, string $expected): void
+    {
+        $request = Request::fromArray('GET', $url);
+
+        self::assertSame($expected, $request->path());
+        self::assertSame($request->uri()->path(), $request->path());
+        // The scheme/authority separator must survive the collapse.
+        self::assertSame('h', $request->uri()->host());
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function equivalentTargetProvider(): array
+    {
+        return [
+            'double slash prefix'     => ['//x/admin/secret'],
+            'double slash single seg' => ['//admin'],
+            'triple slash'            => ['///x/admin'],
+            'bypass shape'            => ['//webhooks/account/close'],
+            'ordinary'                => ['/admin/secret'],
+        ];
+    }
+
+    /**
+     * All three ways of building the same request must produce the same path:
+     * fromGlobals, fromArray with an origin-form target, and fromArray with the
+     * equivalent absolute URL.
+     */
+    #[DataProvider('equivalentTargetProvider')]
+    public function testAllThreeConstructionPathsAgree(string $target): void
+    {
+        $fromGlobals = $this->request($target)->path();
+        $fromOriginForm = Request::fromArray('GET', $target)->path();
+        $fromAbsoluteUrl = Request::fromArray('GET', 'http://app.test' . $target)->path();
+
+        self::assertSame($fromGlobals, $fromOriginForm, 'origin-form fromArray must match fromGlobals');
+        self::assertSame($fromGlobals, $fromAbsoluteUrl, 'absolute-url fromArray must match fromGlobals');
+    }
+
+    public function testWithClonesPreserveTheCanonicalPath(): void
+    {
+        // The with*() clones re-enter the constructor with a Uri object, so
+        // they must not reintroduce a raw path.
+        $request = Request::fromArray('GET', 'https://h//x/admin/secret')
+            ->withAttribute('id', '42')
+            ->withAttributes(['role' => 'admin']);
+
+        self::assertSame('/x/admin/secret', $request->path());
+        self::assertSame('/x/admin/secret', $request->uri()->path());
+        self::assertSame('42', $request->attribute('id'));
+    }
+
+    public function testAQueryValueContainingASchemeIsNotMistakenForAnAbsoluteUrl(): void
+    {
+        // "//" only separates a scheme from an authority when it follows a
+        // scheme at the START of the string.
+        $request = Request::fromArray('GET', '//x/redirect?to=http://elsewhere.test/p');
+
+        self::assertSame('/x/redirect', $request->path());
+        self::assertSame($request->uri()->path(), $request->path());
+    }
+
+    public function testAHandRolledRequestIsCanonicalizedByTheConstructor(): void
+    {
+        // The last construction path: bypassing both named constructors.
+        $request = new Request(method: 'GET', uri: new \Zephyrus\Http\Uri('https://h//x/admin/secret'));
+
+        self::assertSame('/x/admin/secret', $request->path());
+        self::assertSame('/x/admin/secret', $request->uri()->path());
     }
 }
 
