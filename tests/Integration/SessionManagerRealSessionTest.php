@@ -71,6 +71,66 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertNotSame('', session_id());
     }
 
+    /**
+     * The framework enabling a security-relevant ini flag that silently does
+     * nothing is how this was missed the first time: PHP skips its
+     * use_strict_mode check entirely for a handler without validateId(), so the
+     * setting read as done while a client-supplied id was still adopted.
+     */
+    #[RunInSeparateProcess]
+    public function testStartWarnsInDebugWhenTheHandlerCannotHonourStrictMode(): void
+    {
+        \Zephyrus\Core\App::setConfiguration(
+            \Zephyrus\Core\Config\Configuration::fromArray(['application' => ['debug' => true]]),
+        );
+
+        $session = new SessionManager();
+        $session->setHandler(new StrictModeBlindHandler());
+
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            $session->start(SessionConfig::fromArray([]));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('SessionUpdateTimestampHandlerInterface', $warnings[0]);
+        self::assertStringContainsString('ADOPT a client-supplied session id', $warnings[0]);
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartDoesNotWarnForAHandlerThatValidatesIds(): void
+    {
+        \Zephyrus\Core\App::setConfiguration(
+            \Zephyrus\Core\Config\Configuration::fromArray(['application' => ['debug' => true]]),
+        );
+
+        $session = new SessionManager();
+        $session->setHandler(new StrictModeAwareHandler());
+
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            $session->start(SessionConfig::fromArray([]));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings);
+    }
+
     #[RunInSeparateProcess]
     public function testStartIsIdempotentWhenSessionAlreadyActive(): void
     {
@@ -202,4 +262,28 @@ final class SessionManagerRealSessionTest extends TestCase
 
         self::assertSame(PHP_SESSION_NONE, session_status());
     }
+}
+
+/** A plain handler: PHP skips its strict-mode check for this shape. */
+final class StrictModeBlindHandler implements \SessionHandlerInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return true; }
+    public function destroy(string $id): bool { return true; }
+    public function gc(int $maxLifetime): int|false { return 0; }
+}
+
+/** Supplies validateId(), so use_strict_mode is actually honoured. */
+final class StrictModeAwareHandler implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return true; }
+    public function destroy(string $id): bool { return true; }
+    public function gc(int $maxLifetime): int|false { return 0; }
+    public function validateId(string $id): bool { return false; }
+    public function updateTimestamp(string $id, string $data): bool { return true; }
 }
