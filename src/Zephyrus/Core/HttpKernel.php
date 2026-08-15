@@ -66,10 +66,13 @@ use Zephyrus\Routing\RouteMatch;
  *     catch (Throwable $e) { $this->rollback(); throw $e; }
  *
  * will no longer roll back, no longer report, and will commit on a 500. Any
- * global middleware doing error capture, transaction management or span
- * completion must switch to inspecting $response->status instead of catching.
- * A middleware that silently stops reporting is the worst failure mode here, so
- * audit for this shape before upgrading.
+ * global middleware doing transaction management or span completion must switch
+ * to inspecting $response->status instead of catching.
+ *
+ * For ERROR REPORTING specifically, listen to ExceptionEvent instead. It fires
+ * once per throwable at the point of conversion, carries the throwable, the
+ * request and where it came from, and cannot be silently skipped the way a
+ * catch block now is. Registering no listener changes nothing.
  *
  * Because the global pipeline now also runs on requests that match no route,
  * two more things follow.
@@ -162,7 +165,11 @@ final readonly class HttpKernel
 
             return $this->pipe(
                 $unmatched,
-                fn (Request $piped): Response => $this->toErrorResponse($routingFailure, $piped),
+                fn (Request $piped): Response => $this->toErrorResponse(
+                    $routingFailure,
+                    $piped,
+                    ExceptionEvent::SOURCE_ROUTING,
+                ),
             );
         }
 
@@ -189,7 +196,7 @@ final readonly class HttpKernel
         try {
             return $this->globalPipeline->handle($request, $destination);
         } catch (Throwable $exception) {
-            return $this->toErrorResponse($exception, $request);
+            return $this->toErrorResponse($exception, $request, ExceptionEvent::SOURCE_MIDDLEWARE);
         }
     }
 
@@ -213,7 +220,7 @@ final readonly class HttpKernel
         try {
             return $this->dispatcher->dispatchMatch($match, $request);
         } catch (Throwable $exception) {
-            return $this->toErrorResponse($exception, $request);
+            return $this->toErrorResponse($exception, $request, ExceptionEvent::SOURCE_HANDLER);
         }
     }
 
@@ -233,12 +240,42 @@ final readonly class HttpKernel
      * responder again, so it cannot fail in turn. It is returned from inside the
      * pipeline, so the global middlewares still decorate it.
      */
-    private function toErrorResponse(Throwable $exception, Request $request): Response
+    private function toErrorResponse(Throwable $exception, Request $request, string $source): Response
     {
+        $this->fireExceptionEvent($exception, $request, $source);
+
         try {
             return $this->exceptionResponder->toResponse($exception, $request);
         } catch (Throwable $responderFailure) {
+            // A second, distinct throwable. Reported separately so a broken
+            // error template is visible rather than swallowed.
+            $this->fireExceptionEvent($responderFailure, $request, ExceptionEvent::SOURCE_RESPONDER);
+
             return Response::text('Internal Server Error', 500);
+        }
+    }
+
+    /**
+     * Dispatch the reporting seam for one throwable.
+     *
+     * This is the ONLY place ExceptionEvent is fired, which is what makes
+     * "exactly once per throwable" hold. It never touches the pipeline or the
+     * responder, so it cannot recurse.
+     *
+     * Anything a listener throws is swallowed: a reporter must never be able to
+     * turn a handled error response into a dead connection. Note the cost of
+     * that guarantee, a failing listener is silent.
+     */
+    private function fireExceptionEvent(Throwable $exception, Request $request, string $source): void
+    {
+        if ($this->events === null) {
+            return;
+        }
+
+        try {
+            $this->events->dispatch(new ExceptionEvent($request, $exception, $source));
+        } catch (Throwable $listenerFailure) {
+            // Deliberately ignored, see above.
         }
     }
 
