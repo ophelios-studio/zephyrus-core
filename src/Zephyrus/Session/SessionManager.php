@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Session;
 
+use Zephyrus\Core\App;
 use Zephyrus\Core\Config\SessionConfig;
 
 /**
@@ -40,6 +41,9 @@ final class SessionManager
      */
     private ?array $overrideStorage;
 
+    /** The handler registered through setHandler(), when one was. */
+    private ?\SessionHandlerInterface $handler = null;
+
     /**
      * @param array<string, mixed>|null $overrideStorage
      *   When non-null, all session data is read from / written to this array.
@@ -67,6 +71,8 @@ final class SessionManager
             return;
         }
 
+        $this->handler = $handler;
+
         session_set_save_handler($handler, true);
     }
 
@@ -81,8 +87,24 @@ final class SessionManager
      * under it. That lets an unauthenticated caller seed session IDs of its own
      * choosing, one stored record per request, and it is the enabling condition
      * for session fixation: an attacker plants a known ID, gets the victim to
-     * use it, and the ID survives login. With strict mode on, an ID that does
-     * not already exist is discarded and a fresh one is generated instead.
+     * use it, and the ID survives login.
+     *
+     * ## The flag alone is NOT enough with a custom save handler
+     *
+     * PHP only consults use_strict_mode when the save handler supplies
+     * validateId(), i.e. when it implements SessionUpdateTimestampHandlerInterface.
+     * For a handler that does not, the flag is INERT and the client's id is
+     * adopted verbatim. Measured:
+     *
+     *   strict mode on, plain handler       -> session_id() = attackerchosenid123
+     *   strict mode on, validateId handler  -> session_id() = 43e880c2447c...
+     *
+     * PHP's built-in `files` handler implements the check internally, so a
+     * default-configured application is covered by the flag alone. A custom
+     * handler is not. DatabaseSessionHandler implements the interface for
+     * exactly this reason; any other handler must do the same or this setting
+     * buys it nothing. When debug is on, start() warns about a handler that
+     * cannot honour it.
      */
     public function start(SessionConfig $config): void
     {
@@ -95,6 +117,7 @@ final class SessionManager
         }
 
         ini_set('session.use_strict_mode', '1');
+        $this->warnIfHandlerCannotHonourStrictMode();
         session_name($config->name);
         session_set_cookie_params([
             'lifetime' => $config->lifetime,
@@ -105,6 +128,37 @@ final class SessionManager
         ]);
 
         session_start();
+    }
+
+    /**
+     * Warn, in debug only, when the registered save handler cannot honour the
+     * strict-mode flag we just set.
+     *
+     * The framework enabling a security-relevant ini setting that silently does
+     * nothing is precisely the failure this guards: it reads as done. Only
+     * reachable for a handler registered through setHandler(); a handler passed
+     * straight to session_set_save_handler() is invisible here.
+     */
+    private function warnIfHandlerCannotHonourStrictMode(): void
+    {
+        if ($this->handler === null || $this->handler instanceof \SessionUpdateTimestampHandlerInterface) {
+            return;
+        }
+
+        $configuration = App::getConfiguration();
+        if ($configuration === null || !$configuration->application->debug) {
+            return;
+        }
+
+        trigger_error(
+            sprintf(
+                'Session save handler %s does not implement SessionUpdateTimestampHandlerInterface, so PHP '
+                . 'skips its session.use_strict_mode check and will ADOPT a client-supplied session id. '
+                . 'Implement validateId() to reject an id that does not already exist.',
+                $this->handler::class,
+            ),
+            E_USER_WARNING,
+        );
     }
 
     /**
