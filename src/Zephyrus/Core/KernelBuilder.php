@@ -40,14 +40,19 @@ use Zephyrus\Routing\Router;
  * ```
  * Request
  *   └─▶ HttpKernel::handle()
- *         ├─▶ RouteDispatcher::dispatch()
- *         │     ├─▶ RouteCollection::match()     (from Router)
- *         │     ├─▶ MiddlewarePipeline::handle() (global middlewares first)
- *         │     │     └─▶ per-route middlewares  (via registerMiddleware registry)
- *         │     └─▶ HandlerResolver::resolve()   (ClassName@method → Response)
- *         │           └─▶ Controller method      (Request / scalar injection)
- *         └─▶ HttpExceptionResponder             (on any Throwable)
+ *         ├─▶ RouteDispatcher::match()             (from Router, failure deferred)
+ *         ├─▶ MiddlewarePipeline::handle()         (GLOBAL middlewares, wrap everything)
+ *         │     ├─▶ RouteDispatcher::dispatchMatch()
+ *         │     │     ├─▶ per-route middlewares    (via registerMiddleware registry)
+ *         │     │     └─▶ HandlerResolver::resolve() (ClassName@method → Response)
+ *         │     │           └─▶ Controller method  (Request / scalar injection)
+ *         │     └─▶ HttpExceptionResponder         (on any Throwable, INSIDE the pipeline)
+ *         └─▶ HttpExceptionResponder               (backstop: a global middleware threw)
  * ```
+ *
+ * Global middlewares wrap error responses as well as successful ones, so a
+ * 404, a 405 and a 500 all carry the security headers a 200 carries. Route
+ * middlewares only run for a route that actually matched.
  */
 final class KernelBuilder
 {
@@ -199,13 +204,18 @@ final class KernelBuilder
         $router = $this->router ?? new Router();
         $namedMiddlewares = $this->namedRouteMiddlewares;
 
-        $pipeline = new MiddlewarePipeline($this->globalMiddlewares);
+        $globalPipeline = new MiddlewarePipeline($this->globalMiddlewares);
 
         $resolver = new HandlerResolver($this->controllerFactory);
 
         $dispatcher = new RouteDispatcher(
             routes: $router->routes(),
-            pipeline: $pipeline,
+            // The global middlewares are deliberately NOT handed to the
+            // dispatcher: HttpKernel runs them one layer further out so they
+            // also wrap the error responder. The dispatcher only adds the
+            // matched route's own middlewares, which keeps the execution order
+            // identical (global first, then route, then handler).
+            pipeline: new MiddlewarePipeline(),
             resolver: $resolver->resolve(...),
             routeMiddlewareResolver: $namedMiddlewares !== []
                 ? static function (string $name) use ($namedMiddlewares): MiddlewareInterface {
@@ -220,6 +230,6 @@ final class KernelBuilder
             $responder->registerHandler($class, $handler);
         }
 
-        return new HttpKernel($dispatcher, $responder, $this->eventDispatcher);
+        return new HttpKernel($dispatcher, $responder, $this->eventDispatcher, $globalPipeline);
     }
 }
