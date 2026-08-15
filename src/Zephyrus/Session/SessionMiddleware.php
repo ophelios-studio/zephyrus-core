@@ -76,6 +76,12 @@ use Zephyrus\Http\Response;
  * AllowedHostsMiddleware BEFORE this one, so a request they reject never opens
  * a session at all.
  *
+ * To drop the 404 cost specifically, skip on Request::ATTRIBUTE_UNMATCHED_ROUTE,
+ * which HttpKernel sets when nothing matched. This middleware does NOT do that
+ * itself: Laravel and Symfony both start a session on a 404, and a session is
+ * not a security gate whose absence would change an answer, so the framework
+ * leaves the choice to the application rather than making it silently.
+ *
  * start() is deliberately eager. Deferring it until the session is first read
  * or written would change when the session cookie is emitted, which is a
  * session-fixation relevant property, so it is not something this middleware

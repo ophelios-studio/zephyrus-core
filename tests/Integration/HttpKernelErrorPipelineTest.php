@@ -484,22 +484,107 @@ final class HttpKernelErrorPipelineTest extends TestCase
     // the status code on those paths changes. Each stops an unauthenticated
     // prober from learning which routes exist.
 
-    public function testGlobalCsrfMiddlewareAnswersBeforeTheNotFound(): void
+    /**
+     * CSRF asks whether a state change to a RESOURCE is authorised. When no
+     * route matched there is no resource, so the honest answer is 404, not a
+     * security-shaped 403 that sends whoever debugs it hunting a token problem
+     * when the URL is simply wrong. A stale webhook posting to a renamed
+     * endpoint is the case that costs real time.
+     */
+    public function testGlobalCsrfMiddlewareDoesNotGateAnUnmatchedRoute(): void
     {
-        $router = (new Router())->get('/exists', ErrorPipelinePingController::class . '@ping');
+        $router = (new Router())->post('/exists', ErrorPipelinePingController::class . '@ping');
 
         $kernel = KernelBuilder::create()
             ->withRouter($router)
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
             ->withMiddleware(new CsrfMiddleware(new ErrorPipelineTokenManager(), new CsrfConfig()))
             ->build();
 
         $unsafe = $kernel->handle(Request::fromArray('POST', '/no-such-path'));
         $safe   = $kernel->handle(Request::fromArray('GET', '/no-such-path'));
 
-        // POST without a token is rejected before routing can answer 404.
-        self::assertSame(403, $unsafe->status);
-        // GET is a safe method, so it still falls through to the 404.
+        self::assertSame(404, $unsafe->status, 'a POST to a path that does not exist is a 404');
         self::assertSame(404, $safe->status);
+        // Declining to gate must not cost the 404 its decorations.
+        self::assertSame('SAMEORIGIN', $unsafe->headers['x-frame-options']);
+        self::assertSame('nosniff', $unsafe->headers['x-content-type-options']);
+    }
+
+    public function testGlobalCsrfMiddlewareStillRejectsAMatchedRouteWithoutAToken(): void
+    {
+        $router = (new Router())->post('/exists', ErrorPipelinePingController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new CsrfMiddleware(new ErrorPipelineTokenManager(), new CsrfConfig()))
+            ->build();
+
+        $missing = $kernel->handle(Request::fromArray('POST', '/exists'));
+        $bad     = $kernel->handle(Request::fromArray('POST', '/exists', body: ['_csrf_token' => 'wrong']));
+
+        // CSRF is NOT weakened on routes that actually exist.
+        self::assertSame(403, $missing->status);
+        self::assertSame(403, $bad->status);
+    }
+
+    public function testGlobalCsrfMiddlewareAllowsAMatchedRouteWithAValidToken(): void
+    {
+        $router = (new Router())->post('/exists', ErrorPipelinePingController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new CsrfMiddleware(new ErrorPipelineTokenManager(), new CsrfConfig()))
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray(
+            'POST',
+            '/exists',
+            body: ['_csrf_token' => 'valid-token'],
+        ));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('pong', $response->body);
+    }
+
+    public function testMethodNotAllowedKeepsItsStatusAndDecorationsUnderGlobalCsrf(): void
+    {
+        $router = (new Router())->get('/only-get', ErrorPipelinePingController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+            ->withMiddleware(new CsrfMiddleware(new ErrorPipelineTokenManager(), new CsrfConfig()))
+            ->build();
+
+        // DELETE is unsafe and carries no token, but no route matched it, so
+        // the answer is the 405 rather than a 403.
+        $response = $kernel->handle(Request::fromArray('DELETE', '/only-get'));
+
+        self::assertSame(405, $response->status);
+        self::assertNotEmpty($response->headers['allow']);
+        self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
+    }
+
+    public function testUnmatchedRouteAttributeIsSetOnlyWhenNoRouteMatched(): void
+    {
+        $captured = [];
+
+        $router = (new Router())->get('/exists', ErrorPipelinePingController::class . '@ping');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new ErrorPipelineAttributeCaptorMiddleware($captured))
+            ->build();
+
+        $kernel->handle(Request::fromArray('GET', '/nowhere'));
+        self::assertTrue($captured[Request::ATTRIBUTE_UNMATCHED_ROUTE] ?? null);
+
+        $kernel->handle(Request::fromArray('GET', '/exists'));
+        // Never set on a matched route: HandlerResolver injects handler
+        // arguments positionally from $request->attributes, so a stray entry
+        // there would shift that binding.
+        self::assertArrayNotHasKey(Request::ATTRIBUTE_UNMATCHED_ROUTE, $captured);
     }
 
     public function testForceHttpsMiddlewareRedirectsAnUnmatchedPath(): void
