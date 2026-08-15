@@ -64,7 +64,7 @@ final readonly class Request
         public ?string $clientIp = null,
         string $rawBody = '',
     ) {
-        $this->uri = $uri instanceof Uri ? $uri : new Uri($uri);
+        $this->uri = self::canonicalizeUri($uri);
         $this->body = $body instanceof RequestBody
             ? $body
             : new RequestBody($body, $rawBody);
@@ -117,7 +117,7 @@ final readonly class Request
 
         return new self(
             method:     $method,
-            uri:        new Uri($uri),
+            uri:        $uri,
             body:       new RequestBody($parsedBody, $raw),
             query:      $get,
             headers:    new HeaderBag($headers),
@@ -153,7 +153,7 @@ final readonly class Request
     ): self {
         return new self(
             method:     strtoupper($method),
-            uri:        new Uri(self::canonicalizeRequestTarget($uri)),
+            uri:        $uri,
             body:       new RequestBody($body, $rawBody),
             query:      $query,
             headers:    new HeaderBag(self::normalizeHeaders($headers)),
@@ -181,16 +181,15 @@ final readonly class Request
      * The two used to be able to disagree, and a leading "//" was enough to do
      * it: uri()->path() reported "//x/admin/secret" while the router dispatched
      * "/admin/secret", so a path-based guard inspected one route and a different
-     * one executed. See canonicalizeRequestTarget() for the mechanism.
+     * one executed. See canonicalizeUrl() for the mechanism.
      *
-     * Both entry points, fromGlobals() and fromArray(), canonicalise before the
-     * Uri is built, so in practice this equals uri()->path(). It normalises
-     * again here so the guarantee also holds for a Request assembled by hand
-     * through the constructor.
+     * Every construction path canonicalises through the constructor, so this
+     * equals uri()->path() for any Request that exists. The extra normalisation
+     * here is belt and braces and is a no-op in practice.
      */
     public function path(): string
     {
-        return self::canonicalizeRequestTarget($this->uri->path());
+        return self::collapseLeadingSlashes($this->uri->path());
     }
 
     public function body(): RequestBody
@@ -382,6 +381,52 @@ final readonly class Request
      * @param array<string, mixed> $server
      */
     /**
+     * THE single canonicalization point. Every Request funnels through here,
+     * because every construction path ends at the constructor: fromGlobals(),
+     * fromArray(), the with*() clones, and a hand-rolled `new Request(...)`.
+     *
+     * It was three separate call sites before, one per entry point, and that is
+     * how fromArray() came to disagree with fromGlobals() for the same request:
+     * the absolute-URL branch simply never called it. Three places that each
+     * have to remember a rule is the same hazard the rule exists to fix.
+     *
+     * An already-canonical Uri is returned untouched rather than rebuilt, so
+     * the with*() clones cost nothing.
+     */
+    private static function canonicalizeUri(Uri|string $uri): Uri
+    {
+        if (!$uri instanceof Uri) {
+            return new Uri(self::canonicalizeUrl($uri));
+        }
+
+        $canonical = self::canonicalizeUrl($uri->full());
+
+        return $canonical === $uri->full() ? $uri : new Uri($canonical);
+    }
+
+    /**
+     * Canonicalize a URL in either form: an origin-form request target
+     * ("/admin", "//x/admin") or an absolute URL ("https://host//x/admin").
+     *
+     * Only the PATH component is touched. The "//" separating a scheme from its
+     * authority is structural and must survive, which is the whole reason this
+     * cannot just collapse leading slashes on the raw string.
+     */
+    private static function canonicalizeUrl(string $url): string
+    {
+        // Absolute form, anchored so a query value such as
+        // "/redirect?to=http://elsewhere" is not mistaken for a scheme.
+        if (preg_match('#^[a-zA-Z][a-zA-Z0-9+.\-]*://#', $url, $matches) !== 1) {
+            return self::collapseLeadingSlashes($url);
+        }
+
+        $authorityStart = strlen($matches[0]);
+        $pathStart = $authorityStart + strcspn($url, '/?#', $authorityStart);
+
+        return substr($url, 0, $pathStart) . self::collapseLeadingSlashes(substr($url, $pathStart));
+    }
+
+    /**
      * Collapse a leading run of slashes in an origin-form request target.
      *
      * WHY THIS EXISTS. The path was being parsed twice, by two callers, from
@@ -413,7 +458,7 @@ final readonly class Request
      * request changes behaviour. Interior duplicate slashes ("/a//b") are left
      * alone: both parsers already agree on those, so there is nothing to fix.
      */
-    private static function canonicalizeRequestTarget(string $requestUri): string
+    private static function collapseLeadingSlashes(string $requestUri): string
     {
         if (!str_starts_with($requestUri, '//')) {
             return $requestUri;
@@ -430,7 +475,6 @@ final readonly class Request
             return $requestUri;
         }
 
-        $requestUri = self::canonicalizeRequestTarget($requestUri);
 
         $forwarded = [];
         if ($trustForwarded) {
