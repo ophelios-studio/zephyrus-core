@@ -509,9 +509,32 @@ final class RouteCollection
         );
     }
 
+    /**
+     * Reduce a request path to the form routes are matched against.
+     *
+     * Two hazards are handled explicitly here, both of which used to be silent.
+     *
+     * A leading run of slashes is collapsed FIRST. On a bare path string, unlike
+     * on a full URL, parse_url() reads a leading "//token" as an authority and
+     * returns only what follows, so "//x/admin/secret" became "/admin/secret"
+     * and dispatched a route that no path-based guard had inspected. Request
+     * canonicalises its target for the same reason, and this is the second half
+     * of the same guarantee: the router cannot be desynced even when called
+     * directly with a raw string.
+     *
+     * parse_url() then returns false for a malformed target and null when there
+     * is no path component. Casting either to a string turned both into "" and
+     * quietly routed them to "/". They resolve to the root deliberately now,
+     * rather than by accident.
+     */
     private function normalizePath(string $path): string
     {
-        $parsedPath = (string) parse_url($path, PHP_URL_PATH);
+        if (str_starts_with($path, '//')) {
+            $path = '/' . ltrim($path, '/');
+        }
+
+        $parsed = parse_url($path, PHP_URL_PATH);
+        $parsedPath = is_string($parsed) && $parsed !== '' ? $parsed : '/';
 
         if ($this->trailingSlashTolerant) {
             $normalized = '/' . trim($parsedPath, '/');

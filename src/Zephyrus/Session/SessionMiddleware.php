@@ -64,7 +64,10 @@ use Zephyrus\Http\Response;
  *
  *       public function process(Request $request, callable $next): Response
  *       {
- *           if (preg_match($this->skipPattern, $request->uri()->path()) === 1) {
+ *           // path(), never uri()->path(): the latter can differ from the
+ *           // route that actually dispatches, which turns a skip rule into a
+ *           // bypass.
+ *           if (preg_match($this->skipPattern, $request->path()) === 1) {
  *               return $next($request);
  *           }
  *

@@ -153,7 +153,7 @@ final readonly class Request
     ): self {
         return new self(
             method:     strtoupper($method),
-            uri:        new Uri($uri),
+            uri:        new Uri(self::canonicalizeRequestTarget($uri)),
             body:       new RequestBody($body, $rawBody),
             query:      $query,
             headers:    new HeaderBag(self::normalizeHeaders($headers)),
@@ -171,6 +171,26 @@ final readonly class Request
     public function uri(): Uri
     {
         return $this->uri;
+    }
+
+    /**
+     * The canonical request path, i.e. the exact path the router dispatches on.
+     *
+     * ALWAYS PREFER THIS over uri()->path() for any decision about a request:
+     * guards, allowlists, exclusion patterns, rate-limit keys, audit records.
+     * The two used to be able to disagree, and a leading "//" was enough to do
+     * it: uri()->path() reported "//x/admin/secret" while the router dispatched
+     * "/admin/secret", so a path-based guard inspected one route and a different
+     * one executed. See canonicalizeRequestTarget() for the mechanism.
+     *
+     * Both entry points, fromGlobals() and fromArray(), canonicalise before the
+     * Uri is built, so in practice this equals uri()->path(). It normalises
+     * again here so the guarantee also holds for a Request assembled by hand
+     * through the constructor.
+     */
+    public function path(): string
+    {
+        return self::canonicalizeRequestTarget($this->uri->path());
     }
 
     public function body(): RequestBody
@@ -361,6 +381,47 @@ final readonly class Request
     /**
      * @param array<string, mixed> $server
      */
+    /**
+     * Collapse a leading run of slashes in an origin-form request target.
+     *
+     * WHY THIS EXISTS. The path was being parsed twice, by two callers, from
+     * two different strings, and they disagreed:
+     *
+     *   - Here, parse_url() runs on the FULL url ("scheme://host" . target), so
+     *     "//x/admin/secret" keeps its leading slashes and uri()->path()
+     *     reports "//x/admin/secret".
+     *   - RouteCollection::normalizePath() runs parse_url() on the BARE path,
+     *     where a leading "//token" reads as an AUTHORITY, so it returned
+     *     "/admin/secret" and dispatched the protected route.
+     *
+     * The request therefore executed one route while every path-based check saw
+     * another: a guard doing str_starts_with($request->path(), '/admin') was
+     * handed "//x/admin/secret", returned false, and waved the request through
+     * to /admin/secret. The framework's own CsrfMiddleware was bypassable this
+     * way whenever an exclusion pattern was unanchored.
+     *
+     * Collapsing was chosen over rejecting the target. It is a normalisation
+     * rather than a new failure path, so nothing that used to be served starts
+     * erroring: request construction happens at the very top of the lifecycle,
+     * before the kernel's error handling exists, which is a poor place to
+     * introduce a throw. After collapsing, "//x/admin/secret" resolves to
+     * "/x/admin/secret" and 404s, and "//admin" resolves to "/admin" where the
+     * guard now sees "/admin" and blocks correctly. Either way the two views
+     * agree, which is the property that actually closes the hole.
+     *
+     * No legitimate client sends a "//"-prefixed origin-form target, so no real
+     * request changes behaviour. Interior duplicate slashes ("/a//b") are left
+     * alone: both parsers already agree on those, so there is nothing to fix.
+     */
+    private static function canonicalizeRequestTarget(string $requestUri): string
+    {
+        if (!str_starts_with($requestUri, '//')) {
+            return $requestUri;
+        }
+
+        return '/' . ltrim($requestUri, '/');
+    }
+
     private static function buildUri(array $server, bool $trustForwarded = false): string
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
@@ -368,6 +429,8 @@ final readonly class Request
         if (str_starts_with($requestUri, 'http://') || str_starts_with($requestUri, 'https://')) {
             return $requestUri;
         }
+
+        $requestUri = self::canonicalizeRequestTarget($requestUri);
 
         $forwarded = [];
         if ($trustForwarded) {

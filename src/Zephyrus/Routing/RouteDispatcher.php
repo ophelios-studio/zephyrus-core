@@ -69,7 +69,7 @@ final readonly class RouteDispatcher
      */
     public function match(Request $request): RouteMatch
     {
-        return $this->routes->match($request->method, $request->uri()->path());
+        return $this->routes->match($request->method, $request->path());
     }
 
     /**
