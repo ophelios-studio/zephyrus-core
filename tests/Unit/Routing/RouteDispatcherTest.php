@@ -19,6 +19,21 @@ use Zephyrus\Routing\RouteMatch;
 
 final class RouteDispatcherTest extends TestCase
 {
+    /**
+     * Mirrors what HttpKernel does for a matched route: resolve, enrich the
+     * request with the route parameters, then run the route.
+     *
+     * The enrichment is required rather than cosmetic. HandlerResolver reads
+     * route values off $request->attributes, never off RouteMatch::$parameters,
+     * so a caller that skips it gets a handler with no route arguments.
+     */
+    private static function runRoute(RouteDispatcher $dispatcher, Request $request): Response
+    {
+        $match = $dispatcher->match($request);
+
+        return $dispatcher->dispatchMatch($match, $request->withAttributes($match->parameters));
+    }
+
     public function testDispatchResolvesRouteAndRunsPipeline(): void
     {
         $routes = new RouteCollection();
@@ -54,7 +69,7 @@ final class RouteDispatcherTest extends TestCase
             },
         );
 
-        $response = $dispatcher->dispatch(Request::fromArray('GET', '/users/42?expand=roles'));
+        $response = self::runRoute($dispatcher, Request::fromArray('GET', '/users/42?expand=roles'));
 
         self::assertSame(200, $response->status);
         self::assertSame('on', $response->headers['x-pipeline']);
@@ -79,7 +94,7 @@ final class RouteDispatcherTest extends TestCase
         $this->expectException(RouteMiddlewareException::class);
         $this->expectExceptionMessage('Unknown route middleware: missing');
 
-        $dispatcher->dispatch(Request::fromArray('GET', '/users'));
+        self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
     }
 
     public function testDispatchWrapsUnexpectedResolverFailuresAsRouteMiddlewareException(): void
@@ -97,7 +112,7 @@ final class RouteDispatcherTest extends TestCase
         $this->expectException(RouteMiddlewareException::class);
         $this->expectExceptionMessage('Unable to resolve route middleware "auth": container is down');
 
-        $dispatcher->dispatch(Request::fromArray('GET', '/users'));
+        self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
     }
 
     public function testMatchResolvesTheRouteWithoutRunningAnything(): void
@@ -230,7 +245,7 @@ final class RouteDispatcherTest extends TestCase
             },
         );
 
-        $dispatcher->dispatch(Request::fromArray('GET', '/users'));
+        self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
 
         self::assertSame(['auth', 'audit'], $resolvedNames);
     }

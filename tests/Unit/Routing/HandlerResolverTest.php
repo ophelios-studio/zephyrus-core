@@ -705,7 +705,12 @@ final class HandlerResolverTest extends TestCase
             resolver: $resolver->resolve(...),
         );
 
-        $response = $dispatcher->dispatch(Request::fromArray('GET', '/users/99'));
+        // Mirrors HttpKernel: resolve, enrich with the route parameters, run.
+        // The enrichment matters here, HandlerResolver injects from
+        // $request->attributes rather than from RouteMatch::$parameters.
+        $request = Request::fromArray('GET', '/users/99');
+        $match = $dispatcher->match($request);
+        $response = $dispatcher->dispatchMatch($match, $request->withAttributes($match->parameters));
 
         self::assertSame(200, $response->status);
         self::assertStringContainsString('"id":99', $response->body);

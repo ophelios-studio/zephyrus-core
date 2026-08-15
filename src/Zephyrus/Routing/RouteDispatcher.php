@@ -96,23 +96,6 @@ final readonly class RouteDispatcher
     }
 
     /**
-     * Convenience wrapper: match, then dispatch, in a single call.
-     *
-     * NOTE: this method THROWS on a routing failure, it converts nothing into
-     * an error response. It is deliberately NOT the kernel entry point.
-     * HttpKernel calls match() and dispatchMatch() separately so the conversion
-     * happens inside the global middleware pipeline. Wiring an application
-     * through this method instead would ship 404, 405 and 500 responses with no
-     * security headers, which is the bug this split exists to prevent.
-     */
-    public function dispatch(Request $request): Response
-    {
-        $match = $this->match($request);
-
-        return $this->dispatchMatch($match, $request->withAttributes($match->parameters));
-    }
-
-    /**
      * @param array<int, string> $middlewareNames
      * @return array<int, MiddlewareInterface>
      */
