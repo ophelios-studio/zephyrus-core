@@ -72,12 +72,18 @@ final class Database
      * injected PDO has no knowable identity, so those instances keep the
      * per-instance memo alone and behave exactly as before.
      *
+     * This array is backed by APCu when the extension is available, which is
+     * what carries a shape from one REQUEST to the next: PHP resets every
+     * static at request shutdown, so under mod_php or FPM this array alone is
+     * empty again on the next request even though the persistent PDO handle
+     * under it survived. See fetchColumnShapeFromApcu().
+     *
      * KNOWN LIMIT: a column that changes TYPE while keeping BOTH its name and
      * the statement's column count (int4 to numeric, say) is invisible to this
-     * key, and a long-lived process would keep applying the previous converter.
-     * A request-per-process SAPI never sees it because the store dies with the
-     * request. A worker, a CLI loop or a persistent worker SAPI must be
-     * restarted after such a migration, or call flushSharedColumnMetadata().
+     * key, and a process would keep applying the previous converter. A column
+     * added or dropped changes the count, so that case self-invalidates. See
+     * APCU_TTL for how long the undetectable case can survive, and
+     * flushSharedColumnMetadata() for the manual release.
      *
      * @var array<string, array{count: int, types: array<string, string>}>
      */
@@ -106,6 +112,33 @@ final class Database
      * is producing far more query shapes than any cache can help with.
      */
     private const MAX_SHARED_COLUMN_SHAPES = 2048;
+
+    /**
+     * Namespace for the APCu keys, so this cache cannot collide with whatever
+     * else the host application keeps in the same shared memory. The trailing
+     * version segment lets a future change to the stored structure ignore
+     * older entries instead of having to reason about them.
+     */
+    private const APCU_KEY_PREFIX = 'zephyrus:column-shape:v1:';
+
+    /**
+     * Lifetime of an APCu entry, in seconds.
+     *
+     * Deliberately finite rather than unlimited. A deploy replaces the machine
+     * and starts APCu empty, so an ordinary release self-clears, and a column
+     * being added or dropped changes the column count and self-invalidates via
+     * the key. What is left is the one drift the key cannot see: a column that
+     * changes TYPE while keeping its name and the statement width. Because the
+     * house rule is that a migration reaches production BEFORE the code that
+     * needs it, there is a real window where the schema has moved and no
+     * process has restarted, and an unlimited entry would apply the previous
+     * converter until someone noticed.
+     *
+     * An hour bounds that window without operator action. The cost is one
+     * re-resolution per query shape per hour per machine, which is noise
+     * against the round-trips saved on every request in between.
+     */
+    private const APCU_TTL = 3600;
 
     /**
      * Built-in PostgreSQL native type conversions matching v1 DatabaseStatement behavior.
@@ -163,9 +196,10 @@ final class Database
      * Turn the process-wide column shape cache on or off (on by default).
      *
      * Escape hatch for a deployment where a long-lived process must never hold
-     * a schema snapshot, and for tests that need a clean slate. Turning it off
-     * also flushes it, since entries that can no longer be read are only
-     * holding memory; turning it back on simply re-warms on the next query.
+     * a schema snapshot, and for tests that need a clean slate. Covers BOTH
+     * backing layers, the process static and APCu. Turning it off also flushes
+     * them, since entries that can no longer be read are only holding memory;
+     * turning it back on simply re-warms on the next query.
      *
      * Correctness never depends on this: the per-instance memo and the live
      * conversion registry produce the same rows either way.
@@ -175,21 +209,37 @@ final class Database
         self::$sharedColumnMetadataEnabled = $enabled;
 
         if (!$enabled) {
-            self::$sharedColumnMetadata = [];
+            self::flushSharedColumnMetadata();
         }
     }
 
     /**
-     * Drop every cached column shape held by this process.
+     * Drop every cached column shape, from the process static AND from APCu.
      *
      * Needed only in the one case the cache key cannot detect: a column that
      * changed TYPE while keeping both its name and the statement's column
-     * count. Restarting the process has the same effect, and a
-     * request-per-process SAPI gets it for free.
+     * count. APCu expires those entries on its own within APCU_TTL, so this is
+     * the way to reclaim the window rather than wait it out.
+     *
+     * OPERATIONAL NOTE: APCu memory belongs to a SAPI instance, not to a
+     * machine. Calling this from an HTTP request clears it for every worker
+     * process of that web server, which makes a small authenticated admin
+     * route the practical fleet-wide flush (one call per machine). Running it
+     * from a CLI process does NOT reach the web server's segment, so an
+     * `ssh console` one-liner is not a fleet flush. Restarting or redeploying
+     * the app is, since fresh machines start with an empty APCu.
      */
     public static function flushSharedColumnMetadata(): void
     {
         self::$sharedColumnMetadata = [];
+
+        if (!self::apcuUsable() || !class_exists('APCUIterator')) {
+            return;
+        }
+
+        // Prefix scoped on purpose: apcu_clear_cache() would take the host
+        // application's own entries down with it.
+        apcu_delete(new \APCUIterator('/^' . preg_quote(self::APCU_KEY_PREFIX, '/') . '/'));
     }
 
     /**
@@ -828,20 +878,35 @@ final class Database
 
         $shared = $this->connectionDsn !== null && self::$sharedColumnMetadataEnabled;
         $sharedKey = $shared ? sha1($this->connectionDsn . '|' . $sql) . '|' . $columnCount : '';
-        $shape = $shared ? self::$sharedColumnMetadata[$sharedKey] ?? null : null;
+        $shape = null;
 
-        // The width is in the key already; re-checking it here costs one
-        // integer compare and denies a hash collision any chance of serving a
-        // shape of the wrong width.
-        if ($shape === null || $shape['count'] !== $columnCount) {
+        if ($shared) {
+            $shape = self::$sharedColumnMetadata[$sharedKey] ?? null;
+
+            // The width is in the key already; re-checking it here costs one
+            // integer compare and denies a hash collision any chance of serving
+            // a shape of the wrong width.
+            if ($shape !== null && $shape['count'] !== $columnCount) {
+                $shape = null;
+            }
+
+            if ($shape === null) {
+                $shape = self::fetchColumnShapeFromApcu($sharedKey, $columnCount);
+
+                // An APCu hit warms the static, so nothing else in this process
+                // pays even the shared-memory lookup again.
+                if ($shape !== null) {
+                    self::rememberColumnShape($sharedKey, $shape);
+                }
+            }
+        }
+
+        if ($shape === null) {
             $shape = self::describeColumns($stmt, $columnCount);
 
             if ($shared) {
-                if (count(self::$sharedColumnMetadata) >= self::MAX_SHARED_COLUMN_SHAPES) {
-                    self::$sharedColumnMetadata = [];
-                }
-
-                self::$sharedColumnMetadata[$sharedKey] = $shape;
+                self::rememberColumnShape($sharedKey, $shape);
+                self::storeColumnShapeInApcu($sharedKey, $shape);
             }
         }
 
@@ -893,6 +958,106 @@ final class Database
         }
 
         return ['count' => $columnCount, 'types' => $types];
+    }
+
+    /**
+     * Record a shape in the process static, resetting the store wholesale if
+     * it has reached its ceiling.
+     *
+     * @param array{count: int, types: array<string, string>} $shape
+     */
+    private static function rememberColumnShape(string $key, array $shape): void
+    {
+        if (count(self::$sharedColumnMetadata) >= self::MAX_SHARED_COLUMN_SHAPES) {
+            self::$sharedColumnMetadata = [];
+        }
+
+        self::$sharedColumnMetadata[$key] = $shape;
+    }
+
+    /**
+     * Read a shape back from APCu, or null when there is nothing trustworthy
+     * to read.
+     *
+     * This is the layer that makes the cache worth having on a request-per-
+     * process SAPI. PHP destroys every static at request shutdown while the
+     * persistent PDO handle survives, so without shared memory the very first
+     * query of every request re-asks PostgreSQL for metadata it already
+     * answered on that same connection.
+     *
+     * Every failure path returns null, which means "resolve it properly", not
+     * "there are no conversions". Handing back a half-understood entry would
+     * silently skip a JSONB decode or a NUMERIC passthrough, and a wrong value
+     * is far worse than a slow query.
+     *
+     * @return array{count: int, types: array<string, string>}|null
+     */
+    private static function fetchColumnShapeFromApcu(string $key, int $columnCount): ?array
+    {
+        if (!self::apcuUsable()) {
+            return null;
+        }
+
+        $success = false;
+        /** @var mixed $cached */
+        $cached = apcu_fetch(self::APCU_KEY_PREFIX . $key, $success);
+
+        // The out-param decides, not a comparison against false: false is a
+        // perfectly legitimate cached value, and conflating the two is how a
+        // cache starts reporting hits as misses.
+        if (!$success) {
+            return null;
+        }
+
+        if (!is_array($cached)
+            || !is_int($cached['count'] ?? null)
+            || !is_array($cached['types'] ?? null)
+            || $cached['count'] !== $columnCount
+        ) {
+            return null;
+        }
+
+        foreach ($cached['types'] as $nativeType) {
+            if (!is_string($nativeType)) {
+                return null;
+            }
+        }
+
+        /** @var array{count: int, types: array<string, string>} $cached */
+        return $cached;
+    }
+
+    /**
+     * Publish a shape to APCu, best effort.
+     *
+     * A full, disabled or racing APCu simply means the next process resolves
+     * the shape itself, so the return value is deliberately ignored and APCu
+     * needs no size ceiling of its own: its own expunge handles pressure, and
+     * the entries are a few hundred bytes each.
+     *
+     * @param array{count: int, types: array<string, string>} $shape
+     */
+    private static function storeColumnShapeInApcu(string $key, array $shape): void
+    {
+        if (!self::apcuUsable()) {
+            return;
+        }
+
+        apcu_store(self::APCU_KEY_PREFIX . $key, $shape, self::APCU_TTL);
+    }
+
+    /**
+     * Whether APCu can be used right now.
+     *
+     * Checked on the cold path only (a per-instance memo miss), so the cost
+     * never lands on a repeated query. Note that apc.enable_cli defaults to
+     * off, so CLI and worker processes usually get nothing here: that is fine,
+     * because a long-running process is served by the static, which for it
+     * lives as long as the process does.
+     */
+    private static function apcuUsable(): bool
+    {
+        return function_exists('apcu_fetch') && apcu_enabled();
     }
 
     /**

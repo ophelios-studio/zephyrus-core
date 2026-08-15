@@ -39,8 +39,11 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
     protected function setUp(): void
     {
-        // Isolate the static between tests so ordering cannot make one pass
-        // vacuously off another test's warm entries.
+        // Isolate BOTH backing layers between tests so ordering cannot make one
+        // pass vacuously off another test's warm entries. flushSharedColumnMetadata()
+        // covers the process static and APCu, which matters here: a warm APCu
+        // entry outlives a test and would otherwise defeat an isolation attempt
+        // that only reset the static.
         Database::setSharedColumnMetadataEnabled(true);
         Database::flushSharedColumnMetadata();
         MetaSpyStatement::reset();
@@ -326,6 +329,180 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertCount(2, self::sharedStore(), 'Each DSN gets its own entry.');
     }
 
+    // ── the APCu layer: surviving request shutdown ───────────────────────────
+
+    public function testApcuServesTheShapeAfterTheProcessStaticIsGone(): void
+    {
+        // THE point of the APCu layer. PHP destroys every static at request
+        // shutdown while the persistent PDO handle survives, so this is what a
+        // second request against a warm machine actually looks like.
+        $this->requireApcu();
+
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+
+        $first = $this->makeDatabase('apcu_request', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($first);
+        $firstRow = $first->selectOne($sql);
+
+        $callsAfterFirst = MetaSpyStatement::$calls;
+        self::assertSame(2, $callsAfterFirst);
+
+        $cachedShape = array_values(self::sharedStore())[0];
+        self::clearProcessStaticOnly();
+        self::assertCount(0, self::sharedStore(), 'The static must be empty, as it is at request start.');
+
+        $second = $this->makeDatabase('apcu_request', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($second);
+        $secondRow = $second->selectOne($sql);
+
+        self::assertSame(
+            $callsAfterFirst,
+            MetaSpyStatement::$calls,
+            'A warm APCu entry must carry the shape across a cleared static.',
+        );
+        self::assertEquals($firstRow, $secondRow);
+
+        // The APCu hit warms the static back up, so nothing else in this
+        // process pays even the shared-memory lookup.
+        self::assertCount(1, self::sharedStore());
+        self::assertSame($cachedShape, array_values(self::sharedStore())[0]);
+    }
+
+    public function testApcuKeysAreNamespacedAndFlushSparesForeignEntries(): void
+    {
+        $this->requireApcu();
+
+        $foreignKey = 'some-host-application-key';
+        apcu_store($foreignKey, 'untouched');
+
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+        $db = $this->makeDatabase('namespacing', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db);
+        $db->selectOne('SELECT id, price FROM records WHERE id = 1');
+
+        $ourKeys = self::apcuKeysWithPrefix();
+        self::assertCount(1, $ourKeys);
+        self::assertStringStartsWith(self::apcuPrefix(), $ourKeys[0]);
+
+        Database::flushSharedColumnMetadata();
+
+        self::assertCount(0, self::apcuKeysWithPrefix(), 'Our own entries go.');
+
+        $success = false;
+        self::assertSame('untouched', apcu_fetch($foreignKey, $success));
+        self::assertTrue($success, 'A flush must not touch what the host application stores.');
+
+        apcu_delete($foreignKey);
+    }
+
+    public function testFlushClearsApcuNotJustTheStatic(): void
+    {
+        $this->requireApcu();
+
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+
+        $first = $this->makeDatabase('apcu_flush', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($first);
+        $first->selectOne($sql);
+
+        $callsAfterFirst = MetaSpyStatement::$calls;
+
+        Database::flushSharedColumnMetadata();
+
+        $second = $this->makeDatabase('apcu_flush', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($second);
+        $second->selectOne($sql);
+
+        self::assertGreaterThan(
+            $callsAfterFirst,
+            MetaSpyStatement::$calls,
+            'A flush that left APCu warm would silently defeat the escape hatch.',
+        );
+    }
+
+    public function testDisabledLayerWritesNothingToApcu(): void
+    {
+        $this->requireApcu();
+
+        Database::setSharedColumnMetadataEnabled(false);
+
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+        $db = $this->makeDatabase('apcu_disabled', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db);
+        $db->selectOne('SELECT id, price FROM records WHERE id = 1');
+
+        self::assertCount(0, self::apcuKeysWithPrefix());
+    }
+
+    // ── the APCu layer degrades, and never degrades to "no conversion" ───────
+
+    public function testMalformedApcuEntryResolvesProperlyRatherThanSkippingConversions(): void
+    {
+        // The failure that would matter: a junk entry read back as a shape with
+        // no types in it converts nothing, so a NUMERIC silently stops being a
+        // string and a JSONB silently stays raw. Every rejection path has to
+        // mean "go ask the backend", never "there is nothing to convert".
+        $this->requireApcu();
+
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+
+        $warm = $this->makeDatabase('apcu_junk', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($warm);
+        $warm->selectOne($sql);
+
+        $key = self::apcuKeysWithPrefix()[0];
+        $callsBefore = MetaSpyStatement::$calls;
+
+        foreach ([
+            'a bare string',
+            false,
+            ['count' => 2],
+            ['count' => '2', 'types' => ['price' => 'NUMERIC']],
+            ['count' => 2, 'types' => 'not-an-array'],
+            ['count' => 2, 'types' => ['price' => 12345]],
+            ['count' => 99, 'types' => ['price' => 'NUMERIC']],
+        ] as $index => $poison) {
+            apcu_store($key, $poison);
+            self::clearProcessStaticOnly();
+
+            $db = $this->makeDatabase('apcu_junk', self::TWO_COLUMN_TABLE);
+            $db->registerTypeConversion('NUMERIC', static fn (string $v): string => $v);
+            $this->seedTwoColumnRow($db);
+            $row = $db->selectOne($sql);
+
+            self::assertGreaterThan(
+                $callsBefore,
+                MetaSpyStatement::$calls,
+                "Poison #{$index} should have forced a real resolve.",
+            );
+            self::assertSame('12.50', $row->price, "Poison #{$index} must not cost the conversion.");
+            self::assertSame(1, $row->id, "Poison #{$index} must not cost the conversion.");
+
+            $callsBefore = MetaSpyStatement::$calls;
+        }
+    }
+
+    public function testApcuStoresTheSamePlainShapeTheStaticHolds(): void
+    {
+        $this->requireApcu();
+
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+
+        $db = $this->makeDatabase('apcu_shape', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db);
+        $db->selectOne('SELECT id, price FROM records WHERE id = 1');
+
+        $success = false;
+        $stored = apcu_fetch(self::apcuKeysWithPrefix()[0], $success);
+
+        self::assertTrue($success);
+        self::assertSame(['count' => 2, 'types' => ['id' => 'INT4', 'price' => 'NUMERIC']], $stored);
+        self::assertSame(array_values(self::sharedStore())[0], $stored);
+    }
+
     // ── duplicate column names ───────────────────────────────────────────────
 
     public function testDuplicateColumnNamesResolveAgainstTheColumnThatActuallyWins(): void
@@ -506,6 +683,44 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         $store = (new ReflectionProperty(Database::class, 'sharedColumnMetadata'))->getValue();
 
         return $store;
+    }
+
+    /**
+     * Empty the process static WITHOUT touching APCu, which is what PHP itself
+     * does at request shutdown. The only way to test the APCu layer honestly.
+     */
+    private static function clearProcessStaticOnly(): void
+    {
+        (new ReflectionProperty(Database::class, 'sharedColumnMetadata'))->setValue(null, []);
+    }
+
+    private static function apcuPrefix(): string
+    {
+        /** @var string $prefix */
+        $prefix = (new ReflectionClass(Database::class))->getConstant('APCU_KEY_PREFIX');
+
+        return $prefix;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function apcuKeysWithPrefix(): array
+    {
+        $keys = [];
+
+        foreach (new \APCUIterator('/^' . preg_quote(self::apcuPrefix(), '/') . '/') as $entry) {
+            $keys[] = (string) $entry['key'];
+        }
+
+        return $keys;
+    }
+
+    private function requireApcu(): void
+    {
+        if (!function_exists('apcu_fetch') || !apcu_enabled()) {
+            self::markTestSkipped('APCu is not available (apc.enable_cli is off by default on CLI).');
+        }
     }
 }
 
