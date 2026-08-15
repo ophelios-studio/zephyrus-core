@@ -21,6 +21,27 @@ use Zephyrus\Upload\UploadException;
  */
 final readonly class Request
 {
+    /**
+     * Attribute set by HttpKernel when the request matched NO route, i.e. the
+     * response is going to be a 404 or a 405. Its value is always true; the
+     * attribute is absent whenever a route did match.
+     *
+     * It exists so that a global middleware which VALIDATES a request can tell
+     * "this request is invalid" from "this request is fine, the URL just does
+     * not exist", and decline to answer for a resource that never existed. See
+     * CsrfMiddleware for the reference use, and HttpKernel::resolveAndPipe()
+     * for where it is set.
+     *
+     * Middlewares that DECORATE a response (security headers, CSP) must ignore
+     * this and keep running, otherwise an error response loses the very headers
+     * the pipeline exists to add.
+     *
+     * The attribute is deliberately never set on a matched route.
+     * HandlerResolver injects handler arguments positionally from
+     * $request->attributes, so an extra entry there would shift that binding.
+     */
+    public const ATTRIBUTE_UNMATCHED_ROUTE = '_zephyrus.unmatched_route';
+
     private Uri $uri;
     private RequestBody $body;
     private HeaderBag $headerBag;

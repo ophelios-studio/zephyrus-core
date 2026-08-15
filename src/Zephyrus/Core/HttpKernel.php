@@ -80,14 +80,28 @@ use Zephyrus\Routing\RouteMatch;
  * unauthenticated traffic.
  *
  * A global middleware that SHORT-CIRCUITS can now answer before the 404 is
- * produced, so the status code on those paths changes. Measured examples: with
- * CsrfMiddleware registered globally, a POST to an unknown path returns 403
- * instead of 404; with ForceHttpsMiddleware, a plain-HTTP request to an unknown
- * path returns a 308 redirect instead of 404; with AllowedHostsMiddleware, a
- * request carrying a disallowed Host returns 400 instead of 404. Each of those
- * is the intended consequence of the check applying everywhere rather than only
- * on matched routes, and each stops an unauthenticated prober from learning
- * which routes exist, but the response a client sees does change.
+ * produced, so the status code on those paths can change. Whether that is right
+ * depends on what the middleware is asking about, and the two cases are not the
+ * same:
+ *
+ *   - A middleware validating the CONNECTION, the ENVELOPE or the CALLER should
+ *     still run. ForceHttpsMiddleware answers a plain-HTTP request to an
+ *     unknown path with a 308, AllowedHostsMiddleware answers a disallowed Host
+ *     with a 400, and a globally registered AuthGuardMiddleware answers an
+ *     unauthorised caller with a 401. None of those questions depends on the
+ *     URL existing: nothing should be served over plain HTTP, a forged Host
+ *     header is abuse whatever it points at, and an application that guards
+ *     every request usually means to reveal nothing to a stranger, route map
+ *     included. Answering before routing is the point.
+ *   - A middleware validating a request AGAINST A RESOURCE must not.
+ *     CsrfMiddleware asks whether a state change to a resource is authorised;
+ *     when no route matched there is no resource and no state change, so it
+ *     would be answering a question that does not apply. It is passed over via
+ *     Request::ATTRIBUTE_UNMATCHED_ROUTE, and the request gets its 404 or 405.
+ *
+ * Consumer middlewares that validate against a resource should follow
+ * CsrfMiddleware and consult that attribute. Ones that decorate a response must
+ * ignore it and keep running, or error responses lose their headers again.
  */
 final readonly class HttpKernel
 {
@@ -139,8 +153,15 @@ final readonly class HttpKernel
         try {
             $match = $this->dispatcher->match($request);
         } catch (Throwable $routingFailure) {
+            // Flag the request as unmatched so a global middleware that
+            // VALIDATES a request can decline to answer for a resource that
+            // does not exist. Set only here: on a matched route an extra
+            // attribute would shift HandlerResolver's positional argument
+            // injection. See Request::ATTRIBUTE_UNMATCHED_ROUTE.
+            $unmatched = $request->withAttribute(Request::ATTRIBUTE_UNMATCHED_ROUTE, true);
+
             return $this->pipe(
-                $request,
+                $unmatched,
                 fn (Request $piped): Response => $this->toErrorResponse($routingFailure, $piped),
             );
         }

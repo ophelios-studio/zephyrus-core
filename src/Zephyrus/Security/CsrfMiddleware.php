@@ -45,6 +45,16 @@ use function trim;
  *   ]);
  *   $mw = new CsrfMiddleware($sessionManager, $config);
  *
+ * Unmatched routes
+ * ----------------
+ * A request that matched no route is never gated. When HttpKernel finds no
+ * route it flags the request with Request::ATTRIBUTE_UNMATCHED_ROUTE, and this
+ * middleware passes it straight through so the response is the 404 or 405 it
+ * should be, not a 403. There is no resource to protect when nothing matched,
+ * and a security-shaped error there hides an ordinary wrong-URL bug. The error
+ * response still travels through the rest of the global pipeline, so it keeps
+ * its security headers.
+ *
  * The token is validated by the injected CsrfTokenManagerInterface using a
  * constant-time comparison; the middleware itself does not generate tokens.
  *
@@ -80,6 +90,7 @@ final class CsrfMiddleware implements MiddlewareInterface
     public function process(Request $request, callable $next): Response
     {
         if ($this->config->enabled
+            && !$this->isUnmatchedRoute($request)
             && !in_array($request->method, self::SAFE_METHODS, true)
             && !$this->isPathExcluded($request)
             && !$this->isTokenValid($request)
@@ -98,6 +109,27 @@ final class CsrfMiddleware implements MiddlewareInterface
         }
 
         return $this->injectTokenIntoHtmlForms($response);
+    }
+
+    /**
+     * Returns true when no route matched, so this request is heading for a 404
+     * or a 405 and there is nothing to protect.
+     *
+     * CSRF defends a RESOURCE against a state change triggered by a third-party
+     * site. When routing found nothing, no handler runs and no state changes,
+     * so validating a token guards nothing. Answering 403 there would replace a
+     * plain "that URL does not exist" with a security-shaped error, and send
+     * whoever debugs it hunting a token or signature problem when the real
+     * fault is the URL: a stale webhook or a renamed endpoint is the common
+     * case. It also buys no secrecy, because GET is a safe method and already
+     * reveals the same 404.
+     *
+     * The 404 or 405 still leaves through the rest of the global pipeline, so
+     * it keeps every security header a matched response would carry.
+     */
+    private function isUnmatchedRoute(Request $request): bool
+    {
+        return $request->attribute(Request::ATTRIBUTE_UNMATCHED_ROUTE) === true;
     }
 
     /**
