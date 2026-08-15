@@ -393,6 +393,98 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame('nosniff', $response->headers['x-content-type-options']);
     }
 
+    /**
+     * An application that rethrows the SAME exception is deciding to let it
+     * through, normally so a debugger renders it in development. Both consuming
+     * apps do exactly this. Swallowing it replaced a stack trace with a plain
+     * "Internal Server Error" and removed the developer's debugger with nothing
+     * to explain why.
+     */
+    public function testAnExceptionHandlerThatRethrowsTheOriginalPropagatesOutOfHandle(): void
+    {
+        $original = new RuntimeException('let the debugger see this');
+
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/boom', ErrorPipelineBoomController::class . '@boom'))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+            ->withExceptionHandler(
+                RuntimeException::class,
+                static fn (\Throwable $e) => throw $e,
+            )
+            ->build();
+
+        $caught = null;
+
+        try {
+            $kernel->handle(Request::fromArray('GET', '/boom'));
+        } catch (\Throwable $e) {
+            $caught = $e;
+        }
+
+        self::assertInstanceOf(RuntimeException::class, $caught);
+        self::assertSame('handler exploded', $caught->getMessage());
+        // The application must see its OWN exception, never an internal marker.
+        self::assertNotInstanceOf(\Zephyrus\Core\KernelRethrowSignal::class, $caught);
+        unset($original);
+    }
+
+    public function testARethrownRoutingFailureAlsoPropagates(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter(new Router())
+            ->withExceptionHandler(
+                RouteNotFoundException::class,
+                static fn (\Throwable $e) => throw $e,
+            )
+            ->build();
+
+        $this->expectException(RouteNotFoundException::class);
+
+        $kernel->handle(Request::fromArray('GET', '/missing'));
+    }
+
+    /**
+     * The reason the rethrow is wrapped in a signal rather than thrown bare.
+     *
+     * A bare rethrow escapes the destination closure, unwinds through the
+     * global pipeline and lands in pipe()'s backstop, which calls the responder
+     * AGAIN: the application's handler runs twice and the reporting seam fires
+     * a second time with a misleading source. Measured at 2 invocations before
+     * the signal existed.
+     */
+    public function testADeliberateRethrowInvokesTheHandlerOnceAndReportsOnce(): void
+    {
+        $handlerCalls = 0;
+        $sources = [];
+
+        $events = new EventDispatcher();
+        $events->addListener(\Zephyrus\Core\ExceptionEvent::class, static function ($e) use (&$sources): void {
+            $sources[] = $e->getSource();
+        });
+
+        $kernel = KernelBuilder::create()
+            ->withRouter(new Router())
+            ->withEventDispatcher($events)
+            ->withExceptionHandler(
+                RouteNotFoundException::class,
+                static function (\Throwable $e) use (&$handlerCalls) {
+                    $handlerCalls++;
+
+                    throw $e;
+                },
+            )
+            ->build();
+
+        try {
+            $kernel->handle(Request::fromArray('GET', '/missing'));
+        } catch (RouteNotFoundException) {
+            // expected
+        }
+
+        self::assertSame(1, $handlerCalls, 'the handler must not run twice');
+        self::assertSame([\Zephyrus\Core\ExceptionEvent::SOURCE_ROUTING], $sources);
+    }
+
     public function testACatchAllExceptionHandlerThatThrowsDoesNotEscapeTheKernel(): void
     {
         $kernel = KernelBuilder::create()

@@ -40,10 +40,16 @@ use Zephyrus\Routing\RouteMatch;
  * every byte leaving the process. A header that must never be missing belongs
  * at the web server or proxy as well.
  *
- * handle() itself does not throw for a failing route, handler, middleware or
- * exception handler. It can still throw if a RequestEvent or ResponseEvent
- * listener throws, since those run outside the pipeline and outside the
- * backstop.
+ * handle() does not throw for a failing route, handler or middleware, nor for
+ * an exception handler that breaks. It DOES throw in two cases:
+ *
+ *   - A registered exception handler rethrows the SAME throwable it was given.
+ *     That is an application deciding to let the exception through, normally so
+ *     a debugger can render it in development, and the framework passes it
+ *     along rather than overriding the decision. A handler that throws anything
+ *     else is treated as broken and yields the decorated fallback instead.
+ *   - A RequestEvent or ResponseEvent listener throws, since those run outside
+ *     the pipeline and outside the backstop.
  *
  * ROUTE middlewares only ever wrap the matched route's handler:
  *
@@ -136,7 +142,16 @@ final readonly class HttpKernel
         }
 
         // 2. Post-dispatch: listeners may inspect / replace the response.
-        return $this->fireResponseEvent($request, $this->resolveAndPipe($request));
+        try {
+            $response = $this->resolveAndPipe($request);
+        } catch (KernelRethrowSignal $signal) {
+            // An exception handler deliberately rethrew. Unwrap so the
+            // application sees its own exception, never this internal marker.
+            // No ResponseEvent fires: there is no response to fire it with.
+            throw $signal->original;
+        }
+
+        return $this->fireResponseEvent($request, $response);
     }
 
     /**
@@ -195,6 +210,11 @@ final readonly class HttpKernel
     {
         try {
             return $this->globalPipeline->handle($request, $destination);
+        } catch (KernelRethrowSignal $signal) {
+            // A deliberate rethrow from the application's own exception
+            // handler. Converting it here would call that handler a second
+            // time, so it passes straight through to handle().
+            throw $signal;
         } catch (Throwable $exception) {
             return $this->toErrorResponse($exception, $request, ExceptionEvent::SOURCE_MIDDLEWARE);
         }
@@ -247,6 +267,19 @@ final readonly class HttpKernel
         try {
             return $this->exceptionResponder->toResponse($exception, $request);
         } catch (Throwable $responderFailure) {
+            // A handler that rethrows the SAME object is passing the exception
+            // through on purpose, typically so a debugger can render it in
+            // development. That is an application decision and the framework
+            // must not override it: swallowing it replaced a stack trace with a
+            // plain "Internal Server Error" and took the developer's debugger
+            // away with nothing to explain why.
+            //
+            // Identity, not instanceof: a handler that throws anything ELSE is
+            // failing, not deciding, and that is the case this guard exists for.
+            if ($responderFailure === $exception) {
+                throw new KernelRethrowSignal($exception);
+            }
+
             // A second, distinct throwable. Reported separately so a broken
             // error template is visible rather than swallowed.
             $this->fireExceptionEvent($responderFailure, $request, ExceptionEvent::SOURCE_RESPONDER);
