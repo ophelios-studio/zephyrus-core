@@ -142,7 +142,12 @@ final class CsrfMiddleware implements MiddlewareInterface
             return false;
         }
 
-        $path = $request->uri()->path();
+        // The CANONICAL path, never uri()->path(). Keying an exclusion on the
+        // raw path was a live bypass: with an unanchored pattern such as
+        // #/webhooks/#, a POST to //webhooks/account/close matched the
+        // exclusion, skipped the token check, and the router dispatched the
+        // protected /account/close.
+        $path = $request->path();
         foreach ($this->config->excludedPathPatterns as $pattern) {
             if (@preg_match($pattern, $path) === 1) {
                 return true;

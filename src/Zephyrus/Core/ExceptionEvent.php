@@ -62,7 +62,12 @@ use Zephyrus\Http\Request;
  *       }
  *
  *       $reporter->capture($e->getException(), [
- *           'path'   => $e->getRequest()->uri()->path(),
+ *           // path() is the route that actually dispatched. Record the raw
+ *           // target alongside it when the record is evidence: the two can
+ *           // only differ for a deliberately malformed request, and that
+ *           // difference is itself worth keeping.
+ *           'path'    => $e->getRequest()->path(),
+ *           'rawPath' => $e->getRequest()->uri()->path(),
  *           'method' => $e->getRequest()->method,
  *           'source' => $e->getSource(),
  *       ]);
