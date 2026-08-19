@@ -36,9 +36,14 @@ final readonly class Request
      * this and keep running, otherwise an error response loses the very headers
      * the pipeline exists to add.
      *
-     * The attribute is deliberately never set on a matched route.
-     * HandlerResolver injects handler arguments positionally from
-     * $request->attributes, so an extra entry there would shift that binding.
+     * The attribute is deliberately never set on a matched route: it describes
+     * a routing FAILURE, and a request that matched has none to describe.
+     *
+     * That is now a statement of meaning rather than a precaution.
+     * HandlerResolver used to fall back to injecting handler arguments by
+     * position over ALL of $request->attributes, so any extra entry shifted
+     * that binding; its positional pool is the matched route's own parameters
+     * now, and an attribute cannot reach a handler except by name.
      */
     public const ATTRIBUTE_UNMATCHED_ROUTE = '_zephyrus.unmatched_route';
 
