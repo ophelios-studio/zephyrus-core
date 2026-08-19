@@ -673,9 +673,8 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertTrue($captured[Request::ATTRIBUTE_UNMATCHED_ROUTE] ?? null);
 
         $kernel->handle(Request::fromArray('GET', '/exists'));
-        // Never set on a matched route: HandlerResolver injects handler
-        // arguments positionally from $request->attributes, so a stray entry
-        // there would shift that binding.
+        // Never set on a matched route: the attribute describes a routing
+        // failure, and a matched request has none to describe.
         self::assertArrayNotHasKey(Request::ATTRIBUTE_UNMATCHED_ROUTE, $captured);
     }
 

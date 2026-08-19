@@ -20,10 +20,17 @@ use Zephyrus\Routing\Exception\RouteParameterException;
 /**
  * Resolves ClassName@method handler strings into Response values.
  *
- * Dispatches to a controller method using reflection-based argument injection:
+ * Dispatches to a controller method using reflection-based argument injection,
+ * in this order, per parameter:
  * - Parameters type-hinted as Request receive the current Request instance.
- * - Parameters whose name matches a route attribute (hydrated by RouteDispatcher)
- *   are injected from $request->attribute($name), cast to the declared scalar type.
+ * - Parameters whose name matches a request attribute are injected from
+ *   $request->attribute($name), cast to the declared scalar type. The route
+ *   parameters are attributes (HttpKernel hydrates them before the pipeline),
+ *   and so is anything a middleware chose to publish.
+ * - Parameters that match nothing by name fall back to POSITION, but only over
+ *   the route parameters of the matched route that no earlier parameter already
+ *   consumed by name. See resolvePositionalPool() for why the pool is that
+ *   narrow.
  * - Parameters with default values fall back silently.
  * - All other unresolvable parameters throw HandlerResolverException.
  *
@@ -73,7 +80,7 @@ final class HandlerResolver
             }
         }
 
-        $response = $this->invoke($controller, $class, $method, $request);
+        $response = $this->invoke($controller, $class, $method, $request, $match);
 
         // after() hook — may decorate the handler's Response.
         if ($controller instanceof ControllerLifecycleInterface) {
@@ -106,10 +113,15 @@ final class HandlerResolver
     }
 
     /**
-     * Invokes $method on $controller, injecting arguments by type/name.
+     * Invokes $method on $controller, injecting arguments by type/name/position.
      */
-    private function invoke(object $controller, string $class, string $method, Request $request): Response
-    {
+    private function invoke(
+        object $controller,
+        string $class,
+        string $method,
+        Request $request,
+        RouteMatch $match,
+    ): Response {
         try {
             $reflection = new ReflectionMethod($controller, $method);
         } catch (ReflectionException $e) {
@@ -118,10 +130,10 @@ final class HandlerResolver
 
         $args = [];
 
-        // Build positional list of route attribute values for fallback
-        // when parameter names don't match placeholder names.
-        $positionalAttributes = array_values($request->attributes);
-        $positionalIndex = 0;
+        // Route parameters of THIS route, in path order, minus the ones an
+        // earlier handler parameter already took by name. Only these are
+        // eligible for the positional fallback.
+        $positionalPool = $this->resolvePositionalPool($match, $request);
 
         foreach ($reflection->getParameters() as $param) {
             $type = $param->getType();
@@ -133,21 +145,21 @@ final class HandlerResolver
                 continue;
             }
 
-            // Named attribute from the route (e.g. path parameter or any
-            // value previously hydrated into request attributes).
+            // Named attribute (a route parameter, or a value a middleware
+            // published onto the request). Binding by name is the contract;
+            // position is only ever a fallback.
             if (array_key_exists($name, $request->attributes)) {
                 $attrValue = $request->attributes[$name];
                 $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
-                $positionalIndex++;
+                unset($positionalPool[$name]);
                 continue;
             }
 
-            // Positional fallback: inject route attributes by position
-            // when the parameter name doesn't match any placeholder name.
-            if ($positionalIndex < count($positionalAttributes)) {
-                $attrValue = $positionalAttributes[$positionalIndex];
+            // Positional fallback: take the next route parameter nobody has
+            // claimed by name yet.
+            if ($positionalPool !== []) {
+                $attrValue = array_shift($positionalPool);
                 $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
-                $positionalIndex++;
                 continue;
             }
 
@@ -161,6 +173,70 @@ final class HandlerResolver
         }
 
         return $reflection->invoke($controller, ...$args);
+    }
+
+    /**
+     * Builds the ordered pool the positional fallback draws from.
+     *
+     * The pool is the matched route's OWN parameters, in path order, and
+     * nothing else. It used to be array_values($request->attributes), which is
+     * a wider set: HttpKernel hydrates the route parameters into the attributes
+     * before the global pipeline runs, so every attribute a middleware adds
+     * afterwards (a session, a resolved locale, a tenant) landed in the same
+     * positional list. A handler declaring one more parameter than its route
+     * has placeholders, the ordinary way to serve /policies/{type} and
+     * /policies/{type}/{productId} from one method, therefore received the
+     * first middleware attribute instead of its declared default. The value was
+     * a plausible string, so it failed deep inside the handler rather than at
+     * the boundary.
+     *
+     * Membership is read off the route PATH rather than off the match, so the
+     * pool is right for both wirings in use: HttpKernel merges the match's
+     * parameters into the attributes before dispatch, while a caller driving
+     * this resolver directly may hydrate the attributes itself. Values still
+     * come from the request attributes when present, so a middleware that
+     * deliberately REWRITES a route parameter keeps winning; only the
+     * membership of the pool is narrowed, not the source of truth.
+     *
+     * @return array<string, mixed>
+     */
+    private function resolvePositionalPool(RouteMatch $match, Request $request): array
+    {
+        $pool = [];
+
+        foreach ($this->routeParameterNames($match->route->path) as $name) {
+            if (array_key_exists($name, $request->attributes)) {
+                $pool[$name] = $request->attributes[$name];
+                continue;
+            }
+
+            if (array_key_exists($name, $match->parameters)) {
+                $pool[$name] = $match->parameters[$name];
+            }
+        }
+
+        return $pool;
+    }
+
+    /**
+     * The placeholder names of a route path, in path order.
+     *
+     * Mirrors how RouteCollection recognises a parameter segment: the WHOLE
+     * segment is a placeholder, never a fragment of one.
+     *
+     * @return array<int, string>
+     */
+    private function routeParameterNames(string $path): array
+    {
+        $names = [];
+
+        foreach (explode('/', trim($path, '/')) as $segment) {
+            if (strlen($segment) > 2 && str_starts_with($segment, '{') && str_ends_with($segment, '}')) {
+                $names[] = substr($segment, 1, -1);
+            }
+        }
+
+        return $names;
     }
 
     private function acceptsRequestType(?ReflectionType $type): bool

@@ -173,9 +173,8 @@ final readonly class HttpKernel
         } catch (Throwable $routingFailure) {
             // Flag the request as unmatched so a global middleware that
             // VALIDATES a request can decline to answer for a resource that
-            // does not exist. Set only here: on a matched route an extra
-            // attribute would shift HandlerResolver's positional argument
-            // injection. See Request::ATTRIBUTE_UNMATCHED_ROUTE.
+            // does not exist. Set only here, because only a routing failure has
+            // anything to flag. See Request::ATTRIBUTE_UNMATCHED_ROUTE.
             $unmatched = $request->withAttribute(Request::ATTRIBUTE_UNMATCHED_ROUTE, true);
 
             return $this->pipe(

@@ -191,6 +191,56 @@ final class BothLifecycleController extends Controller
 }
 
 /**
+ * Serves BOTH /policies/{type} and /policies/{type}/{productId} from one
+ * method, which is the shape that broke: on the shorter route $productId must
+ * be its declared default, never whatever a middleware last put on the request.
+ */
+final class OptionalTailController
+{
+    public function policies(string $type, ?string $productId = null): Response
+    {
+        return Response::json(['type' => $type, 'productId' => $productId]);
+    }
+
+    /** Same shape, but the tail parameter is REQUIRED, so the short route must fail loudly. */
+    public function policiesRequiredTail(string $type, string $productId): Response
+    {
+        return Response::json(['type' => $type, 'productId' => $productId]);
+    }
+
+    /** The parameter is named differently from the placeholder: position must still bind it. */
+    public function renamed(string $policyType): Response
+    {
+        return Response::text($policyType);
+    }
+
+    /** $second binds by name; $extra must get the placeholder nobody claimed, not $second again. */
+    public function reversedWithExtra(string $second, string $extra): Response
+    {
+        return Response::json(['second' => $second, 'extra' => $extra]);
+    }
+
+    /** A middleware attribute is still injectable BY NAME, which is the supported contract. */
+    public function withMiddlewareAttribute(string $type, string $locale): Response
+    {
+        return Response::json(['type' => $type, 'locale' => $locale]);
+    }
+}
+
+/**
+ * Stands in for an application middleware that publishes a value onto the
+ * request (a resolved locale, a session, a tenant). Registered globally, so it
+ * runs on every route, matched or not.
+ */
+final class LocaleAttributeMiddleware implements \Zephyrus\Http\MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        return $next($request->withAttribute('locale', 'fr'));
+    }
+}
+
+/**
  * A Controller subclass that uses the base-class response helpers.
  */
 final class ExtendedHandlerController extends Controller
@@ -756,6 +806,169 @@ final class HandlerResolverTest extends TestCase
         );
 
         self::assertStringContainsString('"active":true', $response->body);
+    }
+
+    // -- Positional fallback is scoped to the ROUTE parameters -----------------
+
+    /**
+     * The regression. One handler serving /policies/{type} and
+     * /policies/{type}/{productId} used to receive the first attribute a global
+     * middleware had published (here a locale) as $productId, because the
+     * positional fallback ran over ALL request attributes and ran BEFORE the
+     * declared default. The value was a plausible string, so the failure
+     * surfaced far from its cause.
+     */
+    public function testOptionalTailParameterKeepsItsDefaultOnTheShorterRoute(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/policies/{type}',
+            OptionalTailController::class . '@policies',
+            ['type' => 'privacy'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/policies/privacy')
+                ->withAttribute('type', 'privacy')
+                ->withAttribute('locale', 'fr'),
+        );
+
+        self::assertStringContainsString('"type":"privacy"', $response->body);
+        self::assertStringContainsString('"productId":null', $response->body);
+    }
+
+    public function testOptionalTailParameterBindsOnTheLongerRoute(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/policies/{type}/{productId}',
+            OptionalTailController::class . '@policies',
+            ['type' => 'privacy', 'productId' => 'sku-9'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/policies/privacy/sku-9')
+                ->withAttribute('type', 'privacy')
+                ->withAttribute('productId', 'sku-9')
+                ->withAttribute('locale', 'fr'),
+        );
+
+        self::assertStringContainsString('"productId":"sku-9"', $response->body);
+    }
+
+    /**
+     * With no default to fall back on there is nothing to bind, and the
+     * resolver must say so rather than hand the handler a middleware value.
+     */
+    public function testMiddlewareAttributeNeverFillsAPositionalSlot(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/policies/{type}',
+            OptionalTailController::class . '@policiesRequiredTail',
+            ['type' => 'privacy'],
+        );
+
+        $this->expectException(HandlerResolverException::class);
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/policies/privacy')
+                ->withAttribute('type', 'privacy')
+                ->withAttribute('locale', 'fr'),
+        );
+    }
+
+    /** Positional binding itself is kept: it just draws from the route only. */
+    public function testPositionalFallbackStillBindsARenamedRouteParameter(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/policies/{type}',
+            OptionalTailController::class . '@renamed',
+            ['type' => 'privacy'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/policies/privacy')
+                ->withAttribute('type', 'privacy')
+                ->withAttribute('locale', 'fr'),
+        );
+
+        self::assertSame('privacy', $response->body);
+    }
+
+    /**
+     * A placeholder already bound by name is spent. It must not be offered a
+     * second time to the next unmatched parameter.
+     */
+    public function testRouteParameterTakenByNameIsNotOfferedAgainPositionally(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/pairs/{first}/{second}',
+            OptionalTailController::class . '@reversedWithExtra',
+            ['first' => 'a', 'second' => 'b'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/pairs/a/b')
+                ->withAttribute('first', 'a')
+                ->withAttribute('second', 'b'),
+        );
+
+        self::assertStringContainsString('"second":"b"', $response->body);
+        self::assertStringContainsString('"extra":"a"', $response->body);
+    }
+
+    /** Binding a middleware attribute BY NAME stays supported. */
+    public function testMiddlewareAttributeStillBindsByName(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/policies/{type}',
+            OptionalTailController::class . '@withMiddlewareAttribute',
+            ['type' => 'privacy'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/policies/privacy')
+                ->withAttribute('type', 'privacy')
+                ->withAttribute('locale', 'fr'),
+        );
+
+        self::assertStringContainsString('"locale":"fr"', $response->body);
+    }
+
+    /**
+     * End to end through the kernel, which is where the wiring that caused the
+     * bug lives: HttpKernel merges the route parameters into the attributes
+     * BEFORE the global pipeline, so a global middleware's attribute always
+     * lands right behind them.
+     */
+    public function testKernelServesBothRoutesFromOneHandlerBehindAGlobalMiddleware(): void
+    {
+        $router = (new \Zephyrus\Routing\Router())
+            ->get('/policies/{type}', OptionalTailController::class . '@policies')
+            ->get('/policies/{type}/{productId}', OptionalTailController::class . '@policies');
+
+        $kernel = \Zephyrus\Core\KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new LocaleAttributeMiddleware())
+            ->build();
+
+        $short = $kernel->handle(Request::fromArray('GET', '/policies/privacy'));
+        self::assertSame(200, $short->status);
+        self::assertStringContainsString('"productId":null', $short->body);
+
+        $long = $kernel->handle(Request::fromArray('GET', '/policies/privacy/sku-9'));
+        self::assertSame(200, $long->status);
+        self::assertStringContainsString('"productId":"sku-9"', $long->body);
     }
 
     // -------------------------------------------------------------------------
