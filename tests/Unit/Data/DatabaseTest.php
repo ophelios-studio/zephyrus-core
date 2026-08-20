@@ -171,6 +171,147 @@ final class DatabaseTest extends TestCase
         self::assertCount(0, $noneEqualNull);
     }
 
+    // ── fromConfig(): opt-in TLS DSN parameters ──────────────────────────────
+
+    public function testFromConfigOmitsSslParametersByDefault(): void
+    {
+        // The regression that matters: with neither key configured the DSN must
+        // be byte-for-byte the string every existing application already
+        // connects with, so libpq keeps its own 'prefer' default and nothing
+        // about an untouched deployment changes. The literal is spelled out
+        // rather than composed, so any accidental addition fails here.
+        $config = DatabaseConfig::fromArray([
+            'host' => 'db.internal',
+            'port' => 5433,
+            'database' => 'zephyrus',
+            'username' => 'app',
+        ]);
+
+        self::assertNull($config->sslMode);
+        self::assertNull($config->sslRootCert);
+        self::assertSame(
+            'pgsql:host=db.internal;port=5433;dbname=zephyrus',
+            $this->captureDsn($config),
+        );
+    }
+
+    public function testFromConfigOmitsSslParametersForBlankConfiguredValues(): void
+    {
+        // An environment variable that exists but is empty (a cleared Fly
+        // secret, an unset !env with no default) must land on the untouched DSN
+        // too, never on a malformed 'sslmode=' with nothing after it.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+            'sslmode' => '   ',
+            'sslrootcert' => '',
+        ]);
+
+        self::assertSame(
+            'pgsql:host=localhost;port=5432;dbname=zephyrus',
+            $this->captureDsn($config),
+        );
+    }
+
+    public function testFromConfigAppendsEverySupportedSslMode(): void
+    {
+        foreach (DatabaseConfig::SSL_MODES as $mode) {
+            $config = DatabaseConfig::fromArray([
+                'database' => 'zephyrus',
+                'username' => 'app',
+                'sslmode' => $mode,
+            ]);
+
+            self::assertSame(
+                'pgsql:host=localhost;port=5432;dbname=zephyrus;sslmode=' . $mode,
+                $this->captureDsn($config),
+                sprintf('sslmode=%s must reach the DSN verbatim', $mode),
+            );
+        }
+    }
+
+    public function testFromConfigAppendsSslRootCertOnlyWhenSet(): void
+    {
+        $without = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+            'sslmode' => 'verify-full',
+        ]);
+
+        self::assertSame(
+            'pgsql:host=localhost;port=5432;dbname=zephyrus;sslmode=verify-full',
+            $this->captureDsn($without),
+        );
+
+        $with = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+            'sslmode' => 'verify-full',
+            'sslrootcert' => '/etc/ssl/certs/pg-root.crt',
+        ]);
+
+        self::assertSame(
+            'pgsql:host=localhost;port=5432;dbname=zephyrus'
+                . ';sslmode=verify-full;sslrootcert=/etc/ssl/certs/pg-root.crt',
+            $this->captureDsn($with),
+        );
+    }
+
+    public function testFromConfigAppendsSslRootCertIndependentlyOfTheMode(): void
+    {
+        // A configured trust anchor is never silently dropped: libpq simply
+        // ignores it under a non-verifying mode, which is a better outcome than
+        // the framework deciding the operator did not mean it.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
+            'sslrootcert' => 'system',
+        ]);
+
+        self::assertSame(
+            'pgsql:host=localhost;port=5432;dbname=zephyrus;sslrootcert=system',
+            $this->captureDsn($config),
+        );
+    }
+
+    public function testSslDsnParametersCarryNoCredentials(): void
+    {
+        // The DSN is the shared column shape cache key and is echoed in
+        // connection-failure messages, so it must stay free of the password.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'zephyrus_app_role',
+            'password' => 'sup3r-s3cret',
+            'sslmode' => 'require',
+            'sslrootcert' => '/etc/ssl/certs/pg-root.crt',
+        ]);
+
+        $dsn = $this->captureDsn($config);
+
+        self::assertStringNotContainsString('sup3r-s3cret', $dsn);
+        self::assertStringNotContainsString('zephyrus_app_role', $dsn);
+    }
+
+    /**
+     * Open a connection through the injected factory purely to read back the
+     * DSN it was handed, with no real database involved.
+     */
+    private function captureDsn(DatabaseConfig $config): string
+    {
+        $captured = '';
+
+        Database::fromConfig(
+            $config,
+            function (string $dsn) use (&$captured): PDO {
+                $captured = $dsn;
+
+                return new PDO('sqlite::memory:');
+            },
+        );
+
+        return $captured;
+    }
+
     public function testFromConfigWrapsFactoryFailureAsDatabaseException(): void
     {
         $config = DatabaseConfig::fromArray([
