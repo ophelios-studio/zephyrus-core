@@ -261,6 +261,42 @@ final class Database
             $config->database,
         );
 
+        // Opt-in only: libpq negotiates TLS on its own and defaults to
+        // 'prefer', so it already encrypts whenever the server offers TLS.
+        // Pinning a mode is a policy decision about what to do when it does
+        // NOT: 'require' and stricter refuse the connection outright, which is
+        // the point, and also why this can never be a default. Absent, the key
+        // is not added at all, so the DSN is byte-for-byte what it has always
+        // been and libpq keeps its own default. Unlike emulatePrepares below
+        // this is a DSN parameter, not a PDO driver option, so it belongs in
+        // the connection string. DatabaseConfig validates the value against
+        // the libpq set at construction, so only a canonical mode can reach
+        // this string.
+        //
+        // CACHE NOTE: this DSN is part of the process-wide column shape cache
+        // key (see $connectionDsn and $sharedColumnMetadata). Turning the mode
+        // on, off, or from one value to another therefore changes every key
+        // and orphans the previous APCu entries. That is harmless and
+        // self-correcting: the next query of each shape re-resolves it and
+        // re-populates, and the orphans expire on APCU_TTL. It is not a bug.
+        if ($config->sslMode !== null) {
+            $dsn .= ';sslmode=' . $config->sslMode;
+        }
+
+        // Appended whenever it is set, independently of the mode: silently
+        // dropping a trust anchor an operator configured would be worse than
+        // handing libpq a parameter it ignores under a non-verifying mode.
+        //
+        // The converse (a verify mode with no root cert) is deliberately NOT
+        // rejected here. libpq has its own answer for it: it falls back to
+        // ~/.postgresql/root.crt, accepts the literal 'system' for the OS
+        // trust store on PostgreSQL 16+, and fails the connection with a
+        // precise message when no anchor is found. Refusing it here would
+        // reject a configuration libpq accepts.
+        if ($config->sslRootCert !== null) {
+            $dsn .= ';sslrootcert=' . $config->sslRootCert;
+        }
+
         $options = [
             PDO::ATTR_PERSISTENT => false,
         ];
@@ -288,7 +324,9 @@ final class Database
 
         // Record the connection identity so resolved column shapes can be
         // shared across instances opened against the SAME database, and only
-        // those. The DSN carries no credentials (PDO takes those separately).
+        // those. The DSN carries no credentials (PDO takes those separately);
+        // the TLS parameters above are transport policy and a public file
+        // path, so that stays true.
         $db->connectionDsn = $dsn;
 
         // Set client encoding for the connection.

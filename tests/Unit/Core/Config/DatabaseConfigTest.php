@@ -215,4 +215,166 @@ final class DatabaseConfigTest extends TestCase
 
         self::assertFalse($config->emulatePrepares);
     }
+
+    // -------------------------------------------------------------------------
+    // sslMode / sslRootCert (opt-in libpq TLS policy)
+    // -------------------------------------------------------------------------
+
+    public function testSslModeDefaultsToNull(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+        ]);
+
+        self::assertNull($config->sslMode);
+        self::assertNull($config->sslRootCert);
+    }
+
+    public function testEverySupportedSslModeIsAccepted(): void
+    {
+        foreach (DatabaseConfig::SSL_MODES as $mode) {
+            $config = DatabaseConfig::fromArray([
+                'database' => 'db',
+                'username' => 'u',
+                'sslmode'  => $mode,
+            ]);
+
+            self::assertSame($mode, $config->sslMode);
+        }
+    }
+
+    public function testSslModeCamelCaseKeyIsAccepted(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'sslMode'  => 'require',
+        ]);
+
+        self::assertSame('require', $config->sslMode);
+    }
+
+    public function testSslModeIsTrimmedAndCaseFolded(): void
+    {
+        // Environment variables arrive with stray whitespace and shouted
+        // spellings; libpq matches the value exactly, so normalise rather than
+        // hand it a string it would reject at connect time.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'sslmode'  => '  Verify-Full ',
+        ]);
+
+        self::assertSame('verify-full', $config->sslMode);
+    }
+
+    public function testBlankSslModeCollapsesToNull(): void
+    {
+        // A set-but-empty environment variable means "not configured", exactly
+        // like an absent one, and must leave the DSN untouched.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'sslmode'  => '   ',
+        ]);
+
+        self::assertNull($config->sslMode);
+    }
+
+    public function testThrowsForUnknownSslMode(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sslmode');
+
+        DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'sslmode'  => 'required',
+        ]);
+    }
+
+    public function testUnknownSslModeErrorListsTheSupportedValues(): void
+    {
+        try {
+            DatabaseConfig::fromArray([
+                'database' => 'db',
+                'username' => 'u',
+                'sslmode'  => 'on',
+            ]);
+            self::fail('An unrecognised sslmode must not be accepted.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString('verify-full', $e->getMessage());
+            self::assertStringContainsString('disable', $e->getMessage());
+        }
+    }
+
+    public function testThrowsForSslModeSmuggledThroughTheConstructor(): void
+    {
+        // The value is interpolated into the DSN verbatim, so the guarantee has
+        // to hold for a direct caller too, not only for fromArray().
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sslmode');
+
+        new DatabaseConfig(
+            driver: 'pgsql',
+            host: 'localhost',
+            port: 5432,
+            database: 'db',
+            username: 'u',
+            password: '',
+            charset: 'utf8',
+            sslMode: 'require;dbname=other',
+        );
+    }
+
+    public function testSslRootCertIsKeptVerbatimAndCaseSensitive(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'    => 'db',
+            'username'    => 'u',
+            'sslmode'     => 'verify-ca',
+            'sslrootcert' => ' /etc/ssl/certs/PG-Root.crt ',
+        ]);
+
+        self::assertSame('/etc/ssl/certs/PG-Root.crt', $config->sslRootCert);
+    }
+
+    public function testSslRootCertCamelCaseKeyIsAccepted(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'    => 'db',
+            'username'    => 'u',
+            'sslRootCert' => '/etc/ssl/certs/pg-root.crt',
+        ]);
+
+        self::assertSame('/etc/ssl/certs/pg-root.crt', $config->sslRootCert);
+    }
+
+    public function testVerifyModeWithoutRootCertIsAccepted(): void
+    {
+        // Deliberate: libpq falls back to ~/.postgresql/root.crt and reports a
+        // precise error when no anchor exists, so rejecting this here would
+        // refuse a configuration PostgreSQL itself accepts.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'sslmode'  => 'verify-full',
+        ]);
+
+        self::assertSame('verify-full', $config->sslMode);
+        self::assertNull($config->sslRootCert);
+    }
+
+    public function testThrowsForSslRootCertThatWouldBreakTheDsn(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sslrootcert');
+
+        DatabaseConfig::fromArray([
+            'database'    => 'db',
+            'username'    => 'u',
+            'sslrootcert' => '/etc/root.crt;sslmode=disable',
+        ]);
+    }
 }
