@@ -10,6 +10,8 @@ declare(strict_types=1);
  */
 
 use Zephyrus\Core\App;
+use Zephyrus\Inertia\InertiaView;
+use Zephyrus\Rendering\Vite;
 
 if (!function_exists('env')) {
     /**
@@ -214,6 +216,22 @@ if (!function_exists('embed')) {
     }
 }
 
+if (!function_exists('vite')) {
+    /**
+     * Render Vite asset tags for one or more entrypoints.
+     *
+     * In development this points at the Vite dev server. In production it
+     * reads the Vite manifest and renders hashed assets from the build folder.
+     *
+     * @param string|string[]      $entry
+     * @param array<string, mixed> $options
+     */
+    function vite(string|array $entry = Vite::DEFAULT_ENTRY, array $options = []): string
+    {
+        return Vite::render($entry, $options);
+    }
+}
+
 if (!function_exists('nonce')) {
     /**
      * Get the CSP nonce for the current request.
@@ -224,5 +242,30 @@ if (!function_exists('nonce')) {
     function nonce(): string
     {
         return App::nonce();
+    }
+}
+
+if (!function_exists('inertia_app')) {
+    /**
+     * Render the Inertia root element.
+     *
+     * @param string                    $id The id of the base div where the app will be generated
+     * @param array<string, mixed>|null $page
+     */
+    function inertia_app(string $id = 'app', ?array $page = null): string
+    {
+        return InertiaView::app($page, $id);
+    }
+}
+
+if (!function_exists('inertia_head')) {
+    /**
+     * Render Inertia-managed head content.
+     *
+     * @param array<string, mixed>|null $page
+     */
+    function inertia_head(?array $page = null): string
+    {
+        return InertiaView::head($page);
     }
 }

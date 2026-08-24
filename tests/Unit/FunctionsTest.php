@@ -11,6 +11,7 @@ use Zephyrus\Formatting\Formatter;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
+use Zephyrus\Rendering\ViteException;
 use Zephyrus\Session\SessionManager;
 
 final class FunctionsTest extends TestCase
@@ -331,6 +332,109 @@ final class FunctionsTest extends TestCase
         }
     }
 
+    // ─── vite() ───────────────────────────────────────────────────────
+
+    public function testViteDevelopmentReturnsDevServerScripts(): void
+    {
+        App::setConfiguration(Configuration::fromArray([
+            'application' => ['environment' => 'development'],
+        ]));
+
+        self::assertSame(
+            implode("\n", [
+                '<script type="module" src="http://localhost:5173/@vite/client"></script>',
+                '<script type="module" src="http://localhost:5173/resources/js/app.js"></script>',
+            ]),
+            vite('resources/js/app.js', ['dev_server' => 'http://localhost:5173']),
+        );
+    }
+
+    public function testViteProductionReadsManifest(): void
+    {
+        App::setConfiguration(Configuration::fromArray([
+            'application' => ['environment' => 'production'],
+        ]));
+
+        $tempDir = sys_get_temp_dir() . '/zephyrus_vite_test_' . uniqid();
+        mkdir($tempDir . '/build', 0755, true);
+
+        file_put_contents($tempDir . '/build/manifest.json', json_encode([
+            '_vendor.js' => [
+                'file' => 'assets/vendor-123.js',
+                'css' => ['assets/vendor-123.css'],
+            ],
+            'resources/js/app.js' => [
+                'file' => 'assets/app-abc123.js',
+                'src' => 'resources/js/app.js',
+                'imports' => ['_vendor.js'],
+                'css' => ['assets/app-def456.css'],
+            ],
+        ], \JSON_THROW_ON_ERROR));
+
+        try {
+            self::assertSame(
+                implode("\n", [
+                    '<link rel="stylesheet" href="/build/assets/vendor-123.css">',
+                    '<link rel="stylesheet" href="/build/assets/app-def456.css">',
+                    '<script type="module" src="/build/assets/app-abc123.js"></script>',
+                ]),
+                vite('resources/js/app.js', ['public_directory' => $tempDir]),
+            );
+        } finally {
+            $this->cleanDir($tempDir);
+        }
+    }
+
+    public function testViteProductionThrowsWhenEntryIsMissingFromManifest(): void
+    {
+        App::setConfiguration(Configuration::fromArray([
+            'application' => ['environment' => 'production'],
+        ]));
+
+        $tempDir = sys_get_temp_dir() . '/zephyrus_vite_missing_test_' . uniqid();
+        mkdir($tempDir . '/build', 0755, true);
+        file_put_contents($tempDir . '/build/manifest.json', json_encode([], \JSON_THROW_ON_ERROR));
+
+        try {
+            $this->expectException(ViteException::class);
+            vite('resources/js/app.js', ['public_directory' => $tempDir]);
+        } finally {
+            $this->cleanDir($tempDir);
+        }
+    }
+
+    // ─── inertia_app() / inertia_head() ───────────────────────────────
+
+    public function testInertiaAppRendersRootElementWithoutPage(): void
+    {
+        self::assertSame('<div id="app"></div>', inertia_app());
+        self::assertSame('<div id="root"></div>', inertia_app('root'));
+    }
+
+    public function testInertiaAppRendersPagePayload(): void
+    {
+        $html = inertia_app('root', [
+            'component' => 'Dashboard',
+            'props' => ['title' => 'Dashboard'],
+            'url' => '/dashboard',
+            'version' => 'build-1',
+        ]);
+
+        self::assertStringStartsWith('<div id="root" data-page="', $html);
+        self::assertStringContainsString('&quot;component&quot;:&quot;Dashboard&quot;', $html);
+        self::assertStringContainsString('&quot;title&quot;:&quot;Dashboard&quot;', $html);
+    }
+
+    public function testInertiaHeadRendersTitleWhenAvailable(): void
+    {
+        self::assertSame('', inertia_head());
+        self::assertSame('', inertia_head(['props' => []]));
+        self::assertSame(
+            '<title>Dashboard &amp; Reports</title>',
+            inertia_head(['props' => ['title' => 'Dashboard & Reports']]),
+        );
+    }
+
     // ─── embed() ──────────────────────────────────────────────────────
 
     public function testEmbedReturnsEmptyStringWhenNoAssetManagerSet(): void
@@ -367,5 +471,23 @@ final class FunctionsTest extends TestCase
         $first = nonce();
         $second = nonce();
         self::assertSame($first, $second);
+    }
+
+    private function cleanDir(string $dir): void
+    {
+        if (!is_dir($dir)) {
+            return;
+        }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($iterator as $item) {
+            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
+        }
+
+        @rmdir($dir);
     }
 }

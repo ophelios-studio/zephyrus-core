@@ -129,7 +129,33 @@ final readonly class HttpKernel
         $this->globalPipeline = $globalPipeline ?? new MiddlewarePipeline();
     }
 
+    /**
+     * Handle one HTTP request while exposing it as the active framework request.
+     *
+     * Most of the kernel still receives the Request explicitly, but convenience
+     * APIs such as Inertia::render() need to build a response from controller
+     * code without forcing every call site to pass the current Request again.
+     * Storing the request for the duration of dispatch gives those APIs access
+     * to request headers, URL, method, and version information required by the
+     * Inertia protocol.
+     *
+     * The previous request is restored in a finally block so the registry does
+     * not leak state after exceptions, tests, nested dispatches, or long-running
+     * PHP workers.
+     */
     public function handle(Request $request): Response
+    {
+        $previousRequest = App::getRequest();
+        App::setRequest($request);
+
+        try {
+            return $this->handleCurrentRequest($request);
+        } finally {
+            App::setRequest($previousRequest);
+        }
+    }
+
+    private function handleCurrentRequest(Request $request): Response
     {
         // 1. Pre-dispatch: listeners may short-circuit routing entirely.
         if ($this->events !== null) {

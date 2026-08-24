@@ -8,6 +8,8 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Formatting\Formatter;
+use Zephyrus\Http\Request;
+use Zephyrus\Inertia\InertiaRenderer;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
@@ -96,6 +98,38 @@ final class AppTest extends TestCase
         self::assertSame($translator, App::getTranslator());
     }
 
+    // ─── Current Request ──────────────────────────────────────────────
+
+    public function testRequestDefaultsToNull(): void
+    {
+        self::assertNull(App::getRequest());
+    }
+
+    public function testSetAndGetRequest(): void
+    {
+        $request = Request::fromArray('GET', '/dashboard');
+
+        App::setRequest($request);
+
+        self::assertSame($request, App::getRequest());
+    }
+
+    // ─── Inertia ──────────────────────────────────────────────────────
+
+    public function testInertiaDefaultsToNull(): void
+    {
+        self::assertNull(App::getInertia());
+    }
+
+    public function testSetAndGetInertia(): void
+    {
+        $inertia = new InertiaRenderer(__DIR__ . '/../Inertia/fixtures/app.php');
+
+        App::setInertia($inertia);
+
+        self::assertSame($inertia, App::getInertia());
+    }
+
     // ─── Nonce ────────────────────────────────────────────────────────
 
     public function testNonceGeneratesBase64String(): void
@@ -132,6 +166,8 @@ final class AppTest extends TestCase
         App::setSession(new SessionManager([]));
         App::setFormatter(new Formatter('en_US'));
         App::setAsset(new Asset(sys_get_temp_dir()));
+        App::setRequest(Request::fromArray('GET', '/'));
+        App::setInertia(new InertiaRenderer(__DIR__ . '/../Inertia/fixtures/app.php'));
 
         $loader = new class implements LocaleLoaderInterface {
             public function load(string $locale): array
@@ -149,6 +185,8 @@ final class AppTest extends TestCase
         self::assertNull(App::getFormatter());
         self::assertNull(App::getAsset());
         self::assertNull(App::getTranslator());
+        self::assertNull(App::getRequest());
+        self::assertNull(App::getInertia());
 
         // Nonce should be regenerated after reset.
         $newNonce = App::nonce();

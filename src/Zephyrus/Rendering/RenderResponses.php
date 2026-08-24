@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Rendering;
 
 use Zephyrus\Http\Response;
+use Zephyrus\Inertia\Inertia;
 
 /**
  * Convenience methods for rendering templates in controllers.
@@ -58,6 +59,19 @@ trait RenderResponses
     }
 
     /**
+     * Returns an Inertia response for the given frontend component.
+     *
+     * This is a controller shortcut for `Inertia::render()`. Inertia must be
+     * configured once during bootstrap with ApplicationBuilder::withInertia().
+     *
+     * @param array<string, mixed> $props Component props.
+     */
+    protected function inertia(string $component, array $props = []): Response
+    {
+        return Inertia::render($component, $props);
+    }
+
+    /**
      * Render a template using a specific engine (ignoring the default one).
      *
      * Useful for one-off rendering with a different engine (e.g. rendering a
@@ -94,7 +108,7 @@ trait RenderResponses
         if ($this->renderEngine === null) {
             throw RenderException::engineError(
                 'No render engine has been configured. Call setRenderEngine() '
-                . 'or ensure the application builder has configured rendering.',
+                    . 'or ensure the application builder has configured rendering.',
             );
         }
 

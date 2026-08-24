@@ -4,7 +4,7 @@
   "type": "library",
   "license": "MIT",
   "require": {
-    "php": "^8.4",
+    "php": "^8.5",
     "ext-mbstring": "*",
     "ext-pdo": "*",
     "ext-intl": "*",
@@ -13,7 +13,8 @@
     "vlucas/phpdotenv": "^5.6",
     "latte/latte": "^3.0",
     "tracy/tracy": "^2.10",
-    "phpmailer/phpmailer": "^6.9"
+    "phpmailer/phpmailer": "^6.9",
+    "maskulabs/inertia-psr": "^3.0"
   },
   "suggest": {
     "ext-apcu": "For locale catalog caching via CachedLocaleLoader"
