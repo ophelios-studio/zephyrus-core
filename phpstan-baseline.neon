@@ -216,30 +216,32 @@ parameters:
         #    can go green today, and they are listed here so nobody mistakes
         #    that green for "no known defects".
         # ------------------------------------------------------------------
-        # Entity::build() excludes ReflectionUnionType and then calls
-        # isBuiltin()/getName() on whatever is left. An intersection-typed
-        # property reaches this branch as a ReflectionIntersectionType, which
-        # has neither method: Error, "Call to undefined method". The declared
-        # intent ("union types: skipped, not resolvable") applies verbatim to
-        # intersection types.
-        -
-            identifier: method.notFound
-            path: src/Zephyrus/Data/Entity.php
-            count: 3
-        # Same defect in the router: castToType() handles the union case then
-        # hands anything else to castToNamedType(ReflectionNamedType). An
-        # intersection-typed controller parameter is a TypeError on a request,
-        # in code that also enforces route-parameter constraints.
-        -
-            identifier: argument.type
-            path: src/Zephyrus/Routing/HandlerResolver.php
-            count: 1
         # Configuration::fromArray() calls $className::fromArray() through a
         # class-string<ConfigSection>, but ConfigSection never declares that
         # static method. A consumer registering a section class that omits
         # fromArray() gets a fatal at boot instead of a type error at build
-        # time. The docblock already says the method "must" exist; the class
-        # should say so too.
+        # time. The docblock already says the method "must" exist.
+        #
+        # The obvious fix, declaring it abstract on ConfigSection, was tried
+        # and REJECTED: ConfigSection is instantiated directly today, as an
+        # anonymous subclass that wants only the typed getters and is never
+        # registered as a section factory. tests/Unit/Core/Config/ alone holds
+        # 17 such sites, and "Class ConfigSection@anonymous must implement 1
+        # abstract method" is a fatal at the class declaration, not at boot.
+        # That is a hard break for every consumer doing the same thing.
+        #
+        # A CONCRETE default on ConfigSection is the BC-safe shape, and it is
+        # the body every existing subclass already writes:
+        #
+        #     public static function fromArray(array $values): static
+        #     {
+        #         return new static($values);
+        #     }
+        #
+        # It costs one baseline swap: staticMethod.notFound here goes away and
+        # new.static appears on ConfigSection, for the same stated reason as
+        # the Entity entry in group 5 (the contract is that a subclass keeps
+        # the base constructor signature).
         -
             identifier: staticMethod.notFound
             path: src/Zephyrus/Core/Config/Configuration.php
