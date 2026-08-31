@@ -26,6 +26,18 @@ final class MailerException extends ZephyrusRuntimeException
         return new self(sprintf('Attachment not found: %s', $path));
     }
 
+    /**
+     * The attachment path or display name broke a rule attach() enforces.
+     *
+     * Separate from attachmentNotFound() on purpose: "this file is not there"
+     * and "this path is not allowed to be attached" are different answers, and
+     * a caller logging them should be able to tell them apart.
+     */
+    public static function attachmentRejected(string $value, string $reason): self
+    {
+        return new self(sprintf('Attachment rejected: %s %s.', $value, $reason));
+    }
+
     public static function configurationMissing(string $detail): self
     {
         return new self(sprintf('Mailer configuration missing: %s', $detail));

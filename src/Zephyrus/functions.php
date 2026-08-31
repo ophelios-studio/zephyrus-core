@@ -13,14 +13,54 @@ use Zephyrus\Core\App;
 
 if (!function_exists('env')) {
     /**
-     * Read an environment variable from $_ENV or $_SERVER.
+     * Read an environment variable.
+     *
+     * Sources are consulted in this order, and the order is the whole point:
+     *
+     *   1. $_ENV        the process environment as PHP imported it.
+     *   2. getenv()     the REAL process environment. Under php-fpm the default
+     *                   variables_order is "GPCS", with no E, so $_ENV is EMPTY
+     *                   and every value set by the platform lives only here.
+     *   3. $_SERVER     but ONLY for a name that does not start with HTTP_.
+     *
+     * ## Why the two rules exist
+     *
+     * Without (2) this helper failed OPEN and silently. `env('WEBHOOK_SECRET')`
+     * came back NULL on a php-fpm tier where getenv() had the real value, so a
+     * verification that read its secret through here verified nothing; and
+     * `env('REQUIRE_MFA', false)` resolved to the DEFAULT on production while
+     * resolving correctly on a developer's CLI, which is the worst possible
+     * split.
+     *
+     * Without (3)'s HTTP_ exclusion it fails OPEN in the other direction. PHP
+     * writes every request header into $_SERVER as HTTP_<NAME>, so a caller
+     * sending `Proxy: http://attacker/` makes $_SERVER['HTTP_PROXY'] exist and
+     * `env('HTTP_PROXY')` return the attacker's value. That is httpoxy,
+     * CVE-2016-5385. The rest of $_SERVER is KEPT, because configuring an
+     * application through fastcgi_param or SetEnv is a documented deployment
+     * pattern and dropping it would swap live values for defaults.
+     *
+     * This is the same resolution order as ConfigurationFile::resolveEnvTag();
+     * the two are meant to agree, and they used not to.
      *
      * @param string $key     The environment variable name.
      * @param mixed  $default Default value when the variable is not set.
      */
     function env(string $key, mixed $default = null): mixed
     {
-        $value = $_ENV[$key] ?? $_SERVER[$key] ?? null;
+        $value = null;
+
+        if (array_key_exists($key, $_ENV)) {
+            $value = $_ENV[$key];
+        } else {
+            $fromProcessEnvironment = getenv($key);
+            if ($fromProcessEnvironment !== false) {
+                $value = $fromProcessEnvironment;
+            } elseif (!str_starts_with($key, 'HTTP_') && array_key_exists($key, $_SERVER)) {
+                $value = $_SERVER[$key];
+            }
+        }
+
         if ($value === null) {
             return $default;
         }
@@ -154,20 +194,55 @@ if (!function_exists('i18n')) {
     }
 }
 
+if (!defined('ZEPHYRUS_FORMAT_METHODS')) {
+    /**
+     * The Formatter methods format() is allowed to reach.
+     *
+     * $formatter->$type(...) was an unrestricted dynamic method call on a
+     * process-wide singleton, so $type decided which method ran. Anything
+     * public was reachable, including the constructor:
+     * `format('__construct', 'de_DE')` re-initialised the shared Formatter for
+     * the rest of the request, changing every subsequent locale, currency and
+     * date pattern in the application. Accessors were reachable too, which made
+     * the helper a readback channel for whatever the singleton holds.
+     *
+     * Custom formatters are NOT affected: they are resolved before this list,
+     * through Formatter::hasCustomFormatter(), so a name registered with
+     * Formatter::register() still works exactly as before.
+     */
+    define('ZEPHYRUS_FORMAT_METHODS', [
+        'money',
+        'decimal',
+        'percent',
+        'ordinal',
+        'spellOut',
+        'date',
+        'time',
+        'datetime',
+        'timeago',
+        'duration',
+        'filesize',
+        'list',
+        'truncate',
+    ]);
+}
+
 if (!function_exists('format')) {
     /**
      * Format a value using the Formatter service.
      *
-     * The first argument is the format type (method name on Formatter), followed
-     * by the arguments to pass to that method.
+     * The first argument is the format type (a custom formatter name, or one of
+     * ZEPHYRUS_FORMAT_METHODS), followed by the arguments to pass to it.
      *
      * Examples:
      *   format('money', 19.99)           => "$19.99"
      *   format('date', new DateTime())   => "Mar 9, 2026"
      *   format('filesize', 1048576)      => "1.0 MB"
      *
-     * @param string $type The formatter method name.
+     * @param string $type    The formatter name.
      * @param mixed  ...$args Arguments to pass to the formatter method.
+     * @throws InvalidArgumentException when $type is neither a registered custom
+     *         formatter nor one of the built-in formatting methods.
      */
     function format(string $type, mixed ...$args): string
     {
@@ -177,6 +252,13 @@ if (!function_exists('format')) {
         }
         if ($formatter->hasCustomFormatter($type)) {
             return $formatter->format($type, ...$args);
+        }
+        if (!in_array($type, ZEPHYRUS_FORMAT_METHODS, true)) {
+            throw new InvalidArgumentException(sprintf(
+                'Unknown format type "%s". Use one of: %s, or register a custom formatter.',
+                $type,
+                implode(', ', ZEPHYRUS_FORMAT_METHODS),
+            ));
         }
         return $formatter->$type(...$args);
     }

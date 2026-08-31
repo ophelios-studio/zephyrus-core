@@ -31,6 +31,21 @@ use Zephyrus\Rendering\RenderEngine;
  */
 final class Mailer
 {
+    /**
+     * The line written to the error log the first time this process builds a
+     * mailer that will put credentials on an unencrypted socket.
+     */
+    public const string PLAINTEXT_CREDENTIALS_WARNING =
+        'Zephyrus: SMTP credentials will be sent WITHOUT transport encryption, because '
+        . 'mailer.smtp.encryption is empty. Set it to "tls" (submission, port 587) or "ssl" '
+        . '(implicit TLS, port 465) unless this really is a local sink.';
+
+    /**
+     * Emitted at most once per process: this is a configuration mistake, not a
+     * per-message event, and a line per email would bury it.
+     */
+    private static bool $plaintextWarningEmitted = false;
+
     private PHPMailer $mail;
     private ?RenderEngine $renderEngine;
 
@@ -156,13 +171,53 @@ final class Mailer
     /**
      * Attach a file.
      *
-     * @param string $path Absolute path to the file.
-     * @param string $name Display name (default: original filename).
+     * ## This is not a sandbox, and the docblock used to imply it was
+     *
+     * It said "Absolute path to the file" and enforced nothing, so a caller
+     * that passed unvalidated input got exactly what it asked for: any file the
+     * PHP process can read, traversal included, mailed to the recipient. The
+     * guards below close what a library CAN close on its own -- a stream
+     * wrapper, a NUL byte, a display name carrying path separators -- but none
+     * of them can tell a wanted path from an attacker's.
+     *
+     * $allowedRoot is how a caller states the boundary it actually has. When
+     * given, the resolved file must sit inside the resolved root, and anything
+     * else is refused. Pass it whenever any part of $path came from outside the
+     * application.
+     *
+     * @param string      $path        Path to the file. Absolute is strongly preferred; a
+     *                                 relative path still resolves against the working
+     *                                 directory, which is rarely what a caller means.
+     * @param string      $name        Display name (default: original filename). May not
+     *                                 contain a path separator: it lands in a MIME header
+     *                                 and is what the recipient's client writes to disk.
+     * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
+     *                                 the historical behaviour of trusting the caller.
      */
-    public function attach(string $path, string $name = ''): self
+    public function attach(string $path, string $name = '', ?string $allowedRoot = null): self
     {
+        if (str_contains($path, "\0") || str_contains($name, "\0")) {
+            throw MailerException::attachmentRejected($path, 'contains a NUL byte');
+        }
+
+        // A wrapper turns "attach a file" into "fetch a URL" or "read a php://
+        // stream". is_file() rejects most of them already, but not all wrappers
+        // in every build, and refusing here states the rule instead of relying
+        // on that.
+        if (preg_match('#^[a-zA-Z][a-zA-Z0-9+.\-]*://#', $path) === 1) {
+            throw MailerException::attachmentRejected($path, 'is a stream wrapper, not a local file');
+        }
+
+        if (str_contains($name, '/') || str_contains($name, '\\')) {
+            throw MailerException::attachmentRejected($name, 'is a display name and may not contain a path separator');
+        }
+
         if (!is_file($path)) {
             throw MailerException::attachmentNotFound($path);
+        }
+
+        if ($allowedRoot !== null) {
+            $this->assertWithinRoot($path, $allowedRoot);
         }
 
         try {
@@ -196,6 +251,31 @@ final class Mailer
         return $this->mail;
     }
 
+    /**
+     * Resolve $path against $allowedRoot and refuse anything outside it.
+     *
+     * realpath() on BOTH sides is what makes this a boundary rather than a
+     * string comparison: it collapses '..', follows symlinks, and returns false
+     * for a path that does not exist, so a link pointing out of the root cannot
+     * pass by looking innocent.
+     */
+    private function assertWithinRoot(string $path, string $allowedRoot): void
+    {
+        $resolvedRoot = realpath($allowedRoot);
+        if ($resolvedRoot === false || !is_dir($resolvedRoot)) {
+            throw MailerException::attachmentRejected($allowedRoot, 'is not an existing directory');
+        }
+
+        $resolvedFile = realpath($path);
+        if ($resolvedFile === false) {
+            throw MailerException::attachmentNotFound($path);
+        }
+
+        if (!str_starts_with($resolvedFile, rtrim($resolvedRoot, '/\\') . DIRECTORY_SEPARATOR)) {
+            throw MailerException::attachmentRejected($path, 'resolves outside the allowed directory');
+        }
+    }
+
     private function configureSmtp(MailerConfig $config): void
     {
         $this->mail->isSMTP();
@@ -204,11 +284,45 @@ final class Mailer
         $this->mail->SMTPSecure = $config->smtpEncryption;
         $this->mail->CharSet = PHPMailer::CHARSET_UTF8;
 
+        // MailerConfig guarantees one of 'tls', 'ssl' or ''. An empty value is
+        // the operator saying "no encryption", so say it to PHPMailer too:
+        // SMTPAutoTLS would otherwise still try STARTTLS opportunistically, and
+        // that is the worst of the three answers. It looks encrypted in a happy
+        // capture, it produces no error when it does not happen, and a network
+        // attacker turns it off simply by omitting STARTTLS from the EHLO
+        // banner. '' now means none, and 'tls' means tls.
+        if ($config->smtpEncryption === '') {
+            $this->mail->SMTPAutoTLS = false;
+        }
+
         if ($config->smtpUsername !== '' || $config->smtpPassword !== '') {
             $this->mail->SMTPAuth = true;
             $this->mail->Username = $config->smtpUsername;
             $this->mail->Password = $config->smtpPassword;
+
+            if ($config->smtpEncryption === '') {
+                self::warnAboutPlaintextCredentials();
+            }
         }
+    }
+
+    /**
+     * Say once, loudly, that this process will authenticate in the clear.
+     *
+     * Turning '' into "definitely no encryption" is the honest reading of the
+     * setting, but it also removes the accidental safety net that opportunistic
+     * STARTTLS used to provide for a deployment that simply forgot to set
+     * MAIL_ENCRYPTION. Silence is what made the original bug survive, so the
+     * net is replaced by a statement rather than by nothing.
+     */
+    private static function warnAboutPlaintextCredentials(): void
+    {
+        if (self::$plaintextWarningEmitted) {
+            return;
+        }
+
+        self::$plaintextWarningEmitted = true;
+        error_log(self::PLAINTEXT_CREDENTIALS_WARNING);
     }
 
     private function configureFrom(MailerConfig $config): void
