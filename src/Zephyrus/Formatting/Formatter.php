@@ -358,14 +358,28 @@ final class Formatter
 
     /**
      * Truncate a string to the given length, appending a suffix if truncated.
+     *
+     * The result never exceeds `$length` characters. When `$length` is shorter
+     * than the suffix there is no room for both, so the suffix alone is cut to
+     * fit; a naive `$length - mb_strlen($suffix)` would go negative and make
+     * `mb_substr()` trim from the END of the value, returning a string LONGER
+     * than the one that was passed in.
      */
     public function truncate(string $value, int $length, string $suffix = '...'): string
     {
+        $length = max(0, $length);
+
         if (mb_strlen($value) <= $length) {
             return $value;
         }
 
-        return mb_substr($value, 0, $length - mb_strlen($suffix)) . $suffix;
+        $keep = $length - mb_strlen($suffix);
+
+        if ($keep <= 0) {
+            return mb_substr($suffix, 0, $length);
+        }
+
+        return mb_substr($value, 0, $keep) . $suffix;
     }
 
     // ─── Custom Formatters ────────────────────────────────────────────

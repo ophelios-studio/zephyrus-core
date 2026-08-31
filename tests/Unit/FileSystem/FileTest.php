@@ -289,6 +289,97 @@ final class FileTest extends TestCase
         self::assertTrue($file->isWritable());
     }
 
+    // ------------------------------------------------------------------
+    // Permissions do not depend on the process umask
+    // ------------------------------------------------------------------
+
+    public function testCreateAppliesRestrictivePermissionsUnderAPermissiveUmask(): void
+    {
+        $previous = umask(0);
+        $path = $this->tempDir . '/umask-create.txt';
+
+        try {
+            File::create($path, 'content');
+
+            self::assertSame(0644, fileperms($path) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testWriteAppliesRestrictivePermissionsUnderAPermissiveUmask(): void
+    {
+        $previous = umask(0);
+        $path = $this->tempDir . '/umask-write.txt';
+
+        try {
+            (new File($path))->write('content');
+
+            self::assertSame(0644, fileperms($path) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testWriteLeavesAnExistingFilePermissionsAlone(): void
+    {
+        $path = $this->tempDir . '/preset.txt';
+        file_put_contents($path, 'old');
+        chmod($path, 0600);
+
+        (new File($path))->write('new');
+
+        self::assertSame(0600, fileperms($path) & 0777);
+        self::assertSame('new', (string) file_get_contents($path));
+    }
+
+    // ------------------------------------------------------------------
+    // Replacing content never follows a symbolic link
+    // ------------------------------------------------------------------
+
+    public function testWriteReplacesASymlinkInsteadOfClobberingItsTarget(): void
+    {
+        $target = $this->tempDir . '/target.txt';
+        $link = $this->tempDir . '/link.txt';
+        file_put_contents($target, 'SERVER SIDE SECRET');
+        symlink($target, $link);
+
+        (new File($link))->write('attacker content');
+
+        self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
+        self::assertFalse(is_link($link));
+        self::assertSame('attacker content', (string) file_get_contents($link));
+    }
+
+    public function testCopyReplacesASymlinkedDestinationInsteadOfClobberingItsTarget(): void
+    {
+        $source = $this->tempDir . '/source.txt';
+        $target = $this->tempDir . '/copy-target.txt';
+        $link = $this->tempDir . '/copy-link.txt';
+        file_put_contents($source, 'copied content');
+        file_put_contents($target, 'SERVER SIDE SECRET');
+        symlink($target, $link);
+
+        (new File($source))->copy($link);
+
+        self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
+        self::assertFalse(is_link($link));
+        self::assertSame('copied content', (string) file_get_contents($link));
+    }
+
+    public function testCreateReplacesASymlinkInsteadOfClobberingItsTarget(): void
+    {
+        $target = $this->tempDir . '/create-target.txt';
+        $link = $this->tempDir . '/create-link.txt';
+        file_put_contents($target, 'SERVER SIDE SECRET');
+        symlink($target, $link);
+
+        File::create($link, 'attacker content');
+
+        self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
+        self::assertFalse(is_link($link));
+    }
+
     private function cleanDir(string $dir): void
     {
         if (!is_dir($dir)) {

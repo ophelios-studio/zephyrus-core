@@ -132,8 +132,13 @@ final class Directory extends FileSystemNode
     /**
      * Delete the directory.
      *
+     * Every removal is checked. A recursive delete that cannot remove something
+     * throws naming the first path that survived, so a caller performing a
+     * statutory destruction can never log a successful purge over data that is
+     * still on disk.
+     *
      * @param bool $recursive If true, delete all contents first.
-     * @throws FileSystemException if deletion fails.
+     * @throws FileSystemException if any file or directory could not be removed.
      */
     public function delete(bool $recursive = false): void
     {
@@ -190,6 +195,8 @@ final class Directory extends FileSystemNode
 
     /**
      * Recursively delete a directory and all its contents.
+     *
+     * @throws FileSystemException naming the first entry that could not be removed.
      */
     private function deleteRecursive(string $dir): void
     {
@@ -199,14 +206,21 @@ final class Directory extends FileSystemNode
         );
 
         foreach ($iterator as $item) {
-            if ($item->isDir()) {
-                @rmdir($item->getPathname());
-            } else {
-                @unlink($item->getPathname());
+            $path = $item->getPathname();
+
+            // isDir() follows symbolic links, so a link pointing at a directory
+            // would be handed to rmdir() and silently survive. A link of any
+            // kind is removed with unlink(), which also leaves its target alone.
+            $removed = $item->isDir() && !$item->isLink() ? @rmdir($path) : @unlink($path);
+
+            if (!$removed) {
+                throw FileSystemException::operationFailed('delete', $path);
             }
         }
 
-        @rmdir($dir);
+        if (!@rmdir($dir)) {
+            throw FileSystemException::operationFailed('delete directory', $dir);
+        }
     }
 
     /**

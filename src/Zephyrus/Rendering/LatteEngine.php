@@ -6,6 +6,7 @@ namespace Zephyrus\Rendering;
 
 use Latte\Engine;
 use Latte\Extension;
+use Zephyrus\FileSystem\SafePath;
 use Zephyrus\Formatting\Formatter;
 
 /**
@@ -21,8 +22,17 @@ use Zephyrus\Formatting\Formatter;
  *   // resolves to: {directory}/users/show.latte
  *
  * Cache mode:
- *   - 'always' (default): templates are recompiled when the source changes.
- *   - 'never': templates are always recompiled (useful during development).
+ *   - 'always' (default): compiled templates are written to the cache directory
+ *     and recompiled when the source changes.
+ *   - 'never': no cache directory is used at all, so every render recompiles
+ *     the template in memory (useful during development).
+ * Any other value is a configuration error and is refused at construction.
+ *
+ * ## Path safety
+ * The page identifier is resolved against the template directory, so it is
+ * treated as untrusted. A page containing a `..` segment or a null byte is
+ * refused outright, and the resolved file must still sit under the configured
+ * template directory once `realpath()` has collapsed symbolic links.
  */
 final class LatteEngine implements RenderEngine
 {
@@ -45,8 +55,7 @@ final class LatteEngine implements RenderEngine
     ) {
         $this->directory = rtrim($directory, '/\\');
         $this->latte = new Engine();
-        $this->configureCacheDirectory($cacheDirectory);
-        $this->configureCacheMode($cacheMode);
+        $this->configureCache($cacheDirectory, $cacheMode);
 
         foreach ($extensions as $extension) {
             $this->latte->addExtension($extension);
@@ -57,8 +66,8 @@ final class LatteEngine implements RenderEngine
     {
         $path = $this->resolvePath($page);
 
-        if (!is_file($path) || !is_readable($path)) {
-            throw RenderException::templateNotFound($page, $path);
+        if ($path === null) {
+            throw RenderException::templateNotFound($page, $this->candidatePath($page));
         }
 
         try {
@@ -70,8 +79,7 @@ final class LatteEngine implements RenderEngine
 
     public function exists(string $page): bool
     {
-        $path = $this->resolvePath($page);
-        return is_file($path) && is_readable($path);
+        return $this->resolvePath($page) !== null;
     }
 
     /**
@@ -118,11 +126,48 @@ final class LatteEngine implements RenderEngine
     }
 
     /**
-     * Resolve a page identifier to an absolute file path.
+     * Resolve a page identifier to a readable absolute file path contained
+     * within the template directory.
+     *
+     * @return string|null Null when the page traverses out of the directory,
+     *                     is unreadable, or does not exist.
      */
-    private function resolvePath(string $page): string
+    private function resolvePath(string $page): ?string
+    {
+        $path = SafePath::within($this->directory, $page . self::EXTENSION);
+
+        return $path !== null && is_file($path) ? $path : null;
+    }
+
+    /**
+     * The path a page identifier would have resolved to, for error reporting only.
+     */
+    private function candidatePath(string $page): string
     {
         return $this->directory . '/' . ltrim($page, '/\\') . self::EXTENSION;
+    }
+
+    /**
+     * Apply the cache mode, which decides whether a compiled-template cache is
+     * used at all.
+     */
+    private function configureCache(string $cacheDirectory, string $cacheMode): void
+    {
+        if ($cacheMode === 'never') {
+            // No temp directory: Latte compiles the template on every render.
+            $this->latte->setAutoRefresh(true);
+            return;
+        }
+
+        if ($cacheMode !== 'always') {
+            throw RenderException::engineError(sprintf(
+                'Unknown Latte cache mode [%s]. Supported modes: always, never.',
+                $cacheMode,
+            ));
+        }
+
+        $this->configureCacheDirectory($cacheDirectory);
+        $this->latte->setAutoRefresh(true);
     }
 
     private function configureCacheDirectory(string $cacheDirectory): void
@@ -139,15 +184,5 @@ final class LatteEngine implements RenderEngine
         }
 
         $this->latte->setTempDirectory($cacheDirectory);
-    }
-
-    private function configureCacheMode(string $cacheMode): void
-    {
-        if ($cacheMode === 'never') {
-            $this->latte->setAutoRefresh(true);
-        } elseif ($cacheMode === 'always') {
-            // Latte's default: auto-refresh is on, checks file mtime.
-            $this->latte->setAutoRefresh(true);
-        }
     }
 }

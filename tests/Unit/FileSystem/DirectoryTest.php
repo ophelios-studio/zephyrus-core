@@ -254,6 +254,61 @@ final class DirectoryTest extends TestCase
         $dir->files();
     }
 
+    // ------------------------------------------------------------------
+    // A recursive delete that fails must say so
+    // ------------------------------------------------------------------
+
+    public function testDeleteRecursiveThrowsWhenAnEntryCannotBeRemoved(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root ignores directory permissions.');
+        }
+
+        $root = $this->tempDir . '/purge';
+        mkdir($root . '/locked', 0755, true);
+        file_put_contents($root . '/locked/subject-data.txt', 'PERSONAL INFORMATION');
+        // The parent is not writable, so the child cannot be unlinked.
+        chmod($root . '/locked', 0555);
+
+        try {
+            (new Directory($root))->delete(recursive: true);
+            self::fail('A recursive delete that leaves data on disk must not report success.');
+        } catch (FileSystemException $exception) {
+            self::assertStringContainsString('subject-data.txt', $exception->getMessage());
+            self::assertFileExists($root . '/locked/subject-data.txt');
+        } finally {
+            chmod($root . '/locked', 0755);
+            $this->cleanDir($root);
+        }
+    }
+
+    public function testDeleteRecursiveRemovesASymlinkedChildWithoutFollowingIt(): void
+    {
+        $root = $this->tempDir . '/purge-link';
+        $outside = $this->tempDir . '/keep';
+        mkdir($root, 0755, true);
+        mkdir($outside, 0755, true);
+        file_put_contents($outside . '/precious.txt', 'KEEP ME');
+        symlink($outside, $root . '/shortcut');
+
+        (new Directory($root))->delete(recursive: true);
+
+        self::assertDirectoryDoesNotExist($root);
+        self::assertFileExists($outside . '/precious.txt', 'The link target must be left alone.');
+    }
+
+    public function testDeleteRecursiveStillRemovesAWritableTree(): void
+    {
+        $root = $this->tempDir . '/ok';
+        mkdir($root . '/a/b', 0755, true);
+        file_put_contents($root . '/a/b/deep.txt', 'x');
+        file_put_contents($root . '/top.txt', 'y');
+
+        (new Directory($root))->delete(recursive: true);
+
+        self::assertDirectoryDoesNotExist($root);
+    }
+
     private function cleanDir(string $dir): void
     {
         if (!is_dir($dir)) {

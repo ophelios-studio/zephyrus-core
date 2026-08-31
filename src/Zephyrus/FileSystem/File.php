@@ -18,9 +18,25 @@ namespace Zephyrus\FileSystem;
  *   $file->append("\nmore content");
  *   $copy = $file->copy('/path/to/copy.txt');
  *   $file->delete();
+ *
+ * ## Permissions
+ * A newly created file is chmod'ed to {@see self::DEFAULT_PERMISSIONS}. Relying
+ * on the process umask is not enough: a worker or CLI running under `umask 0`
+ * would otherwise leave every written file world-writable.
+ *
+ * ## Symbolic links
+ * The three operations that REPLACE content (`create()`, `write()`, `copy()`)
+ * remove a symbolic link sitting at the destination and write a regular file in
+ * its place, matching `move()`, which renames over the link. Otherwise a link
+ * planted at a predictable path would redirect the write to an arbitrary file.
+ * `append()` deliberately still follows a link, because appending means adding
+ * to what is already there and replacing the link would destroy it.
  */
 final class File extends FileSystemNode
 {
+    /** Mode applied to a file this class creates. */
+    public const int DEFAULT_PERMISSIONS = 0644;
+
     /**
      * Create a new file with optional initial content.
      *
@@ -35,8 +51,15 @@ final class File extends FileSystemNode
             }
         }
 
+        self::detachSymlink($path);
+        $existed = is_file($path);
+
         if (file_put_contents($path, $content) === false) {
             throw FileSystemException::operationFailed('create file', $path);
+        }
+
+        if (!$existed) {
+            self::applyDefaultPermissions($path);
         }
 
         return new self($path);
@@ -66,8 +89,15 @@ final class File extends FileSystemNode
      */
     public function write(string $content): void
     {
+        self::detachSymlink($this->path);
+        $existed = is_file($this->path);
+
         if (file_put_contents($this->path, $content) === false) {
             throw FileSystemException::operationFailed('write to', $this->path);
+        }
+
+        if (!$existed) {
+            self::applyDefaultPermissions($this->path);
         }
     }
 
@@ -78,8 +108,14 @@ final class File extends FileSystemNode
      */
     public function append(string $content): void
     {
+        $existed = is_file($this->path);
+
         if (file_put_contents($this->path, $content, FILE_APPEND) === false) {
             throw FileSystemException::operationFailed('append to', $this->path);
+        }
+
+        if (!$existed) {
+            self::applyDefaultPermissions($this->path);
         }
     }
 
@@ -153,8 +189,15 @@ final class File extends FileSystemNode
             }
         }
 
+        self::detachSymlink($destination);
+        $existed = is_file($destination);
+
         if (!@copy($this->path, $destination)) {
             throw FileSystemException::operationFailed('copy', $this->path . ' to ' . $destination);
+        }
+
+        if (!$existed) {
+            self::applyDefaultPermissions($destination);
         }
 
         return new self($destination);
@@ -222,5 +265,32 @@ final class File extends FileSystemNode
         }
 
         return $lines;
+    }
+
+    /**
+     * Remove a symbolic link sitting at `$path` so the caller writes a regular
+     * file there instead of following the link to an arbitrary target.
+     *
+     * @throws FileSystemException if the link is present but cannot be removed.
+     */
+    private static function detachSymlink(string $path): void
+    {
+        if (!is_link($path)) {
+            return;
+        }
+
+        if (!@unlink($path)) {
+            throw FileSystemException::operationFailed('replace the symbolic link at', $path);
+        }
+    }
+
+    /**
+     * @throws FileSystemException if the mode cannot be applied.
+     */
+    private static function applyDefaultPermissions(string $path): void
+    {
+        if (!@chmod($path, self::DEFAULT_PERMISSIONS)) {
+            throw FileSystemException::operationFailed('set permissions on', $path);
+        }
     }
 }
