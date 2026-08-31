@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Zephyrus\Http\Request;
+
 /**
  * Immutable configuration section for HTTP security behaviour.
  *
@@ -15,6 +17,7 @@ namespace Zephyrus\Core\Config;
  *     allowedHosts: [example.com]
  *     maxBodySize: 2097152
  *     trustedProxies: []
+ *     trustedHeaders: [x-forwarded-for, x-forwarded-host, x-forwarded-proto, x-forwarded-port]
  *     csrf:
  *       enabled: true
  *       autoHtml: false
@@ -31,6 +34,7 @@ namespace Zephyrus\Core\Config;
  *     allowedHosts: []
  *     maxBodySize: 2097152
  *     trustedProxies: []
+ *     trustedHeaders: []
  *
  * Defaults are conservative yet development-friendly:
  *   - forceHttps:     false (must be explicitly enabled in production)
@@ -40,6 +44,9 @@ namespace Zephyrus\Core\Config;
  *   - allowedHosts:   []    (empty = any host; populate for production lockdown)
  *   - maxBodySize:    2097152 (2 MB; 0 = unlimited)
  *   - trustedProxies: []    (empty = trust no proxies; forwarded headers ignored)
+ *   - trustedHeaders: the X-Forwarded-* family (see Request::TRUSTED_HEADERS_DEFAULT);
+ *                     'forwarded', 'x-real-ip', 'cf-connecting-ip' and 'x-client-ip'
+ *                     are opt-in, and [] reads no forwarded header at all
  *   - encryptionKey:  null  (must be set explicitly for Cryptography usage)
  *
  * Validation rules:
@@ -47,6 +54,9 @@ namespace Zephyrus\Core\Config;
  *   - Each allowedHost entry must be a non-empty string.
  *   - Each csrfExceptions entry must be a non-empty string.
  *   - Each trustedProxies entry must be a non-empty string (IP or CIDR).
+ *   - Each trustedHeaders entry must name a header Request can actually read;
+ *     an unknown name is REJECTED rather than ignored, because silently dropping
+ *     a typo would leave an operator believing they trust a header they do not.
  */
 final readonly class SecurityConfig
 {
@@ -61,6 +71,11 @@ final readonly class SecurityConfig
      *                                  are trusted. Empty = trust no proxies (safe default).
      *                                  Use ['*'] to trust all proxies (development only).
      * @param ?string  $encryptionKey   Application encryption key (nullable, from !env).
+     * @param string[] $trustedHeaders  Which forwarding headers may be read once the peer is a
+     *                                  trusted proxy. Trusting a proxy is NOT the same as trusting
+     *                                  every header a caller can name: a proxy manages one family
+     *                                  and passes the rest through untouched. Defaults to the
+     *                                  X-Forwarded-* family; [] reads none.
      */
     public function __construct(
         public bool $forceHttps,
@@ -71,6 +86,7 @@ final readonly class SecurityConfig
         public int $maxBodySize,
         public array $trustedProxies = [],
         public ?string $encryptionKey = null,
+        public array $trustedHeaders = Request::TRUSTED_HEADERS_DEFAULT,
     ) {
     }
 
@@ -114,6 +130,13 @@ final readonly class SecurityConfig
         $allowedHosts = (array) ($values['allowedHosts'] ?? $values['allowed_hosts'] ?? []);
         $maxBodySize = (int) ($values['maxBodySize'] ?? $values['max_body_size'] ?? 2_097_152);
         $trustedProxies = (array) ($values['trustedProxies'] ?? $values['trusted_proxies'] ?? []);
+        // An ABSENT key takes the default set; an explicitly empty list is a
+        // valid, maximally strict setting and must not be confused with it.
+        $trustedHeaders = (array) (
+            $values['trustedHeaders']
+            ?? $values['trusted_headers']
+            ?? Request::TRUSTED_HEADERS_DEFAULT
+        );
 
         // Encryption: nested 'encryption' section takes precedence
         $encryption = isset($values['encryption']) && is_array($values['encryption']) ? $values['encryption'] : [];
@@ -172,6 +195,33 @@ final readonly class SecurityConfig
             }
         }
 
+        $normalizedTrustedHeaders = [];
+        foreach ($trustedHeaders as $i => $header) {
+            if (!is_string($header) || trim($header) === '') {
+                throw ConfigurationException::invalidValue(
+                    'security',
+                    "trustedHeaders[$i]",
+                    $header,
+                    'each entry must be a non-empty string',
+                );
+            }
+
+            $name = strtolower(trim($header));
+            if (!in_array($name, Request::TRUSTED_HEADERS_SUPPORTED, true)) {
+                throw ConfigurationException::invalidValue(
+                    'security',
+                    "trustedHeaders[$i]",
+                    $header,
+                    'unknown forwarding header, supported names are '
+                        . implode(', ', Request::TRUSTED_HEADERS_SUPPORTED),
+                );
+            }
+
+            if (!in_array($name, $normalizedTrustedHeaders, true)) {
+                $normalizedTrustedHeaders[] = $name;
+            }
+        }
+
         return new self(
             forceHttps: $forceHttps,
             csrfEnabled: $csrfEnabled,
@@ -181,6 +231,7 @@ final readonly class SecurityConfig
             maxBodySize: $maxBodySize,
             trustedProxies: array_values($trustedProxies),
             encryptionKey: $encryptionKey,
+            trustedHeaders: $normalizedTrustedHeaders,
         );
     }
 }

@@ -47,6 +47,49 @@ final readonly class Request
      */
     public const ATTRIBUTE_UNMATCHED_ROUTE = '_zephyrus.unmatched_route';
 
+    /**
+     * The forwarding headers read by default once REMOTE_ADDR is a trusted
+     * proxy: the X-Forwarded-* family, and nothing else.
+     *
+     * WHY THE SET IS NARROWER THAN "EVERY FORWARDING HEADER". Trusting a proxy is
+     * not the same as trusting every header a caller can name. A proxy manages
+     * ONE family and passes the rest through untouched, so reading a header the
+     * proxy never writes hands the caller a field it fully controls. Under the
+     * previous "read whatever is present" behaviour, a deployment behind an
+     * nginx that manages only X-Forwarded-* could be told any client IP the
+     * caller liked, just by sending a Forwarded or an X-Real-IP header of its
+     * own. Walking the X-Forwarded-For chain correctly does not help when the
+     * chain being walked is not the one the proxy wrote.
+     *
+     * The X-Forwarded-* family is what the overwhelmingly common proxy actually
+     * writes. Everything else is opt-in by name, so an operator running a proxy
+     * that emits RFC 7239 Forwarded declares it and gets it.
+     */
+    public const TRUSTED_HEADERS_DEFAULT = [
+        'x-forwarded-for',
+        'x-forwarded-host',
+        'x-forwarded-proto',
+        'x-forwarded-port',
+    ];
+
+    /**
+     * Every forwarding header this class knows how to read, in any role. A name
+     * outside this list cannot change behaviour whatever it is set to, which is
+     * why configuration layers validate against it: silently accepting a typo
+     * would leave an operator believing they trust a header they do not. See
+     * SecurityConfig::fromArray(), which rejects an unknown name outright.
+     */
+    public const TRUSTED_HEADERS_SUPPORTED = [
+        'x-forwarded-for',
+        'x-forwarded-host',
+        'x-forwarded-proto',
+        'x-forwarded-port',
+        'forwarded',
+        'x-real-ip',
+        'cf-connecting-ip',
+        'x-client-ip',
+    ];
+
     private Uri $uri;
     private RequestBody $body;
     private HeaderBag $headerBag;
@@ -93,6 +136,10 @@ final readonly class Request
      * @param string|null                $rawBody        Injected for testing; defaults to php://input.
      * @param string[]                   $trustedProxies IP addresses/CIDR ranges whose forwarded
      *                                                   headers are trusted. Use ['*'] for all.
+     * @param string[]                   $trustedHeaders Which forwarding headers may be read once
+     *                                                   the peer is a trusted proxy. Names are
+     *                                                   case-insensitive. Defaults to the
+     *                                                   X-Forwarded-* family; pass [] to read none.
      */
     public static function fromGlobals(
         ?array $server = null,
@@ -102,6 +149,7 @@ final readonly class Request
         ?array $files = null,
         ?string $rawBody = null,
         array $trustedProxies = [],
+        array $trustedHeaders = self::TRUSTED_HEADERS_DEFAULT,
     ): self {
         $server = $server ?? $_SERVER;
         $get    = $get    ?? $_GET;
@@ -113,8 +161,12 @@ final readonly class Request
         $headers = self::extractHeadersFromServer($server);
         $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
         $trustForwarded = self::isProxyTrusted($remoteAddr, $trustedProxies);
-        $uri     = self::buildUri($server, $trustForwarded);
-        $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies);
+        // An untrusted peer collapses to an empty allowlist, so the two gates
+        // ("is this proxy trusted" and "may this header be read") stay a single
+        // question everywhere downstream.
+        $trusted = $trustForwarded ? self::normalizeTrustedHeaders($trustedHeaders) : [];
+        $uri     = self::buildUri($server, $trusted);
+        $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
         $raw = $rawBody ?? (string) file_get_contents('php://input');
         $parsedBody = self::parseBody($method, $headers, $post, $raw);
@@ -383,9 +435,6 @@ final readonly class Request
     }
 
     /**
-     * @param array<string, mixed> $server
-     */
-    /**
      * THE single canonicalization point. Every Request funnels through here,
      * because every construction path ends at the constructor: fromGlobals(),
      * fromArray(), the with*() clones, and a hand-rolled `new Request(...)`.
@@ -472,7 +521,21 @@ final readonly class Request
         return '/' . ltrim($requestUri, '/');
     }
 
-    private static function buildUri(array $server, bool $trustForwarded = false): string
+    /**
+     * Build the absolute request URL.
+     *
+     * Every forwarded input here is gated on the SAME allowlist that gates the
+     * client IP. An operator who drops x-forwarded-host from the list must stop
+     * having their Host decided by that header, otherwise the setting would only
+     * govern half of what it names.
+     *
+     * $trustedHeaders is already empty when the peer is not a trusted proxy, so
+     * an empty list means "read nothing forwarded" and needs no separate flag.
+     *
+     * @param array<string, mixed> $server
+     * @param list<string>         $trustedHeaders
+     */
+    private static function buildUri(array $server, array $trustedHeaders = []): string
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
@@ -480,39 +543,30 @@ final readonly class Request
             return $requestUri;
         }
 
-
-        $forwarded = [];
-        if ($trustForwarded) {
-            $forwardedHeader = isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null;
-            $forwarded = self::parseForwardedHeader($forwardedHeader);
-        }
+        $forwarded = in_array('forwarded', $trustedHeaders, true)
+            ? self::parseForwardedHeader(isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null)
+            : [];
 
         $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
 
-        if ($trustForwarded) {
-            $scheme = $forwarded['proto']
-                ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null)
-                ?? ($https ? 'https' : 'http');
-        } else {
-            $scheme = $https ? 'https' : 'http';
-        }
+        $scheme = $forwarded['proto']
+            ?? (in_array('x-forwarded-proto', $trustedHeaders, true)
+                ? self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null)
+                : null)
+            ?? ($https ? 'https' : 'http');
 
-        if ($trustForwarded) {
-            $host = $forwarded['host']
-                ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
-                ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
-        } else {
-            $host = (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
-        }
+        $host = $forwarded['host']
+            ?? (in_array('x-forwarded-host', $trustedHeaders, true)
+                ? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
+                : null)
+            ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
 
         if (!str_contains($host, ':')) {
-            if ($trustForwarded) {
-                $port = $forwarded['port']
-                    ?? self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null)
-                    ?? (isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
-            } else {
-                $port = isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null;
-            }
+            $port = $forwarded['port']
+                ?? (in_array('x-forwarded-port', $trustedHeaders, true)
+                    ? self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null)
+                    : null)
+                ?? (isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
 
             if ($port !== null && $port !== '' && !self::isDefaultPortForScheme($scheme, $port)) {
                 $host .= ':' . $port;
@@ -617,15 +671,23 @@ final readonly class Request
      * can still vouch for, and that is the client. Above, the proxy pops and
      * 198.51.100.7 answers, so the forged 192.0.2.66 is never reached.
      *
+     * A header is only ever read when it appears in $trustedHeaders. Trusting the
+     * peer is a separate question from trusting a given header: a proxy manages
+     * one family and passes the rest through untouched, so a header the proxy
+     * does not write is still caller-controlled no matter who the peer is. See
+     * TRUSTED_HEADERS_DEFAULT.
+     *
      * @param array<string, mixed>  $server
      * @param array<string, string> $headers
      * @param string[]              $trustedProxies
+     * @param list<string>          $trustedHeaders already normalized and gated on the peer
      */
     private static function resolveClientIp(
         array $server,
         array $headers,
         bool $trustForwarded = false,
         array $trustedProxies = [],
+        array $trustedHeaders = [],
     ): ?string {
         $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
 
@@ -633,7 +695,7 @@ final readonly class Request
             return $remoteAddr;
         }
 
-        $chain = self::forwardedChain($headers);
+        $chain = self::forwardedChain($headers, $trustedHeaders);
         if ($chain !== []) {
             if ($remoteAddr !== null) {
                 $chain[] = $remoteAddr;
@@ -642,12 +704,17 @@ final readonly class Request
             return self::walkForwardedChain($chain, $trustedProxies);
         }
 
-        // Single-value vendor headers, consulted only when neither chain header
-        // yielded a hop. They carry no ordering, so the walk above has nothing to
-        // work on: they are worth exactly as much as the nearest proxy's
-        // willingness to OVERWRITE, rather than pass through, whatever the caller
-        // sent under the same name.
+        // Single-value vendor headers, opt-in by name and consulted only when
+        // neither chain header yielded a hop. They carry no ordering, so the walk
+        // above has nothing to work on: they are worth exactly as much as the
+        // nearest proxy's willingness to OVERWRITE, rather than pass through,
+        // whatever the caller sent under the same name. That is precisely why
+        // they are absent from TRUSTED_HEADERS_DEFAULT.
         foreach (['x-real-ip', 'cf-connecting-ip', 'x-client-ip'] as $header) {
+            if (!in_array($header, $trustedHeaders, true)) {
+                continue;
+            }
+
             $ip = self::normalizeIp($headers[$header] ?? null);
             if ($ip !== null) {
                 return $ip;
@@ -674,14 +741,17 @@ final readonly class Request
      * right of it was appended by our own trusted proxies. Please do not turn
      * this back into a hard failure.
      *
+     * Either header is skipped entirely when it is not in $trustedHeaders.
+     *
      * @param  array<string, string> $headers
+     * @param  list<string>          $trustedHeaders
      * @return list<string>
      */
-    private static function forwardedChain(array $headers): array
+    private static function forwardedChain(array $headers, array $trustedHeaders): array
     {
         $chain = [];
 
-        $forwarded = $headers['forwarded'] ?? null;
+        $forwarded = in_array('forwarded', $trustedHeaders, true) ? ($headers['forwarded'] ?? null) : null;
         if (is_string($forwarded)) {
             foreach (explode(',', $forwarded) as $element) {
                 $ip = self::normalizeIp(self::parseForwardedElement($element)['for'] ?? null);
@@ -695,7 +765,9 @@ final readonly class Request
             return $chain;
         }
 
-        $forwardedFor = $headers['x-forwarded-for'] ?? null;
+        $forwardedFor = in_array('x-forwarded-for', $trustedHeaders, true)
+            ? ($headers['x-forwarded-for'] ?? null)
+            : null;
         if (is_string($forwardedFor)) {
             foreach (explode(',', $forwardedFor) as $candidate) {
                 $ip = self::normalizeIp($candidate);
@@ -762,6 +834,44 @@ final readonly class Request
         }
 
         return null;
+    }
+
+    /**
+     * Lowercase, trim and de-duplicate the configured header names, so a YAML
+     * file may spell them "X-Forwarded-For", and drop any name this class cannot
+     * read.
+     *
+     * DROPPING rather than throwing is deliberate HERE, and it is not the whole
+     * story. A name outside TRUSTED_HEADERS_SUPPORTED cannot enable anything, so
+     * keeping it would change nothing, while a throw would introduce a new
+     * failure path at the very top of the lifecycle, before the kernel's error
+     * handling exists. The loud half lives where an operator's typo actually
+     * originates: SecurityConfig::fromArray() REJECTS an unknown name at boot,
+     * so a misspelling is reported rather than silently believed.
+     *
+     * @param  array<mixed> $trustedHeaders
+     * @return list<string>
+     */
+    private static function normalizeTrustedHeaders(array $trustedHeaders): array
+    {
+        $normalized = [];
+
+        foreach ($trustedHeaders as $header) {
+            if (!is_string($header)) {
+                continue;
+            }
+
+            $name = strtolower(trim($header));
+            if (!in_array($name, self::TRUSTED_HEADERS_SUPPORTED, true)) {
+                continue;
+            }
+
+            if (!in_array($name, $normalized, true)) {
+                $normalized[] = $name;
+            }
+        }
+
+        return $normalized;
     }
 
     /**
