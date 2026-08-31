@@ -146,6 +146,7 @@ final class RouteAttributeReader
      * Collect middleware names from #[Middleware] and #[MiddlewareGroup] attributes
      * on the given class AND all its parent classes (parent-first order).
      *
+     * @param ReflectionClass<object> $reflection
      * @return list<string>
      */
     private function readInheritedMiddlewares(ReflectionClass $reflection): array
@@ -206,6 +207,8 @@ final class RouteAttributeReader
     /**
      * Walks the class hierarchy (parent-first) collecting #[Root] prefixes,
      * then appends the current class prefix. Returns the combined prefix string.
+     *
+     * @param ReflectionClass<object> $reflection
      */
     private function resolveRootPrefix(ReflectionClass $reflection): string
     {
@@ -261,6 +264,8 @@ final class RouteAttributeReader
 
     /**
      * Check #[RequiresEnv] on the class and all its parents.
+     *
+     * @param ReflectionClass<object> $reflection
      */
     private function satisfiesInheritedEnvRequirements(ReflectionClass $reflection): bool
     {

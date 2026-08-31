@@ -2,3 +2,4 @@
 /.phpunit.result.cache
 .idea/
 .claude/worktrees/
+/phpstan.neon

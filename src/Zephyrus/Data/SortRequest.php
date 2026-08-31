@@ -167,7 +167,7 @@ final class SortRequest implements \JsonSerializable
 
         if (str_starts_with($raw, '-')) {
             $column = substr($raw, 1);
-            if ($column === '' || $column === false) {
+            if ($column === '') {
                 return null;
             }
 
@@ -179,7 +179,7 @@ final class SortRequest implements \JsonSerializable
 
         if (str_starts_with($raw, '+')) {
             $column = substr($raw, 1);
-            if ($column === '' || $column === false) {
+            if ($column === '') {
                 return null;
             }
 

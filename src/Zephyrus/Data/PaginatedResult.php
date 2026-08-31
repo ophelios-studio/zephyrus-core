@@ -28,7 +28,7 @@ namespace Zephyrus\Data;
 final class PaginatedResult implements \JsonSerializable
 {
     /**
-     * @param \stdClass[] $items
+     * @param T[] $items
      */
     public function __construct(
         public readonly array $items,
@@ -43,6 +43,7 @@ final class PaginatedResult implements \JsonSerializable
 
     /**
      * @param array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool} $data
+     * @return self<\stdClass>
      */
     public static function fromArray(array $data): self
     {
@@ -84,7 +85,7 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @return null|\stdClass
+     * @return T|null
      */
     public function firstItem(): ?\stdClass
     {
@@ -92,7 +93,7 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @return null|\stdClass
+     * @return T|null
      */
     public function lastItem(): ?\stdClass
     {
@@ -104,7 +105,8 @@ final class PaginatedResult implements \JsonSerializable
     }
 
     /**
-     * @param callable(\stdClass): \stdClass $mapper
+     * @param callable(T): T $mapper
+     * @return self<T>
      */
     public function mapItems(callable $mapper): self
     {

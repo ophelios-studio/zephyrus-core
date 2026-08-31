@@ -252,6 +252,7 @@ abstract class Broker
      * Execute coordinated count + paginated data queries and return object envelope.
      *
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
     {
@@ -262,6 +263,7 @@ abstract class Broker
      * Execute coordinated count + paginated data queries and return object envelope.
      *
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): PaginatedResult
     {
@@ -273,6 +275,7 @@ abstract class Broker
      *
      * @param callable(\stdClass): mixed $mapper
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateResultMapped(
         string $dataSql,
@@ -290,6 +293,7 @@ abstract class Broker
      *
      * @param callable(\stdClass): mixed $mapper
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateResultMappedWith(
         string $dataSql,
@@ -306,6 +310,7 @@ abstract class Broker
      *
      * @param array<string, mixed> $query
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateResultFromQuery(
         string $dataSql,
@@ -329,6 +334,7 @@ abstract class Broker
      * Execute coordinated count + sorted paginated data queries and return typed envelope.
      *
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateSortedResultWith(
         string $dataSql,
@@ -345,6 +351,7 @@ abstract class Broker
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
+     * @return PaginatedResult<\stdClass>
      */
     protected function paginateFilteredSortedResultWith(
         string $dataSql,

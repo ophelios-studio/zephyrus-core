@@ -1,0 +1,38 @@
+# Static analysis gate for zephyrus-framework/core.
+#
+# Level 6 is deliberate: it is the level the largest consumer of this framework
+# (a seven-tier production application under Quebec privacy law) gates itself
+# at, so the framework underneath must not be analysed more loosely than the
+# code that vendors it.
+#
+# Only src/ is analysed. tests/ was measured and rejected: it adds 69 findings
+# at this level, and essentially all of them are test-harness noise (assertion
+# narrowing on values the test just built, untyped array parameters in local
+# helpers, undefined variables inside deliberately bare view fixtures). A
+# baseline of that shape buys nothing and hides the src/ signal.
+#
+# The baseline is grouped and commented. Read it before adding to it: entries
+# are there for a stated reason, and several of them are guards that MUST NOT
+# be "fixed" by deleting the code the analyser calls unreachable.
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+
+    # Serial on purpose. PHPStan's parallel workers have crashed on output
+    # write in the sandboxed environment this repository is developed in, and
+    # a crashed worker reads as a passing run to a careless eye. The whole
+    # tree analyses in about 7 seconds serially against 3 seconds in parallel,
+    # so the safety is nearly free. To opt back in locally, drop an untracked
+    # phpstan.neon next to this file:
+    #
+    #   includes:
+    #       - phpstan.neon.dist
+    #   parameters:
+    #       parallel:
+    #           maximumNumberOfProcesses: 4
+    parallel:
+        maximumNumberOfProcesses: 1
