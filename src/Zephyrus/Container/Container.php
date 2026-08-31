@@ -170,15 +170,50 @@ final class Container implements ContainerInterface
     }
 
     /**
+     * Pattern a string must match before it is handed to the autoloader.
+     *
+     * A PHP fully-qualified class name: namespace segments separated by single
+     * backslashes, each a valid identifier. Nothing else can name a class, so
+     * nothing else has any business reaching class_exists().
+     */
+    private const string CLASS_NAME_PATTERN = '/^\\\\?[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(\\\\[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*)*$/';
+
+    /**
      * Return true when the container can supply the requested $id via an
      * explicit binding, a cached resolved value, or a discoverable class.
+     *
+     * ## The autoloader is only reached for something that could be a class
+     *
+     * The last clause is `class_exists($id)`, which TRIGGERS THE AUTOLOADER.
+     * That is intended for auto-wiring and stays, but it also meant any string
+     * a caller could route here -- a request parameter, a path, a header --
+     * went to the autoloader unfiltered. Composer's resolver turns a class name
+     * into a filesystem path, and including a file runs whatever sits at its
+     * top level, so the input deserves a shape check before it gets there.
+     *
+     * Explicit registrations are checked first and never autoload, so a
+     * container id that is not a class name at all (an 'app.name' style key)
+     * still answers instantly and never touches the filesystem.
      */
     public function has(string $id): bool
     {
-        return array_key_exists($id, $this->resolved)
+        if (
+            array_key_exists($id, $this->resolved)
             || isset($this->singletonFactories[$id])
             || isset($this->bindings[$id])
-            || class_exists($id);
+        ) {
+            return true;
+        }
+
+        if (class_exists($id, autoload: false)) {
+            return true;
+        }
+
+        if (preg_match(self::CLASS_NAME_PATTERN, $id) !== 1) {
+            return false;
+        }
+
+        return class_exists($id);
     }
 
     /**

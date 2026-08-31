@@ -209,9 +209,29 @@ final readonly class Configuration
     /**
      * Export configuration sections to a plain associative array.
      *
+     * ## Secrets are redacted by default
+     *
+     * This method is what a debug panel, a diagnostics route or a config dump
+     * renders. It used to export `security.encryptionKey` and
+     * `database.password` verbatim, alongside every custom section's raw
+     * backing array, so the single most damaging pair of values in the process
+     * travelled to whatever rendered a configuration overview -- and, together
+     * with the debugger serving its output to any client, to that client.
+     *
+     * The default is therefore the safe one. A caller that genuinely needs the
+     * values asks for them explicitly, at the call site, where a reader can see
+     * the request:
+     *
+     *   $config->toArray();              // safe to render
+     *   $config->toArray(revealSecrets: true);   // never render this
+     *
+     * A null or empty secret is left as-is rather than replaced, so an
+     * UNCONFIGURED key still reads as unconfigured instead of looking like a
+     * key somebody hid.
+     *
      * @return array<string, mixed>
      */
-    public function toArray(): array
+    public function toArray(bool $revealSecrets = false): array
     {
         $result = [
             'application' => [
@@ -235,7 +255,7 @@ final readonly class Configuration
                 'maxBodySize' => $this->security->maxBodySize,
                 'trustedProxies' => $this->security->trustedProxies,
                 'trustedHeaders' => $this->security->trustedHeaders,
-                'encryptionKey' => $this->security->encryptionKey,
+                'encryptionKey' => self::redact($this->security->encryptionKey, $revealSecrets),
             ],
             'localization' => [
                 'locale' => $this->localization->locale,
@@ -250,13 +270,13 @@ final readonly class Configuration
                 'port'             => $this->database->port,
                 'database'         => $this->database->database,
                 'username'         => $this->database->username,
-                'password'         => $this->database->password,
+                'password'         => self::redact($this->database->password, $revealSecrets),
                 'charset'          => $this->database->charset,
             ],
         ];
 
         foreach ($this->customSections as $name => $section) {
-            $result[$name] = $section->toArray();
+            $result[$name] = $section->toArray($revealSecrets);
         }
 
         return $result;
@@ -271,6 +291,21 @@ final readonly class Configuration
     public static function defaults(): self
     {
         return self::fromArray([]);
+    }
+
+    /**
+     * Substitute a secret unless the caller explicitly asked for values.
+     *
+     * Null and '' pass through untouched: there is nothing to hide, and
+     * masking them would make an unwired key look configured.
+     */
+    private static function redact(?string $value, bool $revealSecrets): ?string
+    {
+        if ($revealSecrets || $value === null || $value === '') {
+            return $value;
+        }
+
+        return ConfigSection::REDACTED;
     }
 
     /**

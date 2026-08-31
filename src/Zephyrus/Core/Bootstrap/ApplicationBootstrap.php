@@ -163,7 +163,7 @@ final class ApplicationBootstrap
             $resolvedEnvironment = is_string($appEnv) ? $appEnv : '';
         }
 
-        $resolvedEnvironment = trim($resolvedEnvironment);
+        $resolvedEnvironment = self::normalizeEnvironmentName($resolvedEnvironment);
         if ($resolvedEnvironment !== '') {
             $optional[] = $configDir . '/' . $baseName . '.' . $resolvedEnvironment . '.php';
         }
@@ -174,6 +174,35 @@ final class ApplicationBootstrap
             'required' => $required,
             'optional' => $optional,
         ];
+    }
+
+    /**
+     * Reject a path separator in the environment name.
+     *
+     * $baseName and every extraOptionalNames entry were already checked for
+     * '/' and '\\'; $environment, which is APP_ENV and therefore the one of
+     * the three that most often comes from outside the file, was not. The
+     * asymmetry was not exploitable -- the mandatory `<baseName>.` prefix means
+     * any traversal has to start inside an existing directory component and
+     * every variant tried resolved to no file -- but a guard that covers two of
+     * three inputs is a guard nobody can reason about. It now covers all three.
+     *
+     * An empty or blank value is fine and simply disables environment-specific
+     * loading, exactly as before.
+     */
+    private static function normalizeEnvironmentName(string $environment): string
+    {
+        $environment = trim($environment);
+
+        if ($environment === '') {
+            return '';
+        }
+
+        if (str_contains($environment, '/') || str_contains($environment, '\\')) {
+            throw ConfigurationException::invalidPath('Config environment name must not contain path separators.');
+        }
+
+        return $environment;
     }
 
     private static function normalizeBaseName(string $baseName): string

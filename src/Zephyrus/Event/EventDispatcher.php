@@ -112,29 +112,61 @@ final class EventDispatcher
     // -------------------------------------------------------------------------
 
     /**
-     * Dispatch an event to all registered listeners and return it.
+     * Dispatch an event to every applicable listener and return it.
      *
-     * Listeners are called in descending priority order.  If
-     * $event->isPropagationStopped() is true before or between listeners,
-     * the remaining listeners are skipped.
+     * ## Applicable means the hierarchy, not the exact class
+     *
+     * Matching used to be `$event::class` and nothing else, so a listener
+     * registered on RequestEvent did not run for a subclass of RequestEvent.
+     * Subclassing a framework event is the normal way to carry extra data, and
+     * doing it silently disabled every listener already watching the parent --
+     * an audit or authorisation listener among them. Listeners registered on
+     * any ancestor class or implemented interface now run too.
+     *
+     * Ordering is unchanged in spirit: descending priority across the whole
+     * collected set, ties broken by registration order (PHP sorts are stable),
+     * with the exact class contributing its listeners before its ancestors.
+     *
+     * ## Listener failures
+     *
+     * By default a throwing listener propagates immediately, exactly as before:
+     * a listener that fails is a real failure, and swallowing it by default
+     * would be the silent-success trap this framework keeps removing.
+     *
+     * $onListenerError is the seam for the callers that genuinely must survive
+     * one: pass a reporter and each listener is wrapped individually, so the
+     * first failure no longer cancels the ones after it. HttpKernel uses it for
+     * ExceptionEvent, where it previously wrapped the ENTIRE dispatch in one
+     * try/catch and therefore lost every reporter after the first that threw.
      *
      * @template T of Event
      * @param  T $event
+     * @param  callable(\Throwable, Event): void|null $onListenerError
      * @return T
      */
-    public function dispatch(Event $event): Event
+    public function dispatch(Event $event, ?callable $onListenerError = null): Event
     {
-        $eventClass = $event::class;
+        $listeners = $this->applicableListeners($event::class);
 
-        if (!isset($this->listeners[$eventClass])) {
+        if ($listeners === []) {
             return $event;
         }
 
-        foreach ($this->sortedListeners($eventClass) as $listener) {
+        foreach ($listeners as $listener) {
             if ($event->isPropagationStopped()) {
                 break;
             }
-            $listener($event);
+
+            if ($onListenerError === null) {
+                $listener($event);
+                continue;
+            }
+
+            try {
+                $listener($event);
+            } catch (\Throwable $listenerFailure) {
+                $onListenerError($listenerFailure, $event);
+            }
         }
 
         return $event;
@@ -145,7 +177,11 @@ final class EventDispatcher
     // -------------------------------------------------------------------------
 
     /**
-     * Return true when at least one listener is registered for $eventClass.
+     * Return true when at least one listener is registered ON $eventClass itself.
+     *
+     * Deliberately exact, like getListeners() and removeListener(): this is the
+     * registry view. Use applicableListeners() to ask what a dispatch would
+     * actually run.
      *
      * @param class-string<Event> $eventClass
      */
@@ -155,7 +191,12 @@ final class EventDispatcher
     }
 
     /**
-     * Return all listeners for $eventClass in dispatch order (highest priority first).
+     * Return the listeners registered ON $eventClass, in dispatch order.
+     *
+     * Exact-class only, so it stays the mirror of addListener() and
+     * removeListener(): a caller enumerating listeners in order to remove them
+     * must not be handed listeners that belong to a parent class and that
+     * removeListener($eventClass, ...) could never remove.
      *
      * @param  class-string<Event> $eventClass
      * @return list<callable>
@@ -167,6 +208,71 @@ final class EventDispatcher
         }
 
         return $this->sortedListeners($eventClass);
+    }
+
+    /**
+     * Return every listener a dispatch of $eventClass would invoke, in order.
+     *
+     * This is the honest answer to "what will run": the exact class plus every
+     * ancestor class and implemented interface that carries listeners.
+     *
+     * @param  class-string<Event>|string $eventClass
+     * @return list<callable>
+     */
+    public function applicableListeners(string $eventClass): array
+    {
+        $entries = [];
+
+        foreach ($this->matchingRegistryKeys($eventClass) as $key) {
+            foreach ($this->listeners[$key] as $entry) {
+                $entries[] = $entry;
+            }
+        }
+
+        if ($entries === []) {
+            return [];
+        }
+
+        // PHP's sort is stable, so equal priorities keep the order built above:
+        // the exact class first, then ancestors, each in registration order.
+        usort($entries, static fn(array $a, array $b): int => $b[1] <=> $a[1]);
+
+        return array_column($entries, 0);
+    }
+
+    /**
+     * Registry keys that apply to $eventClass, most specific first.
+     *
+     * Only keys that actually carry listeners are returned, so the common case
+     * (no inheritance in play) costs one array lookup plus nothing.
+     *
+     * @return list<string>
+     */
+    private function matchingRegistryKeys(string $eventClass): array
+    {
+        $keys = [];
+
+        if (isset($this->listeners[$eventClass])) {
+            $keys[] = $eventClass;
+        }
+
+        if (!class_exists($eventClass, autoload: false)) {
+            return $keys;
+        }
+
+        foreach (array_values((array) class_parents($eventClass)) as $parent) {
+            if (isset($this->listeners[$parent])) {
+                $keys[] = $parent;
+            }
+        }
+
+        foreach (array_values((array) class_implements($eventClass)) as $interface) {
+            if (isset($this->listeners[$interface])) {
+                $keys[] = $interface;
+            }
+        }
+
+        return $keys;
     }
 
     // -------------------------------------------------------------------------

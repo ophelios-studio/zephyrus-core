@@ -24,6 +24,20 @@ use Zephyrus\Security\MaxBodySizeMiddleware;
 
 final class ApplicationBuilder
 {
+    /**
+     * The line written to the error log when debug is forced off.
+     *
+     * It names the two settings, the consequence and the escape hatch, and it
+     * carries no value of any kind, because it is written on a production tier
+     * where the log is itself a place secrets must not reach.
+     */
+    public const string PRODUCTION_DEBUG_REFUSED =
+        'Zephyrus: application.debug is true while application.environment is production-like. '
+        . 'Debug output has been FORCED OFF for this boot: the debugger renders live configuration, '
+        . 'stack-trace argument values and the process environment to whichever client triggers an error. '
+        . 'If this is deliberate, call ApplicationBuilder::withProductionDebugAcknowledged(); '
+        . 'even then, only clients named by withDebugClientAllowlist() (or loopback) can see it.';
+
     private KernelBuilder $kernelBuilder;
 
     private ?LocaleLoaderInterface $localeLoader = null;
@@ -39,6 +53,11 @@ final class ApplicationBuilder
     private array $acknowledgedSecurityKeys = [];
 
     private bool $securityWiringCheckEnabled = true;
+
+    private bool $productionDebugAcknowledged = false;
+
+    /** @var string|string[]|null */
+    private string|array|null $debugAllowedClients = null;
 
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
@@ -380,6 +399,77 @@ final class ApplicationBuilder
     }
 
     /**
+     * Permit application.debug to stay ON in a production-like environment.
+     *
+     * Without this, build() FORCES debug off whenever
+     * `application.environment` is production or staging and
+     * `application.debug` is true, and writes one loud line to the error log
+     * saying so. See build() for why forcing off beat refusing to boot.
+     *
+     * This is the escape hatch for the operator who genuinely means it, and it
+     * is deliberately a line of BOOTSTRAP CODE rather than a config key: a
+     * config key is exactly what gets flipped on a live tier at 3am and
+     * forgotten, which is the situation this guard exists for.
+     *
+     * Acknowledging does NOT broadcast the debugger. DebugIntegration still
+     * runs Tracy in Detect mode, so a remote client sees nothing unless it is
+     * on the allowlist passed to withDebugClientAllowlist().
+     */
+    public function withProductionDebugAcknowledged(bool $acknowledged = true): self
+    {
+        $clone = clone $this;
+        $clone->productionDebugAcknowledged = $acknowledged;
+
+        return $clone;
+    }
+
+    /**
+     * Name the clients allowed to receive the debugger's rendered output.
+     *
+     * Entries are addresses, or `secret@address` pairs matched against the
+     * `tracy-debug` cookie. Loopback is always permitted by Tracy itself when
+     * the request did not arrive through a proxy, so a local developer never
+     * needs this. It exists for debugging a deployed tier from one known
+     * address.
+     *
+     * @param string|string[]|null $clients
+     */
+    public function withDebugClientAllowlist(string|array|null $clients): self
+    {
+        $clone = clone $this;
+        $clone->debugAllowedClients = $clients;
+
+        return $clone;
+    }
+
+    /**
+     * The debug flag build() will actually act on, with no side effect.
+     *
+     * Exposed so the production guard is assertable without booting Tracy in
+     * the test process: enabling Tracy is global, irreversible for the rest of
+     * the process, and installs error handlers, so a test that had to observe
+     * it through Debugger::isEnabled() could only ever run in isolation.
+     */
+    public function isDebugEnabledForBoot(): bool
+    {
+        if ($this->configuration === null) {
+            return false;
+        }
+
+        $application = $this->configuration->application;
+
+        if (!$application->debug) {
+            return false;
+        }
+
+        if (!$application->environment->isProductionLike()) {
+            return true;
+        }
+
+        return $this->productionDebugAcknowledged;
+    }
+
+    /**
      * Turn the wiring check off wholesale.
      *
      * Prefer withAcknowledgedSecurityKeys(): it keeps the check live for every
@@ -488,6 +578,40 @@ final class ApplicationBuilder
         }
     }
 
+    /**
+     * Assemble the application.
+     *
+     * ## Why debug on production is FORCED OFF rather than refused
+     *
+     * `application.environment: production` plus `application.debug: true` used
+     * to boot silently and hand the debugger to every client. Two repairs were
+     * available and they are not equivalent.
+     *
+     * Refusing to boot is the stricter one, and it is the wrong one HERE. The
+     * operator who sets this combination is, in practice, mid-incident: they
+     * have a production tier misbehaving and they are trying to see why. A
+     * refusal converts their diagnostic attempt into an outage of the very
+     * service they were diagnosing, and it does it at the worst possible
+     * moment. Worse, it teaches the escape hatch as a reflex: once
+     * "acknowledge it or the site is down" is the rule, the acknowledgement
+     * goes into the bootstrap permanently and the guard is gone for good.
+     *
+     * Forcing debug off keeps the tier serving, removes the leak, and costs
+     * the operator only the thing that was unsafe. The failure mode it
+     * introduces is silence, which is the failure mode this whole review
+     * exists to eliminate, so it is bought back with a loud, unconditional
+     * error_log line on every boot (PRODUCTION_DEBUG_REFUSED) naming both
+     * settings and the escape hatch.
+     *
+     * The escape hatch is withProductionDebugAcknowledged(). It is a line of
+     * code in the bootstrap and not a config key, on purpose: config is what
+     * gets edited on a live tier and forgotten.
+     *
+     * And it is not the only line of defence. Even when acknowledged,
+     * DebugIntegration runs Tracy in Detect mode, so the rendered debugger
+     * still only reaches loopback, the `tracy-debug` cookie holder, or an
+     * address named by withDebugClientAllowlist().
+     */
     public function build(): Application
     {
         // Refuse a security configuration nothing enforces BEFORE any side
@@ -498,7 +622,16 @@ final class ApplicationBuilder
 
         // Wire debug mode (Tracy) and timezone before anything else
         if ($this->configuration !== null) {
-            DebugIntegration::initialize($this->configuration->application->debug);
+            $debug = $this->isDebugEnabledForBoot();
+
+            if (!$debug && $this->configuration->application->debug) {
+                error_log(self::PRODUCTION_DEBUG_REFUSED);
+            }
+
+            DebugIntegration::initialize(
+                debug: $debug,
+                allowedClients: $this->debugAllowedClients,
+            );
 
             $timezone = $this->configuration->localization->timezone;
             if ($timezone !== '') {

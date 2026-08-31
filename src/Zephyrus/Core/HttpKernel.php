@@ -300,8 +300,19 @@ final readonly class HttpKernel
      * responder, so it cannot recurse.
      *
      * Anything a listener throws is swallowed: a reporter must never be able to
-     * turn a handled error response into a dead connection. Note the cost of
-     * that guarantee, a failing listener is silent.
+     * turn a handled error response into a dead connection.
+     *
+     * The catch is still around the WHOLE dispatch, so the first reporter that
+     * throws also cancels the reporters after it. EventDispatcher::dispatch()
+     * now accepts a per-listener error handler that would fix exactly that, and
+     * passing one here is a one-line change; it is deliberately NOT made,
+     * because HttpKernelExceptionEventTest pins the current behaviour on
+     * purpose and inverting a pinned expectation is not this layer's call to
+     * make on its own.
+     *
+     * What DID change: the failure is no longer invisible. It used to vanish
+     * into an empty catch block, so an application whose reporter had been
+     * broken for weeks had no way to find out.
      */
     private function fireExceptionEvent(Throwable $exception, Request $request, string $source): void
     {
@@ -312,7 +323,12 @@ final readonly class HttpKernel
         try {
             $this->events->dispatch(new ExceptionEvent($request, $exception, $source));
         } catch (Throwable $listenerFailure) {
-            // Deliberately ignored, see above.
+            // Never rethrown, see above. Logged so it is findable.
+            error_log(sprintf(
+                'Zephyrus: an ExceptionEvent listener failed and the remaining listeners were skipped: %s: %s',
+                $listenerFailure::class,
+                $listenerFailure->getMessage(),
+            ));
         }
     }
 
