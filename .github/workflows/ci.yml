@@ -16,10 +16,16 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, pdo, pdo_sqlite, intl, sodium
+          extensions: mbstring, pdo, pdo_sqlite, intl, sodium, fileinfo
           coverage: xdebug
 
       - run: composer install --no-interaction --prefer-dist
+
+      # Fails the build on a known-vulnerable dependency. A framework that sells security
+      # must not ship one. Three symfony/yaml DoS advisories sat in the lock unnoticed
+      # until a hand-run audit found them, because nothing checked.
+      - name: Dependency audit
+        run: composer audit --no-interaction
 
       - name: Static analysis
         run: php vendor/bin/phpstan analyse --memory-limit=1G --no-progress
