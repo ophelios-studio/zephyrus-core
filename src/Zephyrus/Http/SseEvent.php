@@ -32,6 +32,32 @@ final readonly class SseEvent
         public ?string $id = null,
         public ?int $retry = null,
     ) {
+        // `data` is the only field format() was ever careful with. `id` and
+        // `event` were interpolated raw, and in text/event-stream a newline
+        // ENDS a field: an id of "1\nevent: admin" emitted an extra field of
+        // the sender's choosing, so any value flowing from outside input into
+        // either one could forge whole SSE fields on the wire. A carriage
+        // return terminates a line just as a newline does, and a NUL is not
+        // valid in the protocol at all.
+        self::assertSingleLine($event, 'event');
+        self::assertSingleLine($id, 'id');
+    }
+
+    /**
+     * @throws \InvalidArgumentException When $value would break out of its field.
+     */
+    private static function assertSingleLine(?string $value, string $field): void
+    {
+        if ($value === null) {
+            return;
+        }
+
+        if (strpbrk($value, "\n\r\0") !== false) {
+            throw new \InvalidArgumentException(sprintf(
+                'SSE field "%s" must not contain a newline, a carriage return or a NUL byte.',
+                $field,
+            ));
+        }
     }
 
     /**
@@ -59,8 +85,12 @@ final readonly class SseEvent
             $lines[] = "event: {$this->event}";
         }
 
-        // Multi-line data: each embedded \n becomes a separate "data:" line.
-        foreach (explode("\n", $this->data) as $line) {
+        // Multi-line data: each embedded newline becomes a separate "data:"
+        // line. CRLF and a lone CR are line terminators in event-stream too, so
+        // they are normalised first rather than being emitted inside a field.
+        $data = str_replace(["\r\n", "\r"], "\n", $this->data);
+
+        foreach (explode("\n", $data) as $line) {
             $lines[] = "data: {$line}";
         }
 

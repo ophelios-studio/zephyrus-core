@@ -104,7 +104,11 @@ final readonly class RouteUrlGenerator
             return;
         }
 
-        $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~';
+        // The D modifier must match RouteCollection::compileConstraintRegex().
+        // Without it "$" matches before a trailing newline, so generation would
+        // happily emit a value the matcher's own whitelist was written to
+        // exclude.
+        $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
         if (@preg_match($regex, '') === false) {
             throw new RouteUrlGenerationException(sprintf(
                 'Invalid constraint pattern "%s" for parameter "%s" on route "%s"',

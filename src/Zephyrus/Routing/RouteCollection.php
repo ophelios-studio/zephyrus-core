@@ -339,6 +339,11 @@ final class RouteCollection
     public function allowedMethodsForPath(string $path): array
     {
         $normalizedPath = $this->normalizePath($path);
+
+        if (!self::isWellFormedValue($normalizedPath)) {
+            return [];
+        }
+
         $allowedMethods = [];
 
         foreach ($this->routes as $route) {
@@ -421,6 +426,17 @@ final class RouteCollection
     public function match(string $method, string $path): RouteMatch
     {
         $normalizedPath = $this->normalizePath($path);
+
+        // A malformed target is refused BEFORE any route is consulted. See
+        // isWellFormedValue() for why an invalid byte is a process-kill rather
+        // than an error path.
+        if (!self::isWellFormedValue($normalizedPath)) {
+            throw new RouteNotFoundException(sprintf(
+                'No route matched %s: the request path is not valid UTF-8 or contains a NUL byte',
+                strtoupper($method),
+            ));
+        }
+
         $allowedMethods = [];
 
         foreach ($this->routes as $route) {
@@ -454,6 +470,42 @@ final class RouteCollection
     }
 
     /**
+     * Match one route against one already-normalized request path.
+     *
+     * ## Literal segments are compared RAW, parameter segments are decoded
+     *
+     * Every segment used to be rawurldecode()d before the comparison, literal
+     * segments included, so "/%61dmin/secret" matched the route
+     * "/admin/secret". Request::path() reports the raw target, which is what a
+     * guard, an allowlist, a CSRF exclusion pattern or an audit record reads, so
+     * the request executed one route while every path-based check inspected
+     * another. Measured through the real kernel with the guard the docblock on
+     * Request::path() itself recommended:
+     *
+     *   /admin/secret            path() '/admin/secret'      -> 401 blocked
+     *   /%61dmin/secret          path() '/%61dmin/secret'    -> 200 SECRET
+     *   /%61%64%6d%69%6e/secret                              -> 200 SECRET
+     *
+     * nginx with the documented try_files rewrite leaves REQUEST_URI
+     * percent-encoded, so this reproduced in a real deployment.
+     *
+     * A literal segment is now compared byte for byte against the raw request
+     * segment, which makes Request::path() truthful about the literal part of
+     * the route that dispatches: that is exactly the part a prefix guard or an
+     * anchored exclusion pattern keys on.
+     *
+     * Decoding the PATH into one canonical string was rejected as the fix. It
+     * cannot be done without loss: splitting happens before decoding, so
+     * "/p%2Fq" is ONE segment whose value is "p/q", and a decoded path string
+     * would render it "/p/q", colliding with the genuinely two-segment request.
+     * Manufacturing that collision inside the router is a worse hazard than the
+     * one being closed.
+     *
+     * A PARAMETER segment is still decoded before its constraint is applied,
+     * which is the order that keeps the constraint meaningful: checking the raw
+     * segment and decoding afterwards would let "%2E%2E" satisfy a constraint
+     * that forbids a dot and then hand ".." to the handler.
+     *
      * @return array<string, string>|null
      */
     private function extractParameters(Route $route, string $path): ?array
@@ -472,15 +524,21 @@ final class RouteCollection
 
             if ($this->isParameterSegment($segment)) {
                 $name = substr($segment, 1, -1);
+                $value = rawurldecode($candidate);
+
+                if (!self::isWellFormedValue($value)) {
+                    return null;
+                }
+
                 $pattern = $route->constraints[$name] ?? '[^/]+';
                 $regex = $this->compileConstraintRegex($route, $name, $pattern);
 
-                $matched = @preg_match($regex, $candidate);
+                $matched = @preg_match($regex, $value);
                 if ($matched !== 1) {
                     return null;
                 }
 
-                $parameters[$name] = $candidate;
+                $parameters[$name] = $value;
                 continue;
             }
 
@@ -493,6 +551,11 @@ final class RouteCollection
     }
 
     /**
+     * Split a path into its raw, still percent-encoded segments.
+     *
+     * Decoding used to happen here, for every segment. It now happens in
+     * extractParameters(), for parameter segments only; see that method.
+     *
      * @return array<int, string>
      */
     private function segments(string $path): array
@@ -503,10 +566,36 @@ final class RouteCollection
             return [];
         }
 
-        return array_map(
-            static fn (string $segment): string => rawurldecode($segment),
-            explode('/', ltrim($normalized, '/')),
-        );
+        return explode('/', ltrim($normalized, '/'));
+    }
+
+    /**
+     * Reject a value that is not valid UTF-8 or that carries a NUL byte.
+     *
+     * SEVERITY IS SET BY A CONSUMER FACT, not by tidiness. The default
+     * parameter pattern "[^/]+" is byte-oriented, so "/a/%FF", "/a/%C3%28",
+     * "/a/%ED%A0%80" (a surrogate) and "/a/%00" all used to reach a handler
+     * argument intact. With PDO emulated prepares on PHP 8.4, binding invalid
+     * UTF-8 through pdo_pgsql SEGFAULTS the worker rather than raising, and a
+     * consumer measured seven anonymous GET routes being killed that way in
+     * production. This is a remote process kill, not an error path.
+     *
+     * Refusing is breaking toward safety: a route that genuinely needs raw
+     * bytes declares its own constraint pattern and takes them percent-encoded,
+     * or accepts them in the body rather than the path. Route::SAFE_SLUG is the
+     * ready-made pattern for the common case.
+     *
+     * preg_match with the /u modifier is the validity check rather than
+     * mb_check_encoding, so the guard does not depend on ext-mbstring being
+     * installed. NUL is valid UTF-8, so it needs its own test.
+     */
+    private static function isWellFormedValue(string $value): bool
+    {
+        if (str_contains($value, "\0")) {
+            return false;
+        }
+
+        return @preg_match('//u', $value) === 1;
     }
 
     /**
@@ -567,7 +656,11 @@ final class RouteCollection
 
     private function compileConstraintRegex(Route $route, string $parameterName, string $pattern): string
     {
-        $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~';
+        // The D modifier is not optional. Without it PCRE lets "$" match just
+        // before a trailing newline, so every author-written whitelist silently
+        // accepted one: "/s/123%0A" satisfied a "\d+" constraint and the
+        // handler received the newline intact in its string argument.
+        $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
 
         if (@preg_match($regex, '') === false) {
             throw new RouteSignatureException(sprintf(

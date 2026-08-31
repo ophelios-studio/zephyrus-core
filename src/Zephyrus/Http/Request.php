@@ -48,6 +48,39 @@ final readonly class Request
     public const ATTRIBUTE_UNMATCHED_ROUTE = '_zephyrus.unmatched_route';
 
     /**
+     * The names this request took FROM ITS URL, i.e. the matched route's
+     * placeholders. Empty for a request that matched no route, and empty for
+     * any Request built outside the kernel.
+     *
+     * WHY PROVENANCE IS RECORDED AT ALL. The matched route parameters are
+     * merged into $attributes before the global pipeline runs, and the
+     * attribute namespace is shared with everything a middleware publishes.
+     * Nothing distinguished the two, so an attribute a middleware publishes
+     * CONDITIONALLY could be supplied unconditionally by a URL segment. The
+     * exploitable ordering is the natural one, because a publishing middleware
+     * normally only sets its attribute when there is a session to read:
+     *
+     *   route /reports/{role}, guard on the "role" attribute
+     *   anonymous, no session:  GET /reports/admin -> 200 CONFIDENTIAL REPORTS
+     *   logged-in viewer:       GET /reports/admin -> 401 (session overwrites it)
+     *
+     * Merging is KEPT, because route parameters reaching $attributes is the
+     * documented contract five production applications are built on, and
+     * withdrawing it would break every one of them. What changes is that a
+     * consumer of an attribute can now ask where the value came from, and the
+     * framework's own RequestAttributeGuard refuses to authorise on a
+     * route-sourced name. Route registration refuses a placeholder named after
+     * a framework attribute outright; see Route::RESERVED_PARAMETER_NAMES.
+     *
+     * Provenance is recorded BY NAME and survives an overwrite, which is
+     * deliberate and fail-closed: a middleware that sets the same name later
+     * does not make the URL-supplied value safe, it only makes the attack
+     * conditional on the middleware not running.
+     *
+     * @var array<string, string>
+     */
+
+    /**
      * The forwarding headers read by default once REMOTE_ADDR is a trusted
      * proxy: the X-Forwarded-* family, and nothing else.
      *
@@ -99,6 +132,9 @@ final readonly class Request
      * @param array<string, mixed> $query
      * @param array<string, mixed> $attributes
      * @param array<string, FileUpload|array<int, FileUpload>> $files
+     * @param array<string, string> $routeParameters Names this request took from
+     *   its URL. See the property docblock; the values are also present in
+     *   $attributes, this records WHERE THEY CAME FROM.
      */
     public function __construct(
         public string $method,
@@ -111,6 +147,7 @@ final readonly class Request
         public array $files = [],
         public ?string $clientIp = null,
         string $rawBody = '',
+        public array $routeParameters = [],
     ) {
         $this->uri = self::canonicalizeUri($uri);
         $this->body = $body instanceof RequestBody
@@ -231,7 +268,8 @@ final readonly class Request
     }
 
     /**
-     * The canonical request path, i.e. the exact path the router dispatches on.
+     * The canonical request path: the raw, still percent-encoded target, with a
+     * leading run of slashes collapsed.
      *
      * ALWAYS PREFER THIS over uri()->path() for any decision about a request:
      * guards, allowlists, exclusion patterns, rate-limit keys, audit records.
@@ -239,6 +277,32 @@ final readonly class Request
      * it: uri()->path() reported "//x/admin/secret" while the router dispatched
      * "/admin/secret", so a path-based guard inspected one route and a different
      * one executed. See canonicalizeUrl() for the mechanism.
+     *
+     * ## What this string is, exactly, and what it is not
+     *
+     * This docblock used to claim the value was "the exact path the router
+     * dispatches on". IT WAS NOT, and the pattern it recommended was the
+     * exploitable one. The router rawurldecode()d every segment before
+     * matching, so "/%61dmin/secret" dispatched "/admin/secret" while this
+     * method returned "/%61dmin/secret" and a guard written as
+     * str_starts_with($request->path(), '/admin') waved it through. Measured
+     * through the real kernel, 401 became 200.
+     *
+     * The router was changed rather than this method: a LITERAL route segment
+     * is now compared byte for byte against the raw request segment, so the
+     * literal part of the dispatched route and the literal part of this string
+     * are the same bytes. That is the property a prefix guard or an anchored
+     * exclusion pattern actually needs. See
+     * RouteCollection::extractParameters(), which also explains why decoding
+     * this string instead would have been lossy.
+     *
+     * Two residual differences remain, and both are safe to rely on:
+     *
+     *   - A PARAMETER segment appears here percent-encoded and reaches the
+     *     handler decoded. Read the decoded value with routeParameter().
+     *   - A trailing slash survives here; the router ignores it unless
+     *     trailing-slash tolerance is switched off. A pattern anchored with "$"
+     *     therefore does not match the slashed form, which fails closed.
      *
      * Every construction path canonicalises through the constructor, so this
      * equals uri()->path() for any Request that exists. The extra normalisation
@@ -311,6 +375,30 @@ final readonly class Request
         return $this->attributes[$key] ?? $default;
     }
 
+    /**
+     * The value this request took from its URL under $name, and nothing else.
+     *
+     * Namespaced on purpose: unlike attribute(), it cannot return a value a
+     * middleware published, and it cannot be shadowed by one. Use it wherever
+     * the URL is the intended source. See $routeParameters.
+     */
+    public function routeParameter(string $name, ?string $default = null): ?string
+    {
+        return $this->routeParameters[$name] ?? $default;
+    }
+
+    /**
+     * Whether $name was supplied by a URL segment of the matched route.
+     *
+     * A security decision keyed on an attribute must consult this: a value the
+     * caller chose in the URL is not evidence about the caller. See
+     * $routeParameters and RequestAttributeGuard.
+     */
+    public function isRouteParameter(string $name): bool
+    {
+        return array_key_exists($name, $this->routeParameters);
+    }
+
     public function isMethod(string $method): bool
     {
         return $this->method === strtoupper($method);
@@ -374,15 +462,16 @@ final readonly class Request
         $attributes[$key] = $value;
 
         return new self(
-            method:     $this->method,
-            uri:        $this->uri,
-            body:       $this->body,
-            query:      $this->query,
-            headers:    $this->headerBag,
-            cookies:    $this->cookieJar,
-            attributes: $attributes,
-            files:      $this->files,
-            clientIp:   $this->clientIp,
+            method:          $this->method,
+            uri:             $this->uri,
+            body:            $this->body,
+            query:           $this->query,
+            headers:         $this->headerBag,
+            cookies:         $this->cookieJar,
+            attributes:      $attributes,
+            files:           $this->files,
+            clientIp:        $this->clientIp,
+            routeParameters: $this->routeParameters,
         );
     }
 
@@ -392,15 +481,43 @@ final readonly class Request
     public function withAttributes(array $attributes): self
     {
         return new self(
-            method:     $this->method,
-            uri:        $this->uri,
-            body:       $this->body,
-            query:      $this->query,
-            headers:    $this->headerBag,
-            cookies:    $this->cookieJar,
-            attributes: array_merge($this->attributes, $attributes),
-            files:      $this->files,
-            clientIp:   $this->clientIp,
+            method:          $this->method,
+            uri:             $this->uri,
+            body:            $this->body,
+            query:           $this->query,
+            headers:         $this->headerBag,
+            cookies:         $this->cookieJar,
+            attributes:      array_merge($this->attributes, $attributes),
+            files:           $this->files,
+            clientIp:        $this->clientIp,
+            routeParameters: $this->routeParameters,
+        );
+    }
+
+    /**
+     * Publish the matched route's placeholders onto the request.
+     *
+     * They land in $attributes exactly as withAttributes() would put them
+     * there, which is the contract handlers and middlewares are written
+     * against, AND in $routeParameters, which records that the URL is where
+     * they came from. HttpKernel calls this instead of withAttributes() so that
+     * provenance exists for every request the framework routes.
+     *
+     * @param array<string, string> $parameters
+     */
+    public function withRouteParameters(array $parameters): self
+    {
+        return new self(
+            method:          $this->method,
+            uri:             $this->uri,
+            body:            $this->body,
+            query:           $this->query,
+            headers:         $this->headerBag,
+            cookies:         $this->cookieJar,
+            attributes:      array_merge($this->attributes, $parameters),
+            files:           $this->files,
+            clientIp:        $this->clientIp,
+            routeParameters: array_merge($this->routeParameters, $parameters),
         );
     }
 
@@ -630,8 +747,16 @@ final readonly class Request
             return $method;
         }
 
+        // A NON-SCALAR "_method" used to reach a (string) cast and raise
+        // "Array to string conversion" from inside fromGlobals(). In the
+        // reference bootstrap that runs BEFORE the kernel exists, so the notice
+        // escapes every error-handling seam the framework has: "_method[]=PUT"
+        // was a one-parameter way to make the entry point emit a PHP warning.
+        // A body override that is not a scalar simply is not an override.
+        $bodyOverride = $parsedBody['_method'] ?? null;
+
         $override = $headers['x-http-method-override']
-            ?? (isset($parsedBody['_method']) ? (string) $parsedBody['_method'] : null);
+            ?? (is_scalar($bodyOverride) ? (string) $bodyOverride : null);
 
         if ($override === null) {
             return $method;

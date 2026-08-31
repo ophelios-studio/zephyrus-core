@@ -142,6 +142,23 @@ final class ConfigurationFile
      * Resolve an !env tag value.
      *
      * Format: VAR_NAME[, default_value]
+     *
+     * ## An HTTP_-prefixed name is never read from $_SERVER: CVE-2016-5385
+     *
+     * $_SERVER is not the process environment. Under CGI and FastCGI every
+     * request header arrives in it as HTTP_<NAME>, so "!env HTTP_PROXY" used to
+     * resolve to whatever a caller put in a "Proxy:" header. That is httpoxy,
+     * and it turns one line of configuration into a caller-chosen outbound
+     * proxy for the whole application.
+     *
+     * The trustworthy sources are consulted first and unconditionally: $_ENV,
+     * then getenv(), which reads the real process environment even when
+     * variables_order leaves $_ENV empty, as it does under php-fpm by default.
+     *
+     * The $_SERVER fallback is KEPT for every other name, because setting
+     * configuration through fastcgi_param / SetEnv is a documented deployment
+     * pattern and removing it would silently swap live values for defaults. It
+     * is the HTTP_ family, and only that family, that a client can write.
      */
     private function resolveEnvTag(mixed $value): mixed
     {
@@ -150,6 +167,19 @@ final class ConfigurationFile
         $envKey = trim($arguments[0], " \t\n\r\0\x0B\"'");
         $default = isset($arguments[1]) ? trim($arguments[1], " \t\n\r\0\x0B\"'") : null;
 
-        return $_ENV[$envKey] ?? $_SERVER[$envKey] ?? $default;
+        if (array_key_exists($envKey, $_ENV)) {
+            return $_ENV[$envKey];
+        }
+
+        $fromProcessEnvironment = getenv($envKey);
+        if ($fromProcessEnvironment !== false) {
+            return $fromProcessEnvironment;
+        }
+
+        if (!str_starts_with($envKey, 'HTTP_') && array_key_exists($envKey, $_SERVER)) {
+            return $_SERVER[$envKey];
+        }
+
+        return $default;
     }
 }

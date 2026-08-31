@@ -76,6 +76,9 @@ final readonly class SecurityConfig
      *                                  every header a caller can name: a proxy manages one family
      *                                  and passes the rest through untouched. Defaults to the
      *                                  X-Forwarded-* family; [] reads none.
+     * @param string[] $declaredKeys    Canonical names of the settings the SOURCE ARRAY actually
+     *                                  contained. See isDeclared(); empty when the object was
+     *                                  built directly rather than through fromArray().
      */
     public function __construct(
         public bool $forceHttps,
@@ -87,7 +90,27 @@ final readonly class SecurityConfig
         public array $trustedProxies = [],
         public ?string $encryptionKey = null,
         public array $trustedHeaders = Request::TRUSTED_HEADERS_DEFAULT,
+        public array $declaredKeys = [],
     ) {
+    }
+
+    /**
+     * Whether the configuration source actually named this setting.
+     *
+     * The typed object cannot answer that on its own: csrfEnabled DEFAULTS to
+     * true, so "the operator asked for CSRF" and "the operator said nothing"
+     * produce the identical value. ApplicationBuilder needs the difference to
+     * refuse a boot where a protection was REQUESTED and nothing consumes it,
+     * without failing every application that simply never mentioned the
+     * section.
+     *
+     * Accepts the canonical camelCase name: forceHttps, csrfEnabled,
+     * csrfAutoHtml, csrfExceptions, allowedHosts, maxBodySize, trustedProxies,
+     * trustedHeaders, encryptionKey.
+     */
+    public function isDeclared(string $key): bool
+    {
+        return in_array($key, $this->declaredKeys, true);
     }
 
     /**
@@ -232,6 +255,58 @@ final readonly class SecurityConfig
             trustedProxies: array_values($trustedProxies),
             encryptionKey: $encryptionKey,
             trustedHeaders: $normalizedTrustedHeaders,
+            declaredKeys: self::declaredKeys($values, $csrf, $encryption),
         );
+    }
+
+    /**
+     * The canonical names the source array actually mentioned, under any of the
+     * aliases fromArray() accepts. See isDeclared().
+     *
+     * @param array<string, mixed> $values
+     * @param array<string, mixed> $csrf
+     * @param array<string, mixed> $encryption
+     * @return list<string>
+     */
+    private static function declaredKeys(array $values, array $csrf, array $encryption): array
+    {
+        $aliases = [
+            'forceHttps'     => [['forceHttps', 'force_https'], []],
+            'csrfEnabled'    => [['csrfEnabled', 'csrf_enabled'], ['enabled', 'csrf_enabled']],
+            'csrfAutoHtml'   => [['csrfAutoHtml', 'csrf_auto_html'], ['autoHtml', 'auto_html']],
+            'csrfExceptions' => [['csrfExceptions', 'csrf_exceptions'], ['exceptions', 'csrf_exceptions']],
+            'allowedHosts'   => [['allowedHosts', 'allowed_hosts'], []],
+            'maxBodySize'    => [['maxBodySize', 'max_body_size'], []],
+            'trustedProxies' => [['trustedProxies', 'trusted_proxies'], []],
+            'trustedHeaders' => [['trustedHeaders', 'trusted_headers'], []],
+        ];
+
+        $declared = [];
+
+        foreach ($aliases as $canonical => [$flatKeys, $nestedKeys]) {
+            foreach ($flatKeys as $key) {
+                if (array_key_exists($key, $values)) {
+                    $declared[] = $canonical;
+                    continue 2;
+                }
+            }
+
+            foreach ($nestedKeys as $key) {
+                if (array_key_exists($key, $csrf)) {
+                    $declared[] = $canonical;
+                    continue 2;
+                }
+            }
+        }
+
+        if (
+            array_key_exists('key', $encryption)
+            || array_key_exists('encryptionKey', $values)
+            || array_key_exists('encryption_key', $values)
+        ) {
+            $declared[] = 'encryptionKey';
+        }
+
+        return $declared;
     }
 }
