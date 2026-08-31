@@ -230,15 +230,34 @@ final class RouteCache
 
         $directory = dirname($this->cacheFile);
         if ($directory !== '' && $directory !== '.' && !is_dir($directory)) {
-            $created = @mkdir($directory, 0777, true);
+            // 0755, never 0777. The cache drives Class@method dispatch, so a
+            // local write to it is arbitrary dispatch inside this application.
+            // Under "umask 0" the old mode landed the directory 0777 and the
+            // file 0666, i.e. world-writable, on any machine that runs a
+            // deploy with a permissive umask.
+            $created = @mkdir($directory, 0755, true);
             if ($created === false && !is_dir($directory)) {
                 throw new RouteCacheException(sprintf('Unable to create route cache directory: %s', $directory));
             }
         }
 
-        $result = @file_put_contents($this->cacheFile, $json);
+        // Written to a temporary file and renamed into place, so a concurrent
+        // load() never observes a half-written payload, and chmod()ed
+        // explicitly rather than left to the umask.
+        $temporary = $this->cacheFile . '.' . bin2hex(random_bytes(8)) . '.tmp';
 
+        $result = @file_put_contents($temporary, $json);
         if ($result === false) {
+            @unlink($temporary);
+
+            throw new RouteCacheException(sprintf('Unable to write route cache file: %s', $this->cacheFile));
+        }
+
+        @chmod($temporary, 0644);
+
+        if (@rename($temporary, $this->cacheFile) === false) {
+            @unlink($temporary);
+
             throw new RouteCacheException(sprintf('Unable to write route cache file: %s', $this->cacheFile));
         }
     }
@@ -362,14 +381,23 @@ final class RouteCache
             $this->assertValidMiddlewares($middlewares);
             $this->assertValidRouteName($name);
 
-            $collection->add(Route::define(
-                method: $entry['method'],
-                path: $entry['path'],
-                handler: $entry['handler'],
-                constraints: $constraints,
-                middlewares: $middlewares,
-                name: $name,
-            ));
+            try {
+                // Route validates its own placeholder names, so a cache file
+                // carrying a poisoned path fails here. Everything wrong with
+                // the cache file must surface as a RouteCacheException.
+                $route = Route::define(
+                    method: $entry['method'],
+                    path: $entry['path'],
+                    handler: $entry['handler'],
+                    constraints: $constraints,
+                    middlewares: $middlewares,
+                    name: $name,
+                );
+            } catch (\Zephyrus\Routing\Exception\RouteSignatureException $exception) {
+                throw new RouteCacheException($exception->getMessage(), previous: $exception);
+            }
+
+            $collection->add($route);
         }
 
         try {

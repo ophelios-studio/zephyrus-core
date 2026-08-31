@@ -4,8 +4,21 @@ declare(strict_types=1);
 
 namespace Zephyrus\Http;
 
+use InvalidArgumentException;
+
 final readonly class Response
 {
+    /**
+     * RFC 9110 "token": the only characters a header FIELD NAME may contain.
+     *
+     * withHeader() used to accept any string, so Response::withHeader() with a
+     * name taken from a request reached the SAPI verbatim: a route echoing a
+     * path segment into a header name emitted "content-length: v" and let a
+     * caller state a header the application never meant to send. The name is
+     * lowercased for storage, so the case-insensitive charset is enough.
+     */
+    private const HEADER_NAME_PATTERN = "/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/D";
+
     private const STATUS_PHRASES = [
         100 => 'Continue',
         101 => 'Switching Protocols',
@@ -28,6 +41,7 @@ final readonly class Response
         406 => 'Not Acceptable',
         409 => 'Conflict',
         410 => 'Gone',
+        413 => 'Content Too Large',
         415 => 'Unsupported Media Type',
         422 => 'Unprocessable Content',
         429 => 'Too Many Requests',
@@ -96,8 +110,13 @@ final readonly class Response
         return new self(body: '', status: $status, headers: ['location' => $url]);
     }
 
+    /**
+     * @throws InvalidArgumentException When $name is not a valid header name.
+     */
     public function withHeader(string $name, string $value): self
     {
+        self::assertValidHeaderName($name);
+
         $headers = $this->headers;
         $headers[strtolower($name)] = $value;
 
@@ -110,11 +129,13 @@ final readonly class Response
 
     /**
      * @param array<string, string> $headers
+     * @throws InvalidArgumentException When any name is not a valid header name.
      */
     public function withHeaders(array $headers): self
     {
         $normalized = $this->headers;
         foreach ($headers as $name => $value) {
+            self::assertValidHeaderName($name);
             $normalized[strtolower($name)] = $value;
         }
 
@@ -123,6 +144,27 @@ final readonly class Response
             status: $this->status,
             headers: $normalized,
         );
+    }
+
+    /**
+     * Refuse a header name outside the RFC 9110 token charset.
+     *
+     * Validated on the MUTATORS rather than in the constructor. The named
+     * constructors all pass fixed names, and the constructor is the path
+     * HttpExceptionResponder builds its fallback response on: a throw there
+     * would replace a handled error with an unhandled one. The mutators are
+     * where a name derived from outside input actually arrives.
+     *
+     * @throws InvalidArgumentException
+     */
+    private static function assertValidHeaderName(string $name): void
+    {
+        if (preg_match(self::HEADER_NAME_PATTERN, $name) !== 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid HTTP header name "%s": a field name may only contain RFC 9110 token characters.',
+                $name,
+            ));
+        }
     }
 
     public function withoutHeader(string $name): self

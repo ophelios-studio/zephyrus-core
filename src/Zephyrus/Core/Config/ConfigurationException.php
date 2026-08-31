@@ -64,4 +64,34 @@ final class ConfigurationException extends ZephyrusException
     {
         return new self($reason);
     }
+
+    /**
+     * Thrown when a `security:` setting asks for a protection and nothing in
+     * the assembled kernel provides it.
+     *
+     * The whole block used to be inert: forceHttps, csrfEnabled, allowedHosts
+     * and maxBodySize were parsed, validated, echoed by toArray() and connected
+     * to nothing, so a configuration declaring all four protections ON served a
+     * plain-HTTP, forged-Host, tokenless 5 MiB POST. Failing at boot is the
+     * honest answer, because the framework must not start wiring middlewares
+     * off a config file: an application that already registers its own would
+     * get a second copy of each.
+     *
+     * @param array<string, class-string> $unwired setting name => the middleware that consumes it
+     */
+    public static function unwiredSecurity(array $unwired): self
+    {
+        $lines = [];
+        foreach ($unwired as $setting => $middleware) {
+            $lines[] = sprintf('  - %s is not enforced: register %s', $setting, $middleware);
+        }
+
+        return new self(
+            "Configuration declares security settings that nothing in this application enforces:\n"
+            . implode("\n", $lines)
+            . "\n\nRegister the middleware(s) on the builder, or acknowledge the gap explicitly with "
+            . 'ApplicationBuilder::withAcknowledgedSecurityKeys([...]) when the protection is provided '
+            . 'elsewhere (a reverse proxy, a wrapping middleware, the web server).',
+        );
+    }
 }

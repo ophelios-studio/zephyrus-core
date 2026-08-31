@@ -23,10 +23,12 @@ use Zephyrus\Routing\Exception\RouteParameterException;
  * Dispatches to a controller method using reflection-based argument injection,
  * in this order, per parameter:
  * - Parameters type-hinted as Request receive the current Request instance.
+ * - Parameters NAMED AFTER A PLACEHOLDER of the matched route are injected from
+ *   the route match, never from the request attributes. See invoke() for why
+ *   attribute-wins was withdrawn.
  * - Parameters whose name matches a request attribute are injected from
- *   $request->attribute($name), cast to the declared scalar type. The route
- *   parameters are attributes (HttpKernel hydrates them before the pipeline),
- *   and so is anything a middleware chose to publish.
+ *   $request->attribute($name), cast to the declared scalar type. That is how a
+ *   middleware publishes a value to a handler.
  * - Parameters that match nothing by name fall back to POSITION, but only over
  *   the route parameters of the matched route that no earlier parameter already
  *   consumed by name. See resolvePositionalPool() for why the pool is that
@@ -134,6 +136,7 @@ final class HandlerResolver
         // earlier handler parameter already took by name. Only these are
         // eligible for the positional fallback.
         $positionalPool = $this->resolvePositionalPool($match, $request);
+        $routeParameterNames = $this->routeParameterNames($match->route->path);
 
         foreach ($reflection->getParameters() as $param) {
             $type = $param->getType();
@@ -145,9 +148,34 @@ final class HandlerResolver
                 continue;
             }
 
-            // Named attribute (a route parameter, or a value a middleware
-            // published onto the request). Binding by name is the contract;
-            // position is only ever a fallback.
+            // A PLACEHOLDER OF THIS ROUTE is taken from the match, never from
+            // the attributes.
+            //
+            // The attributes used to win, and that was framed as a feature: a
+            // middleware could "deliberately rewrite a route parameter". What
+            // it actually meant is that a route constraint validated the URL
+            // SEGMENT and then something else was handed to the handler, with
+            // the replacement never constraint-checked. Measured:
+            //
+            //   Route constraint on {docId}: strict UUID.
+            //   GET /docs/<valid-uuid> + header X-Doc-Id: ../../../etc/passwd
+            //     -> 200 LOADING FILE: /var/docs/../../../etc/passwd.pdf
+            //
+            // A constraint that is not authoritative for its own handler
+            // argument is not a constraint. A middleware that genuinely needs
+            // to influence a handler publishes an attribute under a name that
+            // is NOT a placeholder of the route, which still binds by name
+            // below.
+            if (in_array($name, $routeParameterNames, true) && array_key_exists($name, $match->parameters)) {
+                $args[] = $this->castToType($match->parameters[$name], $type, $class, $method, $name);
+                unset($positionalPool[$name]);
+                continue;
+            }
+
+            // Named attribute (a value a middleware published onto the
+            // request, or a route parameter hydrated by a caller driving this
+            // resolver directly). Binding by name is the contract; position is
+            // only ever a fallback.
             if (array_key_exists($name, $request->attributes)) {
                 $attrValue = $request->attributes[$name];
                 $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
@@ -193,10 +221,13 @@ final class HandlerResolver
      * Membership is read off the route PATH rather than off the match, so the
      * pool is right for both wirings in use: HttpKernel merges the match's
      * parameters into the attributes before dispatch, while a caller driving
-     * this resolver directly may hydrate the attributes itself. Values still
-     * come from the request attributes when present, so a middleware that
-     * deliberately REWRITES a route parameter keeps winning; only the
-     * membership of the pool is narrowed, not the source of truth.
+     * this resolver directly may hydrate the attributes itself.
+     *
+     * VALUES COME FROM THE MATCH FIRST, and fall back to the attributes only
+     * for a placeholder the match does not carry, which is the direct-caller
+     * wiring above. The attributes used to win here too, so a middleware could
+     * replace a constraint-checked segment with anything at all and the
+     * replacement reached the handler unchecked. See invoke().
      *
      * @return array<string, mixed>
      */
@@ -205,13 +236,13 @@ final class HandlerResolver
         $pool = [];
 
         foreach ($this->routeParameterNames($match->route->path) as $name) {
-            if (array_key_exists($name, $request->attributes)) {
-                $pool[$name] = $request->attributes[$name];
+            if (array_key_exists($name, $match->parameters)) {
+                $pool[$name] = $match->parameters[$name];
                 continue;
             }
 
-            if (array_key_exists($name, $match->parameters)) {
-                $pool[$name] = $match->parameters[$name];
+            if (array_key_exists($name, $request->attributes)) {
+                $pool[$name] = $request->attributes[$name];
             }
         }
 
@@ -314,14 +345,39 @@ final class HandlerResolver
         };
     }
 
+    /**
+     * Convert a value to int, refusing anything this platform cannot represent.
+     *
+     * The digit test used to be the whole check, and (int) then SATURATED
+     * silently: "/n/9999999999999999999999" answered 200 with
+     * id=9223372036854775807, so two distinct URLs collapsed to one argument
+     * and a lookup, an audit record or an ownership check keyed on the wrong
+     * row. That also contradicted this class's own contract, which is to throw
+     * RouteParameterException for a value it cannot represent.
+     *
+     * Representability is proven by ROUND-TRIPPING rather than by comparing
+     * against PHP_INT_MAX as a string, so leading zeros ("007") and "-0" keep
+     * working exactly as before.
+     */
     private function toInt(mixed $value, string $class, string $method, string $parameter): int
     {
         if (is_int($value)) {
             return $value;
         }
 
-        if (is_string($value) && preg_match('/^-?\d+$/', $value) === 1) {
-            return (int) $value;
+        if (is_string($value) && preg_match('/^-?\d+$/D', $value) === 1) {
+            $negative = str_starts_with($value, '-');
+            $digits = ltrim($negative ? substr($value, 1) : $value, '0');
+            if ($digits === '') {
+                $digits = '0';
+            }
+
+            $canonical = ($negative && $digits !== '0' ? '-' : '') . $digits;
+            $converted = (int) $value;
+
+            if ((string) $converted === $canonical) {
+                return $converted;
+            }
         }
 
         throw new RouteParameterException($class, $method, $parameter, 'int', $value);

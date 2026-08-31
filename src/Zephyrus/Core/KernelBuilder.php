@@ -194,6 +194,40 @@ final class KernelBuilder
     }
 
     /**
+     * Whether a middleware of the given class is already registered, globally
+     * or under a route-middleware name.
+     *
+     * This exists so that a caller can ask "is this protection wired?" WITHOUT
+     * the builder ever wiring one itself. ApplicationBuilder uses it to refuse
+     * a boot whose security configuration nothing consumes; a consumer can use
+     * it to avoid registering a second copy of something it already registers.
+     *
+     * Matching is by instanceof. The framework's own security middlewares are
+     * final, so in practice that means the exact class: a consumer that WRAPS
+     * one in a delegating decorator is invisible here, which is a real limit
+     * and the reason an explicit escape hatch exists. See
+     * ApplicationBuilder::withAcknowledgedSecurityKeys().
+     *
+     * @param class-string $class
+     */
+    public function hasMiddleware(string $class): bool
+    {
+        foreach ($this->globalMiddlewares as $middleware) {
+            if ($middleware instanceof $class) {
+                return true;
+            }
+        }
+
+        foreach ($this->namedRouteMiddlewares as $middleware) {
+            if ($middleware instanceof $class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Assembles and returns a fully wired HttpKernel.
      *
      * The builder itself is unchanged after this call and may be reused to

@@ -6,7 +6,9 @@ namespace Zephyrus\Core;
 
 use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\LocalizationConfig;
+use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Http\MiddlewareInterface;
@@ -15,6 +17,10 @@ use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Routing\Router;
+use Zephyrus\Security\AllowedHostsMiddleware;
+use Zephyrus\Security\CsrfMiddleware;
+use Zephyrus\Security\ForceHttpsMiddleware;
+use Zephyrus\Security\MaxBodySizeMiddleware;
 
 final class ApplicationBuilder
 {
@@ -28,6 +34,11 @@ final class ApplicationBuilder
     private array $supportedLocales = [];
 
     private ?Configuration $configuration = null;
+
+    /** @var list<string> */
+    private array $acknowledgedSecurityKeys = [];
+
+    private bool $securityWiringCheckEnabled = true;
 
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
@@ -282,6 +293,10 @@ final class ApplicationBuilder
      * - application.debug → Tracy Debugger initialization (in build())
      * - localization.timezone → date_default_timezone_set() (in build())
      *
+     * NOTHING in the `security:` section is wired from here, on purpose; see
+     * assertSecurityConfigurationIsWired(), which refuses to boot rather than
+     * letting a declared protection sit inert.
+     *
      * @param Configuration $configuration The full application configuration.
      * @param string|null   $basePath      Optional project root for resolving
      *                                     relative paths (e.g. locale_path).
@@ -332,8 +347,155 @@ final class ApplicationBuilder
         return $this->withConfiguration(Configuration::fromOptionalFiles($paths));
     }
 
+    /**
+     * Declare that a security setting is enforced somewhere build() cannot see.
+     *
+     * The check in build() knows about the middlewares registered on this
+     * builder and nothing else, so it is wrong in exactly one direction: an
+     * application enforcing HTTPS at its load balancer, capping the body size
+     * in nginx, or wrapping a framework middleware in a decorator instead of
+     * extending it, is doing the right thing and would still be refused. This
+     * is how such an application says so, once, in the bootstrap, where the
+     * next reader can see the claim.
+     *
+     * Names may be given short ("maxBodySize") or qualified
+     * ("security.maxBodySize"); both forms mean the same setting.
+     *
+     * @param string[] $keys
+     */
+    public function withAcknowledgedSecurityKeys(array $keys): self
+    {
+        $clone = clone $this;
+        $clone->acknowledgedSecurityKeys = array_values(array_unique(array_merge(
+            $this->acknowledgedSecurityKeys,
+            array_map(
+                static fn (string $key): string => str_starts_with($key, 'security.')
+                    ? substr($key, strlen('security.'))
+                    : $key,
+                $keys,
+            ),
+        )));
+
+        return $clone;
+    }
+
+    /**
+     * Turn the wiring check off wholesale.
+     *
+     * Prefer withAcknowledgedSecurityKeys(): it keeps the check live for every
+     * OTHER setting, including ones added to the framework later. This exists
+     * for a bootstrap that legitimately cannot enumerate them, and it is the
+     * blunt instrument.
+     */
+    public function withoutSecurityWiringCheck(): self
+    {
+        $clone = clone $this;
+        $clone->securityWiringCheckEnabled = false;
+
+        return $clone;
+    }
+
+    /**
+     * Refuse to boot when a declared security setting enforces nothing.
+     *
+     * ## Why this throws instead of wiring the middleware itself
+     *
+     * The whole `security:` block was inert. withConfiguration() wires
+     * localization, application.debug and the timezone; KernelBuilder::build()
+     * never reads Configuration at all. So forceHttps, csrfEnabled,
+     * allowedHosts and maxBodySize were parsed, type-validated, range-checked,
+     * unit-tested, echoed by Configuration::toArray() and connected to nothing:
+     * a configuration declaring all four protections ON served a plain-HTTP,
+     * forged-Host, tokenless 5 MiB POST.
+     *
+     * The obvious repair, wiring them here, is the dangerous one. Applications
+     * already register their own CsrfMiddleware and their own security-header
+     * middleware from their own bootstrap; a framework that started registering
+     * them too would give those applications TWO CSRF middlewares on every
+     * request. That is a worse outage than the silence, and it is the exact
+     * class of breakage this whole review exists to stop. So the framework
+     * still wires nothing, and instead refuses to start while naming the gap.
+     *
+     * ## What is checked, and what deliberately is not
+     *
+     * Only a setting the source file actually DECLARED (see
+     * SecurityConfig::isDeclared()) and that asks for a protection: forceHttps
+     * true, a non-empty allowedHosts, CSRF enabled, a finite maxBodySize.
+     * Disabling something inert is harmless and is never reported.
+     *
+     * trustedProxies, trustedHeaders and encryptionKey are NOT checked. They
+     * are consumed outside the builder entirely, by Request::fromGlobals() and
+     * by whatever constructs Cryptography, so the builder cannot observe
+     * whether an application passed them, and guessing would refuse correctly
+     * wired applications at boot. That is a real, stated limit of this check
+     * rather than an oversight.
+     *
+     * @throws ConfigurationException
+     */
+    private function assertSecurityConfigurationIsWired(SecurityConfig $security): void
+    {
+        if (!$this->securityWiringCheckEnabled) {
+            return;
+        }
+
+        $unwired = [];
+
+        if (
+            $security->isDeclared('forceHttps')
+            && $security->forceHttps
+            && !$this->kernelBuilder->hasMiddleware(ForceHttpsMiddleware::class)
+        ) {
+            $unwired['forceHttps'] = ForceHttpsMiddleware::class;
+        }
+
+        if (
+            $security->isDeclared('allowedHosts')
+            && $security->allowedHosts !== []
+            && !$this->kernelBuilder->hasMiddleware(AllowedHostsMiddleware::class)
+        ) {
+            $unwired['allowedHosts'] = AllowedHostsMiddleware::class;
+        }
+
+        if (
+            ($security->isDeclared('csrfEnabled')
+                || $security->isDeclared('csrfExceptions')
+                || $security->isDeclared('csrfAutoHtml'))
+            && $security->csrfEnabled
+            && !$this->kernelBuilder->hasMiddleware(CsrfMiddleware::class)
+        ) {
+            $unwired['csrf'] = CsrfMiddleware::class;
+        }
+
+        if (
+            $security->isDeclared('maxBodySize')
+            && $security->maxBodySize > 0
+            && !$this->kernelBuilder->hasMiddleware(MaxBodySizeMiddleware::class)
+        ) {
+            $unwired['maxBodySize'] = MaxBodySizeMiddleware::class;
+        }
+
+        foreach ($this->acknowledgedSecurityKeys as $acknowledged) {
+            unset($unwired[$acknowledged]);
+        }
+
+        if ($unwired !== []) {
+            $qualified = [];
+            foreach ($unwired as $setting => $middleware) {
+                $qualified['security.' . $setting] = $middleware;
+            }
+
+            throw ConfigurationException::unwiredSecurity($qualified);
+        }
+    }
+
     public function build(): Application
     {
+        // Refuse a security configuration nothing enforces BEFORE any side
+        // effect (debugger, timezone, App:: statics) has happened.
+        if ($this->configuration !== null) {
+            $this->assertSecurityConfigurationIsWired($this->configuration->security);
+        }
+
         // Wire debug mode (Tracy) and timezone before anything else
         if ($this->configuration !== null) {
             DebugIntegration::initialize($this->configuration->application->debug);

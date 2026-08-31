@@ -187,8 +187,13 @@ final readonly class HttpKernel
             );
         }
 
+        // withRouteParameters(), not withAttributes(): the values land in the
+        // attributes exactly as before, and the request additionally records
+        // that a URL segment is where they came from. A security decision keyed
+        // on an attribute can then tell a value the CALLER chose from a value a
+        // middleware established. See Request::$routeParameters.
         return $this->pipe(
-            $request->withAttributes($match->parameters),
+            $request->withRouteParameters($match->parameters),
             fn (Request $piped): Response => $this->dispatchMatchedRoute($match, $piped),
         );
     }
