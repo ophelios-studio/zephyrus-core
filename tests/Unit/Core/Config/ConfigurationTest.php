@@ -331,6 +331,24 @@ final class ConfigurationTest extends TestCase
         self::assertArrayHasKey('currency', $export['localization']);
     }
 
+    /**
+     * toArray() is what a debug panel or a config dump renders. It must not keep
+     * advertising a knob the framework removed: a reader seeing
+     * `emulate_prepares: false` would reasonably conclude it could be set to true.
+     */
+    public function testToArrayNoLongerExportsTheRemovedEmulatePreparesKey(): void
+    {
+        $config = Configuration::fromArray([
+            'database' => ['database' => 'db', 'username' => 'u'],
+        ]);
+
+        $export = $config->toArray();
+
+        self::assertIsArray($export['database']);
+        self::assertArrayNotHasKey('emulate_prepares', $export['database']);
+        self::assertArrayNotHasKey('emulatePrepares', $export['database']);
+    }
+
     public function testFromOptionalFilesSkipsMissingOverrides(): void
     {
         $basePath = sys_get_temp_dir() . '/zephyrus-config-optional-base-' . uniqid('', true) . '.php';

@@ -15,19 +15,23 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  *
  * WHY THE MESSAGE IS TERSE BY DEFAULT
  *
- * A driver error message is not a safe string. With PDO::ATTR_EMULATE_PREPARES
- * enabled, parameters are interpolated client-side, so the statement PostgreSQL
- * parsed is the INTERPOLATED one and its error-position context quotes real
- * column values back at you:
+ * A driver error message is not a safe string, and native prepares do not make
+ * it one. Zephyrus no longer interpolates parameters client-side, so the old
+ * worst case is gone (the whole statement echoed back with every value inlined:
+ * `LINE 1: ... VALUES ('1','Jane Roe','a private note', ...`). What remains is
+ * still enough to leak, and both halves were measured against PostgreSQL 16 on
+ * native prepares:
  *
- *   LINE 1: ... VALUES ('1','Jane Roe','a private note', ...
+ *   DETAIL:  Key (email)=(jane@example.com) already exists.
+ *   CONTEXT: unnamed portal parameter $1 = 'jane@example.com'
  *
- * The same is true of `DETAIL: Key (email)=(...)` on a constraint violation.
- * That message then travels wherever exceptions travel: logs, alert emails,
- * debug error pages. queryExecutionFailed() therefore keeps the SQLSTATE (a
- * condition code, never a value) in the message and holds the statement and the
- * driver text in sql() and driverMessage(), where a caller must ask for them and
- * can scrub them first.
+ * The first is emitted for any unique or foreign-key violation, the second for
+ * any parameter PostgreSQL fails to coerce. That message then travels wherever
+ * exceptions travel: logs, alert emails, debug error pages.
+ * queryExecutionFailed() therefore keeps the SQLSTATE (a condition code, never
+ * a value) in the message and holds the statement and the driver text in sql()
+ * and driverMessage(), where a caller must ask for them and can scrub them
+ * first.
  *
  * enableVerboseMessages() restores the previous, fully detailed message shape
  * verbatim. It is a development and diagnosis switch: turning it on in a
@@ -122,8 +126,8 @@ final class DatabaseException extends ZephyrusRuntimeException
 
     /**
      * The driver's own error text, when this instance came from
-     * queryExecutionFailed(). Under emulated prepares it can contain interpolated
-     * parameter values; scrub it before writing it to any sink.
+     * queryExecutionFailed(). It can contain real column values even on native
+     * prepares (see the class docblock); scrub it before writing it to any sink.
      */
     public function driverMessage(): ?string
     {

@@ -18,17 +18,13 @@ namespace Zephyrus\Core\Config;
  *     it is interpolated into SET client_encoding).
  *   - sslMode and sslRootCert must be DSN-safe (constructor AND fromArray).
  *
- * Performance note (emulatePrepares):
- *   PostgreSQL server-side prepared statements cost three network round-trips
- *   per query (Parse, Bind/Describe, Execute). Over a non-local DB link that
- *   dominates query latency. Setting PDO::ATTR_EMULATE_PREPARES collapses each
- *   query to a single round-trip by interpolating parameters client-side.
- *
- *   This is a trade-off: emulated prepares lose server-side plan caching and
- *   typed server-side binding, and PostgreSQL is stricter about parameter
- *   types under emulation (e.g. integer LIMIT/OFFSET, typed casts). It is
- *   therefore OPT-IN and defaults to false, preserving native prepares and the
- *   behavior of every existing application.
+ * Prepared statements:
+ *   Zephyrus always uses PostgreSQL's native server-side prepared statements
+ *   (the extended query protocol), and there is no setting to change that.
+ *   Client-side parameter emulation was available here as `emulate_prepares`
+ *   until it was REMOVED: it is a security downgrade, not a tuning knob. See
+ *   REMOVED_EMULATE_PREPARES_KEYS for what a file carrying the key gets, and
+ *   Zephyrus\Data\Database for the enforcement.
  *
  * Transport security note (sslMode / sslRootCert):
  *   libpq negotiates TLS by itself and defaults to 'prefer', meaning it
@@ -59,6 +55,18 @@ final readonly class DatabaseConfig
      */
     public const array SSL_MODES = ['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'];
 
+    /**
+     * Configuration keys that once turned client-side parameter emulation on
+     * and that fromArray() now REFUSES, in either spelling.
+     *
+     * Rejected rather than ignored, and rejected even when set to false. An
+     * operator who wrote this line down believed something about their
+     * deployment, and every one of those beliefs is now wrong; silently
+     * dropping the key would leave a configuration file documenting behaviour
+     * the framework no longer has.
+     */
+    public const array REMOVED_EMULATE_PREPARES_KEYS = ['emulatePrepares', 'emulate_prepares'];
+
     public function __construct(
         public string $driver,
         public string $host,
@@ -67,7 +75,6 @@ final readonly class DatabaseConfig
         public string $username,
         #[\SensitiveParameter] public string $password,
         public string $charset,
-        public bool $emulatePrepares = false,
         public ?string $sslMode = null,
         public ?string $sslRootCert = null,
     ) {
@@ -80,11 +87,15 @@ final readonly class DatabaseConfig
         // canonical value or null.
 
         // charset is interpolated verbatim into `SET client_encoding TO '<charset>'`
-        // at connect time (Database::fromConfig). Under ATTR_EMULATE_PREPARES that
-        // statement goes out on the simple query protocol, where a quote plus a
-        // semicolon starts a SECOND command, so an unvalidated charset was arbitrary
-        // SQL executed as the application role. fromArray() already applied this
-        // check; the constructor did not, and a directly built config skipped it.
+        // at connect time (Database::fromConfig), so a quote plus a semicolon in the
+        // value would try to open a SECOND command. The extended query protocol now
+        // refuses that outright ("cannot insert multiple commands into a prepared
+        // statement"), which is exactly the defence-in-depth layer client-side
+        // emulation used to remove: under emulation the same value ran as arbitrary
+        // SQL under the application role. The check stays regardless, because that
+        // refusal belongs to the driver rather than to us and the statement could
+        // move. fromArray() already applied this check; the constructor did not, and
+        // a directly built config skipped it.
         if (preg_match('/^[a-zA-Z0-9_]+$/', $this->charset) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
@@ -125,6 +136,15 @@ final readonly class DatabaseConfig
      */
     public static function fromArray(array $values): self
     {
+        // FIRST, before any other validation. An operator upgrading a working
+        // application must be told what changed, not handed an unrelated error
+        // from further down that says nothing about the key they wrote.
+        foreach (self::REMOVED_EMULATE_PREPARES_KEYS as $removed) {
+            if (array_key_exists($removed, $values)) {
+                throw self::removedEmulatePrepares($removed);
+            }
+        }
+
         $driver   = (string) ($values['driver']   ?? 'pgsql');
         $host     = (string) ($values['host']     ?? 'localhost');
         $port     = (int)    ($values['port']     ?? 5432);
@@ -132,12 +152,9 @@ final readonly class DatabaseConfig
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
-        // Opt-in client-side parameter emulation. Accepts both a camelCase key
-        // and the canonical snake_case config key, mirroring the mixed-case
-        // key handling used across the other configuration sections.
-        $emulatePrepares = (bool) ($values['emulatePrepares'] ?? $values['emulate_prepares'] ?? false);
         // Opt-in TLS policy for the connection. Accepts the camelCase key and
-        // the canonical libpq spelling, like the pair above. Absent, blank or
+        // the canonical libpq spelling, mirroring the mixed-case key handling
+        // used across the other configuration sections. Absent, blank or
         // whitespace-only all collapse to null, which keeps the parameter out
         // of the DSN: an operator clearing an environment variable must land
         // back on the previous behaviour, not on a malformed connection string.
@@ -194,10 +211,40 @@ final readonly class DatabaseConfig
             username:        $username,
             password:        $password,
             charset:         $charset,
-            emulatePrepares: $emulatePrepares,
             sslMode:         $sslMode,
             sslRootCert:     $sslRootCert,
         );
+    }
+
+    /**
+     * The boot failure an operator gets for a configuration file that still
+     * carries the removed emulation key.
+     *
+     * Loud on purpose, and this is the one place tolerance would be the wrong
+     * instinct. A silently ignored key leaves the file asserting a property of
+     * the deployment that stopped being true, and the person who typed it acted
+     * on that belief. So the message names the key, says plainly that it was
+     * removed and why, and gives the one-line remedy.
+     */
+    private static function removedEmulatePrepares(string $key): ConfigurationException
+    {
+        return new ConfigurationException(sprintf(
+            "Configuration section 'database' field '%s' has been REMOVED from Zephyrus and is no "
+            . 'longer honoured. Client-side parameter emulation '
+            . '(PDO::ATTR_EMULATE_PREPARES) was taken out because it is a security downgrade, not a '
+            . "tuning knob:\n"
+            . "  - binding invalid UTF-8 kills the worker process instead of raising;\n"
+            . "  - PDO::quote() truncates silently at a NUL byte, storing a value nobody typed;\n"
+            . "  - parameter values are interpolated into the statement the server parses, so they "
+            . "leak into driver error messages;\n"
+            . '  - client-side interpolation gives up the extended protocol\'s refusal of a second '
+            . "statement, which is a defence-in-depth layer against SQL injection.\n"
+            . "Connections now always use native server-side prepares.\n"
+            . 'To fix: delete this line from the database section. There is no replacement setting, '
+            . 'and setting it to false is not accepted either, because the line would keep '
+            . 'documenting a knob that no longer exists.',
+            $key,
+        ));
     }
 
     /**
