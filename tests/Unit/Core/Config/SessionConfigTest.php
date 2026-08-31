@@ -28,6 +28,124 @@ final class SessionConfigTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // secure: the three states
+    // -------------------------------------------------------------------------
+
+    /**
+     * SessionConfig::fromArray([]) used to emit
+     * "PHPSESSID=...; path=/; HttpOnly; SameSite=Lax" with no Secure, so an
+     * HTTPS deployment that did not set the flag itself shipped a session
+     * cookie a downgraded request could carry. The default is now "auto", the
+     * same one Symfony ships.
+     */
+    public function testSecureDefaultsToAutoSoAnHttpsRequestGetsASecureCookie(): void
+    {
+        $config = SessionConfig::fromArray([]);
+
+        self::assertTrue($config->secureAuto);
+        self::assertTrue($config->resolveSecure(true));
+        self::assertFalse($config->resolveSecure(false));
+    }
+
+    public function testAnExplicitFalseTurnsAutoOffForLocalHttpDevelopment(): void
+    {
+        $config = SessionConfig::fromArray(['secure' => false]);
+
+        self::assertFalse($config->secureAuto);
+        self::assertFalse($config->resolveSecure(true));
+    }
+
+    public function testAnExplicitTrueIsAlwaysSecure(): void
+    {
+        $config = SessionConfig::fromArray(['secure' => true]);
+
+        self::assertFalse($config->secureAuto);
+        self::assertTrue($config->resolveSecure(false));
+    }
+
+    public function testTheStringAutoSelectsTheAutomaticMode(): void
+    {
+        $config = SessionConfig::fromArray(['secure' => 'auto']);
+
+        self::assertTrue($config->secureAuto);
+        self::assertTrue($config->resolveSecure(true));
+        self::assertFalse($config->resolveSecure(false));
+    }
+
+    /** Positional construction keeps the exact behaviour it had: no auto. */
+    public function testDirectConstructionDoesNotOptIntoAuto(): void
+    {
+        $config = new SessionConfig('PHPSESSID', 0, true, false, 'Lax', '/');
+
+        self::assertFalse($config->secureAuto);
+        self::assertFalse($config->resolveSecure(true));
+    }
+
+    // -------------------------------------------------------------------------
+    // Combinations a browser would silently discard
+    // -------------------------------------------------------------------------
+
+    public function testSameSiteNoneWithAnExplicitInsecureCookieIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sameSite');
+
+        SessionConfig::fromArray(['sameSite' => 'None', 'secure' => false]);
+    }
+
+    public function testSameSiteNoneIsAllowedWhenSecureCanStillApply(): void
+    {
+        // "auto" is correct on the HTTPS origin the setting is for.
+        $config = SessionConfig::fromArray(['sameSite' => 'None']);
+
+        self::assertSame('None', $config->sameSite);
+        self::assertTrue($config->resolveSecure(true));
+    }
+
+    public function testHostPrefixedNameRequiresARootPath(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('cookiePath');
+
+        SessionConfig::fromArray(['name' => '__Host-SESSION', 'cookiePath' => '/app', 'secure' => true]);
+    }
+
+    public function testHostPrefixedNameRequiresSecure(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('__Host-');
+
+        SessionConfig::fromArray(['name' => '__Host-SESSION', 'secure' => false]);
+    }
+
+    public function testSecurePrefixedNameRequiresSecure(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('__Secure-');
+
+        SessionConfig::fromArray(['name' => '__Secure-SESSION', 'secure' => false]);
+    }
+
+    public function testAPrefixedNameIsAcceptedWhenTheAttributesAreCoherent(): void
+    {
+        $config = SessionConfig::fromArray(['name' => '__Host-SESSION', 'secure' => true]);
+
+        self::assertSame('__Host-SESSION', $config->name);
+        self::assertSame('/', $config->cookiePath);
+    }
+
+    /**
+     * The rules live in the constructor, not only in fromArray(), because
+     * building the object directly is what the framework's own middlewares do.
+     */
+    public function testTheRulesAlsoApplyToDirectConstruction(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        new SessionConfig('__Host-SESSION', 0, true, true, 'Lax', '/app');
+    }
+
+    // -------------------------------------------------------------------------
     // Explicit camelCase keys
     // -------------------------------------------------------------------------
 

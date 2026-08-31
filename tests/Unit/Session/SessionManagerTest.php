@@ -165,16 +165,75 @@ final class SessionManagerTest extends TestCase
         self::assertTrue($session->isStarted()); // Still "started" (override mode)
     }
 
-    // ── regenerate (no-op in override mode) ───────────────────────────────────
+    // ── regenerate rotates the simulated id in override mode ──────────────────
 
-    public function testRegenerateIsNoOpInOverrideMode(): void
+    /**
+     * Replaces testRegenerateIsNoOpInOverrideMode, which pinned the no-op as
+     * intended behaviour.
+     *
+     * Override mode reported isStarted() = true while start(), setHandler() and
+     * regenerate() all did nothing, so a consumer test asserting "login rotates
+     * the session id" passed against an implementation that rotated nothing.
+     * That is the same shape as the ini-flag bug this repo already fixed once:
+     * a security-relevant step reads as done and is not.
+     */
+    public function testRegenerateRotatesTheSimulatedIdInOverrideModeAndKeepsTheData(): void
     {
         $session = $this->makeSession(['key' => 'value']);
+        $before  = $session->id();
 
-        // Must not throw; data must be preserved.
         $session->regenerate();
 
-        self::assertSame('value', $session->get('key'));
+        self::assertNotSame($before, $session->id(), 'the id must actually rotate');
+        self::assertNotSame('', $session->id());
+        self::assertSame('value', $session->get('key'), 'regeneration keeps the data, like session_regenerate_id()');
+    }
+
+    public function testOverrideModeExposesASimulatedSessionId(): void
+    {
+        $session = $this->makeSession();
+
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $session->id());
+    }
+
+    public function testTwoOverrideSessionsDoNotShareAnId(): void
+    {
+        self::assertNotSame($this->makeSession()->id(), $this->makeSession()->id());
+    }
+
+    public function testDestroyClearsTheSimulatedIdInOverrideMode(): void
+    {
+        $session = $this->makeSession(['a' => 1]);
+        $session->destroy();
+
+        self::assertSame('', $session->id());
+    }
+
+    public function testStartMintsASimulatedIdAgainAfterDestroy(): void
+    {
+        $session = $this->makeSession();
+        $session->destroy();
+
+        $session->start(\Zephyrus\Core\Config\SessionConfig::fromArray([]));
+
+        self::assertNotSame('', $session->id());
+    }
+
+    /**
+     * Recorded, never registered: override mode opens no real PHP session, so
+     * there is nothing for PHP to call. Recording it is what lets a consumer
+     * test assert the wiring it just built.
+     */
+    public function testSetHandlerRecordsTheHandlerInOverrideModeWithoutRegisteringIt(): void
+    {
+        $session = $this->makeSession();
+        $handler = new OverrideModeHandler();
+
+        $statusBefore = session_status();
+        $session->setHandler($handler);
+
+        self::assertSame($handler, $session->handler());
+        self::assertSame($statusBefore, session_status(), 'no real session may have been opened');
     }
 
     // ── start (no-op in override mode) ────────────────────────────────────────
@@ -218,4 +277,15 @@ final class SessionManagerTest extends TestCase
 
         $session->set('', 'value');
     }
+}
+
+/** Minimal handler used to prove setHandler() records without registering. */
+final class OverrideModeHandler implements \SessionHandlerInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return true; }
+    public function destroy(string $id): bool { return true; }
+    public function gc(int $maxLifetime): int|false { return 0; }
 }

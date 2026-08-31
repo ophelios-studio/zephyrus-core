@@ -6,11 +6,16 @@ namespace Zephyrus\Security;
 
 use InvalidArgumentException;
 
-use function array_values;
 use function is_array;
 use function is_string;
 use function preg_match;
+use function preg_replace;
 use function sprintf;
+use function str_ends_with;
+use function str_starts_with;
+use function strlen;
+use function strrpos;
+use function substr;
 use function trim;
 
 /**
@@ -27,6 +32,34 @@ use function trim;
  * matches at least one pattern is exempt from CSRF validation entirely —
  * useful for webhook endpoints, API routes protected by other means, or
  * health-check URLs.
+ *
+ * ## Every pattern MUST be anchored at BOTH ends of a path segment
+ *
+ * An exemption is a hole in CSRF protection, and a pattern that matches
+ * loosely widens the hole onto routes nobody meant to exempt. Both of these
+ * match, and each match is a mutating route reached with no CSRF token:
+ *
+ *   #/webhooks/#      matches  /account/webhooks/close
+ *   #^/api/public#    matches  /api/publicity/42/delete
+ *
+ * The first needs an attacker-controlled path segment. The second needs
+ * nothing at all: the pattern is anchored, but it stops mid-segment, so it
+ * exempts every sibling route sharing the prefix. That exact pattern used to
+ * be the example shipped in this file.
+ *
+ * So a pattern is refused at construction unless it:
+ *
+ *   - starts with "^" or "\A", pinning the match to the start of the path, and
+ *   - ends with "/", "$", "\z" or "\Z", pinning it to a segment boundary or to
+ *     the end of the path.
+ *
+ * To exempt a route AND everything under it, end with "/" ("#^/webhooks/#").
+ * To exempt exactly one path, end with "$" ("#^/logout$#"). To exempt a route
+ * both with and without children, list both patterns.
+ *
+ * This is validated by the CONSTRUCTOR, not only by fromArray(), because
+ * building the object directly with named arguments is the documented usage
+ * and would otherwise skip the check entirely.
  *
  * injectToken
  * -----------
@@ -55,7 +88,7 @@ use function trim;
  *       'inject_token'             => true,
  *       'excluded_path_patterns'   => [
  *           '#^/webhooks/#',
- *           '#^/api/v\d+/public#',
+ *           '#^/api/v\d+/public/#',
  *       ],
  *   ]);
  *
@@ -64,19 +97,27 @@ use function trim;
 final class CsrfConfig
 {
     /**
-     * @param string       $bodyField              Name of the HTML hidden-field / POST body key.
-     * @param string       $headerName             HTTP header accepted as an alternative token source.
-     * @param bool         $injectToken            Auto-inject a hidden field into HTML form responses.
-     * @param list<string> $excludedPathPatterns   PCRE patterns for paths that skip CSRF validation.
-     * @param bool         $enabled                Enable CSRF token validation on mutating requests.
+     * PCRE patterns for paths that skip CSRF validation, each one validated.
+     *
+     * @var list<string>
+     */
+    public readonly array $excludedPathPatterns;
+
+    /**
+     * @param string $bodyField            Name of the HTML hidden-field / POST body key.
+     * @param string $headerName           HTTP header accepted as an alternative token source.
+     * @param bool   $injectToken          Auto-inject a hidden field into HTML form responses.
+     * @param array<mixed> $excludedPathPatterns Anchored PCRE patterns; see the class docblock.
+     * @param bool   $enabled              Enable CSRF token validation on mutating requests.
      */
     public function __construct(
         public readonly string $bodyField            = '_csrf_token',
         public readonly string $headerName           = 'X-CSRF-Token',
         public readonly bool   $injectToken          = false,
-        public readonly array  $excludedPathPatterns = [],
+        array                  $excludedPathPatterns = [],
         public readonly bool   $enabled              = true,
     ) {
+        $this->excludedPathPatterns = self::normalizeExcludedPathPatterns($excludedPathPatterns);
     }
 
     /** Returns a config with all defaults (no exclusions, injection disabled). */
@@ -141,9 +182,91 @@ final class CsrfConfig
                 throw new InvalidArgumentException(sprintf('CSRF excluded path pattern at index %s is not a valid regex: %s', (string) $index, $pattern));
             }
 
+            self::assertPatternIsAnchored($pattern, $index);
+
             $normalized[] = $pattern;
         }
 
-        return array_values($normalized);
+        return $normalized;
+    }
+
+    /**
+     * Refuse a pattern that can match beyond the routes it names.
+     *
+     * See the class docblock for the two loose patterns this refuses. The
+     * check is syntactic on purpose: whether a regex can only match whole path
+     * segments is not decidable in general, so the rule is a shape a human can
+     * satisfy and verify by reading, rather than an analysis that would be
+     * wrong quietly.
+     *
+     * @param int|string $index
+     */
+    private static function assertPatternIsAnchored(string $pattern, int|string $index): void
+    {
+        $body = self::patternBody($pattern);
+
+        if ($body === null) {
+            throw new InvalidArgumentException(sprintf(
+                'CSRF excluded path pattern at index %s is not a delimited regex: %s',
+                (string) $index,
+                $pattern,
+            ));
+        }
+
+        // A leading inline modifier group, "(?i)" and friends, is allowed to
+        // sit in front of the anchor.
+        $anchorable = preg_replace('/^\(\?[a-zA-Z]+\)/', '', $body) ?? $body;
+
+        if (!str_starts_with($anchorable, '^') && !str_starts_with($anchorable, '\A')) {
+            throw new InvalidArgumentException(sprintf(
+                'CSRF excluded path pattern at index %s must start with "^" so it cannot match in the '
+                . 'middle of a path: %s',
+                (string) $index,
+                $pattern,
+            ));
+        }
+
+        $endsAtBoundary = str_ends_with($body, '/')
+            || str_ends_with($body, '$')
+            || str_ends_with($body, '\z')
+            || str_ends_with($body, '\Z');
+
+        if (!$endsAtBoundary) {
+            throw new InvalidArgumentException(sprintf(
+                'CSRF excluded path pattern at index %s must end with "/" (the route and everything under '
+                . 'it) or "$" (that exact path), otherwise it also exempts every sibling route sharing the '
+                . 'prefix: %s',
+                (string) $index,
+                $pattern,
+            ));
+        }
+    }
+
+    /**
+     * The expression between a PCRE string's delimiters, or null when the
+     * string is not delimited at all.
+     */
+    private static function patternBody(string $pattern): ?string
+    {
+        if (strlen($pattern) < 2) {
+            return null;
+        }
+
+        $opening = $pattern[0];
+        $closing = match ($opening) {
+            '(' => ')',
+            '[' => ']',
+            '{' => '}',
+            '<' => '>',
+            default => $opening,
+        };
+
+        $end = strrpos($pattern, $closing);
+
+        if ($end === false || $end < 1) {
+            return null;
+        }
+
+        return substr($pattern, 1, $end - 1);
     }
 }

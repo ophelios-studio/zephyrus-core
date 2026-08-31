@@ -214,13 +214,26 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertGreaterThan(2000, (int) $row->expire);
     }
 
-    public function testUpdateTimestampRestoresASessionCollectedMidFlight(): void
+    /**
+     * Replaces testUpdateTimestampRestoresASessionCollectedMidFlight, which
+     * asserted the opposite and blessed the bug.
+     *
+     * The old insert branch existed to save a session garbage-collected
+     * mid-flight, and it could not tell that case apart from a row DELETED on
+     * purpose. So logout, sign-out-everywhere and the session eviction a
+     * password reset performs were all undone by any request that was already
+     * open when the delete landed: the whole authenticated payload went
+     * straight back under the same id.
+     */
+    public function testUpdateTimestampNeverRecreatesARowThatIsNoLongerThere(): void
     {
-        // The row is gone (garbage collected between requests). Losing a live
-        // session here would be worse than writing it back.
         self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'live payload'));
 
-        self::assertSame('live payload', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+        self::assertSame(
+            0,
+            $this->database->count('SELECT COUNT(*) FROM session', []),
+            'refreshing the access window must never be able to create a session',
+        );
     }
 
     public function testUpdateTimestampRejectsAMalformedId(): void
@@ -264,6 +277,250 @@ final class DatabaseSessionHandlerTest extends TestCase
         // The row ends in a correct state, and there is exactly one of it.
         self::assertSame('mine', $handler->read('b7c1f0a94e2d8135c6a0f4e79b23d581'));
         self::assertSame(1, $database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', ['b7c1f0a94e2d8135c6a0f4e79b23d581']));
+    }
+
+    // ── Deletion survives an in-flight request ────────────────────────────────
+
+    /**
+     * The finding this whole state-tracking exists for.
+     *
+     * An attacker holding a stolen cookie polls; the victim resets their
+     * password, which deletes every row for that user. The attacker's request
+     * had already read the row, so its write() used to upsert the authenticated
+     * payload back under the same id and the stolen session survived the reset.
+     * Measured against the previous code: logout at t+0.00s, a slow request
+     * writing at t+2.01s, and the id was still alive with its payload restored.
+     */
+    public function testWriteDoesNotResurrectASessionDeletedWhileTheRequestWasInFlight(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+
+        // The in-flight request loads the session...
+        self::assertSame('user_id|i:1;', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+
+        // ...and the logout lands from another request while it is running.
+        $this->database->execute('DELETE FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']);
+
+        // The in-flight request now saves what it has.
+        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;role|s:5:"admin";'));
+
+        self::assertSame(
+            0,
+            $this->database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']),
+            'a revoked session must stay revoked',
+        );
+        self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    public function testUpdateTimestampDoesNotResurrectASessionDeletedWhileTheRequestWasInFlight(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+
+        $this->database->execute('DELETE FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']);
+
+        // PHP calls this, not write(), when the payload did not change, which
+        // is most requests and therefore the likelier half of the race.
+        self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
+
+        self::assertSame(
+            0,
+            $this->database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']),
+        );
+    }
+
+    public function testWriteRefusesToRebuildARowTheSameRequestJustDestroyed(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $this->handler->destroy('43e880c2447ca10d3092d51d258c050c');
+
+        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'payload'));
+        self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
+    }
+
+    /**
+     * The other half of the fix: refusing to resurrect must not stop a session
+     * from being CREATED. PHP calls write() (not updateTimestamp) for a
+     * brand-new session, with an empty payload, so this is the path every
+     * first request takes.
+     */
+    public function testWriteStillCreatesTheRowForASessionThisRequestOpened(): void
+    {
+        self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+
+        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', ''));
+        self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session', []));
+    }
+
+    // ── Expiry is enforced, not merely recorded ───────────────────────────────
+
+    /**
+     * The `expire` column used to be written by write() and updateTimestamp()
+     * and READ BY NOTHING, so expiry rested entirely on PHP's GC lottery, which
+     * this framework never configures and which Debian and Ubuntu ship disabled
+     * (session.gc_probability = 0). A 30-day-old row was adopted and returned
+     * its payload.
+     */
+    public function testAnExpiredRowIsNotAdoptedEvenWhenGarbageCollectionNeverRan(): void
+    {
+        $this->insertExpiredSession();
+
+        self::assertFalse($this->handler->validateId('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    public function testAnExpiredRowReadsAsAbsent(): void
+    {
+        $this->insertExpiredSession();
+
+        self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+        self::assertSame(
+            1,
+            $this->database->count('SELECT COUNT(*) FROM session', []),
+            'read() must not delete: gc() owns removal, and a read that writes costs every page load a write',
+        );
+    }
+
+    private function insertExpiredSession(): void
+    {
+        $this->database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            [
+                '43e880c2447ca10d3092d51d258c050c',
+                time() - 2592000,
+                time() - 2592000 + 1440,
+                'user_id|i:1;role|s:5:"admin";',
+            ],
+        );
+    }
+
+    // ── Id shape ──────────────────────────────────────────────────────────────
+
+    /**
+     * PCRE's "$" also matches immediately before a trailing newline, so the
+     * previous pattern accepted 32 valid characters followed by "\n" and stored
+     * it as a second, distinct primary key. Unreachable through PHP today
+     * (PHP validates the cookie character set first), so latent rather than
+     * live, but the pattern is the only bound on what can reach that column.
+     */
+    public function testAnIdWithATrailingNewlineIsRejected(): void
+    {
+        $id = str_repeat('a', 32) . "\n";
+
+        self::assertFalse($this->handler->validateId($id));
+        self::assertFalse($this->handler->write($id, 'payload'));
+        self::assertSame('', $this->handler->read($id));
+        self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
+    }
+
+    // ── Strict mode ───────────────────────────────────────────────────────────
+
+    /**
+     * The class docblock used to tell you to register the handler with a bare
+     * session_set_save_handler() call. Followed verbatim, that left
+     * session.use_strict_mode at PHP's default of 0 and PHP ADOPTED the id the
+     * client sent. validateId() cannot catch it, because PHP only calls
+     * validateId() when strict mode is already on, so the constructor has to
+     * turn the flag on itself.
+     *
+     * Run in a subprocess because a session ini setting cannot be changed once
+     * output has begun, and PHPUnit has printed its progress dots long before
+     * this test runs.
+     */
+    public function testConstructingTheHandlerTurnsStrictModeOnSoAPlantedIdIsDiscarded(): void
+    {
+        $planted = str_repeat('a', 32);
+        $autoload = dirname(__DIR__, 3) . '/vendor/autoload.php';
+
+        $script = <<<PHP
+            require '{$autoload}';
+            \$pdo = new PDO('sqlite::memory:');
+            \$pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+            ini_set('session.use_cookies', '0');
+            session_id('{$planted}');
+            session_set_save_handler(
+                new Zephyrus\\Session\\DatabaseSessionHandler(new Zephyrus\\Data\\Database(\$pdo), 'session'),
+                true
+            );
+            session_start();
+            echo ini_get('session.use_strict_mode'), '|', session_id();
+            PHP;
+
+        $command = sprintf(
+            '%s -d session.use_strict_mode=0 -r %s 2>/dev/null',
+            escapeshellarg(PHP_BINARY),
+            escapeshellarg($script),
+        );
+
+        $output = (string) shell_exec($command);
+        [$strictMode, $sessionId] = explode('|', $output, 2);
+
+        self::assertSame('1', $strictMode, 'the handler must turn strict mode on for the registration it documents');
+        self::assertNotSame($planted, $sessionId, 'a client-supplied id that exists nowhere must be discarded');
+        self::assertNotSame('', $sessionId);
+    }
+
+    // ── Locking (PostgreSQL) ──────────────────────────────────────────────────
+
+    /**
+     * write() hands the database the WHOLE payload, so two concurrent requests
+     * on one session lose each other's changes: request A mints a CSRF token,
+     * request B writes a locale, and A's token is gone. PHP's own `files`
+     * handler holds an flock for the whole request; this handler held nothing.
+     *
+     * The lock itself is proven against a real PostgreSQL with two concurrent
+     * connections, which SQLite cannot model. What is asserted here is that the
+     * statements are issued at all, and in the right order, on a pgsql driver.
+     */
+    public function testAPostgresConnectionLocksTheSessionForTheWholeRequest(): void
+    {
+        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        self::assertSame(['pg_try_advisory_lock'], $pdo->advisoryCalls, 'read() must take the lock before it reads');
+
+        $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    public function testTheLockIsAlsoReleasedByCloseForARequestThatNeverWrites(): void
+    {
+        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $handler->close();
+
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    public function testLockingCanBeTurnedOffForADeploymentThatCannotAffordIt(): void
+    {
+        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $handler = new DatabaseSessionHandler(new Database($pdo), 'session', 'session_id', DatabaseSessionHandler::DEFAULT_ID_PATTERN, false);
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+
+        self::assertSame([], $pdo->advisoryCalls);
+    }
+
+    public function testASqliteConnectionTakesNoLockAndIsUnaffected(): void
+    {
+        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
+        $pdo->reportedDriver = 'sqlite';
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+
+        self::assertSame([], $pdo->advisoryCalls);
+        self::assertSame('payload', $handler->read('43e880c2447ca10d3092d51d258c050c'));
     }
 
     public function testWriteIssuesASingleStatement(): void
@@ -321,6 +578,47 @@ final class CountingPdo extends \PDO
     public function prepare(string $query, array $options = []): \PDOStatement|false
     {
         $this->prepared++;
+
+        return parent::prepare($query, $options);
+    }
+}
+
+/**
+ * Answers "pgsql" to a driver-name lookup and records the advisory-lock calls
+ * the handler makes, rewriting them to something SQLite can execute.
+ */
+final class AdvisoryLockRecordingPdo extends \PDO
+{
+    public string $reportedDriver = 'pgsql';
+
+    /** @var list<string> */
+    public array $advisoryCalls = [];
+
+    public function getAttribute(int $attribute): mixed
+    {
+        if ($attribute === \PDO::ATTR_DRIVER_NAME) {
+            return $this->reportedDriver;
+        }
+
+        return parent::getAttribute($attribute);
+    }
+
+    /**
+     * @param array<int, mixed> $options
+     */
+    public function prepare(string $query, array $options = []): \PDOStatement|false
+    {
+        if (str_contains($query, 'pg_try_advisory_lock')) {
+            $this->advisoryCalls[] = 'pg_try_advisory_lock';
+
+            return parent::prepare('SELECT 1 WHERE ? IS NOT NULL AND ? IS NOT NULL', $options);
+        }
+
+        if (str_contains($query, 'pg_advisory_unlock')) {
+            $this->advisoryCalls[] = 'pg_advisory_unlock';
+
+            return parent::prepare('SELECT 1 WHERE ? IS NOT NULL AND ? IS NOT NULL', $options);
+        }
 
         return parent::prepare($query, $options);
     }

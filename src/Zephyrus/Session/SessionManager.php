@@ -16,6 +16,18 @@ use Zephyrus\Core\Config\SessionConfig;
  * called. This makes the class trivially testable without spawning real PHP
  * sessions.
  *
+ * ## Override mode simulates an id, and rotates it
+ *
+ * It used to do neither: start(), setHandler() and regenerate() were silent
+ * no-ops while isStarted() reported true, so a consumer test asserting "login
+ * rotates the session id" passed against an implementation that rotated
+ * nothing. That is the same shape as the ini-flag bug this class already fixed
+ * once, where a security-relevant setting read as done and did nothing.
+ *
+ * Override mode now carries an id of its own: id() returns it, regenerate()
+ * replaces it while keeping the data, destroy() clears both, and setHandler()
+ * records the handler for handler() to expose without registering it with PHP.
+ *
  * In production, omit the override and call start() once at bootstrap:
  *
  *   $session = new SessionManager();
@@ -26,11 +38,14 @@ use Zephyrus\Core\Config\SessionConfig;
  * flash() reads and immediately removes the value in the same request — handy
  * for one-time status messages across a redirect.
  *
- * ## Thread-safety note
+ * ## Concurrency note
  *
- * PHP sessions are per-process and are not thread-safe across concurrent
- * requests that share the same session ID. That is a PHP platform concern, not
- * a framework concern; SessionManager does not add locking primitives on top.
+ * SessionManager itself adds no locking: two concurrent requests sharing a
+ * session id are serialized (or not) by whatever save handler is registered.
+ * PHP's built-in `files` handler serializes them with flock, and
+ * DatabaseSessionHandler takes a PostgreSQL advisory lock for the same reason.
+ * A handler that does neither loses one of the two writes, because PHP hands a
+ * save handler the WHOLE payload rather than a delta.
  */
 final class SessionManager
 {
@@ -45,6 +60,12 @@ final class SessionManager
     private ?\SessionHandlerInterface $handler = null;
 
     /**
+     * The id override mode pretends to have. Empty when there is none, which
+     * is the state destroy() leaves behind.
+     */
+    private string $simulatedId = '';
+
+    /**
      * @param array<string, mixed>|null $overrideStorage
      *   When non-null, all session data is read from / written to this array.
      *   start(), regenerate(), and destroy() become no-ops (or lightweight
@@ -53,6 +74,10 @@ final class SessionManager
     public function __construct(?array $overrideStorage = null)
     {
         $this->overrideStorage = $overrideStorage;
+
+        if ($overrideStorage !== null) {
+            $this->simulatedId = self::mintSimulatedId();
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -67,13 +92,22 @@ final class SessionManager
      */
     public function setHandler(\SessionHandlerInterface $handler): void
     {
+        $this->handler = $handler;
+
         if ($this->overrideStorage !== null) {
+            // Recorded but not registered: override mode never opens a real
+            // PHP session, so there is nothing for PHP to call. Recording it
+            // is what lets a consumer test assert the wiring it just built.
             return;
         }
 
-        $this->handler = $handler;
-
         session_set_save_handler($handler, true);
+    }
+
+    /** The handler registered through setHandler(), or null when none was. */
+    public function handler(): ?\SessionHandlerInterface
+    {
+        return $this->handler;
     }
 
     /**
@@ -85,9 +119,16 @@ final class SessionManager
      * Strict mode is forced on. PHP defaults session.use_strict_mode to 0,
      * which makes it ADOPT any session ID the client sends and persist a record
      * under it. That lets an unauthenticated caller seed session IDs of its own
-     * choosing, one stored record per request, and it is the enabling condition
-     * for session fixation: an attacker plants a known ID, gets the victim to
-     * use it, and the ID survives login.
+     * choosing, one stored record per request.
+     *
+     * It removes a STEP from session fixation rather than making it possible.
+     * An attacker does not have to invent an id: SessionMiddleware starts the
+     * session eagerly, so even a request matching no route mints and persists a
+     * server-blessed id that can be fetched and then planted. What actually
+     * defeats fixation is ROTATING the id at every privilege change (login,
+     * second factor, logout, password change) through regenerate(), because a
+     * planted id then never survives into an authenticated session. Refusing an
+     * unknown id is defence in depth on top of that.
      *
      * ## The flag alone is NOT enough with a custom save handler
      *
@@ -106,9 +147,13 @@ final class SessionManager
      * buys it nothing. When debug is on, start() warns about a handler that
      * cannot honour it.
      */
-    public function start(SessionConfig $config): void
+    public function start(SessionConfig $config, ?bool $requestIsSecure = null): void
     {
         if ($this->overrideStorage !== null) {
+            if ($this->simulatedId === '') {
+                $this->simulatedId = self::mintSimulatedId();
+            }
+
             return;
         }
 
@@ -122,12 +167,29 @@ final class SessionManager
         session_set_cookie_params([
             'lifetime' => $config->lifetime,
             'path'     => $config->cookiePath,
-            'secure'   => $config->secure,
+            'secure'   => $config->resolveSecure($requestIsSecure ?? self::serverReportsHttps()),
             'httponly' => $config->httpOnly,
             'samesite' => $config->sameSite,
         ]);
 
         session_start();
+    }
+
+    /**
+     * Fallback for the `secure: auto` setting when the caller passed no answer.
+     *
+     * Reads $_SERVER['HTTPS'] and NOTHING ELSE. A forwarded-protocol header is
+     * deliberately ignored here, because SessionManager holds no trusted-proxy
+     * allowlist and reading one without it is how a caller gets to choose the
+     * answer. SessionMiddleware passes the value Request already resolved,
+     * which does consult the allowlist, so the normal path is not limited to
+     * this check.
+     */
+    private static function serverReportsHttps(): bool
+    {
+        $https = $_SERVER['HTTPS'] ?? '';
+
+        return is_string($https) && $https !== '' && strtolower($https) !== 'off';
     }
 
     /**
@@ -169,7 +231,13 @@ final class SessionManager
     public function regenerate(bool $deleteOld = true): void
     {
         if ($this->overrideStorage !== null) {
-            return; // In-memory store has no ID to rotate.
+            // Rotates the simulated id and keeps the data, which is what
+            // session_regenerate_id() does. Returning without rotating made a
+            // consumer test asserting "login rotates the session id" pass
+            // against an implementation that rotated nothing.
+            $this->simulatedId = self::mintSimulatedId();
+
+            return;
         }
 
         if (session_status() === PHP_SESSION_ACTIVE) {
@@ -186,6 +254,7 @@ final class SessionManager
     {
         if ($this->overrideStorage !== null) {
             $this->overrideStorage = [];
+            $this->simulatedId = '';
             return;
         }
 
@@ -193,6 +262,25 @@ final class SessionManager
             $_SESSION = [];
             session_destroy();
         }
+    }
+
+    /**
+     * The current session id: the real one, or the simulated one in override
+     * mode. Empty string when no session is running.
+     */
+    public function id(): string
+    {
+        if ($this->overrideStorage !== null) {
+            return $this->simulatedId;
+        }
+
+        return session_status() === PHP_SESSION_ACTIVE ? (string) session_id() : '';
+    }
+
+    /** Shaped like a PHP session id so a consumer assertion on format holds. */
+    private static function mintSimulatedId(): string
+    {
+        return bin2hex(random_bytes(16));
     }
 
     /**
