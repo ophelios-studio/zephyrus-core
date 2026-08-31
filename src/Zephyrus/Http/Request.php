@@ -129,7 +129,10 @@ final readonly class Request
     private CookieJar $cookieJar;
 
     /**
+     * @param RequestBody|array<string, mixed> $body
      * @param array<string, mixed> $query
+     * @param HeaderBag|array<string, mixed> $headers
+     * @param CookieJar|array<string, string> $cookies
      * @param array<string, mixed> $attributes
      * @param array<string, FileUpload|array<int, FileUpload>> $files
      * @param array<string, string> $routeParameters Names this request took from
@@ -438,6 +441,8 @@ final readonly class Request
 
     /**
      * Get all parameters merged from body and query.
+     *
+     * @return array<string, mixed>
      */
     public function getParameters(): array
     {
@@ -943,7 +948,7 @@ final readonly class Request
             $endBracket = strpos($trimmed, ']');
             if ($endBracket !== false) {
                 $embedded = substr($trimmed, 1, $endBracket - 1);
-                if ($embedded !== false && filter_var($embedded, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+                if (filter_var($embedded, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
                     return $embedded;
                 }
             }

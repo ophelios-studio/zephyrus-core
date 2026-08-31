@@ -134,13 +134,13 @@ final class FilterRequest implements \JsonSerializable
                     continue;
                 }
 
-                if ($listValues === [] && $hasNull) {
+                if ($listValues === []) {
                     $parts[] = sprintf('%s IS NULL', $column);
                     continue;
                 }
 
                 $placeholders = [];
-                foreach (array_values($listValues) as $index => $item) {
+                foreach ($listValues as $index => $item) {
                     $paramName = sprintf('%s_%d', $baseParamName, $index);
                     $placeholder = ':' . $paramName;
                     $placeholders[] = $placeholder;

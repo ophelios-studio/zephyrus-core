@@ -55,6 +55,9 @@ final readonly class ContentSecurityPolicy
         return array_key_exists(self::normalizeDirectiveName($name), $this->directives);
     }
 
+    /**
+     * @param string|array<int|string, mixed> $values
+     */
     public function withDirective(string $name, string|array $values = []): self
     {
         $normalizedName = self::normalizeDirectiveName($name);
@@ -168,7 +171,10 @@ final readonly class ContentSecurityPolicy
         return $normalized;
     }
 
-    /** @return list<string> */
+    /**
+     * @param string|array<int|string, mixed> $values
+     * @return list<string>
+     */
     private static function normalizeDirectiveValues(string|array $values): array
     {
         if (is_string($values)) {

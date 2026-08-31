@@ -21,6 +21,9 @@ jobs:
 
       - run: composer install --no-interaction --prefer-dist
 
+      - name: Static analysis
+        run: php vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
       - name: Run tests with coverage
         run: php vendor/bin/phpunit --coverage-clover coverage.xml
 

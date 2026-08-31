@@ -1488,7 +1488,7 @@ final class Rules
                 }
 
                 $parts = array_map('trim', explode(',', $v));
-                if ($parts === [] || in_array('', $parts, true)) {
+                if (in_array('', $parts, true)) {
                     return false;
                 }
 
@@ -1521,7 +1521,7 @@ final class Rules
                 }
 
                 $parts = array_map('trim', explode(',', $v));
-                if ($parts === [] || in_array('', $parts, true)) {
+                if (in_array('', $parts, true)) {
                     return false;
                 }
 
@@ -1601,7 +1601,7 @@ final class Rules
                 }
 
                 $ranges = explode(',', substr($v, 6));
-                if ($ranges === [] || in_array('', array_map('trim', $ranges), true)) {
+                if (in_array('', array_map('trim', $ranges), true)) {
                     return false;
                 }
 
