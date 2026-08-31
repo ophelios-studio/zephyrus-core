@@ -64,42 +64,14 @@ final class DatabaseTest extends TestCase
         self::assertInstanceOf(Database::class, $database);
     }
 
-    public function testFromConfigDoesNotEnableEmulatePreparesByDefault(): void
+    public function testFromConfigAlwaysPinsEmulatePreparesOff(): void
     {
-        // Default behavior: native server-side prepares. The connection must
-        // NOT carry PDO::ATTR_EMULATE_PREPARES at all, so existing apps are
-        // untouched. We assert on the options the factory actually receives —
-        // that array is exactly what drives the real PDO at connect time.
+        // Not "absent", PINNED. The key must be present and false in the options
+        // the factory receives, because that array is exactly what drives the real
+        // PDO at connect time and an absent key leaves the decision to the driver.
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'app',
-        ]);
-
-        self::assertFalse($config->emulatePrepares);
-
-        $captured = [];
-
-        Database::fromConfig(
-            $config,
-            function (string $dsn, string $username, string $password, array $options) use (&$captured): PDO {
-                $captured = $options;
-
-                return new PDO('sqlite::memory:');
-            },
-        );
-
-        self::assertArrayNotHasKey(PDO::ATTR_EMULATE_PREPARES, $captured);
-    }
-
-    public function testFromConfigEnablesEmulatePreparesWhenOptedIn(): void
-    {
-        // With emulate_prepares=true the driver option must be present and true
-        // so PDO interpolates parameters client-side (one round-trip per query
-        // instead of three on PostgreSQL). Set at connect time via the options.
-        $config = DatabaseConfig::fromArray([
-            'database'         => 'zephyrus',
-            'username'         => 'app',
-            'emulate_prepares' => true,
         ]);
 
         $captured = [];
@@ -114,21 +86,63 @@ final class DatabaseTest extends TestCase
         );
 
         self::assertArrayHasKey(PDO::ATTR_EMULATE_PREPARES, $captured);
-        self::assertTrue($captured[PDO::ATTR_EMULATE_PREPARES]);
+        self::assertFalse($captured[PDO::ATTR_EMULATE_PREPARES]);
     }
 
-    public function testEmulatePreparesReturnsCorrectlyTypedResultsForTrickyParams(): void
+    /**
+     * The connect-time option only covers the connection fromConfig() opens.
+     * A $pdoFactory is free to ignore the options it is handed and build its own
+     * PDO with emulation on, so the constructor re-asserts the attribute on every
+     * connection that reaches it. Without that, the factory is a documented hole
+     * straight back to client-side interpolation.
+     */
+    public function testAPdoFactoryCannotReintroduceEmulatedPrepares(): void
     {
-        // Guards the PostgreSQL type-pickiness that emulated prepares can trip:
-        // once parameters are interpolated client-side, an integer LIMIT, a
-        // typed WHERE int_col = ? comparison and a NULL bound value must all
-        // still round-trip to the correct rows. A spy PDO backed by a real
-        // SQLite connection both records that ATTR_EMULATE_PREPARES=true was
-        // applied and executes the statements end to end through fromConfig().
         $config = DatabaseConfig::fromArray([
-            'database'         => 'zephyrus',
-            'username'         => 'app',
-            'emulate_prepares' => true,
+            'database' => 'zephyrus',
+            'username' => 'app',
+        ]);
+
+        $spy = null;
+
+        Database::fromConfig(
+            $config,
+            function (string $dsn, string $username, string $password, array $options) use (&$spy): PDO {
+                // Deliberately DISCARDS $options and asks for emulation.
+                $spy = new AttributeSpyPdo('sqlite::memory:');
+
+                return $spy;
+            },
+        );
+
+        self::assertContains(false, $spy->emulateSettings, 'expected emulation to be forced off');
+        self::assertSame(false, end($spy->emulateSettings), 'the last word must be false');
+    }
+
+    /**
+     * Same guarantee for the other door: a pre-built PDO injected through the
+     * constructor. Testability was never meant to be an escape hatch out of the
+     * connection's security posture.
+     */
+    public function testAnInjectedPdoIsForcedOntoNativePrepares(): void
+    {
+        $spy = new AttributeSpyPdo('sqlite::memory:');
+
+        new Database($spy);
+
+        self::assertContains(false, $spy->emulateSettings);
+        self::assertSame(false, end($spy->emulateSettings));
+    }
+
+    public function testTrickyParametersStillRoundTripOnNativePrepares(): void
+    {
+        // Kept from the emulated-prepares era, and still worth having: an integer
+        // LIMIT, a typed WHERE int_col = ? comparison and a NULL bound value are
+        // the three shapes a prepare-mode change is most likely to move, so they
+        // are exercised end to end through fromConfig() on the pinned setting.
+        $config = DatabaseConfig::fromArray([
+            'database' => 'zephyrus',
+            'username' => 'app',
         ]);
 
         $spy = null;
@@ -136,14 +150,14 @@ final class DatabaseTest extends TestCase
         $db = Database::fromConfig(
             $config,
             function (string $dsn, string $username, string $password, array $options) use (&$spy): PDO {
-                $spy = new EmulatePreparesSpyPdo('sqlite::memory:', null, null, $options);
+                $spy = new AttributeSpyPdo('sqlite::memory:', null, null, $options);
 
                 return $spy;
             },
         );
 
-        // The opt-in attribute was handed to the real PDO at construction time.
-        self::assertTrue($spy->receivedEmulateOption);
+        // The connection was built from options that pin emulation off.
+        self::assertFalse($spy->constructorEmulateOption);
 
         $db->execute('CREATE TABLE items (id INTEGER PRIMARY KEY, qty INTEGER, note TEXT)');
         $db->execute('INSERT INTO items (id, qty, note) VALUES (?, ?, ?)', [1, 10, 'first']);
@@ -907,9 +921,10 @@ final class DatabaseTest extends TestCase
     /**
      * REGRESSION. query() built its DatabaseException as
      * queryFailed($sql, $e->getMessage()), so the message carried the raw
-     * statement AND the driver's error text. Under ATTR_EMULATE_PREPARES that
-     * driver text is the INTERPOLATED statement PostgreSQL parsed, which quotes
-     * real column values.
+     * statement AND the driver's error text. Native prepares shrink that text but
+     * do not sanitise it: PostgreSQL still emits `DETAIL: Key (email)=(...)` on a
+     * constraint violation and `CONTEXT: unnamed portal parameter $1 = '...'` on a
+     * coercion failure, both carrying real column values.
      */
     public function testQueryFailureWithholdsTheStatementAndDriverTextByDefault(): void
     {
@@ -946,25 +961,43 @@ final class DatabaseTest extends TestCase
 }
 
 /**
- * A PDO that records whether it was constructed with the opt-in
- * PDO::ATTR_EMULATE_PREPARES driver option, while behaving as a normal
- * (SQLite-backed) connection so bound-parameter queries actually execute.
+ * A PDO that records every PDO::ATTR_EMULATE_PREPARES decision made about it,
+ * both the driver option it was constructed with and every subsequent
+ * setAttribute() call, while behaving as a normal (SQLite-backed) connection so
+ * bound-parameter queries actually execute.
  *
- * Used to prove that Database::fromConfig() applies the emulate-prepares
- * option at connect time and that tricky typed/NULL parameters still return
- * correct results under emulation.
+ * Recording setAttribute() is the point: pdo_sqlite does not implement the
+ * attribute, so getAttribute() would throw and the enforcement could not be
+ * observed from the outside on the connection the tests actually use.
  */
-final class EmulatePreparesSpyPdo extends PDO
+final class AttributeSpyPdo extends PDO
 {
-    public bool $receivedEmulateOption = false;
+    public bool $constructorEmulateOption = false;
+
+    /** @var list<bool> every value passed to setAttribute(ATTR_EMULATE_PREPARES), in order */
+    public array $emulateSettings = [];
 
     /**
      * @param array<int, mixed>|null $options
      */
     public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null)
     {
-        $this->receivedEmulateOption = ($options[PDO::ATTR_EMULATE_PREPARES] ?? false) === true;
+        $this->constructorEmulateOption = ($options[PDO::ATTR_EMULATE_PREPARES] ?? false) === true;
 
         parent::__construct($dsn, $username, $password, $options);
+    }
+
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        if ($attribute === PDO::ATTR_EMULATE_PREPARES) {
+            $this->emulateSettings[] = (bool) $value;
+
+            // Swallowed rather than forwarded: pdo_sqlite answers false for an
+            // attribute it does not implement, and the parent's return value is
+            // what Database's constructor would see.
+            return true;
+        }
+
+        return parent::setAttribute($attribute, $value);
     }
 }

@@ -166,6 +166,28 @@ final class Database
     {
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+
+        // OVERRIDDEN, NOT REFUSED, and that is a deliberate choice.
+        //
+        // fromConfig() already pins the driver option at connect time, but that
+        // only covers the connection IT opens. Two doors stay open: a $pdoFactory
+        // is free to ignore the $options it is handed and build its own PDO, and
+        // this constructor accepts any pre-built PDO at all. Both end up here, so
+        // this is the single point where the guarantee can actually be made.
+        //
+        // Refusing (throwing on a connection that arrives with emulation on) was
+        // the alternative and was rejected: PDO::getAttribute(ATTR_EMULATE_PREPARES)
+        // THROWS on a driver that does not implement the attribute (SQLite does
+        // not), so the detection needed for a refusal is itself unreliable, and it
+        // would turn a fixable misconfiguration into a hard crash for no gain.
+        // Overriding reaches the same end state and cannot fail open.
+        //
+        // The return value is ignored on purpose: a driver with no emulation layer
+        // to disable answers false without raising (verified on pdo_sqlite under
+        // PHP 8.4 and 8.5), and there is nothing to report about a connection that
+        // was never emulating in the first place.
+        $this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+
         $this->registerBuiltinTypeConversions();
     }
 
@@ -267,11 +289,10 @@ final class Database
         // NOT: 'require' and stricter refuse the connection outright, which is
         // the point, and also why this can never be a default. Absent, the key
         // is not added at all, so the DSN is byte-for-byte what it has always
-        // been and libpq keeps its own default. Unlike emulatePrepares below
-        // this is a DSN parameter, not a PDO driver option, so it belongs in
-        // the connection string. DatabaseConfig validates the value against
-        // the libpq set at construction, so only a canonical mode can reach
-        // this string.
+        // been and libpq keeps its own default. This is a DSN parameter rather
+        // than a PDO driver option, so it belongs in the connection string.
+        // DatabaseConfig validates the value against the libpq set at
+        // construction, so only a canonical mode can reach this string.
         //
         // CACHE NOTE: this DSN is part of the process-wide column shape cache
         // key (see $connectionDsn and $sharedColumnMetadata). Turning the mode
@@ -299,17 +320,14 @@ final class Database
 
         $options = [
             PDO::ATTR_PERSISTENT => false,
-        ];
 
-        // Opt-in only: enabling ATTR_EMULATE_PREPARES interpolates parameters
-        // client-side, collapsing PostgreSQL's three round-trips per query
-        // (Parse, Bind/Describe, Execute) down to one — a large win over a
-        // non-local DB link. It must be set at connect time via the driver
-        // options. Absent or false, the key is not added at all, so the PDO
-        // keeps its native server-side prepares and existing apps are unchanged.
-        if ($config->emulatePrepares) {
-            $options[PDO::ATTR_EMULATE_PREPARES] = true;
-        }
+            // NOT configurable, and not merely defaulted off: client-side
+            // parameter emulation is a security downgrade and the framework
+            // refuses to offer it. See the constructor for why setting it here
+            // is not by itself enough, and DatabaseConfig for the four measured
+            // costs and the boot-time rejection of the old config key.
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ];
 
         // #[\SensitiveParameter] so the database password is not captured in a backtrace. Tracy's
         // Debugger::enable() sets zend.exception_ignore_args=0 to render call arguments, so a connect
@@ -369,10 +387,12 @@ final class Database
             return $stmt;
         } catch (PDOException $e) {
             // queryExecutionFailed(), not queryFailed(): the driver text can carry
-            // interpolated parameter values under ATTR_EMULATE_PREPARES, so it stays
-            // off the message unless DatabaseException::enableVerboseMessages() is on.
-            // Both the statement and the driver text remain on the exception, via
-            // sql() and driverMessage().
+            // real column values even on native prepares (PostgreSQL emits
+            // `DETAIL: Key (email)=(...)` on a constraint violation and
+            // `CONTEXT: unnamed portal parameter $1 = '...'` on a type error), so it
+            // stays off the message unless DatabaseException::enableVerboseMessages()
+            // is on. Both the statement and the driver text remain on the exception,
+            // via sql() and driverMessage().
             throw DatabaseException::queryExecutionFailed($sql, $e);
         }
     }

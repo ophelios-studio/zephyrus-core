@@ -146,10 +146,12 @@ final class DatabaseConfigTest extends TestCase
     /**
      * REGRESSION. charset is interpolated verbatim into
      * `SET client_encoding TO '<charset>'` at connect time (Database::fromConfig),
-     * and under ATTR_EMULATE_PREPARES that statement is sent through the simple
-     * query protocol, where a semicolon starts a second command. fromArray()
-     * validated it; the constructor did not, so an object built directly executed
-     * arbitrary SQL on connect. Guarded like sslMode and sslRootCert already are.
+     * where a semicolon would try to open a second command. fromArray() validated
+     * it; the constructor did not, so an object built directly reached that string
+     * unchecked. Native prepares now refuse a second statement outright, which is
+     * the layer client-side emulation used to give away, but the check stays: that
+     * refusal is the driver's rather than ours. Guarded like sslMode and
+     * sslRootCert already are.
      */
     public function testThrowsForCharsetSmuggledThroughTheConstructor(): void
     {
@@ -209,50 +211,88 @@ final class DatabaseConfigTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // emulatePrepares (opt-in PDO::ATTR_EMULATE_PREPARES)
+    // emulate_prepares: REMOVED, and rejected loudly rather than ignored
     // -------------------------------------------------------------------------
 
-    public function testEmulatePreparesDefaultsToFalse(): void
+    /**
+     * The setting used to turn PDO::ATTR_EMULATE_PREPARES on. It was removed
+     * because it is a security downgrade, and a file that still carries it must
+     * FAIL rather than boot: the operator who wrote the line believed something
+     * about their deployment that is no longer true, and a silently dropped key
+     * leaves that belief in place.
+     */
+    public function testFromArrayRejectsTheRemovedSnakeCaseEmulatePreparesKey(): void
     {
-        $config = DatabaseConfig::fromArray([
-            'database' => 'db',
-            'username' => 'u',
-        ]);
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('emulate_prepares');
 
-        self::assertFalse($config->emulatePrepares);
-    }
-
-    public function testEmulatePreparesSnakeCaseKeyEnablesIt(): void
-    {
-        $config = DatabaseConfig::fromArray([
+        DatabaseConfig::fromArray([
             'database'         => 'db',
             'username'         => 'u',
             'emulate_prepares' => true,
         ]);
-
-        self::assertTrue($config->emulatePrepares);
     }
 
-    public function testEmulatePreparesCamelCaseKeyEnablesIt(): void
+    public function testFromArrayRejectsTheRemovedCamelCaseEmulatePreparesKey(): void
     {
-        $config = DatabaseConfig::fromArray([
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('emulatePrepares');
+
+        DatabaseConfig::fromArray([
             'database'        => 'db',
             'username'        => 'u',
             'emulatePrepares' => true,
         ]);
-
-        self::assertTrue($config->emulatePrepares);
     }
 
-    public function testEmulatePreparesFalseKeyKeepsNativePrepares(): void
+    /**
+     * Rejected even at false, which looks pedantic and is not. `false` was the
+     * safe value, so a file carrying it is a file whose author considered the
+     * question; leaving the key readable would keep documenting a knob that no
+     * longer exists, and the next person to flip it to true would get silence.
+     */
+    public function testFromArrayRejectsTheRemovedKeyEvenWhenSetToFalse(): void
     {
-        $config = DatabaseConfig::fromArray([
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('emulate_prepares');
+
+        DatabaseConfig::fromArray([
             'database'         => 'db',
             'username'         => 'u',
             'emulate_prepares' => false,
         ]);
+    }
 
-        self::assertFalse($config->emulatePrepares);
+    /**
+     * The message has to be actionable on its own: an operator reading a boot
+     * failure gets the key, why it is gone, and what to type.
+     */
+    public function testTheRejectionNamesTheReasonAndTheRemedy(): void
+    {
+        try {
+            DatabaseConfig::fromArray([
+                'database'         => 'db',
+                'username'         => 'u',
+                'emulate_prepares' => true,
+            ]);
+            self::fail('expected the removed key to be rejected');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString('REMOVED', $e->getMessage());
+            self::assertStringContainsString('emulate_prepares', $e->getMessage());
+            self::assertStringContainsString('delete this line', $e->getMessage());
+        }
+    }
+
+    /**
+     * The capability is gone from the value object too, not just from the file
+     * format: nothing downstream can read an emulation preference off a config.
+     */
+    public function testDatabaseConfigNoLongerCarriesAnEmulatePreparesProperty(): void
+    {
+        self::assertFalse(
+            property_exists(DatabaseConfig::class, 'emulatePrepares'),
+            'DatabaseConfig must not expose an emulatePrepares property.',
+        );
     }
 
     // -------------------------------------------------------------------------

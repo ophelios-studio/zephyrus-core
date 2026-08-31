@@ -252,7 +252,6 @@ final readonly class Configuration
                 'username'         => $this->database->username,
                 'password'         => $this->database->password,
                 'charset'          => $this->database->charset,
-                'emulate_prepares' => $this->database->emulatePrepares,
             ],
         ];
 

@@ -75,10 +75,13 @@ final class DatabaseExceptionTest extends TestCase
     }
 
     /**
-     * Under ATTR_EMULATE_PREPARES the statement PostgreSQL parsed is the
-     * INTERPOLATED one, so the driver echoes real column values back in its error
-     * text. That text used to be the exception message verbatim, alongside the raw
-     * SQL, and travelled straight into logs, alert emails and debug error pages.
+     * A driver error text carries real column values: under the client-side
+     * emulation this framework no longer offers it echoed the whole interpolated
+     * statement, and on native prepares it still emits `DETAIL: Key (col)=(value)`
+     * and `CONTEXT: unnamed portal parameter $1 = 'value'`. That text used to be
+     * the exception message verbatim, alongside the raw SQL, and travelled
+     * straight into logs, alert emails and debug error pages. The fixture below
+     * keeps the historical worst case because it is the strictest input.
      */
     public function testQueryExecutionFailedWithholdsTheStatementAndDriverTextByDefault(): void
     {
