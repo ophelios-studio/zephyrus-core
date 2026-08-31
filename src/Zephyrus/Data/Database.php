@@ -311,7 +311,10 @@ final class Database
             $options[PDO::ATTR_EMULATE_PREPARES] = true;
         }
 
-        $factory = $pdoFactory ?? static fn (string $dsn, string $username, string $password, array $options): PDO
+        // #[\SensitiveParameter] so the database password is not captured in a backtrace. Tracy's
+        // Debugger::enable() sets zend.exception_ignore_args=0 to render call arguments, so a connect
+        // failure in debug mode would otherwise print the credential on the bluescreen.
+        $factory = $pdoFactory ?? static fn (string $dsn, string $username, #[\SensitiveParameter] string $password, array $options): PDO
             => new PDO($dsn, $username, $password, $options);
 
         try {
