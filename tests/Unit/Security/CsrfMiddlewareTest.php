@@ -291,7 +291,7 @@ final class CsrfMiddlewareTest extends TestCase
 
     public function testExcludedPathBypassesTokenValidationOnDelete(): void
     {
-        $config  = new CsrfConfig(excludedPathPatterns: ['#^/api/v\d+/public#']);
+        $config  = new CsrfConfig(excludedPathPatterns: ['#^/api/v\d+/public/#']);
         $mw      = new CsrfMiddleware($this->makeManager(), $config);
         $request = new Request('DELETE', 'https://example.com/api/v2/public/items/99');
 
@@ -547,6 +547,76 @@ final class CsrfMiddlewareTest extends TestCase
         CsrfConfig::fromArray([
             'excludedPathPatterns' => ['#^/hooks/#', '#[invalid'],
         ]);
+    }
+
+    // ── exclusion patterns must be anchored at both ends ─────────────────────
+
+    /**
+     * The bypass this closes, reproduced against a real route:
+     *
+     *   exclusion #/webhooks/#   POST /account/webhooks/close   no token -> 200
+     *
+     * The pattern matches anywhere in the path, so any route carrying the
+     * segment anywhere is exempt, including one whose leading segment the
+     * caller chooses.
+     */
+    public function testAnUnanchoredExclusionPatternIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must start with "^"');
+
+        new CsrfConfig(excludedPathPatterns: ['#/webhooks/#']);
+    }
+
+    /**
+     * The second bypass, which needs no unanchored pattern and no
+     * attacker-controlled segment:
+     *
+     *   exclusion #^/api/public#  POST /api/publicity/42/delete  no token -> 200
+     *
+     * The pattern is anchored and still stops in the middle of a path segment,
+     * so it exempts every sibling route sharing the prefix. That exact pattern
+     * shipped in the framework's own docblock.
+     */
+    public function testAnExclusionPatternThatStopsMidSegmentIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('every sibling route sharing the prefix');
+
+        new CsrfConfig(excludedPathPatterns: ['#^/api/public#']);
+    }
+
+    public function testTheAcceptedShapesStillWork(): void
+    {
+        $config = new CsrfConfig(excludedPathPatterns: [
+            '#^/webhooks/#',
+            '#^/logout$#',
+            '#^/api/v\d+/public/#',
+            '#\A/health\z#',
+            '#(?i)^/Hooks/#',
+        ]);
+
+        self::assertCount(5, $config->excludedPathPatterns);
+    }
+
+    /**
+     * Validated by the constructor, not only by fromArray(), because
+     * constructing the object with named arguments is the documented usage and
+     * is what the framework's own middleware wiring does.
+     */
+    public function testFromArrayAppliesTheSameRule(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must start with "^"');
+
+        CsrfConfig::fromArray(['excluded_path_patterns' => ['#/webhooks/#']]);
+    }
+
+    public function testAPatternWithoutDelimitersIsRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        new CsrfConfig(excludedPathPatterns: ['^/webhooks/']);
     }
 
     public function testCsrfConfigFromArrayRejectsNonArrayExcludedPatterns(): void

@@ -46,9 +46,10 @@ use Zephyrus\Http\Response;
  *   after:  1 session, save-handler open + read + write + close, 1 Set-Cookie
  *
  * With a database-backed handler (see DatabaseSessionHandler) that read plus
- * write is 3 queries: 1 SELECT to read, then 1 SELECT + 1 INSERT to write. An
- * unauthenticated 404 crawl therefore becomes session-table INSERTs at the rate
- * the crawler sends requests.
+ * write is one SELECT and one upsert, plus, on PostgreSQL, the pair of
+ * statements taking and releasing the session lock. An unauthenticated 404
+ * crawl therefore becomes session-table INSERTs at the rate the crawler sends
+ * requests.
  *
  * The framework ships no path-scoped registration, so if that matters for your
  * application, wrap this middleware to skip the traffic you do not want
@@ -107,7 +108,11 @@ final class SessionMiddleware implements MiddlewareInterface
 
     public function process(Request $request, callable $next): Response
     {
-        $this->session->start($this->config);
+        // The request's own scheme decides the Secure cookie attribute when
+        // SessionConfig leaves it on "auto". Request resolved it against the
+        // trusted-header allowlist already, so a forwarded protocol only counts
+        // when the deployment declared the proxy that writes it.
+        $this->session->start($this->config, $request->uri()->isSecure());
 
         // Make the session available both via request attribute and the
         // global App facade so that the session() helper works everywhere.

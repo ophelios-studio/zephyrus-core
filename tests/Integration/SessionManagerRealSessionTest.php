@@ -131,6 +131,90 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame([], $warnings);
     }
 
+    // ── the Secure cookie attribute ───────────────────────────────────────────
+
+    /**
+     * SessionConfig::fromArray([]) used to emit a session cookie with no Secure
+     * attribute at all: "PHPSESSID=...; path=/; HttpOnly; SameSite=Lax". The
+     * default is "auto" now, so an HTTPS request gets Secure without the
+     * deployment having to remember.
+     */
+    #[RunInSeparateProcess]
+    public function testStartSetsSecureWhenTheRequestArrivedOverHttps(): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray([]), requestIsSecure: true);
+
+        self::assertTrue(session_get_cookie_params()['secure']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartLeavesTheCookieInsecureOnAPlainHttpRequest(): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray([]), requestIsSecure: false);
+
+        self::assertFalse(session_get_cookie_params()['secure']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testAnExplicitFalseIsHonouredEvenOverHttps(): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray(['secure' => false]), requestIsSecure: true);
+
+        self::assertFalse(session_get_cookie_params()['secure']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testTheOtherCookieAttributesAreUnchanged(): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray([]), requestIsSecure: true);
+        $params = session_get_cookie_params();
+
+        self::assertTrue($params['httponly']);
+        self::assertSame('Lax', $params['samesite']);
+        self::assertSame('/', $params['path']);
+        self::assertSame('', $params['domain'], 'the cookie stays host-only');
+    }
+
+    /**
+     * End to end through the middleware, which is where the request's own
+     * scheme becomes the cookie attribute. Request resolved that scheme against
+     * the trusted-header allowlist, so a forwarded protocol only counts when
+     * the deployment declared the proxy that writes it.
+     */
+    #[RunInSeparateProcess]
+    public function testTheMiddlewareGivesAnHttpsRequestASecureSessionCookie(): void
+    {
+        $middleware = new \Zephyrus\Session\SessionMiddleware(SessionConfig::fromArray([]));
+
+        $middleware->process(
+            new \Zephyrus\Http\Request('GET', 'https://example.com/dashboard'),
+            static fn (): \Zephyrus\Http\Response => \Zephyrus\Http\Response::text('ok'),
+        );
+
+        self::assertTrue(session_get_cookie_params()['secure']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testTheMiddlewareLeavesAPlainHttpRequestInsecure(): void
+    {
+        $middleware = new \Zephyrus\Session\SessionMiddleware(SessionConfig::fromArray([]));
+
+        $middleware->process(
+            new \Zephyrus\Http\Request('GET', 'http://localhost:8080/dashboard'),
+            static fn (): \Zephyrus\Http\Response => \Zephyrus\Http\Response::text('ok'),
+        );
+
+        self::assertFalse(session_get_cookie_params()['secure']);
+    }
+
     #[RunInSeparateProcess]
     public function testStartIsIdempotentWhenSessionAlreadyActive(): void
     {

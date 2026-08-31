@@ -98,13 +98,18 @@ final class RequestPathCanonicalizationTest extends TestCase
 
     public function testCsrfExclusionCannotBeBypassedWithADoubleSlashPrefix(): void
     {
-        // UNANCHORED on purpose: this is the vulnerable shape, and nothing in
-        // the framework requires anchoring.
+        // The unanchored shape this used to exercise, "#/webhooks/#", is now
+        // refused by CsrfConfig outright, so the pattern here is the anchored
+        // one an application can actually configure. What is still being
+        // proven is the OTHER half of the defence: the exclusion is keyed on
+        // the canonical path, so "//webhooks/account/close" (where "webhooks"
+        // is an authority, not a path segment) resolves to "/account/close"
+        // and never reaches the exemption.
         $kernel = KernelBuilder::create()
             ->withRouter((new Router())->post('/account/close', PathCanonController::class . '@close'))
             ->withMiddleware(new CsrfMiddleware(
                 new PathCanonTokenManager(),
-                CsrfConfig::fromArray(['excluded_path_patterns' => ['#/webhooks/#']]),
+                CsrfConfig::fromArray(['excluded_path_patterns' => ['#^/webhooks/#']]),
             ))
             ->build();
 
@@ -125,7 +130,7 @@ final class RequestPathCanonicalizationTest extends TestCase
             )
             ->withMiddleware(new CsrfMiddleware(
                 new PathCanonTokenManager(),
-                CsrfConfig::fromArray(['excluded_path_patterns' => ['#/webhooks/#']]),
+                CsrfConfig::fromArray(['excluded_path_patterns' => ['#^/webhooks/#']]),
             ))
             ->build();
 

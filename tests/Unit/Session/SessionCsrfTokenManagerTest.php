@@ -214,6 +214,62 @@ final class SessionCsrfTokenManagerTest extends TestCase
         self::assertSame('pre-seeded-token-abc123', $manager->getToken());
     }
 
+    // ── an empty stored value must not validate an empty submission ───────────
+
+    /**
+     * has() asked array_key_exists() and getToken() cast whatever it found to
+     * string, so an empty stored value was served AS the token and
+     * hash_equals('', '') answered true. Every wrong value was rejected except
+     * the emptiest one.
+     *
+     * CsrfMiddleware refuses an empty submission before delegating, so the
+     * framework's own composition was never exploitable and the precondition
+     * was never demonstrated. This interface is public API documented for
+     * direct use, so it has to hold on its own.
+     */
+    public function testAnEmptyStoredTokenDoesNotValidateAnEmptySubmission(): void
+    {
+        $manager = new SessionCsrfTokenManager(new SessionManager(['_csrf_token' => '']));
+
+        self::assertFalse($manager->isTokenValid(''));
+    }
+
+    public function testANullStoredTokenDoesNotValidateAnEmptySubmission(): void
+    {
+        $manager = new SessionCsrfTokenManager(new SessionManager(['_csrf_token' => null]));
+
+        self::assertFalse($manager->isTokenValid(''));
+    }
+
+    public function testAnUnusableStoredTokenIsReplacedRatherThanServed(): void
+    {
+        $session = new SessionManager(['_csrf_token' => '']);
+        $manager = new SessionCsrfTokenManager($session);
+
+        $token = $manager->getToken();
+
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $token);
+        self::assertSame($token, $session->get('_csrf_token'));
+    }
+
+    public function testANonStringStoredTokenIsReplacedRatherThanServed(): void
+    {
+        $manager = new SessionCsrfTokenManager(new SessionManager(['_csrf_token' => 12345]));
+
+        self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $manager->getToken());
+        self::assertFalse($manager->isTokenValid('12345'));
+    }
+
+    /** A validation attempt must not MINT and store a token as a side effect. */
+    public function testAFailedValidationDoesNotMintAToken(): void
+    {
+        $session = new SessionManager([]);
+        $manager = new SessionCsrfTokenManager($session);
+
+        self::assertFalse($manager->isTokenValid('anything'));
+        self::assertFalse($session->has('_csrf_token'));
+    }
+
     public function testEmptyCustomSessionKeyThrowsSessionException(): void
     {
         $session = new SessionManager([]);

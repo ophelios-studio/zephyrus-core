@@ -41,9 +41,15 @@ use function trim;
  * health-check routes.
  *
  *   $config = CsrfConfig::fromArray([
- *       'excluded_path_patterns' => ['#^/webhooks/#', '#^/api/public#'],
+ *       'excluded_path_patterns' => ['#^/webhooks/#', '#^/api/public/#'],
  *   ]);
  *   $mw = new CsrfMiddleware($sessionManager, $config);
+ *
+ * Note the trailing "/" on both. CsrfConfig refuses a pattern that is not
+ * anchored at both ends, and the example here used to ship "#^/api/public#",
+ * which stops mid-segment and therefore also exempted /api/publicity/42/delete:
+ * a POST with no token returned 200 and changed state. See CsrfConfig for the
+ * rule and for the second reproduced bypass.
  *
  * Unmatched routes
  * ----------------
@@ -146,7 +152,8 @@ final class CsrfMiddleware implements MiddlewareInterface
         // raw path was a live bypass: with an unanchored pattern such as
         // #/webhooks/#, a POST to //webhooks/account/close matched the
         // exclusion, skipped the token check, and the router dispatched the
-        // protected /account/close.
+        // protected /account/close. CsrfConfig now refuses that unanchored
+        // shape outright, so this is the second of two independent guards.
         $path = $request->path();
         foreach ($this->config->excludedPathPatterns as $pattern) {
             if (@preg_match($pattern, $path) === 1) {
