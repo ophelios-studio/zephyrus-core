@@ -329,11 +329,21 @@ final class Database
         // path, so that stays true.
         $db->connectionDsn = $dsn;
 
-        // Set client encoding for the connection.
+        // Set client encoding for the connection. The value is interpolated, which
+        // is only safe because DatabaseConfig validates charset against
+        // ^[a-zA-Z0-9_]+$ in BOTH its constructor and fromArray(); nothing here
+        // re-checks it.
+        //
+        // The failure is swallowed, and that is a deliberate trade-off rather than
+        // a claim that it cannot fail: the realistic causes are a charset name the
+        // server does not know, and a connection that died between connect and this
+        // statement. Raising here would turn a connection that works on the server
+        // default encoding into a hard boot failure for every application that
+        // vendors this framework, so the connection is returned either way.
         try {
             $db->query(sprintf("SET client_encoding TO '%s'", $config->charset));
         } catch (DatabaseException) {
-            // Encoding already set or not critical; proceed.
+            // Intentionally ignored; see above.
         }
 
         return $db;
@@ -343,7 +353,9 @@ final class Database
      * Execute a prepared statement with positional or named placeholders.
      *
      * @param array<int|string, mixed> $params
-     * @throws DatabaseException on prepare or execution failure.
+     * @throws DatabaseException on prepare or execution failure. Its message
+     *         carries the SQLSTATE only; the statement and the driver text are
+     *         reachable through DatabaseException::sql() and driverMessage().
      */
     public function query(string $sql, array $params = []): PDOStatement
     {
@@ -353,7 +365,12 @@ final class Database
 
             return $stmt;
         } catch (PDOException $e) {
-            throw DatabaseException::queryFailed($sql, $e->getMessage());
+            // queryExecutionFailed(), not queryFailed(): the driver text can carry
+            // interpolated parameter values under ATTR_EMULATE_PREPARES, so it stays
+            // off the message unless DatabaseException::enableVerboseMessages() is on.
+            // Both the statement and the driver text remain on the exception, via
+            // sql() and driverMessage().
+            throw DatabaseException::queryExecutionFailed($sql, $e);
         }
     }
 

@@ -196,4 +196,87 @@ final class PaginationRequestTest extends TestCase
 
         PaginationRequest::fromArrayWithBounds([], defaultPerPage: 10, maxPerPage: 0);
     }
+
+    // ── overflow guard (finding 1) ───────────────────────────────────────────
+
+    /**
+     * REGRESSION. offset() computed ($page - 1) * $perPage with no guard, so a
+     * 17-digit page overflowed int to float and the `: int` return type raised a
+     * raw TypeError instead of the DatabaseException this class contracts on.
+     * Every caller catching DatabaseException therefore 500ed instead.
+     */
+    public function testOffsetRejectsAPageThatWouldOverflowInsteadOfRaisingATypeError(): void
+    {
+        $request = new PaginationRequest(page: 99999999999999999, perPage: 100);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Page is too large');
+
+        $request->offset();
+    }
+
+    public function testOffsetStillComputesAtTheLargestRepresentablePage(): void
+    {
+        $perPage = 100;
+        $request = new PaginationRequest(page: intdiv(PHP_INT_MAX, $perPage), perPage: $perPage);
+
+        self::assertSame((intdiv(PHP_INT_MAX, $perPage) - 1) * $perPage, $request->offset());
+    }
+
+    /**
+     * The documented-safe path must not even reach the throw above:
+     * ?page=99999999999999999&per_page=100 is a plain HTTP request.
+     */
+    public function testFromQueryClampsAPageThatWouldOverflowTheOffset(): void
+    {
+        $request = PaginationRequest::fromQuery(
+            ['page' => 99999999999999999, 'per_page' => 100],
+            25,
+            100,
+        );
+
+        self::assertSame(100, $request->perPage);
+        self::assertSame(intdiv(PHP_INT_MAX, 100), $request->page);
+        self::assertIsInt($request->offset());
+    }
+
+    public function testFromQueryLeavesAnOrdinaryPageAlone(): void
+    {
+        $request = PaginationRequest::fromQuery(['page' => 5000, 'per_page' => 50], 25, 100);
+
+        self::assertSame(5000, $request->page);
+        self::assertSame(249950, $request->offset());
+    }
+
+    // ── fromArray is the pre-validated sibling (finding 2) ───────────────────
+
+    /**
+     * TRAP-PINNING TEST. fromArray() reads the SAME HTTP parameter names as
+     * fromQuery() but applies NO ceiling of its own, so handing it $_GET
+     * unfiltered yields `LIMIT 100000000`. That is by design: fromArray() takes
+     * PRE-VALIDATED input. The optional $maxPerPage argument is what makes it
+     * safe on untrusted input, and fromQuery() applies one by default.
+     *
+     * The first assertion pins the trap on purpose. Do not "fix" it by making the
+     * ceiling mandatory without checking every consumer repository first.
+     */
+    public function testFromArrayDoesNotClampPerPageUnlessGivenACeiling(): void
+    {
+        $unbounded = PaginationRequest::fromArray(['page' => 1, 'per_page' => 100000000]);
+        self::assertSame(100000000, $unbounded->perPage, 'fromArray takes PRE-VALIDATED input only');
+
+        $bounded = PaginationRequest::fromArray(['page' => 1, 'per_page' => 100000000], maxPerPage: 100);
+        self::assertSame(100, $bounded->perPage);
+
+        $fromQuery = PaginationRequest::fromQuery(['page' => 1, 'per_page' => 100000000]);
+        self::assertSame(100, $fromQuery->perPage, 'fromQuery is the untrusted-input sibling and clamps by default');
+    }
+
+    public function testFromArrayCeilingRejectsANonPositiveValue(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Max per-page must be >= 1');
+
+        PaginationRequest::fromArray(['per_page' => 10], maxPerPage: 0);
+    }
 }

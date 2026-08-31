@@ -901,6 +901,48 @@ final class DatabaseTest extends TestCase
             throw new \RuntimeException('work failed');
         });
     }
+
+    // ── query failures do not leak the statement (finding 5) ────────────────
+
+    /**
+     * REGRESSION. query() built its DatabaseException as
+     * queryFailed($sql, $e->getMessage()), so the message carried the raw
+     * statement AND the driver's error text. Under ATTR_EMULATE_PREPARES that
+     * driver text is the INTERPOLATED statement PostgreSQL parsed, which quotes
+     * real column values.
+     */
+    public function testQueryFailureWithholdsTheStatementAndDriverTextByDefault(): void
+    {
+        $this->db->query('INSERT INTO users (id, name, email) VALUES (?, ?, ?)', [1, 'Jane Roe', 'jane@example.com']);
+
+        try {
+            $this->db->query('INSERT INTO users (id, name, email) VALUES (?, ?, ?)', [1, 'Jane Roe', 'jane@example.com']);
+            self::fail('expected the duplicate key to raise a DatabaseException');
+        } catch (DatabaseException $e) {
+            self::assertStringNotContainsString('INSERT INTO users', $e->getMessage());
+            self::assertStringNotContainsString('UNIQUE constraint failed', $e->getMessage());
+            self::assertStringContainsString('Query failed', $e->getMessage());
+
+            // Still fully available to a caller that scrubs before logging.
+            self::assertStringContainsString('INSERT INTO users', (string) $e->sql());
+            self::assertStringContainsString('UNIQUE constraint failed', (string) $e->driverMessage());
+        }
+    }
+
+    public function testVerboseMessagesRestoreThePreviousQueryFailureShape(): void
+    {
+        DatabaseException::enableVerboseMessages();
+
+        try {
+            $this->db->query('SELECT * FROM table_that_does_not_exist');
+            self::fail('expected a DatabaseException');
+        } catch (DatabaseException $e) {
+            self::assertStringContainsString('Query failed [SELECT * FROM table_that_does_not_exist]', $e->getMessage());
+            self::assertStringContainsString('no such table', $e->getMessage());
+        } finally {
+            DatabaseException::enableVerboseMessages(false);
+        }
+    }
 }
 
 /**

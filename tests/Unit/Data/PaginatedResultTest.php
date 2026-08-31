@@ -161,4 +161,34 @@ final class PaginatedResultTest extends TestCase
         self::assertSame(3, $request->page);
         self::assertSame(15, $request->perPage);
     }
+
+    /**
+     * PINS THE DOCUMENTED SHARP EDGE. $items holds raw stdClass rows, not entities,
+     * so #[JsonIgnore] is not consulted anywhere on this path and every selected
+     * column ships. This test exists so the warning in the class docblock is a
+     * proven statement rather than a claim; it passes today and must keep passing
+     * until the envelope is redesigned, at which point the docblock changes with it.
+     */
+    public function testJsonEncodingTheEnvelopeEmitsEveryColumnOfARawRow(): void
+    {
+        $row = new \stdClass();
+        $row->id = 1;
+        $row->email = 'jane.roe@example.com';
+        $row->password_hash = 'argon2id$secret';
+
+        $result = new PaginatedResult(
+            items: [$row],
+            total: 1,
+            page: 1,
+            perPage: 25,
+            totalPages: 1,
+            hasPrevious: false,
+            hasNext: false,
+        );
+
+        $json = (string) json_encode($result);
+
+        self::assertStringContainsString('password_hash', $json);
+        self::assertStringContainsString('argon2id', $json);
+    }
 }

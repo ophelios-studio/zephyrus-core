@@ -143,6 +143,45 @@ final class DatabaseConfigTest extends TestCase
         ]);
     }
 
+    /**
+     * REGRESSION. charset is interpolated verbatim into
+     * `SET client_encoding TO '<charset>'` at connect time (Database::fromConfig),
+     * and under ATTR_EMULATE_PREPARES that statement is sent through the simple
+     * query protocol, where a semicolon starts a second command. fromArray()
+     * validated it; the constructor did not, so an object built directly executed
+     * arbitrary SQL on connect. Guarded like sslMode and sslRootCert already are.
+     */
+    public function testThrowsForCharsetSmuggledThroughTheConstructor(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('charset');
+
+        new DatabaseConfig(
+            driver: 'pgsql',
+            host: 'localhost',
+            port: 5432,
+            database: 'db',
+            username: 'u',
+            password: '',
+            charset: "utf8'; CREATE TABLE pwned (x int); SET client_encoding TO 'utf8",
+        );
+    }
+
+    public function testConstructorStillAcceptsAnOrdinaryCharset(): void
+    {
+        $config = new DatabaseConfig(
+            driver: 'pgsql',
+            host: 'localhost',
+            port: 5432,
+            database: 'db',
+            username: 'u',
+            password: '',
+            charset: 'utf8mb4',
+        );
+
+        self::assertSame('utf8mb4', $config->charset);
+    }
+
     // -------------------------------------------------------------------------
     // Driver validation
     // -------------------------------------------------------------------------
