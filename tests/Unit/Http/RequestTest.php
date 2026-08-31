@@ -275,6 +275,289 @@ final class RequestTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // fromGlobals - client IP behind trusted proxies (right to left walk)
+    // -------------------------------------------------------------------------
+
+    public function testFromGlobalsIgnoresForgedLeftmostForwardedForEntry(): void
+    {
+        // The caller sent "X-Forwarded-For: 192.0.2.66" and the proxy appended
+        // the peer it actually saw. The forged leftmost entry must not win.
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'        => 'GET',
+                'HTTP_HOST'             => 'example.com',
+                'REQUEST_URI'           => '/',
+                'REMOTE_ADDR'           => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR'  => '192.0.2.66, 198.51.100.7',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('198.51.100.7', $request->clientIp());
+    }
+
+    public function testFromGlobalsWalksPastEveryChainedTrustedProxy(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR' => '192.0.2.66, 203.0.113.20, 10.0.0.3, 10.0.0.2',
+            ],
+            trustedProxies: ['10.0.0.1', '10.0.0.2', '10.0.0.3'],
+        );
+
+        self::assertSame('203.0.113.20', $request->clientIp());
+    }
+
+    public function testFromGlobalsConsultsNoHeaderWhenRemoteAddressIsNotTrusted(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '198.51.100.5',
+                'HTTP_FORWARDED'       => 'for=203.0.113.10',
+                'HTTP_X_FORWARDED_FOR' => '192.0.2.66, 192.0.2.67',
+                'HTTP_X_REAL_IP'       => '192.0.2.68',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('198.51.100.5', $request->clientIp());
+    }
+
+    public function testFromGlobalsReturnsLeftmostWhenEveryHopIsTrusted(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR' => '10.0.0.9, 10.0.0.2',
+            ],
+            trustedProxies: ['10.0.0.1', '10.0.0.2', '10.0.0.9'],
+        );
+
+        self::assertSame('10.0.0.9', $request->clientIp());
+    }
+
+    public function testFromGlobalsWildcardTrustedProxyReturnsLeftmostEntry(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR' => '192.0.2.66, 198.51.100.7',
+            ],
+            trustedProxies: ['*'],
+        );
+
+        self::assertSame('192.0.2.66', $request->clientIp());
+    }
+
+    public function testFromGlobalsReturnsRemoteAddressWhenTrustedPeerSendsNoForwardingHeader(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '10.0.0.1',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertNotNull($request->clientIp());
+        self::assertSame('10.0.0.1', $request->clientIp());
+    }
+
+    public function testFromGlobalsWalksForwardedHeaderFromTheRight(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=192.0.2.66;proto=https, for=198.51.100.7;proto=https',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('198.51.100.7', $request->clientIp());
+    }
+
+    public function testFromGlobalsResolvesBracketedIpv6WithPortInForwardedHeader(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=unknown, for="[2001:db8::1]:1234"',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('2001:db8::1', $request->clientIp());
+    }
+
+    public function testFromGlobalsForwardedHeaderCarryingOnlyUnknownFallsBackToRemoteAddress(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'example.com',
+                'REQUEST_URI'    => '/',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=unknown',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('10.0.0.1', $request->clientIp());
+    }
+
+    public function testFromGlobalsPrefersForwardedHeaderOverForwardedForChain(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_FORWARDED'       => 'for=192.0.2.66, for=198.51.100.7',
+                'HTTP_X_FORWARDED_FOR' => '203.0.113.90, 203.0.113.91',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('198.51.100.7', $request->clientIp());
+    }
+
+    public function testFromGlobalsWalksIpv6ForwardedForChain(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '2001:db8:ff::1',
+                'HTTP_X_FORWARDED_FOR' => '2001:db8::66, 2001:db8::7',
+            ],
+            trustedProxies: ['2001:db8:ff::1'],
+        );
+
+        self::assertSame('2001:db8::7', $request->clientIp());
+    }
+
+    public function testFromGlobalsWalksMixedIpv4AndIpv6Chain(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR' => '192.0.2.66, 2001:db8::7, 10.0.0.2',
+            ],
+            trustedProxies: ['10.0.0.0/24'],
+        );
+
+        self::assertSame('2001:db8::7', $request->clientIp());
+    }
+
+    public function testFromGlobalsTrustsIpv4CidrRange(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '172.16.4.9',
+                'HTTP_X_FORWARDED_FOR' => '192.0.2.66, 203.0.113.7, 172.16.9.4',
+            ],
+            trustedProxies: ['172.16.0.0/12'],
+        );
+
+        self::assertSame('203.0.113.7', $request->clientIp());
+    }
+
+    public function testFromGlobalsTrustsIpv6CidrRange(): void
+    {
+        // Mirrors the real deployment, whose internal network is fdaa::/8.
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => 'fdaa:0:2::5',
+                'HTTP_X_FORWARDED_FOR' => '198.51.100.66, 203.0.113.7, fdaa:0:2::9',
+            ],
+            trustedProxies: ['fdaa::/8'],
+        );
+
+        self::assertSame('203.0.113.7', $request->clientIp());
+    }
+
+    public function testFromGlobalsToleratesWhitespaceEmptyEntriesAndTrailingComma(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR' => '  192.0.2.66 , ,  198.51.100.7 ,',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('198.51.100.7', $request->clientIp());
+    }
+
+    public function testFromGlobalsUsesSingleValueVendorHeaderOnlyAsLastResort(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'  => 'GET',
+                'HTTP_HOST'       => 'example.com',
+                'REQUEST_URI'     => '/',
+                'REMOTE_ADDR'     => '10.0.0.1',
+                'HTTP_X_REAL_IP'  => '203.0.113.44',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('203.0.113.44', $request->clientIp());
+    }
+
+    public function testFromGlobalsPrefersForwardedForChainOverSingleValueVendorHeader(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'HTTP_X_FORWARDED_FOR' => '192.0.2.66, 198.51.100.7',
+                'HTTP_X_REAL_IP'       => '203.0.113.44',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('198.51.100.7', $request->clientIp());
+    }
+
+    // -------------------------------------------------------------------------
     // fromGlobals — URI construction
     // -------------------------------------------------------------------------
 

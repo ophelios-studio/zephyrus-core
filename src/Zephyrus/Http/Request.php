@@ -114,7 +114,7 @@ final readonly class Request
         $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
         $trustForwarded = self::isProxyTrusted($remoteAddr, $trustedProxies);
         $uri     = self::buildUri($server, $trustForwarded);
-        $clientIp = self::resolveClientIp($server, $headers, $trustForwarded);
+        $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies);
 
         $raw = $rawBody ?? (string) file_get_contents('php://input');
         $parsedBody = self::parseBody($method, $headers, $post, $raw);
@@ -592,48 +592,61 @@ final readonly class Request
     }
 
     /**
+     * Resolve the IP of the ORIGINAL caller, i.e. the value a rate limiter, an
+     * allowlist or an audit record should key on.
+     *
+     * A forwarding header is only ever read when the peer we actually spoke to
+     * (REMOTE_ADDR) is a configured trusted proxy. REMOTE_ADDR is the one address
+     * the SAPI hands us that a caller cannot forge; every header can be sent by
+     * anyone. When the peer is not trusted, NO header is consulted at all.
+     *
+     * Once the peer IS trusted, the header still cannot be believed at face
+     * value. Every conforming reverse proxy APPENDS the peer it saw to the RIGHT
+     * of whatever chain came in, so the LEFTMOST entry is simply what the
+     * original caller wrote there. Reading it let a caller choose its own
+     * throttle bucket, rotate it at will, or pin somebody else's:
+     *
+     *   caller sends      X-Forwarded-For: 192.0.2.66
+     *   proxy appends     X-Forwarded-For: 192.0.2.66, 198.51.100.7
+     *   REMOTE_ADDR       (the proxy)
+     *
+     * The chain is therefore ordered outermost (the caller) first and innermost
+     * (the nearest proxy) last, with REMOTE_ADDR closing it as the innermost hop
+     * of all. It is walked from the RIGHT, popping hops that are themselves
+     * trusted proxies; the first hop that is NOT trusted is the furthest point we
+     * can still vouch for, and that is the client. Above, the proxy pops and
+     * 198.51.100.7 answers, so the forged 192.0.2.66 is never reached.
+     *
      * @param array<string, mixed>  $server
      * @param array<string, string> $headers
+     * @param string[]              $trustedProxies
      */
-    private static function resolveClientIp(array $server, array $headers, bool $trustForwarded = false): ?string
-    {
-        if ($trustForwarded) {
-            $forwarded = self::parseForwardedHeader(isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null);
-            $forwardedIp = self::normalizeIp($forwarded['for'] ?? null);
-            if ($forwardedIp !== null) {
-                return $forwardedIp;
-            }
+    private static function resolveClientIp(
+        array $server,
+        array $headers,
+        bool $trustForwarded = false,
+        array $trustedProxies = [],
+    ): ?string {
+        $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
 
-            $headerIp = self::resolveClientIpFromHeaders($headers);
-            if ($headerIp !== null) {
-                return $headerIp;
-            }
+        if (!$trustForwarded) {
+            return $remoteAddr;
         }
 
-        return self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
-    }
-
-    /**
-     * @param array<string, string> $headers
-     */
-    private static function resolveClientIpFromHeaders(array $headers): ?string
-    {
-        $forwarded = self::parseForwardedHeader($headers['forwarded'] ?? null);
-        $forwardedIp = self::normalizeIp($forwarded['for'] ?? null);
-        if ($forwardedIp !== null) {
-            return $forwardedIp;
-        }
-
-        $forwardedFor = $headers['x-forwarded-for'] ?? null;
-        if (is_string($forwardedFor) && $forwardedFor !== '') {
-            foreach (explode(',', $forwardedFor) as $candidate) {
-                $ip = self::normalizeIp($candidate);
-                if ($ip !== null) {
-                    return $ip;
-                }
+        $chain = self::forwardedChain($headers);
+        if ($chain !== []) {
+            if ($remoteAddr !== null) {
+                $chain[] = $remoteAddr;
             }
+
+            return self::walkForwardedChain($chain, $trustedProxies);
         }
 
+        // Single-value vendor headers, consulted only when neither chain header
+        // yielded a hop. They carry no ordering, so the walk above has nothing to
+        // work on: they are worth exactly as much as the nearest proxy's
+        // willingness to OVERWRITE, rather than pass through, whatever the caller
+        // sent under the same name.
         foreach (['x-real-ip', 'cf-connecting-ip', 'x-client-ip'] as $header) {
             $ip = self::normalizeIp($headers[$header] ?? null);
             if ($ip !== null) {
@@ -641,7 +654,81 @@ final readonly class Request
             }
         }
 
-        return null;
+        return $remoteAddr;
+    }
+
+    /**
+     * The forwarded hops as IP addresses, ordered outermost (the original caller)
+     * first and innermost (the proxy nearest to us) last. REMOTE_ADDR is NOT
+     * included here; the caller appends it.
+     *
+     * The RFC 7239 Forwarded header wins over the de facto X-Forwarded-For when
+     * both yield hops. Both are comma separated and both are appended to by each
+     * hop, so the same ordering holds for either.
+     *
+     * Entries that do not normalize to an IP (junk, "unknown", an empty slot from
+     * a trailing comma) are DROPPED rather than failing the whole chain, and that
+     * is deliberate. Junk to the LEFT of the real client is never reached, since
+     * the walk starts from the right and stops at the first untrusted hop. Junk
+     * cannot appear to the RIGHT of the real client either, because everything
+     * right of it was appended by our own trusted proxies. Please do not turn
+     * this back into a hard failure.
+     *
+     * @param  array<string, string> $headers
+     * @return list<string>
+     */
+    private static function forwardedChain(array $headers): array
+    {
+        $chain = [];
+
+        $forwarded = $headers['forwarded'] ?? null;
+        if (is_string($forwarded)) {
+            foreach (explode(',', $forwarded) as $element) {
+                $ip = self::normalizeIp(self::parseForwardedElement($element)['for'] ?? null);
+                if ($ip !== null) {
+                    $chain[] = $ip;
+                }
+            }
+        }
+
+        if ($chain !== []) {
+            return $chain;
+        }
+
+        $forwardedFor = $headers['x-forwarded-for'] ?? null;
+        if (is_string($forwardedFor)) {
+            foreach (explode(',', $forwardedFor) as $candidate) {
+                $ip = self::normalizeIp($candidate);
+                if ($ip !== null) {
+                    $chain[] = $ip;
+                }
+            }
+        }
+
+        return $chain;
+    }
+
+    /**
+     * Return the outermost hop that is not itself a trusted proxy, scanning from
+     * the innermost end. Popping by the configured trusted LIST rather than by a
+     * hop count is what keeps this correct when a deployment adds or removes a
+     * layer of proxies.
+     *
+     * @param list<string> $chain          outermost first, innermost last
+     * @param string[]     $trustedProxies
+     */
+    private static function walkForwardedChain(array $chain, array $trustedProxies): ?string
+    {
+        for ($i = count($chain) - 1; $i >= 0; $i--) {
+            if (!self::isProxyTrusted($chain[$i], $trustedProxies)) {
+                return $chain[$i];
+            }
+        }
+
+        // Every hop is trusted infrastructure, so the caller itself sits inside
+        // it and the outermost entry is the best answer available. This is also
+        // what keeps trustedProxies: ['*'] returning the leftmost entry.
+        return $chain[0] ?? null;
     }
 
     private static function normalizeIp(?string $value): ?string
@@ -746,22 +833,43 @@ final readonly class Request
     }
 
     /**
-     * @return array{proto?: string, host?: string, port?: string, for?: string}
+     * The connection parameters of the FIRST forwarding element, for buildUri().
+     * The client identity is deliberately not exposed here: resolveClientIp()
+     * needs every element, not the first one, and asking this helper for a "for"
+     * is what produced the leftmost-entry bug in the first place.
+     *
+     * @return array{proto?: string, host?: string, port?: string}
      */
     private static function parseForwardedHeader(?string $header): array
     {
-        if ($header === null || trim($header) === '') {
+        if ($header === null) {
             return [];
         }
 
-        $first = trim(explode(',', $header)[0] ?? '');
-        if ($first === '') {
-            return [];
-        }
+        $parameters = self::parseForwardedElement(explode(',', $header)[0] ?? '');
 
         $result = [];
+        foreach (['proto', 'host', 'port'] as $key) {
+            if (isset($parameters[$key])) {
+                $result[$key] = strtolower($parameters[$key]);
+            }
+        }
 
-        foreach (explode(';', $first) as $pair) {
+        return $result;
+    }
+
+    /**
+     * Parse ONE RFC 7239 forwarding element ("for=1.2.3.4;proto=https") into its
+     * parameters: lowercased names mapped to unquoted values. Values keep their
+     * original case, callers normalize when they need to.
+     *
+     * @return array<string, string>
+     */
+    private static function parseForwardedElement(string $element): array
+    {
+        $parameters = [];
+
+        foreach (explode(';', $element) as $pair) {
             [$name, $value] = array_pad(explode('=', trim($pair), 2), 2, null);
             if ($name === null || $value === null) {
                 continue;
@@ -769,21 +877,14 @@ final readonly class Request
 
             $key = strtolower(trim($name));
             $normalizedValue = trim($value, " \t\n\r\0\x0B\"");
-            if ($normalizedValue === '') {
+            if ($key === '' || $normalizedValue === '') {
                 continue;
             }
 
-            if ($key === 'for') {
-                $result[$key] = $normalizedValue;
-                continue;
-            }
-
-            if (in_array($key, ['proto', 'host', 'port'], true)) {
-                $result[$key] = strtolower($normalizedValue);
-            }
+            $parameters[$key] = $normalizedValue;
         }
 
-        return $result;
+        return $parameters;
     }
 
     private static function isDefaultPortForScheme(string $scheme, string $port): bool
