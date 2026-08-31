@@ -4,6 +4,24 @@ declare(strict_types=1);
 
 namespace Zephyrus\Data;
 
+/**
+ * Immutable column/direction pair for an ORDER BY clause.
+ *
+ * TWO FACTORIES, TWO CONTRACTS. They read the SAME request parameter names
+ * (sort_by / sortBy / order_by / orderBy), so picking the wrong one is silent:
+ *
+ *   - fromQuery() is the UNTRUSTED-INPUT sibling. An allowlist is REQUIRED and a
+ *     column outside it falls back to the default. Hand it $_GET.
+ *   - fromArray() takes PRE-VALIDATED input. Without the optional $allowedColumns
+ *     it accepts ANY identifier-shaped column, including one that appears in no
+ *     SELECT, which turns a listing into a blind ORDER BY oracle: an attacker
+ *     infers a hidden column's ranking from the row order, and a non-existent
+ *     column turns a 200 into an error. Pass $allowedColumns whenever the array
+ *     came from a request.
+ *
+ * The blast radius of that trap is disclosure, not injection: the constructor
+ * regex forbids quotes and quoteIdentifier() double-quotes every dotted part.
+ */
 final class SortRequest implements \JsonSerializable
 {
     public readonly string $direction;
@@ -24,15 +42,44 @@ final class SortRequest implements \JsonSerializable
         $this->direction = $normalized;
     }
 
-    public static function fromArray(array $data, string $defaultColumn, string $defaultDirection = 'ASC'): self
-    {
+    /**
+     * Build from an array of ALREADY VALIDATED values.
+     *
+     * With $allowedColumns left null this validates NOTHING beyond the identifier
+     * shape: any column name survives into the ORDER BY. That is intentional (an
+     * internal caller sorting by a column it chose itself must not need a list),
+     * and it is also the trap, because this method reads the same sort_by / sortBy
+     * / order_by / orderBy keys as fromQuery().
+     *
+     * Pass $allowedColumns, or use fromQuery(), for anything derived from a request.
+     *
+     * @param array<string, mixed> $data
+     * @param array<int, string>|null $allowedColumns optional allowlist; a column
+     *        outside it falls back to $defaultColumn, exactly as fromQuery() does.
+     */
+    public static function fromArray(
+        array $data,
+        string $defaultColumn,
+        string $defaultDirection = 'ASC',
+        ?array $allowedColumns = null,
+    ): self {
+        $candidate = self::resolveColumn($data, $defaultColumn);
+        if ($allowedColumns !== null && !in_array($candidate, $allowedColumns, true)) {
+            $candidate = $defaultColumn;
+        }
+
         return new self(
-            column: self::resolveColumn($data, $defaultColumn),
+            column: $candidate,
             direction: self::resolveDirection($data, $defaultDirection),
         );
     }
 
     /**
+     * Build from an UNTRUSTED request array. The allowlist is mandatory and a
+     * column outside it silently falls back to $defaultColumn, so no query
+     * parameter can order by a column the caller did not publish. This is the
+     * factory to reach for on $_GET.
+     *
      * @param array<string, mixed> $query
      * @param array<int, string> $allowedColumns
      */

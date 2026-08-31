@@ -87,6 +87,23 @@ class StdClassEntity extends Entity
     public stdClass $meta;
 }
 
+class DeclaredRawDataEntity extends Entity
+{
+    public int $id;
+    public string $rawData;
+}
+
+class PrivatePropertyEntity extends Entity
+{
+    public int $id;
+    private string $internal = 'untouched';
+
+    public function internal(): string
+    {
+        return $this->internal;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -361,5 +378,118 @@ final class EntityTest extends TestCase
         $this->assertSame('42', $entity->name);
         $this->assertFalse($entity->active);
         $this->assertSame(3.0, $entity->score);
+    }
+
+    // ── partial rows and reserved names (findings 3 and 6) ───────────────────
+
+    /**
+     * REGRESSION. jsonSerialize() called getValue() on EVERY declared public
+     * property, but build() only assigns the ones present in the row, so a partial
+     * SELECT left a typed property uninitialized and json_encode() died with
+     * "Typed property must not be accessed before initialization". Selecting a
+     * subset of columns and then serializing is an ordinary, innocent pattern.
+     */
+    public function testJsonSerializeSkipsPropertiesAPartialRowNeverAssigned(): void
+    {
+        $row = new stdClass();
+        $row->id = '7';
+
+        $entity = SimpleEntity::build($row);
+
+        $this->assertSame(['id' => 7], $entity->jsonSerialize());
+        $this->assertSame('{"id":7}', json_encode($entity));
+    }
+
+    public function testJsonSerializeStillEmitsEveryAssignedProperty(): void
+    {
+        $row = new stdClass();
+        $row->id = '7';
+        $row->name = 'Alice';
+        $row->active = '1';
+        $row->score = '1.5';
+
+        $entity = SimpleEntity::build($row);
+
+        $this->assertSame(
+            ['id' => 7, 'name' => 'Alice', 'active' => true, 'score' => 1.5],
+            $entity->jsonSerialize(),
+        );
+    }
+
+    /**
+     * REGRESSION. A row carrying a column literally named rawData threw a
+     * ReflectionException: property_exists() answered from Entity's own scope, where
+     * the base class's private $rawData slot IS visible, while getProperty() on the
+     * subclass reflection could not address it.
+     */
+    public function testBuildIgnoresARowColumnNamedRawDataInsteadOfThrowing(): void
+    {
+        $row = new stdClass();
+        $row->id = '3';
+        $row->name = 'Alice';
+        $row->rawData = 'a column that happens to be named rawData';
+
+        $entity = SimpleEntity::build($row);
+
+        $this->assertSame(3, $entity->id);
+        $this->assertSame('Alice', $entity->name);
+        // The row itself is still reachable, unchanged.
+        $this->assertSame($row, $entity->getRawData());
+    }
+
+    /**
+     * REGRESSION. A subclass that DECLARES a public $rawData shadows the base
+     * class's private slot, so the assignment made from Entity's scope landed on the
+     * private ?stdClass and raised a TypeError. rawData is reserved: the column is
+     * skipped rather than fatalling.
+     */
+    public function testBuildSkipsAReservedRawDataPropertyInsteadOfFatalling(): void
+    {
+        $row = new stdClass();
+        $row->id = '4';
+        $row->rawData = 'boom';
+
+        $entity = DeclaredRawDataEntity::build($row);
+
+        $this->assertSame(4, $entity->id);
+        $this->assertSame($row, $entity->getRawData());
+    }
+
+    /**
+     * Guard for the property_exists() to hasProperty() swap: a private property
+     * declared on the SUBCLASS is invisible from Entity's scope and must stay
+     * skipped, not become an "Cannot access private property" Error.
+     */
+    public function testBuildSkipsAPrivatePropertyDeclaredOnTheSubclass(): void
+    {
+        $row = new stdClass();
+        $row->id = '5';
+        $row->internal = 'injected';
+
+        $entity = PrivatePropertyEntity::build($row);
+
+        $this->assertSame(5, $entity->id);
+        $this->assertSame('untouched', $entity->internal());
+    }
+
+    /**
+     * The enum coercion failure used to interpolate the RAW DATABASE VALUE into the
+     * exception message, which then travelled into logs and error pages.
+     */
+    public function testEnumCoercionFailureDoesNotEchoTheDatabaseValue(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->role = 'jane.roe@example.com';
+
+        try {
+            EnumEntity::build($row);
+            $this->fail('expected an InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('Invalid value for enum', $e->getMessage());
+            $this->assertStringContainsString('UserRole', $e->getMessage());
+            $this->assertStringContainsString('role', $e->getMessage());
+            $this->assertStringNotContainsString('jane.roe@example.com', $e->getMessage());
+        }
     }
 }

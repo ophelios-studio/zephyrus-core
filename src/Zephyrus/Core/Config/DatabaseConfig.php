@@ -11,10 +11,12 @@ namespace Zephyrus\Core\Config;
  * All other fields carry safe defaults for a typical local PostgreSQL setup.
  *
  * Validation rules:
- *   - database and username must be non-empty strings.
- *   - port must be in the valid TCP range 1-65535.
- *   - charset must be alphanumeric (safe for SQL SET client_encoding).
- *   - driver must be 'pgsql' (only PostgreSQL is supported).
+ *   - database and username must be non-empty strings (fromArray only).
+ *   - port must be in the valid TCP range 1-65535 (fromArray only).
+ *   - driver must be 'pgsql' (fromArray only; PostgreSQL is the only driver).
+ *   - charset must be alphanumeric or underscore (constructor AND fromArray:
+ *     it is interpolated into SET client_encoding).
+ *   - sslMode and sslRootCert must be DSN-safe (constructor AND fromArray).
  *
  * Performance note (emulatePrepares):
  *   PostgreSQL server-side prepared statements cost three network round-trips
@@ -70,11 +72,28 @@ final readonly class DatabaseConfig
         public ?string $sslRootCert = null,
     ) {
         // Validated in the constructor rather than in fromArray() alone, unlike
-        // every other field here: these two are the only ones appended to the
-        // DSN as free-form text, so the guarantee worth having is that no
-        // instance can exist at all carrying a value libpq would not recognise.
-        // fromArray() normalises first (trim, lower-case, empty to null); a
-        // direct caller is expected to pass a canonical value or null.
+        // most other fields here: these three are the ones that reach a connection
+        // string or a SQL statement as free-form text, so the guarantee worth
+        // having is that no instance can exist at all carrying a value the driver
+        // or the server would not recognise. fromArray() normalises first (trim,
+        // lower-case, empty to null); a direct caller is expected to pass a
+        // canonical value or null.
+
+        // charset is interpolated verbatim into `SET client_encoding TO '<charset>'`
+        // at connect time (Database::fromConfig). Under ATTR_EMULATE_PREPARES that
+        // statement goes out on the simple query protocol, where a quote plus a
+        // semicolon starts a SECOND command, so an unvalidated charset was arbitrary
+        // SQL executed as the application role. fromArray() already applied this
+        // check; the constructor did not, and a directly built config skipped it.
+        if (preg_match('/^[a-zA-Z0-9_]+$/', $this->charset) !== 1) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                'charset',
+                $this->charset,
+                'must contain only alphanumeric characters and underscores',
+            );
+        }
+
         if ($this->sslMode !== null && !in_array($this->sslMode, self::SSL_MODES, true)) {
             throw ConfigurationException::invalidValue(
                 'database',

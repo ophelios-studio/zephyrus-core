@@ -31,7 +31,29 @@ final class SortRequestTest extends TestCase
         self::assertSame('DESC', $sort->direction);
     }
 
-    public function testFromArrayReadsSnakeAndCamelKeys(): void
+    /**
+     * TRAP-PINNING TEST. This used to be testFromArrayReadsSnakeAndCamelKeys and it
+     * blessed the dangerous half of the behaviour without naming it.
+     *
+     * fromArray() reads the SAME HTTP parameter names as fromQuery()
+     * (sort_by / sortBy / order_by / orderBy) but, with no allowlist, accepts ANY
+     * identifier-shaped column. Handing it $_GET unfiltered therefore yields a blind
+     * ORDER BY oracle: an attacker sorts a listing by a column that is not in the
+     * SELECT and reads the hidden ranking off the row order, and a non-existent
+     * column turns a 200 into a 42703 error, which is a column-existence oracle.
+     *
+     * That is NOT arbitrary SQL injection: toSql() double-quotes each dotted part and
+     * doubles embedded quotes, and the constructor regex forbids quotes outright, so
+     * identifier breakout does not reproduce (see the assertions below). The impact
+     * is disclosure plus a 500.
+     *
+     * fromArray() takes PRE-VALIDATED input ONLY. The optional $allowedColumns
+     * argument is what makes it safe on untrusted input, and fromQuery() requires one.
+     *
+     * The unrestricted assertions here pin the trap deliberately. Do not "fix" them by
+     * making the allowlist mandatory without checking every consumer repository first.
+     */
+    public function testFromArrayReadsSnakeAndCamelKeysAndValidatesNothingWithoutAnAllowlist(): void
     {
         $snake = SortRequest::fromArray(['sort_by' => 'created_at', 'sort_dir' => 'ASC'], 'id');
         $camel = SortRequest::fromArray(['sortBy' => 'name', 'sortDir' => 'DESC'], 'id');
@@ -46,6 +68,48 @@ final class SortRequestTest extends TestCase
         self::assertSame('DESC', strtoupper($orderSnake->direction));
         self::assertSame('email', $orderCamel->column);
         self::assertSame('ASC', strtoupper($orderCamel->direction));
+
+        // THE TRAP: a column that is in no SELECT, and in no allowlist, is accepted.
+        $oracle = SortRequest::fromArray(['sort_by' => 'internal_risk_score'], 'id');
+        self::assertSame('internal_risk_score', $oracle->column);
+        self::assertSame(' ORDER BY "internal_risk_score" ASC', $oracle->toSql());
+
+        // The bound on the damage: no identifier breakout, because the constructor
+        // regex refuses a quote before quoteIdentifier() ever runs.
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid sort column');
+        SortRequest::fromArray(['sort_by' => 'id" , (SELECT 1) --'], 'id');
+    }
+
+    /**
+     * The BC-safe remedy: pass $allowedColumns and fromArray() restricts the column
+     * exactly as fromQuery() does, falling back to the default column.
+     */
+    public function testFromArrayFallsBackToTheDefaultWhenGivenAnAllowlist(): void
+    {
+        $rejected = SortRequest::fromArray(
+            ['sort_by' => 'internal_risk_score', 'sort_dir' => 'DESC'],
+            'id',
+            allowedColumns: ['id', 'name'],
+        );
+
+        self::assertSame('id', $rejected->column);
+        self::assertSame('DESC', $rejected->direction);
+
+        $accepted = SortRequest::fromArray(
+            ['sort_by' => 'name'],
+            'id',
+            allowedColumns: ['id', 'name'],
+        );
+
+        self::assertSame('name', $accepted->column);
+    }
+
+    public function testFromArrayWithAnEmptyAllowlistFallsBackToTheDefaultColumn(): void
+    {
+        $sort = SortRequest::fromArray(['sort_by' => 'name'], 'id', allowedColumns: []);
+
+        self::assertSame('id', $sort->column);
     }
 
     public function testFromArrayPrioritizesSortKeysOverOrderAliases(): void
