@@ -29,6 +29,30 @@ use Zephyrus\Security\SecureHeadersMiddleware;
  */
 final class HttpKernelExceptionEventTest extends TestCase
 {
+    private string $errorLogFile = '';
+
+    private string $previousErrorLog = '';
+
+    /**
+     * Several cases below register a reporter that throws on purpose, and the
+     * kernel logs every listener failure. Route that to a file so the suite's
+     * stderr stays readable; HttpKernelListenerFailureLoggingTest is what
+     * asserts the content.
+     */
+    protected function setUp(): void
+    {
+        $this->errorLogFile = (string) tempnam(sys_get_temp_dir(), 'zephyrus-kernel-events-');
+        $previous = ini_get('error_log');
+        $this->previousErrorLog = $previous === false ? '' : $previous;
+        ini_set('error_log', $this->errorLogFile);
+    }
+
+    protected function tearDown(): void
+    {
+        ini_set('error_log', $this->previousErrorLog);
+        @unlink($this->errorLogFile);
+    }
+
     // -- David's condition: opting into nothing must change nothing ----------
 
     /**
@@ -252,14 +276,22 @@ final class HttpKernelExceptionEventTest extends TestCase
     }
 
     /**
-     * Pins a real LIMITATION, not a feature: EventDispatcher::dispatch() has no
-     * per-listener isolation, so the kernel's guard catches the first throw and
-     * the remaining listeners for that event never run. Two reporters
-     * registered together are therefore not independent. The guarantee the
-     * kernel does make is narrower: the response survives, and the next request
-     * is unaffected.
+     * Reporters registered together are INDEPENDENT.
+     *
+     * This test used to pin the opposite, and said so: EventDispatcher had no
+     * per-listener isolation, the kernel's guard caught the first throw, and
+     * the remaining listeners for that event never ran. Pinning it was honest
+     * about the code, but the behaviour it described was a security defect
+     * rather than a design choice. fireExceptionEvent() is the seam whose whole
+     * purpose is to make failures visible, so one broken reporter silently
+     * suppressing an audit reporter behind it is the worst possible place for
+     * that to happen. EventDispatcher::dispatch() now takes a per-listener
+     * error handler and the kernel passes one, so the assertion is inverted.
+     *
+     * What did NOT change, and is asserted alongside: nothing a listener throws
+     * can influence the response, and the next request is unaffected.
      */
-    public function testAThrowingListenerAbortsTheRemainingListenersForThatRequest(): void
+    public function testAThrowingListenerNoLongerCancelsTheRemainingListeners(): void
     {
         $reached = 0;
 
@@ -276,12 +308,14 @@ final class HttpKernelExceptionEventTest extends TestCase
         $kernel->handle(Request::fromArray('GET', '/boom'));
         $kernel->handle(Request::fromArray('GET', '/boom'));
 
-        // The lower-priority listener is NOT reached, on either request. This
-        // asserts the limitation as it actually is rather than implying an
-        // isolation the kernel does not provide.
-        self::assertSame(0, $reached);
-        // What IS guaranteed: the kernel keeps producing correct responses.
+        // Once per request, both times: the failing high-priority reporter no
+        // longer cancels the low-priority one.
+        self::assertSame(2, $reached);
+
+        // Still guaranteed: the kernel keeps producing correct responses, and
+        // the isolation holds on every subsequent request too.
         self::assertSame(500, $kernel->handle(Request::fromArray('GET', '/boom'))->status);
+        self::assertSame(3, $reached);
     }
 
     // -- The event cannot influence the response -----------------------------

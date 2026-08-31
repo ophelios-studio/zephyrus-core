@@ -302,17 +302,17 @@ final readonly class HttpKernel
      * Anything a listener throws is swallowed: a reporter must never be able to
      * turn a handled error response into a dead connection.
      *
-     * The catch is still around the WHOLE dispatch, so the first reporter that
-     * throws also cancels the reporters after it. EventDispatcher::dispatch()
-     * now accepts a per-listener error handler that would fix exactly that, and
-     * passing one here is a one-line change; it is deliberately NOT made,
-     * because HttpKernelExceptionEventTest pins the current behaviour on
-     * purpose and inverting a pinned expectation is not this layer's call to
-     * make on its own.
+     * The swallowing is PER LISTENER. It used to wrap the whole dispatch, which
+     * made the guarantee much narrower than it looked: the first reporter that
+     * threw also cancelled every reporter after it, so an application sending
+     * errors to a log service AND to an audit trail lost the audit trail
+     * whenever the log service's client failed. On the one seam whose entire
+     * job is to make failures visible, a failure made other failures invisible.
      *
-     * What DID change: the failure is no longer invisible. It used to vanish
-     * into an empty catch block, so an application whose reporter had been
-     * broken for weeks had no way to find out.
+     * And the loss used to be total: the catch block was empty, so an
+     * application whose reporter had been broken for weeks had no way to find
+     * out from anywhere. Each failure is now written to the error log, which is
+     * where an operator can see it and where it cannot reach the client.
      */
     private function fireExceptionEvent(Throwable $exception, Request $request, string $source): void
     {
@@ -321,14 +321,37 @@ final readonly class HttpKernel
         }
 
         try {
-            $this->events->dispatch(new ExceptionEvent($request, $exception, $source));
-        } catch (Throwable $listenerFailure) {
-            // Never rethrown, see above. Logged so it is findable.
+            $this->events->dispatch(
+                new ExceptionEvent($request, $exception, $source),
+                self::reportListenerFailure(...),
+            );
+        } catch (Throwable $dispatchFailure) {
+            // The per-listener handler already absorbs anything a LISTENER
+            // throws, so reaching here means the dispatcher itself failed.
+            // Still swallowed, for the same reason.
+        }
+    }
+
+    /**
+     * Record one listener failure without ever becoming a failure itself.
+     *
+     * This runs inside the error path, on the seam that exists so errors are
+     * seen. If it could throw it would propagate out of dispatch() and undo the
+     * per-listener isolation it is there to report on, so its whole body is
+     * guarded. error_log() returns false rather than throwing, and both values
+     * read off the throwable are safe, but the guard is what makes that a
+     * property of this method instead of a fact about today's implementation.
+     */
+    private static function reportListenerFailure(Throwable $listenerFailure): void
+    {
+        try {
             error_log(sprintf(
-                'Zephyrus: an ExceptionEvent listener failed and the remaining listeners were skipped: %s: %s',
+                'Zephyrus: an ExceptionEvent listener failed and was skipped: %s: %s',
                 $listenerFailure::class,
                 $listenerFailure->getMessage(),
             ));
+        } catch (Throwable) {
+            // Nothing left to report to. Never rethrown.
         }
     }
 
