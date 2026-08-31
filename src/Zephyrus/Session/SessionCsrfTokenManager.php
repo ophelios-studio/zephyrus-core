@@ -68,7 +68,7 @@ final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
      *
      * Uses hash_equals() for a constant-time comparison.
      */
-    public function isTokenValid(string $submitted): bool
+    public function isTokenValid(#[\SensitiveParameter] string $submitted): bool
     {
         if (!$this->session->has($this->sessionKey)) {
             return false;

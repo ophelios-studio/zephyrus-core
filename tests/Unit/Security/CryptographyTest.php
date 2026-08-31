@@ -370,4 +370,186 @@ final class CryptographyTest extends TestCase
     {
         self::assertSame(32, Cryptography::ENCRYPTION_KEY_BYTES);
     }
+
+    // ─── Documented hazard: the pepper carries no delimiter ───────────
+
+    /**
+     * NOT A BUG REPORT, A PIN. The pepper is prepended with no separator, so the
+     * pepper/password boundary is not recoverable and different pairs hash the
+     * same input. This test exists so the hazard cannot be "fixed" by accident:
+     * adding a delimiter would invalidate every peppered hash already stored,
+     * which is a forced password reset for every account that has one. The
+     * hazard is documented on hashPassword() and deliberately left in place.
+     */
+    public function testPepperConcatenationIsAmbiguousAndIsLeftThatWayDeliberately(): void
+    {
+        $hash = Cryptography::hashPassword('B', 'A');
+
+        self::assertTrue(Cryptography::verifyPassword('B', $hash, 'A'));
+        self::assertTrue(Cryptography::verifyPassword('AB', $hash, null));
+        self::assertTrue(Cryptography::verifyPassword('', $hash, 'AB'));
+    }
+
+    // ─── Keyed hashing must not degrade into an unkeyed public hash ───
+
+    /**
+     * libsodium treats an empty key as "no key at all", so an empty string used
+     * to produce the plain unkeyed digest while looking like a MAC. Every other
+     * invalid length was already rejected; the one input that switches
+     * authentication off was the one accepted.
+     */
+    public function testHashRejectsAnEmptyKeyInsteadOfSilentlyDroppingAuthentication(): void
+    {
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::hash('message', '');
+    }
+
+    public function testHashRejectsAKeyShorterThanTheBlake2bMinimum(): void
+    {
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::hash('message', str_repeat('k', SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MIN - 1));
+    }
+
+    public function testHashRejectsAKeyLongerThanTheBlake2bMaximum(): void
+    {
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::hash('message', str_repeat('k', SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MAX + 1));
+    }
+
+    public function testHashStillAcceptsAnOmittedKeyAsAnUnkeyedDigest(): void
+    {
+        self::assertSame(Cryptography::hash('message'), Cryptography::hash('message', null));
+    }
+
+    public function testHashFileRejectsAnEmptyKeyInsteadOfSilentlyDroppingAuthentication(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'zephyrus-test-');
+        file_put_contents($path, 'file content');
+
+        try {
+            $this->expectException(CryptographyException::class);
+            $this->expectExceptionMessage('Invalid cryptographic key');
+            Cryptography::hashFile($path, '');
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testHashFileRejectsAKeyShorterThanTheBlake2bMinimum(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'zephyrus-test-');
+        file_put_contents($path, 'file content');
+
+        try {
+            $this->expectException(CryptographyException::class);
+            $this->expectExceptionMessage('Invalid cryptographic key');
+            Cryptography::hashFile($path, str_repeat('k', SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MIN - 1));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    // ─── Key material must be a real key ──────────────────────────────
+
+    /**
+     * decodeKey('') decoded to zero bytes and returned it, which is the
+     * shortest route to handing a keyed operation something that is not a key.
+     */
+    public function testDecodeKeyRejectsAnEmptyEncodedKey(): void
+    {
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::decodeKey('');
+    }
+
+    public function testDecodeKeyRejectsAKeyOfTheWrongLength(): void
+    {
+        $short = Cryptography::encodeKey(random_bytes(16));
+
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::decodeKey($short);
+    }
+
+    public function testEncryptRejectsTheAllZeroKey(): void
+    {
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::encrypt('secret', str_repeat("\0", Cryptography::ENCRYPTION_KEY_BYTES));
+    }
+
+    public function testDecryptRejectsTheAllZeroKey(): void
+    {
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::decrypt('anything', str_repeat("\0", Cryptography::ENCRYPTION_KEY_BYTES));
+    }
+
+    public function testDecodeKeyRejectsTheAllZeroKey(): void
+    {
+        $encoded = Cryptography::encodeKey(str_repeat("\0", Cryptography::ENCRYPTION_KEY_BYTES));
+
+        $this->expectException(CryptographyException::class);
+        $this->expectExceptionMessage('Invalid cryptographic key');
+        Cryptography::decodeKey($encoded);
+    }
+
+    // ─── Context binding (AAD) ────────────────────────────────────────
+
+    public function testEncryptDecryptRoundTripWithAContext(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+
+        $encrypted = Cryptography::encrypt('418-555-0199', $key, 'tenant:42|column:phone');
+        $decrypted = Cryptography::decrypt($encrypted, $key, 'tenant:42|column:phone');
+
+        self::assertSame('418-555-0199', $decrypted);
+    }
+
+    /**
+     * The transplant this closes: a ciphertext lifted out of one column and read
+     * back as another decrypted cleanly, because nothing bound the ciphertext to
+     * where it came from.
+     */
+    public function testCiphertextBoundToOneContextDoesNotDecryptUnderAnother(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+        $sealed = Cryptography::encrypt('111 222 333', $key, 'tenant:42|column:ssn');
+
+        $this->expectException(CryptographyException::class);
+        Cryptography::decrypt($sealed, $key, 'tenant:42|column:email');
+    }
+
+    public function testCiphertextBoundToOneTenantDoesNotDecryptUnderAnother(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+        $sealed = Cryptography::encrypt('111 222 333', $key, 'tenant:42|column:ssn');
+
+        $this->expectException(CryptographyException::class);
+        Cryptography::decrypt($sealed, $key, 'tenant:77|column:ssn');
+    }
+
+    public function testContextlessCiphertextDoesNotDecryptOnceAContextIsAdopted(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+        $sealed = Cryptography::encrypt('111 222 333', $key);
+
+        $this->expectException(CryptographyException::class);
+        Cryptography::decrypt($sealed, $key, 'tenant:42|column:ssn');
+    }
+
+    /**
+     * The default must stay byte-identical to the pre-context behaviour, or
+     * every ciphertext already in a database stops opening.
+     */
+    public function testOmittedContextDecryptsCiphertextWrittenWithoutOne(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+
+        self::assertSame('111 222 333', Cryptography::decrypt(Cryptography::encrypt('111 222 333', $key), $key));
+        self::assertSame('111 222 333', Cryptography::decrypt(Cryptography::encrypt('111 222 333', $key, ''), $key));
+    }
 }

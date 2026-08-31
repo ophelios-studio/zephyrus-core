@@ -177,6 +177,14 @@ final readonly class ContentSecurityPolicy
                 return [];
             }
 
+            // The separator guard runs on the RAW string, before the split.
+            // preg_split('/\s+/') consumes CR and LF as delimiters, so a value
+            // checked only after splitting could never contain one: the same
+            // "a\r\nb" threw as an array and was quietly accepted as a string.
+            self::assertNoSeparators($values);
+
+            // Splitting a whitespace-separated source list is deliberate and is
+            // the documented way to write a directive, so it stays.
             $values = preg_split('/\s+/', $values) ?: [];
         }
 
@@ -199,6 +207,16 @@ final readonly class ContentSecurityPolicy
         return array_values($normalized);
     }
 
+    /**
+     * A directive VALUE is exactly one source expression.
+     *
+     * Rejecting ";" and CRLF was never enough, because a plain space is also a
+     * separator in a CSP directive: "https://cdn.tenant.example 'unsafe-inline'"
+     * passed as one value emitted two source expressions, so a caller allowed to
+     * add a host could switch inline script on. Interior whitespace of any kind
+     * is refused here; callers that legitimately want several sources pass an
+     * array, or the whitespace-separated string form of withDirective().
+     */
     private static function normalizeDirectiveValue(string $value): string
     {
         $normalized = trim($value);
@@ -206,10 +224,21 @@ final readonly class ContentSecurityPolicy
             throw new InvalidArgumentException('CSP directive values cannot be empty.');
         }
 
-        if (preg_match('/[;\r\n]/', $normalized) === 1) {
-            throw new InvalidArgumentException('CSP directive values cannot contain separators.');
+        self::assertNoSeparators($normalized);
+
+        if (preg_match('/\s/', $normalized) === 1) {
+            throw new InvalidArgumentException(
+                'A CSP directive value must be a single source expression and cannot contain whitespace.',
+            );
         }
 
         return $normalized;
+    }
+
+    private static function assertNoSeparators(string $value): void
+    {
+        if (preg_match('/[;\r\n]/', $value) === 1) {
+            throw new InvalidArgumentException('CSP directive values cannot contain separators.');
+        }
     }
 }

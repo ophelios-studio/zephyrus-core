@@ -117,6 +117,40 @@ final class SecureHeadersMiddlewareTest extends TestCase
         );
     }
 
+    /**
+     * THE TRAP THIS PINS. Uri::__construct falls back to "http" and "localhost"
+     * when parse_url() fails, silently, so a malformed authority collapsed the
+     * whole URI and uri()->isSecure() answered false on a request the SAPI had
+     * reported as HTTPS. HSTS was then dropped with no error anywhere.
+     *
+     * "https://example.com:port/secure" is a URL parse_url() rejects outright,
+     * and Request::fromGlobals builds exactly that shape from an attacker-chosen
+     * Host header on an HTTPS connection.
+     */
+    public function testHstsIsStillEmittedWhenAMalformedAuthorityDefeatsUriParsing(): void
+    {
+        $request = new Request('GET', 'https://example.com:port/secure');
+        // The collapse itself, asserted rather than assumed.
+        self::assertFalse($request->uri()->isSecure());
+        self::assertSame('localhost', $request->uri()->host());
+
+        $config = SecureHeadersConfig::fromArray(['hstsMaxAge' => 31_536_000]);
+        $mw = new SecureHeadersMiddleware($config);
+        $response = $this->process($mw, $request);
+
+        self::assertContains('strict-transport-security: max-age=31536000', $response->toHeaderLines());
+    }
+
+    public function testHstsIsNotEmittedWhenAMalformedAuthorityAppearsOnAnHttpUrl(): void
+    {
+        $config = SecureHeadersConfig::fromArray(['hstsMaxAge' => 31_536_000]);
+        $mw = new SecureHeadersMiddleware($config);
+        $response = $this->process($mw, new Request('GET', 'http://example.com:port/plain'));
+        $headerString = implode("\n", $response->toHeaderLines());
+
+        self::assertStringNotContainsString('strict-transport-security', $headerString);
+    }
+
     public function testHstsDisabledWhenMaxAgeIsZeroOnHttps(): void
     {
         $config = SecureHeadersConfig::fromArray(['hstsMaxAge' => 0]);

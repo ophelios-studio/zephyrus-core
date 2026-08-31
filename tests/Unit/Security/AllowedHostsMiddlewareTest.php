@@ -54,11 +54,63 @@ final class AllowedHostsMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
-    public function testIpv6HostHeaderWithPortIsNormalizedAndAllowed(): void
+    public function testIpv6UriWithPortIsNormalizedAndAllowed(): void
     {
         $mw = new AllowedHostsMiddleware(['2001:db8::1']);
-        $request = new Request('GET', 'https://example.com/secure', headers: [
-            'host' => '[2001:db8::1]:443',
+        $request = new Request('GET', 'https://[2001:db8::1]:443/secure');
+
+        $response = $mw->process($request, static fn (Request $r): Response => Response::text('ok'));
+
+        self::assertSame(200, $response->status);
+    }
+
+    /**
+     * THE TRAP THIS PINS. The middleware used to read the raw Host header first
+     * and fall back to the URI, while every downstream consumer (links,
+     * redirects, cookie domains, baseUrl()) reads uri()->host(), which a trusted
+     * X-Forwarded-Host overrides. The two could therefore describe different
+     * hosts, and the allowlist checked the one nothing else used.
+     *
+     * This case is that divergence in its smallest form: an allowed Host header
+     * over a URI pointing somewhere else. It used to PASS, which is the bug. The
+     * allowlist now judges uri()->host(), so it refuses.
+     *
+     * The previous version of this case asserted the opposite (an allowed IPv6
+     * Host header over an example.com URI returning 200) and was the only test
+     * whose expectation had to change.
+     */
+    public function testAnAllowedHostHeaderCannotAdmitARequestWhoseUriPointsElsewhere(): void
+    {
+        $called = false;
+        $mw = new AllowedHostsMiddleware(['app.agreely.ca']);
+        $request = new Request('GET', 'https://evil.attacker.test/path', headers: [
+            'host' => 'app.agreely.ca',
+        ]);
+
+        $response = $mw->process($request, static function (Request $r) use (&$called): Response {
+            $called = true;
+
+            return Response::text('unreachable');
+        });
+
+        self::assertFalse($called);
+        self::assertSame(400, $response->status);
+        self::assertSame('evil.attacker.test', $request->uri()->host());
+    }
+
+    /**
+     * The mirror image: the URI is the allowed host, so the request is served no
+     * matter what the raw Host header claims. A trusted proxy rewriting Host and
+     * forwarding the public name through X-Forwarded-Host is a legitimate and
+     * common topology, and Request::fromGlobals already gates that header on the
+     * trusted-proxy allowlist. Refusing on disagreement would break exactly the
+     * deployments allowed_hosts exists to protect.
+     */
+    public function testAnAllowedUriIsServedEvenWhenTheRawHostHeaderDisagrees(): void
+    {
+        $mw = new AllowedHostsMiddleware(['app.agreely.ca']);
+        $request = new Request('GET', 'https://app.agreely.ca/dashboard', headers: [
+            'host' => 'internal-backend.flycast',
         ]);
 
         $response = $mw->process($request, static fn (Request $r): Response => Response::text('ok'));

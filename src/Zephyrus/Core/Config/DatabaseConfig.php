@@ -65,7 +65,7 @@ final readonly class DatabaseConfig
         public int $port,
         public string $database,
         public string $username,
-        public string $password,
+        #[\SensitiveParameter] public string $password,
         public string $charset,
         public bool $emulatePrepares = false,
         public ?string $sslMode = null,

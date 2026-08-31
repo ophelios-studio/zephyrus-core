@@ -44,5 +44,5 @@ interface CsrfTokenManagerInterface
      *
      * MUST use a constant-time comparison to prevent timing attacks.
      */
-    public function isTokenValid(string $submitted): bool;
+    public function isTokenValid(#[\SensitiveParameter] string $submitted): bool;
 }
