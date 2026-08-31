@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Core\Config;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
+use Zephyrus\Http\Request;
 
 final class SecurityConfigTest extends TestCase
 {
@@ -218,6 +219,84 @@ final class SecurityConfigTest extends TestCase
         ]);
 
         self::assertSame(['10.0.0.1', '10.0.0.2'], $config->trustedProxies);
+    }
+
+    // -- Trusted Headers ---------------------------------------------
+
+    public function testTrustedHeadersDefaultsToTheXForwardedFamily(): void
+    {
+        $config = SecurityConfig::fromArray([]);
+
+        self::assertSame(
+            ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port'],
+            $config->trustedHeaders,
+        );
+        self::assertSame(Request::TRUSTED_HEADERS_DEFAULT, $config->trustedHeaders);
+    }
+
+    public function testTrustedHeadersAcceptsSnakeCaseKey(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trusted_headers' => ['forwarded'],
+        ]);
+
+        self::assertSame(['forwarded'], $config->trustedHeaders);
+    }
+
+    public function testTrustedHeadersNormalizesCaseAndWhitespace(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trustedHeaders' => ['  X-Forwarded-For ', 'FORWARDED'],
+        ]);
+
+        self::assertSame(['x-forwarded-for', 'forwarded'], $config->trustedHeaders);
+    }
+
+    public function testTrustedHeadersAreDeduplicated(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trustedHeaders' => ['x-forwarded-for', 'X-Forwarded-For'],
+        ]);
+
+        self::assertSame(['x-forwarded-for'], $config->trustedHeaders);
+    }
+
+    public function testTrustedHeadersMayBeExplicitlyEmpty(): void
+    {
+        // An empty list is a real setting (read no forwarded header at all) and
+        // must not be mistaken for an absent key taking the default.
+        $config = SecurityConfig::fromArray([
+            'trustedHeaders' => [],
+        ]);
+
+        self::assertSame([], $config->trustedHeaders);
+    }
+
+    public function testTrustedHeadersAcceptsEveryOptInName(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'trustedHeaders' => ['forwarded', 'x-real-ip', 'cf-connecting-ip', 'x-client-ip'],
+        ]);
+
+        self::assertSame(['forwarded', 'x-real-ip', 'cf-connecting-ip', 'x-client-ip'], $config->trustedHeaders);
+    }
+
+    public function testThrowsForUnknownTrustedHeader(): void
+    {
+        // A silently dropped typo would leave an operator believing they trust a
+        // header they do not.
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('trustedHeaders');
+
+        SecurityConfig::fromArray(['trustedHeaders' => ['x-forwarded-fro']]);
+    }
+
+    public function testThrowsForEmptyStringInTrustedHeaders(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('trustedHeaders');
+
+        SecurityConfig::fromArray(['trustedHeaders' => ['x-forwarded-for', '']]);
     }
 
     // ── Nested CSRF section ──────────────────────────────────────────
