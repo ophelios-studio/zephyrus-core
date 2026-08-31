@@ -7,6 +7,7 @@
     "php": "^8.4",
     "ext-mbstring": "*",
     "ext-pdo": "*",
+    "ext-fileinfo": "*",
     "ext-intl": "*",
     "ext-sodium": "*",
     "symfony/yaml": "^7.0",
