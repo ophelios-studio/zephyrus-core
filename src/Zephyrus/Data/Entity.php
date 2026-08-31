@@ -7,8 +7,8 @@ namespace Zephyrus\Data;
 use InvalidArgumentException;
 use JsonSerializable;
 use ReflectionClass;
+use ReflectionNamedType;
 use ReflectionProperty;
-use ReflectionUnionType;
 use stdClass;
 use ValueError;
 
@@ -60,7 +60,7 @@ abstract class Entity implements JsonSerializable
      *   - Backed enums: Enum::from($value)
      *   - Nested entities (subclasses of Entity): recursive build()
      *   - stdClass properties: assigned directly
-     *   - Union types: skipped (not resolvable)
+     *   - Union and intersection types: skipped (not resolvable)
      *   - Null values: assigned as-is
      *
      * @return static|null Returns null when $row is null.
@@ -101,8 +101,16 @@ abstract class Entity implements JsonSerializable
 
             $reflectionType = $property->getType();
 
-            // Skip union types — we cannot resolve which type to use.
-            if ($reflectionType instanceof ReflectionUnionType) {
+            // Skip composite types: a union does not say which member to use,
+            // and an intersection cannot be satisfied by a database value at
+            // all. The test is a POSITIVE one against ReflectionNamedType
+            // rather than a list of the composite classes, because enumerating
+            // the exclusions is what let ReflectionIntersectionType through
+            // here in the first place: it reached isBuiltin() below, which it
+            // does not declare, and hydration died with "Call to undefined
+            // method". A fourth ReflectionType added by a future PHP release
+            // is skipped by this shape instead of reopening the same hole.
+            if ($reflectionType !== null && !$reflectionType instanceof ReflectionNamedType) {
                 continue;
             }
 

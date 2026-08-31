@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Data;
 
+use ArrayAccess;
+use Countable;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use stdClass;
 use Zephyrus\Data\Entity;
 use Zephyrus\Data\JsonIgnore;
@@ -79,6 +82,12 @@ class UnionTypeEntity extends Entity
 {
     public int $id;
     public int|string $mixed;
+}
+
+class IntersectionTypeEntity extends Entity
+{
+    public int $id;
+    public Countable&ArrayAccess $bag;
 }
 
 class StdClassEntity extends Entity
@@ -253,6 +262,22 @@ final class EntityTest extends TestCase
         $this->assertSame(1, $entity->id);
         // Union type property should remain at its default (uninitialized),
         // so we just verify the entity was built without error.
+    }
+
+    public function testBuildSkipsIntersectionTypes(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->bag = 'hello';
+
+        $entity = IntersectionTypeEntity::build($row);
+
+        $this->assertSame(1, $entity->id);
+        // An intersection type is no more resolvable to a single type than a
+        // union is, so the property is skipped and left uninitialized instead
+        // of reaching isBuiltin()/getName(), which ReflectionIntersectionType
+        // does not declare.
+        $this->assertFalse((new ReflectionProperty($entity, 'bag'))->isInitialized($entity));
     }
 
     public function testBuildUntypedProperty(): void

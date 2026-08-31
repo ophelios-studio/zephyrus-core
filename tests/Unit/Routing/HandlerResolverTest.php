@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Routing;
 
+use ArrayAccess;
+use Countable;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Controller\Controller;
 use Zephyrus\Http\Request;
@@ -97,6 +99,69 @@ final class PlainHandlerController
     public function withUntypedParam($value): Response
     {
         return Response::text((string) $value);
+    }
+
+    /** Intersection type: no coercion rule applies, the value passes through. */
+    public function withIntersection(Countable&ArrayAccess $bag): Response
+    {
+        return Response::json(['count' => count($bag)]);
+    }
+
+    /** DNF type: an intersection nested inside a union, alongside null. */
+    public function withNullableIntersection(null|(Countable&ArrayAccess) $bag): Response
+    {
+        return Response::json(['count' => $bag === null ? null : count($bag)]);
+    }
+
+    /** DNF type whose only named member cannot accept the object. */
+    public function withIntOrIntersection(int|(Countable&ArrayAccess) $bag): Response
+    {
+        return Response::json(['count' => is_int($bag) ? $bag : count($bag)]);
+    }
+}
+
+/**
+ * A value a middleware might publish onto the request: an object that satisfies
+ * an intersection type declared on a handler parameter.
+ */
+final class CountableBag implements Countable, ArrayAccess
+{
+    /**
+     * @param array<int, string> $items
+     */
+    public function __construct(private array $items = [])
+    {
+    }
+
+    public function count(): int
+    {
+        return count($this->items);
+    }
+
+    public function offsetExists(mixed $offset): bool
+    {
+        return isset($this->items[$offset]);
+    }
+
+    public function offsetGet(mixed $offset): mixed
+    {
+        return $this->items[$offset] ?? null;
+    }
+
+    public function offsetSet(mixed $offset, mixed $value): void
+    {
+        if ($offset === null) {
+            $this->items[] = $value;
+
+            return;
+        }
+
+        $this->items[$offset] = $value;
+    }
+
+    public function offsetUnset(mixed $offset): void
+    {
+        unset($this->items[$offset]);
     }
 }
 
@@ -969,6 +1034,72 @@ final class HandlerResolverTest extends TestCase
         $long = $kernel->handle(Request::fromArray('GET', '/policies/privacy/sku-9'));
         self::assertSame(200, $long->status);
         self::assertStringContainsString('"productId":"sku-9"', $long->body);
+    }
+
+    // -- intersection and DNF parameter types ---------------------------------
+
+    public function testInjectsIntersectionTypeAttributeUntouched(): void
+    {
+        $match = $this->makeMatch('GET', '/bags', PlainHandlerController::class . '@withIntersection');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/bags')->withAttribute('bag', new CountableBag(['a', 'b'])),
+        );
+
+        self::assertStringContainsString('"count":2', $response->body);
+    }
+
+    public function testIntersectionTypeRejectsNullAtTheBoundary(): void
+    {
+        $this->expectException(RouteParameterException::class);
+        $this->expectExceptionMessageMatches('/expected Countable&ArrayAccess/');
+
+        $match = $this->makeMatch('GET', '/bags', PlainHandlerController::class . '@withIntersection');
+
+        $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/bags')->withAttribute('bag', null),
+        );
+    }
+
+    public function testInjectsNestedIntersectionOfADnfTypeUntouched(): void
+    {
+        $match = $this->makeMatch('GET', '/bags', PlainHandlerController::class . '@withNullableIntersection');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/bags')->withAttribute('bag', new CountableBag(['a'])),
+        );
+
+        self::assertStringContainsString('"count":1', $response->body);
+    }
+
+    public function testDnfTypeStillAcceptsNullForItsNullableMember(): void
+    {
+        $match = $this->makeMatch('GET', '/bags', PlainHandlerController::class . '@withNullableIntersection');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/bags')->withAttribute('bag', null),
+        );
+
+        self::assertStringContainsString('"count":null', $response->body);
+    }
+
+    public function testDnfTypeFallsBackToItsCompositeMemberWhenNoNamedMemberCasts(): void
+    {
+        // int|(Countable&ArrayAccess): the int candidate rejects the object and
+        // the composite member carries no coercion rule, so the value must pass
+        // through rather than be reported as an unresolvable route parameter.
+        $match = $this->makeMatch('GET', '/bags', PlainHandlerController::class . '@withIntOrIntersection');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/bags')->withAttribute('bag', new CountableBag(['a', 'b', 'c'])),
+        );
+
+        self::assertStringContainsString('"count":3', $response->body);
     }
 
     // -------------------------------------------------------------------------

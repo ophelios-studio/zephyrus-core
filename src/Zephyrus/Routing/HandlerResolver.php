@@ -6,6 +6,7 @@ namespace Zephyrus\Routing;
 
 use Closure;
 use ReflectionException;
+use ReflectionIntersectionType;
 use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionType;
@@ -299,12 +300,31 @@ final class HandlerResolver
         }
 
         if ($type instanceof ReflectionUnionType) {
+            // A DNF type such as "int|(Countable&Stringable)" is a union whose
+            // members are NOT all named: getTypes() hands back the nested
+            // ReflectionIntersectionType too, and passing that to
+            // castToNamedType() was a TypeError on a live request.
+            $hasCompositeMember = false;
+
             foreach ($type->getTypes() as $candidate) {
+                if (!$candidate instanceof ReflectionNamedType) {
+                    $hasCompositeMember = true;
+                    continue;
+                }
+
                 try {
                     return $this->castToNamedType($value, $candidate, $class, $method, $parameter);
                 } catch (RouteParameterException) {
                     continue;
                 }
+            }
+
+            // No named member accepted the value, but a composite member is
+            // still standing and carries no coercion rule of its own, so the
+            // value goes through untouched. Throwing here instead would reject
+            // an object that actually satisfies the intersection.
+            if ($hasCompositeMember) {
+                return $value;
             }
 
             throw new RouteParameterException(
@@ -314,6 +334,28 @@ final class HandlerResolver
                 $this->describeType($type),
                 $value,
             );
+        }
+
+        // Anything that is not a named type is an intersection (the only other
+        // ReflectionType on PHP 8.4/8.5, and the positive test keeps a future
+        // fourth one out of castToNamedType too). Every member of an
+        // intersection is a class or an interface, so no coercion applies and
+        // the value passes through exactly as it already does for a named class
+        // type. PHP's own parameter check enforces the intersection at invoke().
+        if (!$type instanceof ReflectionNamedType) {
+            // An intersection never allows null, so null is refused at this
+            // boundary rather than deeper, matching a non-nullable named type.
+            if ($value === null) {
+                throw new RouteParameterException(
+                    $class,
+                    $method,
+                    $parameter,
+                    $this->describeType($type),
+                    $value,
+                );
+            }
+
+            return $value;
         }
 
         return $this->castToNamedType($value, $type, $class, $method, $parameter);
@@ -435,8 +477,15 @@ final class HandlerResolver
             return $type->getName();
         }
 
+        // Recursive, because a DNF union nests an intersection. The closure
+        // this replaced declared ReflectionNamedType, so describing such a
+        // union was itself a TypeError inside the error path.
         if ($type instanceof ReflectionUnionType) {
-            return implode('|', array_map(static fn (ReflectionNamedType $candidate): string => $candidate->getName(), $type->getTypes()));
+            return implode('|', array_map($this->describeType(...), $type->getTypes()));
+        }
+
+        if ($type instanceof ReflectionIntersectionType) {
+            return implode('&', array_map($this->describeType(...), $type->getTypes()));
         }
 
         return 'mixed';
