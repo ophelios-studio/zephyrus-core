@@ -7,6 +7,7 @@ namespace Zephyrus\Localization;
 use JsonException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use UnexpectedValueException;
 
 /**
  * Loads locale catalogs from JSON files.
@@ -30,9 +31,34 @@ use RecursiveIteratorIterator;
  * The returned catalog is a **nested associative array** (not flattened).
  * The Translator resolves dot-notation keys at lookup time by traversing
  * the nesting levels.
+ *
+ * ## Path safety
+ * The locale is concatenated into a filesystem path, so it is treated as
+ * untrusted input regardless of where it came from. Two independent guards
+ * are enforced here, in the loader itself, because `load()` is public API a
+ * consumer may call directly without ever going through a locale resolver:
+ *
+ * 1. The locale must match {@see self::LOCALE_PATTERN}, a BCP-47-shaped tag.
+ *    That shape admits no separator, no dot and no null byte, so no traversal
+ *    sequence can survive it.
+ * 2. The resolved directory or file must still sit under `$basePath` once
+ *    `realpath()` has collapsed every symbolic link.
+ *
+ * A locale failing either guard yields an empty catalog, which is exactly the
+ * behaviour of a locale that has no catalog on disk.
  */
 final class JsonLocaleLoader implements LocaleLoaderInterface
 {
+    /**
+     * BCP-47-shaped locale tag: a 2-3 letter language, then any number of
+     * alphanumeric subtags separated by "-" or "_".
+     *
+     * Both separators are accepted because {@see self::localeCandidates()}
+     * documents and supports underscore-named catalog directories, so an
+     * application may legitimately configure "fr_CA".
+     */
+    private const string LOCALE_PATTERN = '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$/';
+
     public function __construct(
         private readonly string $basePath,
     ) {
@@ -43,13 +69,17 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
      */
     public function load(string $locale): array
     {
+        if (!self::isWellFormedLocale($locale)) {
+            return [];
+        }
+
         $base = rtrim($this->basePath, DIRECTORY_SEPARATOR);
         $candidates = $this->localeCandidates($locale);
 
         // 1. Try directory mode: {basePath}/{locale}/
         foreach ($candidates as $candidate) {
             $dir = $base . DIRECTORY_SEPARATOR . $candidate;
-            if (is_dir($dir)) {
+            if (is_dir($dir) && $this->isContainedIn($dir, $base)) {
                 return $this->loadDirectory($dir);
             }
         }
@@ -57,12 +87,39 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
         // 2. Fall back to single-file mode: {basePath}/{locale}.json
         foreach ($candidates as $candidate) {
             $file = $base . DIRECTORY_SEPARATOR . $candidate . '.json';
-            if (is_file($file)) {
+            if (is_file($file) && $this->isContainedIn($file, $base)) {
                 return $this->loadFile($file);
             }
         }
 
         return [];
+    }
+
+    /**
+     * Whether a locale tag is shaped like a language tag and therefore safe to
+     * concatenate into a filesystem path.
+     */
+    public static function isWellFormedLocale(string $locale): bool
+    {
+        return preg_match(self::LOCALE_PATTERN, trim($locale)) === 1;
+    }
+
+    /**
+     * Whether `$path` still resolves inside `$base` after symbolic links are
+     * collapsed. A path that cannot be resolved at all is never contained.
+     */
+    private function isContainedIn(string $path, string $base): bool
+    {
+        $realBase = realpath($base);
+        $realPath = realpath($path);
+
+        if ($realBase === false || $realPath === false) {
+            return false;
+        }
+
+        $realBase = rtrim($realBase, DIRECTORY_SEPARATOR);
+
+        return str_starts_with($realPath, $realBase . DIRECTORY_SEPARATOR);
     }
 
     /**
@@ -122,16 +179,23 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     {
         $files = [];
 
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::LEAVES_ONLY,
-        );
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY,
+            );
 
-        /** @var \SplFileInfo $fileInfo */
-        foreach ($iterator as $fileInfo) {
-            if ($fileInfo->isFile() && strtolower($fileInfo->getExtension()) === 'json') {
-                $files[] = $fileInfo->getRealPath();
+            /** @var \SplFileInfo $fileInfo */
+            foreach ($iterator as $fileInfo) {
+                if ($fileInfo->isFile() && strtolower($fileInfo->getExtension()) === 'json') {
+                    $files[] = $fileInfo->getRealPath();
+                }
             }
+        } catch (UnexpectedValueException $exception) {
+            // The SPL iterators embed the absolute server path in their message.
+            // Wrap so the catalog directory name is reported and the full path
+            // stays in the previous exception rather than in the message.
+            throw LocalizationException::unreadableDirectory(basename($directory), $exception);
         }
 
         return $files;

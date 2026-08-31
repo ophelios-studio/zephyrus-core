@@ -446,6 +446,32 @@ final class FormatterTest extends TestCase
         self::assertStringEndsWith('…', $result);
     }
 
+    public function testTruncateNeverReturnsMoreThanTheRequestedLength(): void
+    {
+        $value = '12345678901234567890';
+
+        // A length shorter than the suffix leaves no room for both; a negative
+        // mb_substr() length would otherwise trim from the END of the value and
+        // hand back a string LONGER than the one passed in.
+        self::assertSame('', $this->formatter->truncate($value, 0));
+        self::assertSame('..', $this->formatter->truncate($value, 2));
+        self::assertSame('...', $this->formatter->truncate($value, 3));
+        self::assertSame('12...', $this->formatter->truncate($value, 5));
+
+        foreach (range(0, 25) as $length) {
+            self::assertLessThanOrEqual(
+                max($length, 0),
+                mb_strlen($this->formatter->truncate($value, $length)),
+                'truncate() must never exceed the requested length: ' . $length,
+            );
+        }
+    }
+
+    public function testTruncateClampsANegativeLength(): void
+    {
+        self::assertSame('', $this->formatter->truncate('12345678901234567890', -5));
+    }
+
     // ─── Custom Formatters ────────────────────────────────────────────
 
     public function testRegisterAndUseCustomFormatter(): void

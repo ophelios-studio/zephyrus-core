@@ -204,6 +204,48 @@ final class FileUploadTest extends TestCase
     }
 
     // ------------------------------------------------------------------
+    // extensions()
+    // ------------------------------------------------------------------
+
+    public function test_extensions_returns_every_dotted_segment(): void
+    {
+        $file = new FileUpload('avatar.php.jpg', 'image/jpeg', '/tmp/x', 0);
+
+        // extension() sees only "jpg", which is exactly how a double extension
+        // walks past an allowlist that checks the last segment alone.
+        self::assertSame('jpg', $file->extension());
+        self::assertSame(['php', 'jpg'], $file->extensions());
+    }
+
+    public function test_extensions_lowercases_every_segment(): void
+    {
+        $file = new FileUpload('Archive.TAR.GZ', 'application/gzip', '/tmp/x', 0);
+
+        self::assertSame(['tar', 'gz'], $file->extensions());
+    }
+
+    public function test_extensions_returns_empty_list_for_a_name_without_a_dot(): void
+    {
+        $file = new FileUpload('Makefile', 'text/plain', '/tmp/x', 0);
+
+        self::assertSame([], $file->extensions());
+    }
+
+    public function test_extensions_reports_a_dotfile_suffix(): void
+    {
+        $file = new FileUpload('.htaccess', 'text/plain', '/tmp/x', 0);
+
+        self::assertSame(['htaccess'], $file->extensions());
+    }
+
+    public function test_extensions_ignores_directory_components(): void
+    {
+        $file = new FileUpload('../../etc/passwd.php.png', 'image/png', '/tmp/x', 0);
+
+        self::assertSame(['php', 'png'], $file->extensions());
+    }
+
+    // ------------------------------------------------------------------
     // isValid()
     // ------------------------------------------------------------------
 

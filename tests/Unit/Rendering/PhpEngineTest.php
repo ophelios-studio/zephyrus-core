@@ -116,4 +116,72 @@ final class PhpEngineTest extends TestCase
         self::assertSame('Hello, Alice!', $first);
         self::assertSame('Hello, Bob!', $second);
     }
+
+    // ------------------------------------------------------------------
+    // Path containment: the page identifier is include()d
+    // ------------------------------------------------------------------
+
+    public function testRefusesToRenderATemplateOutsideTheDirectory(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-php-traversal-' . uniqid();
+        mkdir($root . '/views', 0755, true);
+        mkdir($root . '/uploads', 0755, true);
+        file_put_contents($root . '/uploads/evil.php', '<?php echo "RCE:" . PHP_OS; ?>');
+
+        $engine = new PhpEngine($root . '/views');
+
+        try {
+            $this->expectException(RenderException::class);
+            $engine->render('../uploads/evil');
+        } finally {
+            @unlink($root . '/uploads/evil.php');
+            @rmdir($root . '/uploads');
+            @rmdir($root . '/views');
+            @rmdir($root);
+        }
+    }
+
+    public function testExistsIsNotAFileExistenceOracle(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-php-oracle-' . uniqid();
+        mkdir($root . '/views', 0755, true);
+        file_put_contents($root . '/present.php', 'x');
+
+        $engine = new PhpEngine($root . '/views');
+
+        try {
+            self::assertFalse($engine->exists('../present'));
+            self::assertFalse($engine->exists('..'));
+        } finally {
+            @unlink($root . '/present.php');
+            @rmdir($root . '/views');
+            @rmdir($root);
+        }
+    }
+
+    public function testRefusesATemplateSymlinkedOutOfTheDirectory(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-php-symlink-' . uniqid();
+        mkdir($root . '/views', 0755, true);
+        file_put_contents($root . '/outside.php', '<?php echo "leaked"; ?>');
+        symlink($root . '/outside.php', $root . '/views/leak.php');
+
+        $engine = new PhpEngine($root . '/views');
+
+        try {
+            self::assertFalse($engine->exists('leak'));
+        } finally {
+            @unlink($root . '/views/leak.php');
+            @unlink($root . '/outside.php');
+            @rmdir($root . '/views');
+            @rmdir($root);
+        }
+    }
+
+    public function testRefusesAPageIdentifierCarryingANullByte(): void
+    {
+        $engine = new PhpEngine($this->viewsDir);
+
+        self::assertFalse($engine->exists("hello\0.txt"));
+    }
 }

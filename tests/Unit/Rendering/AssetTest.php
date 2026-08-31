@@ -128,6 +128,49 @@ final class AssetTest extends TestCase
         self::assertStringContainsString('?v=', $url2);
     }
 
+    // ------------------------------------------------------------------
+    // Path containment: embed() returns raw bytes to every template
+    // ------------------------------------------------------------------
+
+    public function testEmbedRefusesToTraverseOutOfThePublicDirectory(): void
+    {
+        $asset = new Asset($this->publicDir);
+
+        self::assertSame('', $asset->embed('/' . str_repeat('../', 12) . 'etc/hosts'));
+        self::assertSame('', $asset->embed('../../etc/hosts'));
+        self::assertSame('', $asset->embed('/css/../../../../etc/hosts'));
+    }
+
+    public function testExistsRefusesToTraverseOutOfThePublicDirectory(): void
+    {
+        $outside = $this->publicDir . '/../zephyrus-asset-outside-' . uniqid();
+        file_put_contents($outside, 'secret');
+
+        try {
+            $asset = new Asset($this->publicDir);
+
+            self::assertFalse($asset->exists('/../' . basename($outside)));
+            self::assertSame('', $asset->embed('/../' . basename($outside)));
+        } finally {
+            @unlink($outside);
+        }
+    }
+
+    public function testUrlLeavesATraversingPathUnhashed(): void
+    {
+        $asset = new Asset($this->publicDir);
+        $path = '/' . str_repeat('../', 12) . 'etc/hosts';
+
+        self::assertSame($path, $asset->url($path));
+    }
+
+    public function testRefusesAPathCarryingANullByte(): void
+    {
+        $asset = new Asset($this->publicDir);
+
+        self::assertFalse($asset->exists("/css/app.css\0"));
+    }
+
     private function cleanDir(string $dir): void
     {
         if (!is_dir($dir)) {

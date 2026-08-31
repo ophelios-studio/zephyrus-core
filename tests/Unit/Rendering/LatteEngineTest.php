@@ -148,6 +148,75 @@ final class LatteEngineTest extends TestCase
         self::assertStringContainsString('&lt;script&gt;', $output);
     }
 
+    // ------------------------------------------------------------------
+    // Path containment
+    // ------------------------------------------------------------------
+
+    public function testRefusesToRenderATemplateOutsideTheDirectory(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-latte-traversal-' . uniqid();
+        mkdir($root . '/views', 0755, true);
+        mkdir($root . '/uploads', 0755, true);
+        file_put_contents($root . '/uploads/evil.latte', 'LATTE-LFI ok');
+
+        $engine = new LatteEngine($root . '/views', $this->cacheDir);
+
+        try {
+            $this->expectException(RenderException::class);
+            $engine->render('../uploads/evil');
+        } finally {
+            @unlink($root . '/uploads/evil.latte');
+            @rmdir($root . '/uploads');
+            @rmdir($root . '/views');
+            @rmdir($root);
+        }
+    }
+
+    public function testExistsIsNotAFileExistenceOracle(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-latte-oracle-' . uniqid();
+        mkdir($root . '/views', 0755, true);
+        file_put_contents($root . '/present.latte', 'x');
+
+        $engine = new LatteEngine($root . '/views', $this->cacheDir);
+
+        try {
+            self::assertFalse($engine->exists('../present'));
+        } finally {
+            @unlink($root . '/present.latte');
+            @rmdir($root . '/views');
+            @rmdir($root);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Cache mode
+    // ------------------------------------------------------------------
+
+    public function testRejectsAnUnknownCacheMode(): void
+    {
+        $this->expectException(RenderException::class);
+        $this->expectExceptionMessage('Unknown Latte cache mode [garbage]');
+
+        new LatteEngine($this->viewsDir, $this->cacheDir, cacheMode: 'garbage');
+    }
+
+    public function testCacheModeNeverWritesNoCompiledTemplate(): void
+    {
+        $tempCache = sys_get_temp_dir() . '/zephyrus-latte-nocache-' . uniqid();
+
+        try {
+            $engine = new LatteEngine($this->viewsDir, $tempCache, cacheMode: 'never');
+            $output = $engine->render('hello', ['name' => 'World']);
+
+            self::assertSame('Hello, World!', $output);
+            self::assertDirectoryDoesNotExist($tempCache);
+        } finally {
+            $this->cleanDirectory($tempCache);
+            @rmdir($tempCache);
+        }
+    }
+
     /**
      * Recursively delete contents of a directory (but keep the directory itself).
      */

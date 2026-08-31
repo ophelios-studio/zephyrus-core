@@ -51,6 +51,45 @@ final class UploadException extends ZephyrusRuntimeException
     }
 
     /**
+     * The source is not a file PHP registered as an HTTP upload.
+     *
+     * Raised by the default mover. Non-HTTP callers and tests inject their own
+     * `$fileMover` rather than relying on a fallback, because the only reason
+     * `move_uploaded_file()` fails is precisely this check.
+     */
+    public static function notAnUploadedFile(string $path): self
+    {
+        return new self(sprintf(
+            'Refusing to move "%s": it is not a genuine PHP upload. '
+            . 'Inject a $fileMover when storing files that did not arrive over HTTP.',
+            $path,
+        ));
+    }
+
+    public static function unreadableSource(string $path): self
+    {
+        return new self(sprintf('Upload temporary file "%s" is missing or unreadable.', $path));
+    }
+
+    public static function mimeTypeSniffFailed(string $path): self
+    {
+        return new self(sprintf('Unable to determine the real MIME type of "%s".', $path));
+    }
+
+    public static function destinationAlreadyExists(string $path): self
+    {
+        return new self(sprintf(
+            'Refusing to overwrite the existing file "%s". Pass $overwriteExisting to allow replacement.',
+            $path,
+        ));
+    }
+
+    public static function destinationNotContained(string $path): self
+    {
+        return new self(sprintf('Upload destination "%s" resolves outside the destination root.', $path));
+    }
+
+    /**
      * @param string[] $allowedExtensions
      */
     public static function extensionNotAllowed(string $extension, array $allowedExtensions): self

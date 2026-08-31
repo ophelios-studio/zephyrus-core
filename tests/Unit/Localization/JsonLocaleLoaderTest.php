@@ -297,4 +297,112 @@ final class JsonLocaleLoaderTest extends TestCase
             @rmdir($tempDir);
         }
     }
+
+    // -----------------------------------------------------------------
+    // The locale is a filesystem path, so it is untrusted input
+    // -----------------------------------------------------------------
+
+    public function testLoadRefusesALocaleThatTraversesOutOfTheBasePath(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-locale-traversal-' . uniqid('', true);
+        mkdir($root . '/locale', 0755, true);
+        mkdir($root . '/secrets', 0755, true);
+        file_put_contents($root . '/secrets/en.json', '{"db_password":"S3CR3T-PROD-PASSWORD"}');
+
+        $loader = new JsonLocaleLoader($root . '/locale');
+
+        try {
+            // "../secrets" carries no "-" so the Accept-Language normaliser
+            // passes it through byte for byte.
+            self::assertSame([], $loader->load('../secrets'));
+            self::assertSame([], $loader->load('..'));
+            self::assertSame([], $loader->load('/etc'));
+        } finally {
+            @unlink($root . '/secrets/en.json');
+            @rmdir($root . '/secrets');
+            @rmdir($root . '/locale');
+            @rmdir($root);
+        }
+    }
+
+    public function testLoadRefusesALocaleThatIsNotALanguageTag(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-locale-shape-' . uniqid('', true);
+        mkdir($root, 0755, true);
+        // A directory whose name is a traversal chain would otherwise be walked.
+        file_put_contents($root . '/x.json', '{"a":"b"}');
+
+        $loader = new JsonLocaleLoader($root);
+
+        try {
+            foreach ([str_repeat('../', 20), 'en/../../..', "en\0", '.', 'e', 'a_very_long_language'] as $hostile) {
+                self::assertSame([], $loader->load($hostile), 'Refused: ' . addcslashes($hostile, "\0"));
+            }
+        } finally {
+            @unlink($root . '/x.json');
+            @rmdir($root);
+        }
+    }
+
+    public function testWellFormedLocaleAcceptsRealTagsAndRejectsPaths(): void
+    {
+        self::assertTrue(JsonLocaleLoader::isWellFormedLocale('en'));
+        self::assertTrue(JsonLocaleLoader::isWellFormedLocale('fr-CA'));
+        self::assertTrue(JsonLocaleLoader::isWellFormedLocale('fr_CA'));
+        self::assertTrue(JsonLocaleLoader::isWellFormedLocale('zh-Hant-TW'));
+
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale('../storage/uploads'));
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale('..'));
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale('en.json'));
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale(''));
+    }
+
+    public function testLoadRefusesACatalogDirectoryThatSymlinksOutOfTheBasePath(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-locale-symlink-' . uniqid('', true);
+        mkdir($root . '/locale', 0755, true);
+        mkdir($root . '/outside', 0755, true);
+        file_put_contents($root . '/outside/strings.json', '{"leaked":"yes"}');
+        symlink($root . '/outside', $root . '/locale/fr');
+
+        $loader = new JsonLocaleLoader($root . '/locale');
+
+        try {
+            self::assertSame([], $loader->load('fr'));
+        } finally {
+            @unlink($root . '/locale/fr');
+            @unlink($root . '/outside/strings.json');
+            @rmdir($root . '/outside');
+            @rmdir($root . '/locale');
+            @rmdir($root);
+        }
+    }
+
+    public function testUnreadableCatalogDirectoryIsWrappedWithoutLeakingTheServerPath(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root ignores directory permissions.');
+        }
+
+        $root = sys_get_temp_dir() . '/zephyrus-locale-unreadable-' . uniqid('', true);
+        mkdir($root . '/en', 0755, true);
+        file_put_contents($root . '/en/strings.json', '{"a":"b"}');
+        chmod($root . '/en', 0000);
+
+        $loader = new JsonLocaleLoader($root);
+
+        try {
+            $loader->load('en');
+            self::fail('An unreadable catalog directory must raise a LocalizationException.');
+        } catch (LocalizationException $exception) {
+            self::assertStringContainsString('en', $exception->getMessage());
+            self::assertStringNotContainsString($root, $exception->getMessage());
+            self::assertInstanceOf(\UnexpectedValueException::class, $exception->getPrevious());
+        } finally {
+            chmod($root . '/en', 0755);
+            @unlink($root . '/en/strings.json');
+            @rmdir($root . '/en');
+            @rmdir($root);
+        }
+    }
 }

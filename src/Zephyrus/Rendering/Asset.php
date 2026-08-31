@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Rendering;
 
+use Zephyrus\FileSystem\SafePath;
+
 /**
  * Asset manager for cache-busted URL generation and file embedding.
  *
@@ -18,6 +20,14 @@ namespace Zephyrus\Rendering;
  *   $asset->embed('/img/logo.svg'); // "<svg>...</svg>"
  *
  * The hash is computed once per request and cached in memory.
+ *
+ * ## Path safety
+ * `embed()` returns raw file bytes and is exposed to every template through the
+ * global `embed()` helper, so the requested path is treated as untrusted. A path
+ * containing a `..` segment or a null byte is refused, and the resolved file
+ * must still sit under the configured public directory once `realpath()` has
+ * collapsed symbolic links. `exists()` therefore reports false for such a path
+ * rather than acting as a file-existence oracle for the whole disk.
  */
 final class Asset
 {
@@ -87,15 +97,13 @@ final class Asset
     private function resolve(string $path): ?string
     {
         // Strip query string and fragment for filesystem resolution.
-        $cleanPath = parse_url($path, PHP_URL_PATH) ?? $path;
-        $cleanPath = '/' . ltrim($cleanPath, '/');
-        $filePath = $this->publicDirectory . $cleanPath;
+        // parse_url() returns false on a severely malformed URL, in which case
+        // the raw path is used and SafePath decides whether it is acceptable.
+        $parsed = parse_url($path, PHP_URL_PATH);
+        $cleanPath = is_string($parsed) ? $parsed : $path;
+        $filePath = SafePath::within($this->publicDirectory, $cleanPath);
 
-        if (!is_file($filePath) || !is_readable($filePath)) {
-            return null;
-        }
-
-        return $filePath;
+        return $filePath !== null && is_file($filePath) ? $filePath : null;
     }
 
     /**

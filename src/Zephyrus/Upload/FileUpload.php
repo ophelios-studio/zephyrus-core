@@ -82,6 +82,33 @@ final readonly class FileUpload
     }
 
     /**
+     * Returns every dotted segment of the client-supplied original name,
+     * lowercased and in order.
+     *
+     * `extension()` only ever reports the last one, which is why an allowlist
+     * built on it lets `avatar.php.jpg` through. Callers enforcing an extension
+     * allowlist must check every segment returned here.
+     *
+     * Examples:
+     *   "avatar.php.jpg" => ["php", "jpg"]
+     *   ".htaccess"      => ["htaccess"]
+     *   "Makefile"       => []
+     *
+     * @return list<string>
+     */
+    public function extensions(): array
+    {
+        $base = basename(str_replace('\\', '/', $this->originalName));
+        $parts = explode('.', $base);
+        array_shift($parts);
+
+        return array_values(array_filter(
+            array_map(static fn (string $part): string => strtolower($part), $parts),
+            static fn (string $part): bool => $part !== '',
+        ));
+    }
+
+    /**
      * Returns true when the PHP upload pipeline reported no error.
      */
     public function isValid(): bool

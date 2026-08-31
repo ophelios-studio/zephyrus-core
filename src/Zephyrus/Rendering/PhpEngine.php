@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Rendering;
 
+use Zephyrus\FileSystem\SafePath;
+
 /**
  * Plain PHP template rendering engine.
  *
@@ -17,6 +19,13 @@ namespace Zephyrus\Rendering;
  *   // resolves to: {directory}/users/show.php
  *
  * File extension is configurable (default `.php`).
+ *
+ * ## Path safety
+ * The page identifier is `include`d, so it is treated as untrusted. A page
+ * containing a `..` segment or a null byte is refused outright, and the
+ * resolved file must still sit under the configured template directory once
+ * `realpath()` has collapsed symbolic links. `exists()` reports false for such
+ * a page rather than acting as a file-existence oracle for the whole disk.
  */
 final class PhpEngine implements RenderEngine
 {
@@ -37,8 +46,8 @@ final class PhpEngine implements RenderEngine
     {
         $path = $this->resolvePath($page);
 
-        if (!is_file($path) || !is_readable($path)) {
-            throw RenderException::templateNotFound($page, $path);
+        if ($path === null) {
+            throw RenderException::templateNotFound($page, $this->candidatePath($page));
         }
 
         try {
@@ -50,14 +59,27 @@ final class PhpEngine implements RenderEngine
 
     public function exists(string $page): bool
     {
-        $path = $this->resolvePath($page);
-        return is_file($path) && is_readable($path);
+        return $this->resolvePath($page) !== null;
     }
 
     /**
-     * Resolve a page identifier to an absolute file path.
+     * Resolve a page identifier to a readable absolute file path contained
+     * within the template directory.
+     *
+     * @return string|null Null when the page traverses out of the directory,
+     *                     is unreadable, or does not exist.
      */
-    private function resolvePath(string $page): string
+    private function resolvePath(string $page): ?string
+    {
+        $path = SafePath::within($this->directory, $page . $this->extension);
+
+        return $path !== null && is_file($path) ? $path : null;
+    }
+
+    /**
+     * The path a page identifier would have resolved to, for error reporting only.
+     */
+    private function candidatePath(string $page): string
     {
         return $this->directory . '/' . ltrim($page, '/\\') . $this->extension;
     }
