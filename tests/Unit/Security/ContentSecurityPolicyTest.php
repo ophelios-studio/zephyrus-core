@@ -137,4 +137,55 @@ final class ContentSecurityPolicyTest extends TestCase
 
         ContentSecurityPolicy::create()->withDirective('default-src', ["'self'; report-uri /csp"]);
     }
+
+    /**
+     * A single value is a single source expression. A space inside one lets a
+     * caller smuggle a second source expression into a directive it was only
+     * meant to add a host to, which is how "add this tenant's CDN" becomes
+     * "and allow 'unsafe-inline'".
+     */
+    public function testAppendValueRejectsASpaceSmugglingASecondSourceExpression(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'"])
+            ->appendValue('script-src', "https://cdn.tenant.example 'unsafe-inline'");
+    }
+
+    public function testWithDirectiveRejectsASpaceInsideAnArrayValue(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "https://cdn.tenant.example 'unsafe-inline'"]);
+    }
+
+    public function testAppendNonceStillProducesASingleSourceExpression(): void
+    {
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'"])
+            ->appendNonce('script-src', 'abc123==');
+
+        self::assertSame("script-src 'self' 'nonce-abc123=='", $policy->toHeaderValue());
+    }
+
+    /**
+     * The string path split on whitespace BEFORE the separator guard ran, so
+     * the guard never saw a CRLF: it had already been consumed as a delimiter.
+     * The same input therefore threw as an array and was accepted as a string.
+     */
+    public function testCrlfIsRejectedOnTheStringPathJustAsItIsOnTheArrayPath(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->withDirective('script-src', "'self'\r\nX-Injected: 1");
+    }
+
+    public function testSemicolonIsRejectedOnTheStringPath(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->withDirective('script-src', "'self' ; object-src 'none'");
+    }
 }

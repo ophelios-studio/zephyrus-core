@@ -218,4 +218,25 @@ final class RouteSignatureTest extends TestCase
             now: 1_700_000_000,
         );
     }
+
+    /**
+     * hash_hmac('sha256', $payload, '') is a value anyone can compute, so an
+     * empty secret turns every signed URL into a public one while every
+     * verify() still returns true. Same fail-open class as an empty BLAKE2b key.
+     */
+    public function testConstructorRejectsAnEmptySecret(): void
+    {
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('signing secret');
+
+        new RouteSignature('');
+    }
+
+    public function testConstructorRejectsAWhitespaceOnlySecret(): void
+    {
+        $this->expectException(RouteSignatureException::class);
+        $this->expectExceptionMessage('signing secret');
+
+        new RouteSignature("  \t ");
+    }
 }

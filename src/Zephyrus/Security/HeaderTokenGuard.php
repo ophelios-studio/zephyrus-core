@@ -9,7 +9,7 @@ use Zephyrus\Http\Request;
 final class HeaderTokenGuard implements AuthGuardInterface
 {
     public function __construct(
-        private readonly string $expectedToken,
+        #[\SensitiveParameter] private readonly string $expectedToken,
         private readonly string $headerName = 'Authorization',
         private readonly string $bearerPrefix = 'Bearer ',
     ) {

@@ -8,8 +8,25 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final readonly class RouteSignature
 {
-    public function __construct(private string $secret)
+    /**
+     * An empty secret is refused rather than accepted.
+     *
+     * hash_hmac('sha256', $payload, '') is a perfectly well-formed digest that
+     * anybody can recompute from the URL alone, so an empty secret turns every
+     * signed URL into a public one while sign(), verify() and assertValid() all
+     * keep reporting success. The failure is invisible from the outside, which
+     * is why it has to fail at construction: a secret read from an unset
+     * environment variable is the way this happens in practice, and the moment
+     * to notice is boot, not an audit.
+     *
+     * Whitespace is trimmed for the emptiness test only. The secret itself is
+     * used verbatim, so an existing signature stays valid.
+     */
+    public function __construct(#[\SensitiveParameter] private string $secret)
     {
+        if (trim($this->secret) === '') {
+            throw RouteSignatureException::missingSecret();
+        }
     }
 
     public function sign(string $url): string

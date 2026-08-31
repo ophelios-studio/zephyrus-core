@@ -8,6 +8,11 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 final class RouteSignatureException extends ZephyrusRuntimeException
 {
+    public static function missingSecret(): self
+    {
+        return new self('Route signing secret cannot be empty');
+    }
+
     public static function invalidSignature(): self
     {
         return new self('Invalid route signature');

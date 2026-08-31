@@ -10,7 +10,6 @@ use Zephyrus\Http\Response;
 
 use function array_map;
 use function array_values;
-use function parse_url;
 use function str_contains;
 use function str_ends_with;
 use function str_starts_with;
@@ -20,7 +19,11 @@ use function substr;
 use function trim;
 
 /**
- * Enforces an allowlist of accepted Host values to mitigate host header abuse.
+ * Enforces an allowlist of accepted hosts to mitigate host header abuse.
+ *
+ * The value judged is $request->uri()->host(), which is the host every other
+ * consumer resolves against (links, redirects, cookie domains, baseUrl()). See
+ * resolveRequestHost() for why the raw Host header is deliberately not read.
  *
  * When allowlist is empty, all hosts are accepted.
  * Each configured host may be:
@@ -59,18 +62,33 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return $next($request);
     }
 
+    /**
+     * The host to judge is uri()->host(), and only that.
+     *
+     * WHY NOT THE RAW HOST HEADER. It used to be read first, with the URI as a
+     * fallback, and the two can name different hosts: Request::fromGlobals lets
+     * a trusted X-Forwarded-Host decide uri()->host(), while the raw header
+     * still carries whatever the peer sent. Every downstream consumer, link
+     * generation, redirects, cookie domains and baseUrl(), reads the URI, so the
+     * allowlist was vetting a value nothing else used. An attacker only had to
+     * send an allowed Host header to get the request served with a URI pointing
+     * somewhere else.
+     *
+     * Disagreement between the two is NOT treated as an attack, because it is
+     * the normal shape of a reverse-proxy deployment: the proxy rewrites Host to
+     * an internal name and forwards the public one. Request::fromGlobals already
+     * gates that header on the trusted-proxy allowlist, so an untrusted peer
+     * cannot move uri()->host() at all, and refusing on disagreement would only
+     * break the topologies this middleware exists to protect.
+     */
     private function resolveRequestHost(Request $request): ?string
     {
-        $rawHost = $request->headers()->get('host');
-        if (!is_string($rawHost) || trim($rawHost) === '') {
-            $rawHost = $request->uri()->host();
-        }
-
-        if (!is_string($rawHost) || trim($rawHost) === '') {
+        $host = $request->uri()->host();
+        if (trim($host) === '') {
             return null;
         }
 
-        return self::normalizeHost($rawHost);
+        return self::normalizeHost($host);
     }
 
     private function isAllowed(string $requestHost): bool
