@@ -194,6 +194,59 @@ if (!function_exists('i18n')) {
     }
 }
 
+if (!function_exists('e')) {
+    /**
+     * Escape a value for safe interpolation into HTML.
+     *
+     * ## Why this exists
+     *
+     * RenderConfig offers `engine: php` as a first-class option, and
+     * PhpEngine::capture() is raw extract() plus include. Nothing sits between a
+     * template variable and the response body on that engine, and until this
+     * helper landed there was no escaping function anywhere in this file, so the
+     * only thing a template author could write was `<?= $value ?>`. A Flash
+     * message rendered that way, exactly as the Flash docblock demonstrates, is
+     * stored XSS. Latte auto-escapes and does not need this; PhpEngine does.
+     *
+     * ## The two flags are not decoration
+     *
+     * ENT_QUOTES also escapes the SINGLE quote, which is the character that
+     * breaks out of a single-quoted attribute (`<a title='<?= e($v) ?>'>`). The
+     * PHP default leaves it alone.
+     *
+     * ENT_SUBSTITUTE turns invalid UTF-8 into U+FFFD. Without it,
+     * htmlspecialchars() returns an EMPTY STRING for a byte sequence it cannot
+     * decode, so the value silently disappears from the page with nothing
+     * logged and nothing thrown. A visible replacement character is a bug
+     * somebody can see.
+     *
+     * ## What it accepts, and why
+     *
+     * NULL is accepted and yields "". `e($row->middleName)` on a nullable
+     * column is the most common expression a template author writes, and a
+     * strict `string` parameter would make it a TypeError at render time. The
+     * realistic reaction to that is not `e($x ?? '')`, it is deleting the
+     * `e()`, so a helper that refuses null is a helper that gets removed. "" is
+     * also exactly what the unescaped `<?= $x ?>` already printed, so nothing
+     * is invented.
+     *
+     * Stringable is accepted for the same reason: this framework echoes its own
+     * value objects (Uri among them) in templates, and a helper less capable
+     * than a raw echo gets skipped.
+     *
+     * An array or a plain object is REFUSED at the signature. (string) [] is
+     * the literal 'Array' plus a warning and (string) $plainObject is a fatal,
+     * so neither is a value a template meant to print. That is the same posture
+     * ConfigSection::getString() takes on a value it cannot read.
+     *
+     * @param string|int|float|bool|Stringable|null $value The value to render.
+     */
+    function e(string|int|float|bool|Stringable|null $value): string
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+}
+
 if (!defined('ZEPHYRUS_FORMAT_METHODS')) {
     /**
      * The Formatter methods format() is allowed to reach.

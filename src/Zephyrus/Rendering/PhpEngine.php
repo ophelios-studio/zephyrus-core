@@ -20,6 +20,19 @@ use Zephyrus\FileSystem\SafePath;
  *
  * File extension is configurable (default `.php`).
  *
+ * ## THIS ENGINE DOES NOT ESCAPE ANYTHING
+ * capture() is extract() plus include, so a template variable reaches the
+ * response body byte for byte. Unlike LatteEngine there is no auto-escaping
+ * layer, and there is no opt-in switch that adds one. Every value a template
+ * prints into HTML must be passed through the global e() helper by the template
+ * author:
+ *
+ *   <p><?= e($user->displayName) ?></p>
+ *
+ * A value printed with a bare `<?= $value ?>` is raw HTML. Flash messages,
+ * validation errors and anything else that round-trips through a user are
+ * stored XSS when written that way.
+ *
  * ## Path safety
  * The page identifier is `include`d, so it is treated as untrusted. A page
  * containing a `..` segment or a null byte is refused outright, and the
