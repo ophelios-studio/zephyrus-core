@@ -14,15 +14,52 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 final class RenderException extends ZephyrusRuntimeException
 {
     /**
+     * The absolute path the page identifier resolved to, when there is one.
+     *
+     * Deliberately NOT in getMessage(). See templateNotFound().
+     */
+    private ?string $resolvedPath = null;
+
+    /**
      * The template could not be found on disk.
+     *
+     * ## The resolved path is context, not part of the sentence
+     *
+     * The message used to read 'Template [users/show] not found (resolved to
+     * [/srv/app/views/users/show.latte]).' The message is the part that
+     * TRAVELS: a log line, an alert email, a Tracy panel, an APM event,
+     * occasionally a 500 page. Every one of those readers was handed the
+     * deployment's filesystem layout, and none of them could do anything with
+     * it, because the only actor who can fix a missing template is a developer
+     * who already has the repository checked out.
+     *
+     * $page STAYS. It is a developer-authored identifier, not a filesystem
+     * fact, and it is the entire diagnostic value of the sentence: it names the
+     * render() call to go and look at.
+     *
+     * The path is not discarded, it is moved to resolvedPath(), so a caller
+     * that genuinely needs it (a debug page that has already decided it is
+     * allowed to show paths) asks for it explicitly instead of receiving it by
+     * default. Same shape as LocalizationException::unreadableDirectory().
      */
     public static function templateNotFound(string $page, string $resolvedPath): self
     {
-        return new self(sprintf(
-            'Template [%s] not found (resolved to [%s]).',
-            $page,
-            $resolvedPath,
-        ));
+        $exception = new self(sprintf('Template [%s] not found.', $page));
+        $exception->resolvedPath = $resolvedPath;
+
+        return $exception;
+    }
+
+    /**
+     * The absolute path the missing template resolved to, or null when this
+     * exception carries no path.
+     *
+     * Null and '' are distinguishable on purpose: "no path was recorded" is a
+     * different fact from "the path was empty".
+     */
+    public function resolvedPath(): ?string
+    {
+        return $this->resolvedPath;
     }
 
     /**
