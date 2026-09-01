@@ -69,17 +69,43 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertNull($e->getPrevious());
     }
 
-    public function testInvalidFormat(): void
+    /**
+     * WHAT THIS USED TO PIN, AND WHY IT CHANGED.
+     *
+     * This asserted that the path passed in was present in getMessage(), which
+     * with a real absolute path meant the message disclosed the deployment's
+     * filesystem layout. Configuration loading runs at BOOT, before the
+     * kernel's error handling exists, so this message is among the likeliest in
+     * the framework to land raw in a log line or a bluescreen.
+     *
+     * The file NAME stays, because that is the diagnostic. The path moved to
+     * path(), the same shape RenderException::templateNotFound() uses.
+     */
+    public function testInvalidFormatKeepsTheServerPathOutOfTheMessage(): void
     {
-        $e = ConfigurationException::invalidFormat('/config.php');
-        self::assertStringContainsString('/config.php', $e->getMessage());
+        $e = ConfigurationException::invalidFormat('/srv/app/config/config.php');
+
+        self::assertStringContainsString('config.php', $e->getMessage());
+        self::assertStringNotContainsString('/srv/app/config/', $e->getMessage());
         self::assertStringContainsString('must return an array', $e->getMessage());
+        self::assertSame('/srv/app/config/config.php', $e->path());
     }
 
     public function testInvalidFormatWithCustomReason(): void
     {
-        $e = ConfigurationException::invalidFormat('/config.php', 'must be valid YAML');
+        $e = ConfigurationException::invalidFormat('/srv/app/config/config.php', 'must be valid YAML');
+
         self::assertStringContainsString('must be valid YAML', $e->getMessage());
+        self::assertStringNotContainsString('/srv/app/config/', $e->getMessage());
+    }
+
+    /**
+     * The accessor is null for a factory that carries no path, so "no path
+     * recorded" stays distinguishable from "the path was empty".
+     */
+    public function testPathIsNullForAFactoryThatCarriesNoPath(): void
+    {
+        self::assertNull(ConfigurationException::invalidPath('Config path must not be empty.')->path());
     }
 
     public function testInvalidPath(): void
