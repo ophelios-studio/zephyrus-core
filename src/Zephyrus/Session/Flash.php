@@ -28,6 +28,13 @@ use Zephyrus\Core\App;
  *   // $flash->info     === []
  *
  * Messages are stored in the session under `_flash_{type}` keys.
+ *
+ * ## Flash values are UNTRUSTED OUTPUT
+ * Nothing here sanitizes a message. A message routinely carries a value the
+ * user supplied (a rejected field, a filename, a search term), it is persisted
+ * across a redirect, and it is then printed on a later page, which is the exact
+ * shape of stored XSS. Latte auto-escapes; the PhpEngine does not, so the
+ * example above must be written `<?= e($message) ?>` on that engine.
  */
 final class Flash
 {
