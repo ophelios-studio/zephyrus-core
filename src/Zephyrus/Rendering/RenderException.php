@@ -64,6 +64,18 @@ final class RenderException extends ZephyrusRuntimeException
 
     /**
      * The template exists but rendering failed.
+     *
+     * ## The inherited message MAY carry a server path, and that is DELIBERATE
+     *
+     * $previous->getMessage() is appended verbatim, and a PHP include error or
+     * an engine parse error routinely names the file. That is NOT the same
+     * defect templateNotFound() had: there we FORMATTED a filesystem fact
+     * ourselves, into a sentence that carried no other information. Here we are
+     * preserving an upstream diagnostic, and a render failure with its cause
+     * redacted is close to useless.
+     *
+     * Ruled and left as is. Do not "fix" it by stripping the previous message
+     * without deciding what replaces the diagnostic.
      */
     public static function renderFailed(string $page, \Throwable $previous): self
     {
