@@ -122,4 +122,114 @@ final class UriTest extends TestCase
         self::assertSame('example.com', $uri->host());
         self::assertSame('/path', $uri->path());
     }
+
+    // ── a URL parse_url() refuses outright ───────────────────────────────────
+
+    /**
+     * THE TRAP. parse_url() returns false for an authority it cannot read, and
+     * the constructor then fell through to "http" and "localhost" for EVERY
+     * component at once: scheme, host, port, path, query and fragment were all
+     * replaced by defaults, silently.
+     *
+     * A Host header of "app.example.com:evil" is enough to trigger it, and
+     * Request::fromGlobals composes exactly that shape (scheme . "://" . host .
+     * target). It is the root cause of two separate findings: HSTS was dropped
+     * from a genuinely HTTPS response because the collapsed URI said "http",
+     * and ForceHttpsMiddleware redirected an already-HTTPS request to HTTPS,
+     * which with a persistent Host is a redirect loop.
+     *
+     * The constructor now refuses to INVENT an authority. It preserves what it
+     * was actually given.
+     */
+    #[Test]
+    public function malformedAuthorityKeepsTheSchemeThatWasActuallyReported(): void
+    {
+        $uri = new Uri('https://app.example.com:evil/dashboard');
+
+        self::assertSame('https', $uri->scheme());
+        self::assertTrue($uri->isSecure());
+    }
+
+    #[Test]
+    public function malformedAuthorityKeepsTheHostAsSentInsteadOfInventingLocalhost(): void
+    {
+        $uri = new Uri('https://app.example.com:evil/dashboard');
+
+        self::assertSame('app.example.com:evil', $uri->host());
+    }
+
+    /**
+     * An unreadable ":port" suffix stays visible as part of the host rather than
+     * being trimmed off. Trimming it would report a host that was never sent,
+     * which is the same class of invention as "localhost".
+     */
+    #[Test]
+    public function malformedAuthorityLeavesThePortNullRatherThanGuessingOne(): void
+    {
+        self::assertNull((new Uri('https://app.example.com:evil/dashboard'))->port());
+    }
+
+    #[Test]
+    public function malformedAuthorityKeepsThePathQueryAndFragment(): void
+    {
+        $uri = new Uri('https://app.example.com:evil/dashboard?tab=2&sort=name#totals');
+
+        self::assertSame('/dashboard', $uri->path());
+        self::assertSame('tab=2&sort=name', $uri->queryString());
+        self::assertSame('totals', $uri->fragment());
+    }
+
+    #[Test]
+    public function malformedAuthorityStillDropsUserinfoBecauseItIsACredential(): void
+    {
+        $uri = new Uri('https://user:pass@app.example.com:evil/path');
+
+        self::assertSame('app.example.com:evil', $uri->host());
+        self::assertSame('/path', $uri->path());
+    }
+
+    #[Test]
+    public function malformedAuthorityIsStillLowercasedLikeAReadableOne(): void
+    {
+        self::assertSame('app.example.com:evil', (new Uri('HTTPS://APP.EXAMPLE.COM:EVIL/x'))->host());
+        self::assertSame('https', (new Uri('HTTPS://APP.EXAMPLE.COM:EVIL/x'))->scheme());
+    }
+
+    #[Test]
+    public function malformedAuthorityKeepsTheOriginalStringForFull(): void
+    {
+        $url = 'https://app.example.com:evil/dashboard';
+
+        self::assertSame($url, (new Uri($url))->full());
+    }
+
+    /**
+     * baseUrl() reflects the malformed host instead of a clean invented one. The
+     * value is unusable to an attacker (a browser rejects a non-numeric port),
+     * and it is honest, which is what a security check downstream needs in order
+     * to make the right call.
+     */
+    #[Test]
+    public function malformedAuthorityProducesAnHonestBaseUrl(): void
+    {
+        self::assertSame(
+            'https://app.example.com:evil',
+            (new Uri('https://app.example.com:evil/dashboard'))->baseUrl(),
+        );
+    }
+
+    /**
+     * The boundary of the ruling. "localhost" is still the default when the URL
+     * genuinely carries NO authority, which is the ordinary origin-form case and
+     * the shape Request::fromArray() builds all over this suite. What was wrong
+     * was discarding an authority that WAS reported, not defaulting one that was
+     * never there.
+     */
+    #[Test]
+    public function anAbsentAuthorityStillDefaultsRatherThanBeingLeftEmpty(): void
+    {
+        self::assertSame('localhost', (new Uri('/just-a-path'))->host());
+        self::assertSame('localhost', (new Uri('http://'))->host());
+        self::assertSame('http', (new Uri('http://'))->scheme());
+    }
 }

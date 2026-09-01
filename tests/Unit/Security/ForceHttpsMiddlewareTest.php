@@ -103,6 +103,32 @@ final class ForceHttpsMiddlewareTest extends TestCase
         self::assertFalse($called);
     }
 
+    // ── a malformed authority must not produce a self-redirect ────────────────
+
+    /**
+     * THE REDIRECT LOOP THIS PINS. On a URL parse_url() refuses,
+     * Uri::__construct used to collapse the whole thing to "http://localhost/",
+     * so uri()->isSecure() answered false on a request that arrived over TLS.
+     * This middleware then took the redirect branch and called buildHttpsUrl()
+     * with the ORIGINAL string, which already starts with "https://" and is
+     * therefore returned unchanged: a 308 to the exact URL just requested.
+     *
+     * A malformed Host header is not a one-off, it repeats on the next request,
+     * so the browser followed that 308 back into the same 308 until it gave up.
+     *
+     * Fixed at the root: Uri no longer invents "http", isSecure() is true, and
+     * the request passes straight through to the handler.
+     */
+    public function testAMalformedAuthorityOnAnHttpsRequestPassesThroughInsteadOfLooping(): void
+    {
+        $request  = new Request('GET', 'https://example.com:port/secure');
+        $response = $this->mw->process($request, fn (Request $r): Response => Response::text('handled'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('handled', $response->body);
+        self::assertNotContains('location: https://example.com:port/secure', $response->toHeaderLines());
+    }
+
     // ── 308 preserves method semantics ────────────────────────────────────────
 
     public function testRedirectIs308PermanentForMethodPreservation(): void

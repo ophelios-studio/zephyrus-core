@@ -118,21 +118,38 @@ final class SecureHeadersMiddlewareTest extends TestCase
     }
 
     /**
-     * THE TRAP THIS PINS. Uri::__construct falls back to "http" and "localhost"
-     * when parse_url() fails, silently, so a malformed authority collapsed the
+     * THE TRAP THIS PINS. Uri::__construct fell back to "http" and "localhost"
+     * when parse_url() failed, silently, so a malformed authority collapsed the
      * whole URI and uri()->isSecure() answered false on a request the SAPI had
      * reported as HTTPS. HSTS was then dropped with no error anywhere.
      *
      * "https://example.com:port/secure" is a URL parse_url() rejects outright,
      * and Request::fromGlobals builds exactly that shape from an attacker-chosen
      * Host header on an HTTPS connection.
+     *
+     * ## WHAT CHANGED, AND WHY THESE TWO ASSERTIONS ARE INVERTED
+     *
+     * The two lines below used to read:
+     *
+     *     self::assertFalse($request->uri()->isSecure());
+     *     self::assertSame('localhost', $request->uri()->host());
+     *
+     * and were commented "the collapse itself, asserted rather than assumed".
+     * They pinned the DEFECT as a precondition of the workaround, so they had to
+     * flip the moment the defect was fixed at its root in Uri::__construct,
+     * which no longer invents an authority it failed to parse. The headline
+     * guarantee of this test, that HSTS survives a malformed authority, is
+     * unchanged and still asserted below; what changed is that it is now true
+     * for the right reason. The assertions were strengthened, not relaxed: the
+     * scheme and the host are now the ones actually reported.
      */
     public function testHstsIsStillEmittedWhenAMalformedAuthorityDefeatsUriParsing(): void
     {
         $request = new Request('GET', 'https://example.com:port/secure');
-        // The collapse itself, asserted rather than assumed.
-        self::assertFalse($request->uri()->isSecure());
-        self::assertSame('localhost', $request->uri()->host());
+        // The URI no longer collapses: the scheme and host survive the parse
+        // failure, so isSecure() answers correctly on its own.
+        self::assertTrue($request->uri()->isSecure());
+        self::assertSame('example.com:port', $request->uri()->host());
 
         $config = SecureHeadersConfig::fromArray(['hstsMaxAge' => 31_536_000]);
         $mw = new SecureHeadersMiddleware($config);
