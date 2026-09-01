@@ -13,6 +13,15 @@ use Zephyrus\Exceptions\ZephyrusException;
  */
 final class ConfigurationException extends ZephyrusException
 {
+    /**
+     * The absolute path this exception is about, when it was given one.
+     *
+     * Deliberately NOT in getMessage() for the factories that populate it. Null
+     * rather than '' when there is no path, so "none recorded" stays
+     * distinguishable from "it was empty".
+     */
+    private ?string $path = null;
+
     public static function missingRequired(string $section, string $field): self
     {
         return new self(
@@ -55,9 +64,41 @@ final class ConfigurationException extends ZephyrusException
         return new self($message, previous: $previous);
     }
 
+    /**
+     * ## The absolute server path is CONTEXT, never part of the sentence
+     *
+     * This used to interpolate the full path. The message is the part that
+     * TRAVELS: a log line, an alert email, a Tracy panel, sometimes a 500 page.
+     * Worse than most, configuration loading runs at BOOT, before the kernel's
+     * error handling exists, so this message is among the likeliest in the
+     * framework to land raw in front of somebody, and it disclosed the
+     * deployment's filesystem layout for nothing.
+     *
+     * The file NAME stays, because that is the diagnostic. The path moved to
+     * path(). Same shape as RenderException::templateNotFound() and
+     * LocalizationException.
+     *
+     * ## NOT YET GIVEN THIS TREATMENT
+     *
+     * fileNotFound(), loadFailed() and parseFailed() above still interpolate
+     * the full path, and parseFailed() additionally inherits the YAML parser's
+     * message, which names the file itself. They are listed here so nobody
+     * reads this class as finished; changing them is a separate ruling.
+     */
     public static function invalidFormat(string $path, string $reason = 'must return an array'): self
     {
-        return new self(sprintf('Configuration file %s: %s', $path, $reason));
+        $exception = new self(sprintf('Configuration file %s: %s', basename($path), $reason));
+        $exception->path = $path;
+
+        return $exception;
+    }
+
+    /**
+     * The absolute path this exception is about, or null when it carries none.
+     */
+    public function path(): ?string
+    {
+        return $this->path;
     }
 
     public static function invalidPath(string $reason): self
