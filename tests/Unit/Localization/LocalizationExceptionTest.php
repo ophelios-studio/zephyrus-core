@@ -85,6 +85,42 @@ final class LocalizationExceptionTest extends TestCase
     }
 
     /**
+     * basename() alone was ambiguous: a catalog is nested as
+     * locale/<tag>/<file>.json, so fr/legal.json and en/legal.json produced the
+     * SAME sentence, and the locale tag is the single most useful
+     * disambiguator when a translation file fails to parse.
+     *
+     * The message therefore carries the last TWO segments. That is not an
+     * invented convention, it is the catalog's own structure, and a directory
+     * NAME is not a server path: nothing above the catalog is disclosed.
+     */
+    public function testALocaleFileIsNamedByItsCatalogRelativePathNotJustItsBasename(): void
+    {
+        $fr = LocalizationException::invalidFormat('/srv/app/locale/fr/legal.json');
+        $en = LocalizationException::invalidFormat('/srv/app/locale/en/legal.json');
+
+        self::assertStringContainsString('fr/legal.json', $fr->getMessage());
+        self::assertStringContainsString('en/legal.json', $en->getMessage());
+        self::assertNotSame($fr->getMessage(), $en->getMessage());
+        self::assertStringNotContainsString('/srv/app/locale/', $fr->getMessage());
+    }
+
+    /**
+     * A path with no parent segment to show must not grow a stray separator.
+     */
+    public function testALocaleFileWithNoParentSegmentIsNamedByItselfAlone(): void
+    {
+        self::assertStringContainsString(
+            '"en.json"',
+            LocalizationException::unreadableFile('/en.json')->getMessage(),
+        );
+        self::assertStringContainsString(
+            '"en.json"',
+            LocalizationException::unreadableFile('en.json')->getMessage(),
+        );
+    }
+
+    /**
      * unreadableDirectory() was already correct: the caller hands it a
      * basename, never a path, so there is no path to expose and the accessor
      * says so rather than returning a misleading ''.

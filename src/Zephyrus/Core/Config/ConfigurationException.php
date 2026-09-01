@@ -10,6 +10,25 @@ use Zephyrus\Exceptions\ZephyrusException;
  * Thrown when configuration loading, parsing, or validation fails.
  *
  * Use the named factory methods for consistent, contextual messages.
+ *
+ * ## The absolute server path is CONTEXT, never part of the sentence
+ *
+ * Every factory that takes a path used to interpolate the whole thing. The
+ * message is the part that TRAVELS: a log line, an alert email, a Tracy panel,
+ * sometimes a 500 page. Worse than most, configuration loading runs at BOOT,
+ * before the kernel's error handling exists, so these messages are among the
+ * likeliest in the whole framework to land raw in front of somebody. They
+ * disclosed the deployment's filesystem layout to every one of those readers
+ * for nothing, because the only actor who can fix a broken config file is a
+ * developer who already has the repository.
+ *
+ * The file NAME stays, because that is the diagnostic. The path moved to
+ * path(), so a caller that genuinely needs it asks instead of receiving it by
+ * default. Same shape as RenderException::templateNotFound() and
+ * LocalizationException.
+ *
+ * The ONE deliberate exception is the half of parseFailed() inherited from the
+ * parser. See that factory.
  */
 final class ConfigurationException extends ZephyrusException
 {
@@ -44,53 +63,56 @@ final class ConfigurationException extends ZephyrusException
 
     public static function fileNotFound(string $path): self
     {
-        return new self(sprintf('Configuration file not found: %s', $path));
+        return self::withPath(sprintf('Configuration file not found: %s', basename($path)), $path);
     }
 
     public static function loadFailed(string $path, ?\Throwable $previous = null): self
     {
-        return new self(
-            sprintf('Configuration file failed to load: %s', $path),
-            previous: $previous,
+        return self::withPath(
+            sprintf('Configuration file failed to load: %s', basename($path)),
+            $path,
+            $previous,
         );
     }
 
+    /**
+     * ## Two halves, ruled differently, on purpose
+     *
+     * OUR half is a basename, because interpolating the full path is us
+     * formatting a filesystem fact ourselves. It is on path() instead.
+     *
+     * The PARSER's half is appended verbatim and is KEPT, the same category
+     * ruled KEEP for RenderException::renderFailed(): it is a preserved
+     * upstream diagnostic, and it carries the line number a developer actually
+     * needs to fix the file.
+     *
+     * ## The consequence, stated plainly
+     *
+     * Symfony's ParseException names the ABSOLUTE file in some of its messages
+     * and not others, which was measured rather than assumed: a tab-indentation
+     * error yields 'A YAML file cannot contain tabs as indentation in
+     * "/srv/app/config/app.yml" at line 2', while a malformed-inline error
+     * yields only 'Malformed inline YAML string at line 3'. So this message CAN
+     * STILL DISCLOSE A PATH in practice, through the inherited half, on some
+     * inputs. That is a knowing trade, not an oversight. Do not "finish" this
+     * by stripping the parser message:
+     * that destroys the diagnostic and buys nothing our half has not already
+     * bought. If the disclosure ever has to go, the answer is to reformat the
+     * parser's text while keeping its line number, which is a separate decision.
+     */
     public static function parseFailed(string $path, ?\Throwable $previous = null): self
     {
-        $message = sprintf('Failed to parse configuration file [%s]', $path);
+        $message = sprintf('Failed to parse configuration file [%s]', basename($path));
         if ($previous !== null) {
             $message .= ': ' . $previous->getMessage();
         }
-        return new self($message, previous: $previous);
+
+        return self::withPath($message, $path, $previous);
     }
 
-    /**
-     * ## The absolute server path is CONTEXT, never part of the sentence
-     *
-     * This used to interpolate the full path. The message is the part that
-     * TRAVELS: a log line, an alert email, a Tracy panel, sometimes a 500 page.
-     * Worse than most, configuration loading runs at BOOT, before the kernel's
-     * error handling exists, so this message is among the likeliest in the
-     * framework to land raw in front of somebody, and it disclosed the
-     * deployment's filesystem layout for nothing.
-     *
-     * The file NAME stays, because that is the diagnostic. The path moved to
-     * path(). Same shape as RenderException::templateNotFound() and
-     * LocalizationException.
-     *
-     * ## NOT YET GIVEN THIS TREATMENT
-     *
-     * fileNotFound(), loadFailed() and parseFailed() above still interpolate
-     * the full path, and parseFailed() additionally inherits the YAML parser's
-     * message, which names the file itself. They are listed here so nobody
-     * reads this class as finished; changing them is a separate ruling.
-     */
     public static function invalidFormat(string $path, string $reason = 'must return an array'): self
     {
-        $exception = new self(sprintf('Configuration file %s: %s', basename($path), $reason));
-        $exception->path = $path;
-
-        return $exception;
+        return self::withPath(sprintf('Configuration file %s: %s', basename($path), $reason), $path);
     }
 
     /**
@@ -99,6 +121,14 @@ final class ConfigurationException extends ZephyrusException
     public function path(): ?string
     {
         return $this->path;
+    }
+
+    private static function withPath(string $message, string $path, ?\Throwable $previous = null): self
+    {
+        $exception = new self($message, previous: $previous);
+        $exception->path = $path;
+
+        return $exception;
     }
 
     public static function invalidPath(string $reason): self

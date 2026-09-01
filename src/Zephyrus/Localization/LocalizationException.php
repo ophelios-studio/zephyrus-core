@@ -24,9 +24,15 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * path(), so a caller that genuinely needs it asks instead of receiving it by
  * default. Same shape as RenderException::templateNotFound().
  *
- * A catalog is nested (locale/fr/legal.json), so basename() alone can be
- * ambiguous across locales. That is exactly why the accessor exists rather than
- * the path simply being dropped.
+ * ## Why the LAST TWO segments and not just the basename
+ *
+ * A catalog is nested as locale/<tag>/<file>.json, so a basename alone made
+ * fr/legal.json and en/legal.json produce the IDENTICAL sentence, and the
+ * locale tag is the single most useful disambiguator when a translation file
+ * fails to parse. Naming the parent segment is not an invented convention, it
+ * is the catalog's own structure, and a directory NAME is not a server path:
+ * nothing above the catalog is disclosed. The accessor still carries the full
+ * path for a caller that needs it.
  */
 final class LocalizationException extends ZephyrusRuntimeException
 {
@@ -41,7 +47,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function unreadableFile(string $path): self
     {
         return self::withPath(
-            sprintf('Unable to read locale file "%s".', basename($path)),
+            sprintf('Unable to read locale file "%s".', self::catalogRelativeName($path)),
             $path,
         );
     }
@@ -53,7 +59,7 @@ final class LocalizationException extends ZephyrusRuntimeException
      */
     public static function invalidJson(string $path, ?\Throwable $previous = null): self
     {
-        $message = sprintf('Invalid JSON in locale file "%s"', basename($path));
+        $message = sprintf('Invalid JSON in locale file "%s"', self::catalogRelativeName($path));
         if ($previous !== null) {
             $message .= ': ' . $previous->getMessage();
         }
@@ -64,7 +70,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function invalidFormat(string $path): self
     {
         return self::withPath(
-            sprintf('Locale file "%s" must decode to an object.', basename($path)),
+            sprintf('Locale file "%s" must decode to an object.', self::catalogRelativeName($path)),
             $path,
         );
     }
@@ -91,6 +97,26 @@ final class LocalizationException extends ZephyrusRuntimeException
     public function path(): ?string
     {
         return $this->path;
+    }
+
+    /**
+     * Name a locale file by its last two path segments ("fr/legal.json").
+     *
+     * Falls back to the file alone when there is no parent segment to show, so
+     * a bare "en.json" or a root-level "/en.json" never grows a stray
+     * separator. dirname() answers "." for the first and "/" (whose basename is
+     * "") for the second.
+     */
+    private static function catalogRelativeName(string $path): string
+    {
+        $file = basename($path);
+        $parent = basename(dirname($path));
+
+        if ($parent === '' || $parent === '.' || $parent === DIRECTORY_SEPARATOR) {
+            return $file;
+        }
+
+        return $parent . '/' . $file;
     }
 
     private static function withPath(string $message, string $path, ?\Throwable $previous = null): self
