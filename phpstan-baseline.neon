@@ -178,6 +178,16 @@ parameters:
             identifier: new.static
             path: src/Zephyrus/Data/Entity.php
             count: 1
+        # ConfigSection::fromArray() calls new static() for exactly the same
+        # reason, and carries the same contract: a section subclass keeps the
+        # base constructor signature. This entry REPLACES the staticMethod.
+        # notFound entry that used to sit in a "real findings" group, because
+        # the finding it recorded is now fixed: Configuration::fromArray()
+        # calls a method the class actually declares.
+        -
+            identifier: new.static
+            path: src/Zephyrus/Core/Config/ConfigSection.php
+            count: 1
 
         # ------------------------------------------------------------------
         # 6. Missing iterable docblocks, deferred ONLY because these files
@@ -198,51 +208,11 @@ parameters:
             identifier: missingType.iterableValue
             path: src/Zephyrus/Core/Config/ConfigSection.php
             count: 1
-        -
-            identifier: missingType.iterableValue
-            path: src/Zephyrus/Rendering/RenderConfig.php
-            count: 1
+        # RenderConfig's entry was RESOLVED, not swept: its fromArray() override
+        # now inherits the @param array<string, mixed> declared on the
+        # ConfigSection::fromArray() it overrides. MailerConfig::fromArray()
+        # already carried its own and was never listed here.
         -
             identifier: missingType.iterableValue
             path: src/Zephyrus/functions.php
-            count: 1
-
-        # ------------------------------------------------------------------
-        # 7. REAL FINDINGS. Reported to the maintainer, NOT silently patched.
-        #
-        #    Each of these is a runtime fatal on a reachable input, not a
-        #    typing gap, and each fix is a behaviour change that needs a
-        #    decision rather than a docblock. They are baselined so the gate
-        #    can go green today, and they are listed here so nobody mistakes
-        #    that green for "no known defects".
-        # ------------------------------------------------------------------
-        # Configuration::fromArray() calls $className::fromArray() through a
-        # class-string<ConfigSection>, but ConfigSection never declares that
-        # static method. A consumer registering a section class that omits
-        # fromArray() gets a fatal at boot instead of a type error at build
-        # time. The docblock already says the method "must" exist.
-        #
-        # The obvious fix, declaring it abstract on ConfigSection, was tried
-        # and REJECTED: ConfigSection is instantiated directly today, as an
-        # anonymous subclass that wants only the typed getters and is never
-        # registered as a section factory. tests/Unit/Core/Config/ alone holds
-        # 17 such sites, and "Class ConfigSection@anonymous must implement 1
-        # abstract method" is a fatal at the class declaration, not at boot.
-        # That is a hard break for every consumer doing the same thing.
-        #
-        # A CONCRETE default on ConfigSection is the BC-safe shape, and it is
-        # the body every existing subclass already writes:
-        #
-        #     public static function fromArray(array $values): static
-        #     {
-        #         return new static($values);
-        #     }
-        #
-        # It costs one baseline swap: staticMethod.notFound here goes away and
-        # new.static appears on ConfigSection, for the same stated reason as
-        # the Entity entry in group 5 (the contract is that a subclass keeps
-        # the base constructor signature).
-        -
-            identifier: staticMethod.notFound
-            path: src/Zephyrus/Core/Config/Configuration.php
             count: 1

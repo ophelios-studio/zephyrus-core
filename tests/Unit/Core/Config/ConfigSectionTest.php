@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigSection;
+use Zephyrus\Core\Config\Configuration;
 
 final class ConfigSectionTest extends TestCase
 {
@@ -142,5 +143,95 @@ final class ConfigSectionTest extends TestCase
 
         self::assertSame('example.com', $section->get('smtpConfig.mailHost'));
         self::assertSame(465, $section->get('smtpConfig.mailPort'));
+    }
+
+    // ── the fromArray() contract ─────────────────────────────────────────────
+
+    /**
+     * Configuration::fromArray() calls $className::fromArray() through a
+     * class-string<ConfigSection>, and ConfigSection never declared that method.
+     * A consumer registering a section class that omits it therefore got
+     * "Call to undefined method" at BOOT, in a codepath that runs before
+     * anything can report it.
+     *
+     * The base class now supplies the concrete default, which is the exact body
+     * every real subclass already writes.
+     */
+    public function testASubclassThatOmitsFromArrayStillHydratesThroughConfiguration(): void
+    {
+        $config = Configuration::fromArray([
+            'plain' => ['name' => 'Test', 'retries' => 3],
+        ], sectionFactories: [
+            'plain' => PlainSectionConfig::class,
+        ]);
+
+        $section = $config->section('plain');
+
+        self::assertInstanceOf(PlainSectionConfig::class, $section);
+        self::assertSame('Test', $section->getString('name'));
+        self::assertSame(3, $section->getInt('retries'));
+    }
+
+    /**
+     * new static(), not new self(): the instance must be the SUBCLASS, otherwise
+     * a section would come back as an unusable abstract-base instance.
+     */
+    public function testTheDefaultFactoryReturnsTheSubclassAndNotTheBase(): void
+    {
+        $section = PlainSectionConfig::fromArray(['a' => 1]);
+
+        self::assertInstanceOf(PlainSectionConfig::class, $section);
+        self::assertSame(1, $section->get('a'));
+    }
+
+    /**
+     * The default must not shadow a subclass that hydrates its own typed
+     * properties. It is a default, not a takeover.
+     */
+    public function testASubclassOverrideStillWins(): void
+    {
+        $section = HydratingSectionConfig::fromArray(['name' => 'Overridden']);
+
+        self::assertInstanceOf(HydratingSectionConfig::class, $section);
+        self::assertSame('Overridden', $section->name);
+    }
+
+    /**
+     * The shape 17 test sites in this suite already rely on, and the reason an
+     * `abstract public static function` was rejected: it would have made every
+     * one of these a fatal at the class declaration.
+     */
+    public function testAnAnonymousSubclassIsStillDirectlyInstantiable(): void
+    {
+        $section = new class(['key' => 'value']) extends ConfigSection {
+        };
+
+        self::assertSame('value', $section->get('key'));
+        self::assertSame('value', ($section::fromArray(['key' => 'value']))->get('key'));
+    }
+}
+
+/**
+ * A section class that declares NOTHING but the extends clause. Registering one
+ * of these used to be a fatal at boot.
+ */
+final class PlainSectionConfig extends ConfigSection
+{
+}
+
+/**
+ * A section class that overrides the default to hydrate its own properties,
+ * which is what MailerConfig and RenderConfig do.
+ */
+final class HydratingSectionConfig extends ConfigSection
+{
+    public string $name = '';
+
+    public static function fromArray(array $values): static
+    {
+        $instance = new static($values);
+        $instance->name = $instance->getString('name', 'fallback');
+
+        return $instance;
     }
 }

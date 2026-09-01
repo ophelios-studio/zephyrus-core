@@ -87,6 +87,43 @@ abstract class ConfigSection
     }
 
     /**
+     * Build a section from its raw configuration array.
+     *
+     * ## Why this is concrete and not abstract
+     *
+     * Configuration::fromArray() calls $className::fromArray() through a
+     * class-string<ConfigSection>, and this class did not declare the method it
+     * calls. A consumer registering a section class that omitted it got
+     * "Call to undefined method" at BOOT, from inside the configuration load,
+     * which is about the worst place in the lifecycle to discover a typo.
+     *
+     * Declaring it `abstract` was tried and REJECTED. ConfigSection is
+     * instantiated directly today, as an anonymous subclass that wants only the
+     * typed getters and is never registered as a section factory; this suite
+     * alone holds 17 such sites. "Class ConfigSection@anonymous must implement
+     * 1 abstract method" is a fatal at the CLASS DECLARATION, not at boot, so
+     * the cure would have broken more than the disease, in every consumer
+     * vendoring this framework.
+     *
+     * A concrete default is fully backward compatible: it is the exact body
+     * every real subclass already writes, and MailerConfig and RenderConfig
+     * already declare `: static` and simply override it.
+     *
+     * ## The contract a subclass must keep
+     *
+     * `new static($values)` requires the subclass to keep this constructor
+     * signature, the same contract Entity::build() relies on. A subclass that
+     * needs different construction overrides this method, which is what a
+     * subclass hydrating typed properties does anyway.
+     *
+     * @param array<string, mixed> $values
+     */
+    public static function fromArray(array $values): static
+    {
+        return new static($values);
+    }
+
+    /**
      * Get a configuration value by key with an optional default.
      * Supports dot-notation for nested access (e.g. 'smtp.host').
      */
