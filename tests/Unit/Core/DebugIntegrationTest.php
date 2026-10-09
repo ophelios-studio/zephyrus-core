@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Tracy\Debugger;
 use Zephyrus\Core\DebugIntegration;
+use Zephyrus\Data\DatabaseException;
 
 final class DebugIntegrationTest extends TestCase
 {
@@ -232,6 +233,27 @@ final class DebugIntegrationTest extends TestCase
         $html = $this->renderBlueScreenWithArgument([$key => $secret, 'username' => self::marker('visible')]);
 
         self::assertFalse(str_contains($html, $secret), 'A key matching the secret pattern rendered its value.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksTheDatabaseDriverMessage(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $email = 'jane-' . self::marker('email') . '@example.com';
+        $driverMessage = 'SQLSTATE[23505]: DETAIL: Key (email)=(' . $email . ') already exists.';
+
+        $exception = DatabaseException::queryExecutionFailed('insert into users', new \PDOException($driverMessage));
+        $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . uniqid('', true) . '.html';
+
+        try {
+            Debugger::getBlueScreen()->renderToFile($exception, $file);
+            $html = (string) file_get_contents($file);
+        } finally {
+            @unlink($file);
+        }
+
+        self::assertFalse(str_contains($html, $email), 'The bluescreen rendered the driver message with a column value.');
     }
 
     #[RunInSeparateProcess]

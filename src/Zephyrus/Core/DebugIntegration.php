@@ -95,6 +95,7 @@ final class DebugIntegration
     /** Class properties masked by Tracy's Class::$property form. Tracy's own "POST (preview)" still shows the request body. */
     public const array SENSITIVE_PROPERTIES = [
         'Zephyrus\Http\RequestBody::$raw',
+        'Zephyrus\Data\DatabaseException::$driverMessage',
     ];
 
     /**
