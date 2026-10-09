@@ -13,6 +13,7 @@ namespace Zephyrus\Core\Config;
  *   - sameSite:   'Lax' (balanced CSRF protection)
  *   - lifetime:   0     (browser-session cookie)
  *   - cookiePath: '/'
+ *   - idleTimeout: null (session.gc_maxlifetime is left as configured)
  *
  * No Domain attribute is ever emitted, so the cookie is host-only.
  *
@@ -49,6 +50,7 @@ namespace Zephyrus\Core\Config;
  * Validation rules:
  *   - name must be a non-empty string.
  *   - lifetime must be >= 0.
+ *   - idleTimeout must be a positive whole number of seconds when set.
  *   - sameSite must be one of: Strict, Lax, None.
  */
 final readonly class SessionConfig
@@ -56,12 +58,18 @@ final readonly class SessionConfig
     /** @var array<string> */
     private const VALID_SAME_SITE = ['Strict', 'Lax', 'None'];
 
+    private const IDLE_TIMEOUT_RULE = 'must be a positive whole number of seconds';
+
     /**
      * @param bool $secure     Force the Secure attribute on regardless of the request.
      * @param bool $secureAuto Add Secure when the request itself is HTTPS. Ignored when
      *                         $secure is already true. Defaults to false so a caller
      *                         building this object positionally keeps the exact
      *                         behaviour it had; fromArray() turns it on.
+     * @param ?int $idleTimeout Server-side idle timeout in seconds, applied by
+     *                         SessionManager::start() as session.gc_maxlifetime.
+     *                         DatabaseSessionHandler refuses a session idle longer on read.
+     *                         PHP's files handler only uses it as the garbage-collection age.
      */
     public function __construct(
         public string $name,
@@ -71,6 +79,7 @@ final readonly class SessionConfig
         public string $sameSite,
         public string $cookiePath,
         public bool $secureAuto = false,
+        public ?int $idleTimeout = null,
     ) {
         // Validated here rather than only in fromArray() so that a caller
         // constructing the object directly, which the framework's own
@@ -81,6 +90,10 @@ final readonly class SessionConfig
 
         if ($this->lifetime < 0) {
             throw ConfigurationException::invalidValue('session', 'lifetime', $this->lifetime, 'must be 0 or greater');
+        }
+
+        if ($this->idleTimeout !== null && $this->idleTimeout <= 0) {
+            throw ConfigurationException::invalidValue('session', 'idleTimeout', $this->idleTimeout, self::IDLE_TIMEOUT_RULE);
         }
 
         if (!in_array($this->sameSite, self::VALID_SAME_SITE, strict: true)) {
@@ -117,6 +130,41 @@ final readonly class SessionConfig
             sameSite:   (string) ($values['sameSite']   ?? $values['same_site']   ?? 'Lax'),
             cookiePath: (string) ($values['cookiePath'] ?? $values['cookie_path'] ?? '/'),
             secureAuto: $auto,
+            idleTimeout: self::idleTimeoutFrom($values['idleTimeout'] ?? $values['idle_timeout'] ?? null),
+        );
+    }
+
+    /**
+     * Strict on purpose: a cast would read '30m' as 30 seconds and 'abc' as 0.
+     */
+    private static function idleTimeoutFrom(mixed $value): ?int
+    {
+        if ($value === null || is_int($value)) {
+            return $value;
+        }
+
+        // Leading zeros are dropped so '0600' reads as decimal; all zeros leaves nothing.
+        $digits = is_string($value) && preg_match('/\A[0-9]+\z/', $value) === 1 ? ltrim($value, '0') : '';
+
+        if ($digits !== '') {
+            $seconds = filter_var($digits, FILTER_VALIDATE_INT);
+
+            if ($seconds === false) {
+                throw ConfigurationException::invalidValue('session', 'idleTimeout', $value, 'is too large');
+            }
+
+            return $seconds;
+        }
+
+        throw ConfigurationException::invalidValue(
+            'session',
+            'idleTimeout',
+            match (true) {
+                is_string($value) => $value,
+                is_scalar($value) => var_export($value, true),
+                default => get_debug_type($value),
+            },
+            self::IDLE_TIMEOUT_RULE,
         );
     }
 

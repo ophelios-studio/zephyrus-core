@@ -234,4 +234,81 @@ final class SessionConfigTest extends TestCase
 
         SessionConfig::fromArray(['lifetime' => -1]);
     }
+
+    // -------------------------------------------------------------------------
+    // idleTimeout
+    // -------------------------------------------------------------------------
+
+    public function testIdleTimeoutIsUnsetByDefault(): void
+    {
+        self::assertNull(SessionConfig::fromArray([])->idleTimeout);
+        self::assertNull((new SessionConfig('APP', 0, true, false, 'Lax', '/'))->idleTimeout);
+    }
+
+    /** @return array<string, array{array<string, mixed>}> */
+    public static function idleTimeoutKeyProvider(): array
+    {
+        return [
+            'camelCase'        => [['idleTimeout' => 1800]],
+            'snake_case'       => [['idle_timeout' => 1800]],
+            'numeric string'   => [['idle_timeout' => '1800']],
+        ];
+    }
+
+    /** @param array<string, mixed> $values */
+    #[DataProvider('idleTimeoutKeyProvider')]
+    public function testAcceptsIdleTimeoutInEitherKeyStyle(array $values): void
+    {
+        self::assertSame(1800, SessionConfig::fromArray($values)->idleTimeout);
+    }
+
+    /** @return array<string, array{mixed, string}> */
+    public static function invalidIdleTimeoutProvider(): array
+    {
+        return [
+            'zero'              => [0, "'0'"],
+            'zero string'       => ['0', "'0'"],
+            'negative'          => [-60, "'-60'"],
+            'negative string'   => ['-60', "'-60'"],
+            'unit suffix'       => ['30m', "'30m'"],
+            'decimal string'    => ['1.9', "'1.9'"],
+            'float'             => [1.9, "'1.9'"],
+            'boolean'           => [true, "'true'"],
+            'word'              => ['abc', "'abc'"],
+            'empty string'      => ['', "''"],
+            'padded'            => [' 1800', "' 1800'"],
+            'all zeros'         => ['000', "'000'"],
+            'array'             => [[1800], "'array'"],
+        ];
+    }
+
+    #[DataProvider('invalidIdleTimeoutProvider')]
+    public function testThrowsForAnIdleTimeoutThatIsNotAPositiveWholeNumber(mixed $value, string $shown): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("'idleTimeout' has invalid value {$shown}");
+
+        SessionConfig::fromArray(['idle_timeout' => $value]);
+    }
+
+    public function testAcceptsAZeroPaddedIdleTimeoutAsDecimalSeconds(): void
+    {
+        self::assertSame(600, SessionConfig::fromArray(['idle_timeout' => '0600'])->idleTimeout);
+    }
+
+    public function testAnIdleTimeoutBeyondTheIntegerRangeIsReportedAsTooLarge(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("'99999999999999999999': is too large");
+
+        SessionConfig::fromArray(['idle_timeout' => '99999999999999999999']);
+    }
+
+    public function testDirectConstructionAlsoRefusesANonPositiveIdleTimeout(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('idleTimeout');
+
+        new SessionConfig('APP', 0, true, false, 'Lax', '/', idleTimeout: 0);
+    }
 }

@@ -155,6 +155,12 @@ final class SessionManager
      * exactly this reason; any other handler must do the same or this setting
      * buys it nothing. When debug is on, start() warns about a handler that
      * cannot honour it.
+     *
+     * ## The idle timeout depends on the handler
+     *
+     * A configured idleTimeout becomes session.gc_maxlifetime. DatabaseSessionHandler
+     * refuses a session idle longer on read; PHP's files handler only uses it as
+     * the garbage-collection age, so start() warns about that in debug.
      */
     public function start(SessionConfig $config, ?bool $requestIsSecure = null): void
     {
@@ -171,7 +177,13 @@ final class SessionManager
         }
 
         ini_set('session.use_strict_mode', '1');
+
+        if ($config->idleTimeout !== null) {
+            ini_set('session.gc_maxlifetime', (string) $config->idleTimeout);
+        }
+
         $this->warnIfHandlerCannotHonourStrictMode();
+        $this->warnIfIdleTimeoutIsNotEnforced($config);
         session_name($config->name);
         session_set_cookie_params([
             'lifetime' => $config->lifetime,
@@ -199,6 +211,26 @@ final class SessionManager
         $https = $_SERVER['HTTPS'] ?? '';
 
         return is_string($https) && $https !== '' && strtolower($https) !== 'off';
+    }
+
+    /** Warn, in debug only, when the idle timeout can only act as a GC age. */
+    private function warnIfIdleTimeoutIsNotEnforced(SessionConfig $config): void
+    {
+        if ($config->idleTimeout === null || $this->handler !== null || ini_get('session.save_handler') !== 'files') {
+            return;
+        }
+
+        $configuration = App::getConfiguration();
+        if ($configuration === null || !$configuration->application->debug) {
+            return;
+        }
+
+        trigger_error(
+            'The session idle timeout is only a garbage-collection age with the files save handler: nothing '
+            . 'checks how long a session sat idle when it is read, so it is resumed. Register '
+            . 'DatabaseSessionHandler through setHandler() to enforce it.',
+            E_USER_WARNING,
+        );
     }
 
     /**
