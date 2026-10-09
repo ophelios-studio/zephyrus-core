@@ -26,7 +26,7 @@ use Zephyrus\Http\Response;
  *
  * Pass the directives that should receive the nonce:
  *
- *   $policy = (new ContentSecurityPolicy())
+ *   $policy = ContentSecurityPolicy::create()
  *       ->withDirective('default-src', "'self'")
  *       ->withDirective('script-src', "'self'");
  *
@@ -52,20 +52,25 @@ use Zephyrus\Http\Response;
  * directive and never automatic: enabling it is a decision about the
  * application's own markup, not something a framework can infer.
  *
- * When debug is on, a combination of a nonce and 'unsafe-inline' in the same
- * directive raises an E_USER_WARNING naming the directive. The policy is never
- * rewritten: silently editing a security policy would be worse than the warning.
+ * When debug is on, 'unsafe-inline' next to a nonce, or next to a hash in the
+ * same directive, raises an E_USER_WARNING naming the directive. Matching is
+ * case-insensitive, as browsers match keywords and hash algorithms. Only a
+ * ContentSecurityPolicy object is inspected: a raw string policy is sent as
+ * written. The policy is never rewritten: silently editing a security policy
+ * would be worse than the warning.
  *
  * ## Ordering against SecureHeadersMiddleware
  *
  * SecureHeadersMiddleware also emits Content-Security-Policy when its config
- * carries a csp value, and global middlewares write their headers while the
- * response unwinds, so the FIRST REGISTERED middleware writes last and wins.
+ * carries a csp value. Both middlewares leave a header the response already
+ * carries alone, and the response unwinds from the innermost middleware (the
+ * one registered LAST) outwards, so the innermost writer wins.
  *
- * Register this middleware BEFORE SecureHeadersMiddleware, or leave
- * SecureHeadersConfig::csp empty. Registering SecureHeaders first with a csp
- * set silently replaces the policy built here, nonce included, and the inline
- * scripts relying on that nonce stop running with nothing to explain why. Only
+ * Register this middleware AFTER SecureHeadersMiddleware, or leave
+ * SecureHeadersConfig::csp empty. Registered BEFORE it, this middleware is the
+ * outer one, so SecureHeadersMiddleware's csp, written first from the inside,
+ * reaches the client: the policy built here, nonce included, silently
+ * disappears and the inline scripts relying on that nonce stop running. Only
  * one of the two should own the CSP header.
  */
 final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterface
@@ -107,13 +112,17 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
 
     public function process(Request $request, callable $next): Response
     {
+        if ($this->nonceTemplate !== null) {
+            $this->warnOnUnsafeInline($this->nonceTemplate);
+        }
+
         if ($this->nonceDirectives === [] || $this->nonceTemplate === null) {
             // Unchanged path: no nonce is minted and the header is byte for
             // byte what it was before nonce support existed.
             /** @var Response $response */
             $response = $next($request);
 
-            if ($this->policy === '') {
+            if ($this->policy === '' || $this->routeSetsHeader($response)) {
                 return $response;
             }
 
@@ -127,7 +136,6 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
 
         $policy = $this->nonceTemplate;
         foreach ($this->nonceDirectives as $directive) {
-            $this->warnOnUnsafeInline($policy, $directive);
             $policy = $policy->appendNonce($directive, $nonce);
         }
 
@@ -139,36 +147,118 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
             return $response;
         }
 
+        if ($this->routeSetsHeader($response)) {
+            $this->warnNoncePolicyNotApplied();
+
+            return $response;
+        }
+
         return $response->withHeader($this->headerName(), $headerValue);
     }
 
     /**
-     * Warn, in debug only, when a nonce is being added to a directive that also
-     * carries 'unsafe-inline'. Browsers ignore 'unsafe-inline' once a nonce is
-     * present, so this combination silently disables the project's inline
-     * scripts, which is exactly the failure that is hard to attribute later.
+     * Debug only. The usual cause is SecureHeadersMiddleware registered before
+     * this middleware: it wrote its csp first from the inside, so the nonce
+     * policy is silently dropped. Say so, with the fix.
      */
-    private function warnOnUnsafeInline(ContentSecurityPolicy $policy, string $directive): void
+    private function warnNoncePolicyNotApplied(): void
     {
-        $configuration = App::getConfiguration();
-        if ($configuration === null || !$configuration->application->debug) {
-            return;
-        }
-
-        $values = $policy->toArray()[strtolower(trim($directive))] ?? [];
-        if (!in_array("'unsafe-inline'", $values, true)) {
+        if (!self::isDebug()) {
             return;
         }
 
         trigger_error(
             sprintf(
-                "Content-Security-Policy: a nonce was added to %s, which also contains 'unsafe-inline'. "
-                . "Browsers ignore 'unsafe-inline' when a nonce is present, so inline scripts without the "
-                . 'nonce attribute will stop running. Remove one of the two.',
-                strtolower(trim($directive)),
+                'Content-Security-Policy: the nonce policy was not applied because %s is already set on the '
+                . 'response, by SecureHeadersMiddleware registered before this middleware or by a route. '
+                . 'Register ContentSecurityPolicyMiddleware after SecureHeadersMiddleware, or leave '
+                . 'SecureHeadersConfig::csp empty.',
+                $this->headerName(),
             ),
             E_USER_WARNING,
         );
+    }
+
+    private static function isDebug(): bool
+    {
+        $configuration = App::getConfiguration();
+
+        return $configuration !== null && $configuration->application->debug;
+    }
+
+    /**
+     * Warn, in debug only, about 'unsafe-inline' in a directive that a nonce or
+     * a hash also covers. Browsers ignore 'unsafe-inline' once either is
+     * present, so the keyword looks harmless today and silently activates the
+     * day the nonce or hash is removed. A nonce being added makes it worse: the
+     * inline scripts stop running right away.
+     */
+    private function warnOnUnsafeInline(ContentSecurityPolicy $policy): void
+    {
+        if (!self::isDebug()) {
+            return;
+        }
+
+        $nonceDirectives = array_map(
+            static fn (string $directive): string => strtolower(trim($directive)),
+            $this->nonceDirectives,
+        );
+
+        foreach ($policy->toArray() as $name => $values) {
+            $directive = (string) $name;
+            if (!self::containsUnsafeInline($values)) {
+                continue;
+            }
+
+            $hasNonce = in_array($directive, $nonceDirectives, true);
+            if (!$hasNonce && !self::containsHashSource($values)) {
+                continue;
+            }
+
+            $message = $hasNonce
+                ? "Content-Security-Policy: a nonce was added to %s, which also contains 'unsafe-inline'. "
+                    . "Browsers ignore 'unsafe-inline' when a nonce is present, so inline scripts without the "
+                    . 'nonce attribute will stop running. Remove one of the two.'
+                : "Content-Security-Policy: %s contains a hash and 'unsafe-inline'. "
+                    . "Browsers ignore 'unsafe-inline' when a hash is present, so the keyword has no effect "
+                    . "today and silently activates the day the hash is removed. Remove one of the two.";
+
+            trigger_error(sprintf($message, $directive), E_USER_WARNING);
+        }
+    }
+
+    /**
+     * @param list<string> $values
+     */
+    private static function containsUnsafeInline(array $values): bool
+    {
+        foreach ($values as $value) {
+            if (strtolower($value) === "'unsafe-inline'") {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<string> $values
+     */
+    private static function containsHashSource(array $values): bool
+    {
+        foreach ($values as $value) {
+            if (preg_match("/^'sha(?:256|384|512)-/Di", $value) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** A blank value counts as absent, so it does not block the configured policy. */
+    private function routeSetsHeader(Response $response): bool
+    {
+        return trim($response->getHeader($this->headerName()) ?? '') !== '';
     }
 
     private function headerName(): string

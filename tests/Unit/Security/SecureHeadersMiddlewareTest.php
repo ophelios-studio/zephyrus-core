@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -279,5 +280,90 @@ final class SecureHeadersMiddlewareTest extends TestCase
         self::assertContains("content-security-policy: default-src 'none'", $headers);
         self::assertContains('permissions-policy: camera=()', $headers);
         self::assertContains('strict-transport-security: max-age=86400; includeSubDomains', $headers);
+    }
+
+    // ── a header the route already set is kept ───────────────────────────────
+
+    /**
+     * A route that set its own non-empty value for a configured name keeps it.
+     * The route's value differs from the configured one, so an overwrite cannot
+     * pass as a coincidence.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function routeOwnedHeaders(): iterable
+    {
+        yield 'X-Frame-Options' => ['X-Frame-Options', 'DENY'];
+        yield 'X-Content-Type-Options' => ['X-Content-Type-Options', 'none'];
+        yield 'Referrer-Policy' => ['Referrer-Policy', 'no-referrer'];
+        yield 'X-XSS-Protection' => ['X-XSS-Protection', '1; mode=block'];
+        yield 'Content-Security-Policy' => ['Content-Security-Policy', "default-src 'none'"];
+        yield 'Permissions-Policy' => ['Permissions-Policy', 'camera=()'];
+        yield 'Strict-Transport-Security' => ['Strict-Transport-Security', 'max-age=0'];
+    }
+
+    #[DataProvider('routeOwnedHeaders')]
+    public function testRouteOwnedHeaderIsKeptWhenTheConfigurationAlsoSetsIt(string $name, string $routeValue): void
+    {
+        $config = SecureHeadersConfig::fromArray([
+            'csp'               => "default-src 'self'",
+            'permissionsPolicy' => 'geolocation=()',
+            'hstsMaxAge'        => 31_536_000,
+        ]);
+        $mw = new SecureHeadersMiddleware($config);
+        $inner = Response::text('ok')->withHeader($name, $routeValue);
+
+        $response = $mw->process($this->makeRequest(secure: true), fn (Request $r): Response => $inner);
+
+        self::assertSame($routeValue, $response->headers[strtolower($name)]);
+    }
+
+    public function testConfiguredValueIsStillAppliedWhenTheRouteSetsNoSecurityHeader(): void
+    {
+        $config = SecureHeadersConfig::fromArray([
+            'referrerPolicy'    => 'same-origin',
+            'csp'               => "default-src 'self'",
+            'permissionsPolicy' => 'geolocation=()',
+            'hstsMaxAge'        => 31_536_000,
+        ]);
+        $mw = new SecureHeadersMiddleware($config);
+
+        $response = $mw->process($this->makeRequest(secure: true), fn (Request $r): Response => Response::text('ok'));
+
+        self::assertSame('same-origin', $response->headers['referrer-policy']);
+        self::assertSame("default-src 'self'", $response->headers['content-security-policy']);
+        self::assertSame('geolocation=()', $response->headers['permissions-policy']);
+        self::assertSame('max-age=31536000', $response->headers['strict-transport-security']);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function blankRouteValues(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'space' => [' '];
+        yield 'tab and newline' => ["\t\n"];
+    }
+
+    #[DataProvider('blankRouteValues')]
+    public function testBlankRouteValueGetsTheConfiguredDefault(string $blank): void
+    {
+        $mw = new SecureHeadersMiddleware(SecureHeadersConfig::defaults());
+        $inner = Response::text('ok')->withHeader('X-Frame-Options', $blank);
+
+        $response = $mw->process($this->makeRequest(), fn (Request $r): Response => $inner);
+
+        self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
+    }
+
+    public function testRouteHeaderIsKeptWhenOtherConfiguredHeadersAreStillApplied(): void
+    {
+        $mw = new SecureHeadersMiddleware(SecureHeadersConfig::defaults());
+        $inner = Response::text('ok')->withHeader('Referrer-Policy', 'no-referrer');
+
+        $response = $mw->process($this->makeRequest(), fn (Request $r): Response => $inner);
+
+        self::assertSame('no-referrer', $response->headers['referrer-policy']);
+        self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
+        self::assertSame('nosniff', $response->headers['x-content-type-options']);
     }
 }

@@ -31,6 +31,9 @@ use Zephyrus\Security\SecureHeadersMiddleware;
  */
 final class ContentSecurityPolicyNonceTest extends TestCase
 {
+    /** The SHA-256 of the empty string, a real hash source that needs no fixture. */
+    private const HASH_SOURCE = "'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='";
+
     protected function tearDown(): void
     {
         App::reset();
@@ -178,19 +181,9 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'"]);
 
-        $warnings = [];
-        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
-            $warnings[] = $message;
-
-            return true;
-        }, E_USER_WARNING);
-
-        try {
-            $this->kernel(new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']))
-                ->handle(Request::fromArray('GET', '/p'));
-        } finally {
-            restore_error_handler();
-        }
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(
+            new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']),
+        )->handle(Request::fromArray('GET', '/p')));
 
         self::assertCount(1, $warnings);
         self::assertStringContainsString('script-src', $warnings[0]);
@@ -204,19 +197,9 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'"]);
 
-        $warnings = [];
-        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
-            $warnings[] = $message;
-
-            return true;
-        }, E_USER_WARNING);
-
-        try {
-            $this->kernel(new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']))
-                ->handle(Request::fromArray('GET', '/p'));
-        } finally {
-            restore_error_handler();
-        }
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(
+            new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']),
+        )->handle(Request::fromArray('GET', '/p')));
 
         self::assertSame([], $warnings);
     }
@@ -225,6 +208,20 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
 
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(
+            new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
+        )->handle(Request::fromArray('GET', '/p')));
+
+        self::assertSame([], $warnings);
+    }
+
+
+    /**
+     * @param callable(): void $run
+     * @return list<string>
+     */
+    private function captureUserWarnings(callable $run): array
+    {
         $warnings = [];
         set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
             $warnings[] = $message;
@@ -233,11 +230,108 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         }, E_USER_WARNING);
 
         try {
-            $this->kernel(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
-                ->handle(Request::fromArray('GET', '/p'));
+            $run();
         } finally {
             restore_error_handler();
         }
+
+        return $warnings;
+    }
+
+    public function testDebugModeWarnsWhenAHashMeetsUnsafeInlineWithoutAnyNonce(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('script-src', $warnings[0]);
+        self::assertStringContainsString("'unsafe-inline'", $warnings[0]);
+        self::assertStringContainsString('hash', $warnings[0]);
+    }
+
+    public function testDebugModeWarnsOnceWhenAHashedDirectiveIsAlsoNonced(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(
+            new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']),
+        )->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+    }
+
+    public function testDebugModeWarnsForAHashedDirectiveWhileAnotherDirectiveIsNonced(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE])
+            ->withDirective('style-src', ["'self'"]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(
+            new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['style-src']),
+        )->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('script-src', $warnings[0]);
+    }
+
+    public function testDebugModeWarnsForAnUpperCaseHashSource(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "'unsafe-inline'", "'SHA256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='"]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+    }
+
+    public function testDebugModeWarnsForAnUpperCaseUnsafeInline(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "'UNSAFE-INLINE'", self::HASH_SOURCE]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+    }
+
+    public function testDebugModeDoesNotWarnForAHashAloneWithoutUnsafeInline(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", self::HASH_SOURCE]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertSame([], $warnings);
+    }
+
+    public function testNoHashWarningWhenDebugIsOff(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => false]]));
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
+            ->handle(Request::fromArray('GET', '/p')));
 
         self::assertSame([], $warnings);
     }
@@ -255,36 +349,88 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     // -- Interaction with SecureHeadersMiddleware ----------------------------
 
     /**
-     * Pins a known collision rather than hiding it. Global middlewares write
-     * headers as the response unwinds, so the FIRST registered one writes last
-     * and wins. SecureHeadersMiddleware also emits Content-Security-Policy when
-     * its config sets csp, so registering it first silently discards the
-     * nonce'd policy built here.
+     * Each middleware leaves a header that is already set alone, and the
+     * response unwinds from the innermost middleware (the one registered last)
+     * outwards. So the innermost writer wins: registering the nonce policy
+     * AFTER SecureHeadersMiddleware keeps the nonce even when csp is set.
      */
-    public function testSecureHeadersRegisteredFirstSilentlyReplacesTheNoncedPolicy(): void
+    public function testNoncedPolicySurvivesWhenRegisteredAfterSecureHeaders(): void
     {
         $cspMiddleware = new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']);
         $secureHeaders = new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"]));
 
-        $correct = KernelBuilder::create()
-            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
-            ->withMiddleware($cspMiddleware)
-            ->withMiddleware($secureHeaders)
-            ->build()
-            ->handle(Request::fromArray('GET', '/p'));
-
-        $collided = KernelBuilder::create()
+        $response = KernelBuilder::create()
             ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
             ->withMiddleware($secureHeaders)
             ->withMiddleware($cspMiddleware)
             ->build()
             ->handle(Request::fromArray('GET', '/p'));
 
-        self::assertStringContainsString('nonce-', $correct->headers['content-security-policy']);
-        // The documented failure: register SecureHeaders first with a csp set
-        // and the nonce is gone.
-        self::assertSame("default-src 'none'", $collided->headers['content-security-policy']);
-        self::assertStringNotContainsString('nonce-', $collided->headers['content-security-policy']);
+        self::assertStringContainsString('nonce-', $response->headers['content-security-policy']);
+    }
+
+    public function testDebugModeWarnsWhenTheNoncePolicyIsNotAppliedBecauseCspIsAlreadySet(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build()
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('the nonce policy was not applied', $warnings[0]);
+        self::assertStringContainsString('after SecureHeadersMiddleware', $warnings[0]);
+    }
+
+    public function testNoNonceWarningWhenTheNoncePolicyIsAppliedInDebugMode(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
+            ->build()
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertSame([], $warnings);
+    }
+
+    public function testNoNonceWarningWhenTheNoncePolicyIsNotAppliedAndDebugIsOff(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => false]]));
+
+        $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build()
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertSame([], $warnings);
+    }
+
+    /**
+     * The trap that remains: registered before SecureHeadersMiddleware, the nonce
+     * policy is the outer middleware, so SecureHeadersMiddleware's csp, written
+     * first from the inside, reaches the client and the nonce is gone.
+     */
+    public function testSecureHeadersRegisteredAfterTheNoncedPolicyReplacesIt(): void
+    {
+        $cspMiddleware = new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']);
+        $secureHeaders = new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"]));
+
+        $response = KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
+            ->withMiddleware($cspMiddleware)
+            ->withMiddleware($secureHeaders)
+            ->build()
+            ->handle(Request::fromArray('GET', '/p'));
+
+        self::assertSame("default-src 'none'", $response->headers['content-security-policy']);
     }
 }
 

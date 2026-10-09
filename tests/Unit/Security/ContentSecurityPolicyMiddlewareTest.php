@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -59,5 +60,61 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
             "content-security-policy: default-src 'self'; img-src https://cdn.example.com",
             $response->toHeaderLines(),
         );
+    }
+
+    public function testRouteOwnedContentSecurityPolicyIsKept(): void
+    {
+        $policy = ContentSecurityPolicy::create()->withDirective('default-src', ["'self'"]);
+        $inner = Response::text('ok')->withHeader('Content-Security-Policy', "default-src 'none'");
+        $middleware = new ContentSecurityPolicyMiddleware($policy);
+
+        $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => $inner);
+
+        self::assertSame("default-src 'none'", $response->headers['content-security-policy']);
+    }
+
+    public function testRouteOwnedReportOnlyHeaderIsKeptAndTheConfiguredOneIsNotAddedBesideIt(): void
+    {
+        $policy = ContentSecurityPolicy::create()->withDirective('default-src', ["'self'"]);
+        $inner = Response::text('ok')->withHeader('Content-Security-Policy-Report-Only', "default-src 'none'");
+        $middleware = new ContentSecurityPolicyMiddleware($policy, reportOnly: true);
+
+        $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => $inner);
+
+        self::assertSame("default-src 'none'", $response->headers['content-security-policy-report-only']);
+        self::assertArrayNotHasKey('content-security-policy', $response->headers);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function blankRouteValues(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'space' => [' '];
+        yield 'tab and newline' => ["\t\n"];
+    }
+
+    #[DataProvider('blankRouteValues')]
+    public function testBlankRouteContentSecurityPolicyGetsTheConfiguredPolicy(string $blank): void
+    {
+        $policy = ContentSecurityPolicy::create()->withDirective('default-src', ["'self'"]);
+        $inner = Response::text('ok')->withHeader('Content-Security-Policy', $blank);
+        $middleware = new ContentSecurityPolicyMiddleware($policy);
+
+        $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => $inner);
+
+        self::assertSame("default-src 'self'", $response->headers['content-security-policy']);
+    }
+
+    public function testRouteOwnedContentSecurityPolicyIsKeptOnTheNoncePath(): void
+    {
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('default-src', ["'self'"])
+            ->withDirective('script-src', ["'self'"]);
+        $inner = Response::text('ok')->withHeader('Content-Security-Policy', "default-src 'none'");
+        $middleware = new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']);
+
+        $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => $inner);
+
+        self::assertSame("default-src 'none'", $response->headers['content-security-policy']);
     }
 }

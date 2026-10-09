@@ -13,7 +13,12 @@ use Zephyrus\Http\Response;
  *
  * Behaviour:
  *   - Calls $next to obtain the inner response first.
- *   - Appends each configured security header via Response::withHeader().
+ *   - Sets each configured security header the inner response does not already
+ *     carry with a non-blank value. The configured value is a default: a route's
+ *     own value wins, even a stricter or a looser one (a stricter Referrer-Policy
+ *     on a page carrying a one-time token, for example).
+ *   - A route's Content-Security-Policy replaces the configured policy whole, it
+ *     is not merged with it.
  *   - Headers with an empty string value in the config are skipped (not emitted).
  *   - Strict-Transport-Security is only emitted on HTTPS requests (see isSecure()).
  *
@@ -48,36 +53,41 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
     private function applyHeaders(Request $request, Response $response): Response
     {
         if ($this->config->xFrameOptions !== '') {
-            $response = $response->withHeader('X-Frame-Options', $this->config->xFrameOptions);
+            $response = self::withDefault($response, 'X-Frame-Options', $this->config->xFrameOptions);
         }
 
         if ($this->config->xContentTypeOptions !== '') {
-            $response = $response->withHeader('X-Content-Type-Options', $this->config->xContentTypeOptions);
+            $response = self::withDefault($response, 'X-Content-Type-Options', $this->config->xContentTypeOptions);
         }
 
         if ($this->config->referrerPolicy !== '') {
-            $response = $response->withHeader('Referrer-Policy', $this->config->referrerPolicy);
+            $response = self::withDefault($response, 'Referrer-Policy', $this->config->referrerPolicy);
         }
 
         if ($this->config->xssProtection !== '') {
-            $response = $response->withHeader('X-XSS-Protection', $this->config->xssProtection);
+            $response = self::withDefault($response, 'X-XSS-Protection', $this->config->xssProtection);
         }
 
         if ($this->config->csp !== '') {
-            $response = $response->withHeader('Content-Security-Policy', $this->config->csp);
+            $response = self::withDefault($response, 'Content-Security-Policy', $this->config->csp);
         }
 
         if ($this->config->permissionsPolicy !== '') {
-            $response = $response->withHeader('Permissions-Policy', $this->config->permissionsPolicy);
+            $response = self::withDefault($response, 'Permissions-Policy', $this->config->permissionsPolicy);
         }
 
         $hstsValue = $this->config->hstsHeaderValue();
 
         if ($hstsValue !== '' && self::isSecure($request)) {
-            $response = $response->withHeader('Strict-Transport-Security', $hstsValue);
+            $response = self::withDefault($response, 'Strict-Transport-Security', $hstsValue);
         }
 
         return $response;
+    }
+
+    private static function withDefault(Response $response, string $name, string $value): Response
+    {
+        return trim($response->getHeader($name) ?? '') !== '' ? $response : $response->withHeader($name, $value);
     }
 
     /**
