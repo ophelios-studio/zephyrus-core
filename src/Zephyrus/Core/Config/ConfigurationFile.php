@@ -20,8 +20,8 @@ use Symfony\Component\Yaml\Yaml;
  *
  * Environment variables are resolved from $_ENV and the process environment at
  * parse time, so .env files must be loaded before this class is used. Names
- * starting with HTTP_ or REDIRECT_, and CGI meta-variables such as QUERY_STRING, are
- * refused with a ConfigurationException.
+ * starting with HTTP_, REDIRECT_, ORIG_, SSL_ or H2_, exact request names such as
+ * QUERY_STRING, and names containing a NUL byte are refused with a ConfigurationException.
  */
 final class ConfigurationFile
 {
@@ -142,7 +142,8 @@ final class ConfigurationFile
 
     /**
      * Resolve an !env tag value (VAR_NAME[, default_value]) from $_ENV or the process environment.
-     * Names starting with HTTP_ or REDIRECT_, and CGI meta-variables such as QUERY_STRING, are refused with a ConfigurationException.
+     * Names starting with HTTP_, REDIRECT_, ORIG_, SSL_ or H2_, exact request names such as
+     * QUERY_STRING, and names containing a NUL byte are refused with a ConfigurationException.
      */
     private function resolveEnvTag(mixed $value): mixed
     {

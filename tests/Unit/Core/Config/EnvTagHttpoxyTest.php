@@ -9,7 +9,7 @@ use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 
 /**
- * The !env tag refuses HTTP_ and REDIRECT_ names rather than reading request data.
+ * The !env tag refuses names that web servers fill from the request rather than reading them.
  */
 final class EnvTagHttpoxyTest extends TestCase
 {

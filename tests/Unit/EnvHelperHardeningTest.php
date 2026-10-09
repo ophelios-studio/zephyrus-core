@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * env() reads $_ENV and the process environment, never request data, and
- * refuses HTTP_ and REDIRECT_ names.
+ * refuses names that web servers fill from the request, such as HTTP_ and REDIRECT_ names.
  */
 final class EnvHelperHardeningTest extends TestCase
 {
