@@ -366,4 +366,14 @@ final class SecureHeadersMiddlewareTest extends TestCase
         self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
         self::assertSame('nosniff', $response->headers['x-content-type-options']);
     }
+
+    public function testWhitespaceOnlyConfiguredCspIsNotSent(): void
+    {
+        $config = SecureHeadersConfig::fromArray(['csp' => " \t\n "]);
+        $mw = new SecureHeadersMiddleware($config);
+
+        $response = $mw->process($this->makeRequest(), fn (Request $r): Response => Response::text('ok'));
+
+        self::assertArrayNotHasKey('content-security-policy', $response->headers);
+    }
 }

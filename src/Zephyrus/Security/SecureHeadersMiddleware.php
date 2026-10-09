@@ -74,7 +74,7 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
             $response = self::withDefault($response, 'X-XSS-Protection', $this->config->xssProtection);
         }
 
-        if ($this->config->csp !== '') {
+        if ($this->hasContentSecurityPolicy()) {
             $response = self::withDefault($response, 'Content-Security-Policy', $this->config->csp);
         }
 
