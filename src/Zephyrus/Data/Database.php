@@ -1024,9 +1024,14 @@ final class Database
         $sorted = $keys;
         sort($sorted);
         if ($sorted !== range(0, count($keys) - 1)) {
+            $listed = implode(', ', array_slice($keys, 0, 10));
+            if (count($keys) > 10) {
+                $listed .= ', ...';
+            }
+
             throw new \InvalidArgumentException(sprintf(
                 'Positional query parameters must use the keys 0 to n-1 (got keys %s): renumber them or use named parameters.',
-                implode(', ', $keys),
+                $listed,
             ));
         }
     }

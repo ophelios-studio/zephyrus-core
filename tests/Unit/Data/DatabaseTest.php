@@ -417,6 +417,24 @@ final class DatabaseTest extends TestCase
         }
     }
 
+    public function testTheKeysListedInThePositionalKeysMessageAreCapped(): void
+    {
+        $params = [];
+        for ($key = 1; $key <= 60000; $key++) {
+            $params[$key] = 'value';
+        }
+
+        try {
+            $this->db->query('SELECT ?', $params);
+            self::fail('expected the parameters to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                'Positional query parameters must use the keys 0 to n-1 (got keys 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...): renumber them or use named parameters.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testPositionalKeysOutOfOrderBindByKey(): void
     {
         $row = $this->db->selectOne('SELECT ? AS first, ? AS second', [1 => 'b', 0 => 'a']);
