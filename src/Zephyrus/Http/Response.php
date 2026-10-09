@@ -229,6 +229,15 @@ final readonly class Response
         return null;
     }
 
+    /**
+     * Whether a header is present with a value that is not blank. A blank value
+     * counts as absent, so a security middleware may still set its default.
+     */
+    public function hasNonBlankHeader(string $name): bool
+    {
+        return trim($this->getHeader($name) ?? '') !== '';
+    }
+
     public function withoutHeader(string $name): self
     {
         $headers = $this->headers;

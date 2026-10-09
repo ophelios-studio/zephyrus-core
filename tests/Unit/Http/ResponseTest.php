@@ -605,4 +605,26 @@ final class ResponseTest extends TestCase
         self::assertFalse($response->hasHeader(''));
         self::assertFalse($response->hasHeader('X-Frame'));
     }
+
+    /**
+     * @return iterable<string, array{?string, bool}>
+     */
+    public static function headerValuesForNonBlankCheck(): iterable
+    {
+        yield 'absent' => [null, false];
+        yield 'empty' => ['', false];
+        yield 'spaces' => ['   ', false];
+        yield 'tab and newline' => ["\t\n", false];
+        yield 'value with a NUL byte' => ["\0x", true];
+        yield 'value' => ['DENY', true];
+        yield 'zero' => ['0', true];
+    }
+
+    #[DataProvider('headerValuesForNonBlankCheck')]
+    public function testHasNonBlankHeaderIgnoresBlankValuesWhateverTheNameCase(?string $value, bool $expected): void
+    {
+        $response = $value === null ? new Response() : new Response(headers: ['X-Test' => $value]);
+
+        self::assertSame($expected, $response->hasNonBlankHeader('x-TEST'));
+    }
 }

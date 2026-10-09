@@ -93,7 +93,7 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
 
     private static function withDefault(Response $response, string $name, string $value): Response
     {
-        return trim($response->getHeader($name) ?? '') !== '' ? $response : $response->withHeader($name, $value);
+        return $response->hasNonBlankHeader($name) ? $response : $response->withHeader($name, $value);
     }
 
     /**

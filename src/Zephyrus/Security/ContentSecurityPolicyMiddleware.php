@@ -133,7 +133,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
             /** @var Response $response */
             $response = $next($request);
 
-            if ($this->policy === '' || $this->routeSetsHeader($response)) {
+            if ($this->policy === '' || $response->hasNonBlankHeader($this->headerName())) {
                 return $response;
             }
 
@@ -158,7 +158,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
             return $response;
         }
 
-        if ($this->routeSetsHeader($response)) {
+        if ($response->hasNonBlankHeader($this->headerName())) {
             $this->warnNoncePolicyNotApplied();
 
             return $response;
@@ -265,12 +265,6 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         }
 
         return false;
-    }
-
-    /** A blank value counts as absent, so it does not block the configured policy. */
-    private function routeSetsHeader(Response $response): bool
-    {
-        return trim($response->getHeader($this->headerName()) ?? '') !== '';
     }
 
     private function headerName(): string
