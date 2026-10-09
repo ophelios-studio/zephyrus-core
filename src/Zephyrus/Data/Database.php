@@ -905,7 +905,7 @@ final class Database
      * caused it. When $work catches a failed query() and the server has aborted
      * the transaction (PostgreSQL), the commit or release is refused rather than
      * reported as done: let the exception propagate, or catch it around a nested
-     * transaction().
+     * transaction(). A statement run through pdo() is not tracked here: see pdo().
      *
      * @throws DatabaseException when the database fails to begin, commit, or set or release a savepoint,
      *         or with SQLSTATE 25P02 when $work caught a failure that aborted the transaction. Its
@@ -1003,6 +1003,9 @@ final class Database
     /**
      * Expose the underlying PDO for advanced callers (e.g. schema migrations).
      * Prefer the typed helpers for normal query work.
+     *
+     * A statement run through this PDO inside transaction() is not tracked: if it fails on PostgreSQL
+     * and the exception is caught, the COMMIT silently becomes a ROLLBACK. Let the exception escape.
      */
     public function pdo(): PDO
     {
