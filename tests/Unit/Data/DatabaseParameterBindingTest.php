@@ -133,7 +133,7 @@ final class DatabaseParameterBindingTest extends TestCase
         );
     }
 
-    public function testAPositionalArrayThatDoesNotStartAtZeroIsRefusedBeforeTheQuery(): void
+    public function testAPositionalArrayWhoseKeysAreNotZeroToNIsRefusedBeforeTheQuery(): void
     {
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Positional query parameters must use the keys 0 to n-1');
