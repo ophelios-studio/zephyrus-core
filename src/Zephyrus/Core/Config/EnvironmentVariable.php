@@ -9,25 +9,45 @@ namespace Zephyrus\Core\Config;
  */
 final class EnvironmentVariable
 {
-    private const REFUSED_PREFIXES = ['HTTP_', 'REDIRECT_', 'ORIG_', 'SSL_', 'H2_'];
-
-    /** @var list<string> */
+    /**
+     * Exact names, grouped by the source that sets them per request.
+     *
+     * @var array<string, list<string>>
+     */
     private const REFUSED_NAMES = [
-        'AUTH_TYPE', 'CONTENT_LENGTH', 'CONTENT_TYPE', 'GATEWAY_INTERFACE', 'PATH_INFO',
-        'PATH_TRANSLATED', 'QUERY_STRING', 'REMOTE_ADDR', 'REMOTE_HOST', 'REMOTE_IDENT',
-        'REMOTE_PORT', 'REMOTE_USER', 'REQUEST_METHOD', 'SCRIPT_NAME', 'SERVER_NAME',
-        'SERVER_PORT', 'SERVER_ADDR', 'SERVER_PROTOCOL', 'SERVER_SOFTWARE', 'REQUEST_URI',
-        'DOCUMENT_URI', 'DOCUMENT_ROOT', 'SCRIPT_FILENAME', 'SCRIPT_URI', 'SCRIPT_URL',
-        'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT', 'REQUEST_SCHEME', 'HTTPS', 'PHP_AUTH_USER',
-        'PHP_AUTH_PW', 'PHP_AUTH_DIGEST', 'SERVER_SIGNATURE', 'HTTP2', 'H2PUSH',
+        'CGI or php-fpm' => [
+            'AUTH_TYPE', 'CONTENT_LENGTH', 'CONTENT_TYPE', 'GATEWAY_INTERFACE', 'PATH_INFO',
+            'PATH_TRANSLATED', 'QUERY_STRING', 'REMOTE_ADDR', 'REMOTE_HOST', 'REMOTE_IDENT',
+            'REMOTE_PORT', 'REMOTE_USER', 'REQUEST_METHOD', 'SCRIPT_NAME', 'SERVER_NAME',
+            'SERVER_PORT', 'SERVER_ADDR', 'SERVER_PROTOCOL', 'SERVER_SOFTWARE', 'REQUEST_URI',
+            'DOCUMENT_URI', 'DOCUMENT_ROOT', 'SCRIPT_FILENAME', 'SCRIPT_URI', 'SCRIPT_URL',
+            'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT', 'REQUEST_SCHEME', 'HTTPS', 'PHP_AUTH_USER',
+            'PHP_AUTH_PW', 'PHP_AUTH_DIGEST',
+        ],
+        'Apache' => ['SERVER_SIGNATURE'],
+        'Apache mod_http2' => ['HTTP2', 'H2PUSH'],
+    ];
+
+    /**
+     * Prefixes, mapped to the source that sets names starting with them per request.
+     *
+     * @var array<string, string>
+     */
+    private const REFUSED_PREFIXES = [
+        'HTTP_' => 'the client request headers',
+        'REDIRECT_' => 'Apache mod_rewrite',
+        'ORIG_' => 'php-fpm',
+        'SSL_' => 'Apache mod_ssl',
+        'H2_' => 'Apache mod_http2',
     ];
 
     /**
      * Reads a configuration value from $_ENV, then from the process environment.
      *
-     * Names that carry request data under CGI, php-fpm or Apache are refused: those starting
-     * with a REFUSED_PREFIXES entry, and those listed in REFUSED_NAMES. Matching ignores
-     * case. A server may pass other request-derived names.
+     * Names containing a NUL byte are refused. So are names starting with HTTP_, REDIRECT_,
+     * ORIG_, SSL_ or H2_, and exact request names such as QUERY_STRING, REMOTE_ADDR,
+     * PHP_AUTH_PW, SERVER_SIGNATURE or HTTP2. Matching ignores case. A server may pass
+     * other request-derived names.
      *
      * @throws \InvalidArgumentException
      */
@@ -39,19 +59,23 @@ final class EnvironmentVariable
 
         $upper = strtoupper($name);
 
-        if (in_array($upper, self::REFUSED_NAMES, true)) {
-            throw new \InvalidArgumentException(sprintf(
-                '%s: CGI meta-variables carry request data and are never read as configuration; rename the variable.',
-                $name,
-            ));
+        foreach (self::REFUSED_NAMES as $source => $names) {
+            if (in_array($upper, $names, true)) {
+                throw new \InvalidArgumentException(sprintf(
+                    '%s: set per request by %s, so it is never read as configuration; rename the variable.',
+                    $name,
+                    $source,
+                ));
+            }
         }
 
-        foreach (self::REFUSED_PREFIXES as $prefix) {
+        foreach (self::REFUSED_PREFIXES as $prefix => $source) {
             if (str_starts_with($upper, $prefix)) {
                 throw new \InvalidArgumentException(sprintf(
-                    '%s: names starting with %s carry request data under CGI and are never read as configuration; rename the variable.',
+                    '%s: names starting with %s are set per request by %s, so they are never read as configuration; rename the variable.',
                     $name,
                     $prefix,
+                    $source,
                 ));
             }
         }
