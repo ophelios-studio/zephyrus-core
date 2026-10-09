@@ -12,7 +12,7 @@ final class EnvironmentVariable
     private const REFUSED_PREFIXES = ['HTTP_', 'REDIRECT_', 'ORIG_', 'SSL_'];
 
     /** @var list<string> */
-    private const CGI_META_VARIABLES = [
+    private const REFUSED_NAMES = [
         'AUTH_TYPE', 'CONTENT_LENGTH', 'CONTENT_TYPE', 'GATEWAY_INTERFACE', 'PATH_INFO',
         'PATH_TRANSLATED', 'QUERY_STRING', 'REMOTE_ADDR', 'REMOTE_HOST', 'REMOTE_IDENT',
         'REMOTE_PORT', 'REMOTE_USER', 'REQUEST_METHOD', 'SCRIPT_NAME', 'SERVER_NAME',
@@ -26,7 +26,7 @@ final class EnvironmentVariable
      * Reads a configuration value from $_ENV, then from the process environment.
      *
      * Names that carry request data under CGI, php-fpm or Apache are refused: those starting
-     * with a REFUSED_PREFIXES entry, and those listed in CGI_META_VARIABLES. Matching ignores
+     * with a REFUSED_PREFIXES entry, and those listed in REFUSED_NAMES. Matching ignores
      * case. A server may pass other request-derived names.
      *
      * @throws \InvalidArgumentException
@@ -35,7 +35,7 @@ final class EnvironmentVariable
     {
         $upper = strtoupper($name);
 
-        if (in_array($upper, self::CGI_META_VARIABLES, true)) {
+        if (in_array($upper, self::REFUSED_NAMES, true)) {
             throw new \InvalidArgumentException(sprintf(
                 '%s: CGI meta-variables carry request data and are never read as configuration; rename the variable.',
                 $name,

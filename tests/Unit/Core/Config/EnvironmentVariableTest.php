@@ -150,7 +150,7 @@ final class EnvironmentVariableTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function cgiMetaVariableNames(): iterable
+    public static function refusedNames(): iterable
     {
         foreach ([
             'QUERY_STRING', 'CONTENT_TYPE', 'REQUEST_URI', 'SERVER_NAME', 'HTTPS', 'PHP_AUTH_USER',
@@ -192,8 +192,8 @@ final class EnvironmentVariableTest extends TestCase
         EnvironmentVariable::read($name);
     }
 
-    #[DataProvider('cgiMetaVariableNames')]
-    public function testACgiMetaVariableIsRefusedWhenTheEnvSuperglobalHoldsIt(string $name): void
+    #[DataProvider('refusedNames')]
+    public function testARefusedNameIsRefusedWhenTheEnvSuperglobalHoldsIt(string $name): void
     {
         $_ENV[$name] = 'client';
 
@@ -203,8 +203,8 @@ final class EnvironmentVariableTest extends TestCase
         EnvironmentVariable::read($name);
     }
 
-    #[DataProvider('cgiMetaVariableNames')]
-    public function testACgiMetaVariableIsRefusedWhenTheProcessEnvironmentHoldsIt(string $name): void
+    #[DataProvider('refusedNames')]
+    public function testARefusedNameIsRefusedWhenTheProcessEnvironmentHoldsIt(string $name): void
     {
         putenv($name . '=client');
 
@@ -213,7 +213,7 @@ final class EnvironmentVariableTest extends TestCase
         EnvironmentVariable::read($name);
     }
 
-    public function testACgiMetaVariableNameIsRefusedInAnyCase(): void
+    public function testARefusedNameIsRefusedInAnyCase(): void
     {
         putenv('query_string=client');
 
@@ -231,7 +231,7 @@ final class EnvironmentVariableTest extends TestCase
         EnvironmentVariable::read('http_zephyrus_test');
     }
 
-    public function testANameMerelyStartingLikeACgiMetaVariableIsStillRead(): void
+    public function testANameMerelyStartingLikeARefusedNameIsStillRead(): void
     {
         putenv('SERVER_NAME_ALIAS=edge');
 
