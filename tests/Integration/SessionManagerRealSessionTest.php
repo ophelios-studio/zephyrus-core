@@ -581,9 +581,9 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     /**
-     * PHP's output warning is the only record of why it refused, so the helper
-     * flushes every buffer level before PHP counts the headers as sent, then
-     * reopens the levels: closing the runner's buffer is flagged as risky.
+     * Sends output past every buffer level, since PHP counts the headers as
+     * sent only then, and reopens those levels: PHPUnit flags a test that
+     * closes its buffer as risky.
      */
     private function sendOutputToBrowser(): void
     {
