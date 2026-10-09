@@ -13,6 +13,7 @@ final class MailerException extends ZephyrusRuntimeException
 {
     public function __construct(
         string $message,
+        public readonly MailerFailure $failure,
         ?\Throwable $previous = null,
         #[\SensitiveParameter] public readonly ?string $transportMessage = null,
     ) {
@@ -26,7 +27,7 @@ final class MailerException extends ZephyrusRuntimeException
      */
     public static function sendFailed(#[\SensitiveParameter] string $transportMessage, ?\Throwable $previous = null): self
     {
-        return new self('The mail transport refused the message.', $previous, $transportMessage);
+        return new self('The mail transport refused the message.', MailerFailure::SendFailed, $previous, $transportMessage);
     }
 
     /**
@@ -34,12 +35,12 @@ final class MailerException extends ZephyrusRuntimeException
      */
     public static function invalidAddress(string $method): self
     {
-        return new self(sprintf('Invalid email address given to %s().', $method));
+        return new self(sprintf('Invalid email address given to %s().', $method), MailerFailure::InvalidAddress);
     }
 
     public static function attachmentNotFound(string $path): self
     {
-        return new self(sprintf('Attachment not found: %s', $path));
+        return new self(sprintf('Attachment not found: %s', $path), MailerFailure::AttachmentNotFound);
     }
 
     /**
@@ -51,11 +52,11 @@ final class MailerException extends ZephyrusRuntimeException
      */
     public static function attachmentRejected(string $value, string $reason): self
     {
-        return new self(sprintf('Attachment rejected: %s %s.', $value, $reason));
+        return new self(sprintf('Attachment rejected: %s %s.', $value, $reason), MailerFailure::AttachmentRejected);
     }
 
     public static function configurationMissing(string $detail): self
     {
-        return new self(sprintf('Mailer configuration missing: %s', $detail));
+        return new self(sprintf('Mailer configuration missing: %s', $detail), MailerFailure::ConfigurationMissing);
     }
 }
