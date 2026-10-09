@@ -4,46 +4,105 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use InvalidArgumentException;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
-use function array_map;
-use function array_values;
-use function str_contains;
+use function explode;
+use function filter_var;
 use function str_ends_with;
 use function str_starts_with;
-use function substr_count;
 use function strtolower;
 use function substr;
-use function trim;
+use function substr_count;
 
 /**
  * Enforces an allowlist of accepted hosts to mitigate host header abuse.
  *
- * The value judged is $request->uri()->host(), which is the host every other
- * consumer resolves against (links, redirects, cookie domains, baseUrl()). See
- * resolveRequestHost() for why the raw Host header is deliberately not read.
+ * The host judged is the one the request URL spells, see requestAuthority().
+ * Each configured host may be:
+ * - exact: "example.com", "2001:db8::1" or "[2001:db8::1]" for an IPv6 literal
+ * - wildcard subdomain: "*.example.com"
  *
  * When allowlist is empty, all hosts are accepted.
- * Each configured host may be:
- * - exact: "example.com"
- * - wildcard subdomain: "*.example.com"
+ *
+ * allows() applies the same syntax and matching for callers that decide a host
+ * outside a request, so an application never copies the rules.
  */
 final class AllowedHostsMiddleware implements MiddlewareInterface
 {
+    /** The only port a host may carry: one to five digits, nothing else. */
+    private const PORT_PATTERN = '/^\d{1,5}$/D';
+
+    /**
+     * One label: letters, digits, hyphens and underscores (Docker service names
+     * use the last), no leading or trailing hyphen. None of them can split an
+     * authority, so accepting them is safe.
+     */
+    private const LABEL_PATTERN = '/^(?!-)[a-z0-9_-]{1,63}(?<!-)$/D';
+
+    private const MAX_NAME_LENGTH = 253;
+
+    /** Anchored: a "://" later in an origin-form target belongs to its query, not to a scheme. */
+    private const SCHEME_PATTERN = '#^[a-zA-Z][a-zA-Z0-9+.\-]*://#';
+
     /** @var list<string> */
     private array $allowedHosts;
 
     /**
      * @param list<string> $allowedHosts
+     * @throws InvalidArgumentException When an entry is not a host name, an IP
+     *   literal or a wildcard over a name. Failing at boot beats an entry that
+     *   silently matches nothing.
      */
     public function __construct(array $allowedHosts)
     {
-        $this->allowedHosts = array_values(array_map(
-            static fn (string $host): string => self::normalizeHost($host),
-            $allowedHosts,
-        ));
+        $normalized = [];
+        foreach ($allowedHosts as $entry) {
+            $host = self::normalizeEntry($entry);
+            if ($host === null) {
+                throw new InvalidArgumentException(sprintf(
+                    'Allowed host "%s": %s.',
+                    $entry,
+                    self::invalidEntryReason($entry) ?? 'not a usable host',
+                ));
+            }
+
+            $normalized[] = $host;
+        }
+
+        $this->allowedHosts = $normalized;
+    }
+
+    /**
+     * Why a configured entry is unusable, or null when it is usable. The
+     * constructor and boot-time configuration validation both call it, so they
+     * accept and refuse exactly the same entries.
+     */
+    public static function invalidEntryReason(string $entry): ?string
+    {
+        if ($entry === '') {
+            return 'an empty entry matches nothing, remove it';
+        }
+
+        if ($entry === '*') {
+            return "'*' is not a host name, use an empty list to allow every host";
+        }
+
+        if (preg_match(self::SCHEME_PATTERN, $entry) === 1) {
+            return 'drop the scheme, list the host only, such as example.com';
+        }
+
+        if (preg_match('/[^\x00-\x7F]/', $entry) === 1) {
+            return 'use the punycode form of an internationalised name, such as xn--bcher-kva.example';
+        }
+
+        if (self::normalizeEntry($entry) === null) {
+            return 'must be a host name, an IP literal, or a wildcard over a host name such as *.example.com';
+        }
+
+        return null;
     }
 
     public function process(Request $request, callable $next): Response
@@ -53,8 +112,7 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
             return $next($request);
         }
 
-        $requestHost = $this->resolveRequestHost($request);
-        if ($requestHost === null || !$this->isAllowed($requestHost)) {
+        if (!$this->allows(self::requestAuthority($request))) {
             return Response::json(['error' => 'Invalid Host header.'], 400);
         }
 
@@ -63,32 +121,38 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
     }
 
     /**
-     * The host to judge is uri()->host(), and only that.
-     *
-     * WHY NOT THE RAW HOST HEADER. It used to be read first, with the URI as a
-     * fallback, and the two can name different hosts: Request::fromGlobals lets
-     * a trusted X-Forwarded-Host decide uri()->host(), while the raw header
-     * still carries whatever the peer sent. Every downstream consumer, link
-     * generation, redirects, cookie domains and baseUrl(), reads the URI, so the
-     * allowlist was vetting a value nothing else used. An attacker only had to
-     * send an allowed Host header to get the request served with a URI pointing
-     * somewhere else.
-     *
-     * Disagreement between the two is NOT treated as an attack, because it is
-     * the normal shape of a reverse-proxy deployment: the proxy rewrites Host to
-     * an internal name and forwards the public one. Request::fromGlobals already
-     * gates that header on the trusted-proxy allowlist, so an untrusted peer
-     * cannot move uri()->host() at all, and refusing on disagreement would only
-     * break the topologies this middleware exists to protect.
+     * Whether a raw host, as a client would send it, passes this allowlist. An
+     * empty allowlist accepts every host, so do not use allows() to vet links without one.
      */
-    private function resolveRequestHost(Request $request): ?string
+    public function allows(string $host): bool
     {
-        $host = $request->uri()->host();
-        if (trim($host) === '') {
-            return null;
+        if ($this->allowedHosts === []) {
+            return true;
         }
 
-        return self::normalizeHost($host);
+        $normalized = self::normalizeHost(self::authorityOf($host));
+
+        return $normalized !== null && $this->isAllowed($normalized);
+    }
+
+    /** The authority as the URL spells it: Uri rewrites a bad port or tab, so uri()->host() is not the sent value. */
+    private static function requestAuthority(Request $request): string
+    {
+        $url = $request->uri()->full();
+        if (preg_match(self::SCHEME_PATTERN, $url, $scheme) !== 1) {
+            return $request->uri()->host();
+        }
+
+        return self::authorityOf(substr($url, strlen($scheme[0])));
+    }
+
+    /**
+     * Cuts a host, or the text after a scheme, at the first "/", "?" or "#", the
+     * point where the authority ends for a browser and for the URL parser alike.
+     */
+    private static function authorityOf(string $text): string
+    {
+        return substr($text, 0, strcspn($text, '/?#'));
     }
 
     private function isAllowed(string $requestHost): bool
@@ -116,25 +180,107 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return false;
     }
 
-    private static function normalizeHost(string $host): string
+    /**
+     * Entries are written by an operator, not sent by a client, so a bare IPv6
+     * literal is accepted here. Only a Host value has to bracket it.
+     */
+    private static function normalizeEntry(string $entry): ?string
     {
-        $normalized = strtolower(trim($host));
+        if (substr_count($entry, ':') > 1 && !str_starts_with($entry, '[')) {
+            $literal = strtolower($entry);
+
+            return self::isIpv6($literal) ? $literal : null;
+        }
+
+        $wildcard = str_starts_with($entry, '*.');
+        $host = self::normalizeHost($wildcard ? substr($entry, 2) : $entry);
+        if ($host === null) {
+            return null;
+        }
+
+        if (!$wildcard) {
+            return $host;
+        }
+
+        return self::isIpLiteral($host) ? null : '*.' . $host;
+    }
+
+    /**
+     * Reduces a raw host to its canonical form, or returns null when it is not a
+     * host name, an IPv4 literal or a bracketed IPv6 literal, with at most a
+     * numeric port. Lowercased, one trailing dot removed.
+     */
+    private static function normalizeHost(string $host): ?string
+    {
+        $normalized = strtolower($host);
+
+        if (str_starts_with($normalized, '[')) {
+            $closingBracket = strpos($normalized, ']');
+            if ($closingBracket === false) {
+                return null;
+            }
+
+            $address = substr($normalized, 1, $closingBracket - 1);
+            $suffix = substr($normalized, $closingBracket + 1);
+            $hasValidPort = str_starts_with($suffix, ':') && preg_match(self::PORT_PATTERN, substr($suffix, 1)) === 1;
+            if (($suffix !== '' && !$hasValidPort) || !self::isIpv6($address)) {
+                return null;
+            }
+
+            return $address;
+        }
+
+        $parts = explode(':', $normalized, 3);
+        if (count($parts) > 2) {
+            return null;
+        }
+
+        if (count($parts) === 2) {
+            if (preg_match(self::PORT_PATTERN, $parts[1]) !== 1) {
+                return null;
+            }
+
+            $normalized = $parts[0];
+        }
+
         if (str_ends_with($normalized, '.')) {
             $normalized = substr($normalized, 0, -1);
         }
 
-        if (str_starts_with($normalized, '[') && str_contains($normalized, ']')) {
-            $closingBracket = strpos($normalized, ']');
-            if ($closingBracket !== false) {
-                return substr($normalized, 1, $closingBracket - 1);
+        if (self::isIpv4($normalized)) {
+            return $normalized;
+        }
+
+        return self::isDnsName($normalized) ? $normalized : null;
+    }
+
+    private static function isDnsName(string $name): bool
+    {
+        if ($name === '' || strlen($name) > self::MAX_NAME_LENGTH) {
+            return false;
+        }
+
+        foreach (explode('.', $name) as $label) {
+            if (preg_match(self::LABEL_PATTERN, $label) !== 1) {
+                return false;
             }
         }
 
-        $colonPosition = strpos($normalized, ':');
-        if ($colonPosition !== false && substr_count($normalized, ':') === 1) {
-            $normalized = substr($normalized, 0, $colonPosition);
-        }
+        return true;
+    }
 
-        return $normalized;
+    private static function isIpLiteral(string $host): bool
+    {
+        return self::isIpv4($host) || self::isIpv6($host);
+    }
+
+    private static function isIpv4(string $address): bool
+    {
+        return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false;
+    }
+
+    private static function isIpv6(string $address): bool
+    {
+        return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
     }
 }

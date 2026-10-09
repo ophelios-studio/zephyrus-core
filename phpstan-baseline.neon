@@ -128,10 +128,6 @@ parameters:
             count: 1
         -
             identifier: arrayValues.list
-            path: src/Zephyrus/Security/AllowedHostsMiddleware.php
-            count: 1
-        -
-            identifier: arrayValues.list
             path: src/Zephyrus/Security/ContentSecurityPolicy.php
             count: 1
         -

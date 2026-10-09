@@ -450,4 +450,35 @@ final class SecurityConfigTest extends TestCase
 
         self::assertNull($config->encryptionKey);
     }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function malformedAllowedHostEntries(): iterable
+    {
+        yield 'bare star' => ['*', 'use an empty list to allow every host'];
+        yield 'scheme' => ['https://example.com', 'drop the scheme'];
+        yield 'unicode name' => ['bücher.example', 'punycode'];
+        yield 'path' => ['example.com/x', 'must be a host name'];
+        yield 'non-numeric port' => ['example.com:evil', 'must be a host name'];
+    }
+
+    #[DataProvider('malformedAllowedHostEntries')]
+    public function testMalformedAllowedHostEntryFailsAtBootWithTheFix(string $entry, string $fix): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'allowedHosts[0]' has invalid value '$entry'");
+        $this->expectExceptionMessage($fix);
+
+        SecurityConfig::fromArray(['allowedHosts' => [$entry]]);
+    }
+
+    public function testWildcardAndIpLiteralAllowedHostEntriesAreAccepted(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'allowedHosts' => ['*.example.com', '[2001:db8::1]', 'my_app.example.com:8443'],
+        ]);
+
+        self::assertSame(['*.example.com', '[2001:db8::1]', 'my_app.example.com:8443'], $config->allowedHosts);
+    }
 }

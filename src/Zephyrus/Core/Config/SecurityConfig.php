@@ -6,6 +6,7 @@ namespace Zephyrus\Core\Config;
 
 use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
+use Zephyrus\Security\AllowedHostsMiddleware;
 
 /**
  * Immutable configuration section for HTTP security behaviour.
@@ -198,13 +199,11 @@ final readonly class SecurityConfig
         }
 
         foreach ($allowedHosts as $i => $host) {
-            if (!is_string($host) || trim($host) === '') {
-                throw ConfigurationException::invalidValue(
-                    'security',
-                    "allowedHosts[$i]",
-                    $host,
-                    'each entry must be a non-empty string',
-                );
+            $reason = is_string($host)
+                ? AllowedHostsMiddleware::invalidEntryReason($host)
+                : 'each entry must be a host name string';
+            if ($reason !== null) {
+                throw ConfigurationException::invalidValue('security', "allowedHosts[$i]", $host, $reason);
             }
         }
 
