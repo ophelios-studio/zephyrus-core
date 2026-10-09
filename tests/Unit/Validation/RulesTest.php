@@ -19,7 +19,6 @@ final class RulesTest extends TestCase
         self::assertTrue($constructor->isPrivate());
 
         $instance = $reflection->newInstanceWithoutConstructor();
-        $constructor->setAccessible(true);
         $constructor->invoke($instance);
 
         self::assertInstanceOf(Rules::class, $instance);
