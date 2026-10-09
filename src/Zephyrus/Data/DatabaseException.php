@@ -70,6 +70,14 @@ final class DatabaseException extends ZephyrusRuntimeException
     /**
      * The message holds no SQL text.
      */
+    public static function returningNotSingleColumn(int $columns): self
+    {
+        return new self("RETURNING must name exactly one column, found {$columns}. The statement was executed.");
+    }
+
+    /**
+     * The message holds no SQL text.
+     */
     public static function returningRequired(): self
     {
         return new self('The generated id must be read with INSERT ... RETURNING id on this driver.');
