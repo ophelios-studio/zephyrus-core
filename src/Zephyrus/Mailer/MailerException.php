@@ -14,7 +14,7 @@ final class MailerException extends ZephyrusRuntimeException
     /**
      * The transport's reply.
      */
-    private ?string $transportMessage = null;
+    private ?\SensitiveParameterValue $transportMessage = null;
 
     public function __construct(
         string $message,
@@ -59,7 +59,7 @@ final class MailerException extends ZephyrusRuntimeException
      */
     public function transportMessage(): ?string
     {
-        return $this->transportMessage;
+        return $this->transportMessage?->getValue();
     }
 
     /**
@@ -113,7 +113,7 @@ final class MailerException extends ZephyrusRuntimeException
     ): self
     {
         $exception = new self($message, $failure);
-        $exception->transportMessage = $transportMessage;
+        $exception->transportMessage = new \SensitiveParameterValue($transportMessage);
 
         return $exception;
     }

@@ -64,6 +64,36 @@ final class MailerExceptionTest extends TestCase
         self::assertStringNotContainsString('jane@example.com', (string) json_encode($exception));
     }
 
+    public function testTransportTextIsAbsentFromEveryDumpAndCast(): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '1');
+
+        try {
+            $exception = MailerException::recipientsRefused('550 jane.tremblay@example.test mailbox unavailable');
+            $outputs = [
+                'print_r' => print_r($exception, true),
+                'var_export' => var_export($exception, true),
+                'array cast' => print_r((array) $exception, true),
+                'var_dump' => $this->captureVarDump($exception),
+            ];
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+
+        foreach ($outputs as $label => $output) {
+            self::assertStringNotContainsString('jane.tremblay', $output, $label);
+        }
+        self::assertSame('550 jane.tremblay@example.test mailbox unavailable', $exception->transportMessage());
+    }
+
+    private function captureVarDump(object $value): string
+    {
+        ob_start();
+        var_dump($value);
+
+        return (string) ob_get_clean();
+    }
+
     public function testSendFailedTakesNoPreviousThrowable(): void
     {
         $parameters = (new \ReflectionMethod(MailerException::class, 'sendFailed'))->getParameters();
