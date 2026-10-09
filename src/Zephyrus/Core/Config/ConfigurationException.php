@@ -165,4 +165,14 @@ final class ConfigurationException extends ZephyrusException
             . 'elsewhere (a reverse proxy, a wrapping middleware, the web server).',
         );
     }
+
+    /** Raised when ContentSecurityPolicyMiddleware is registered before a SecureHeadersMiddleware that sets its own csp. */
+    public static function shadowedContentSecurityPolicy(): self
+    {
+        return new self(
+            'ContentSecurityPolicyMiddleware is registered before SecureHeadersMiddleware, whose csp is set, '
+            . 'so the policy registered first is never sent. Register ContentSecurityPolicyMiddleware after '
+            . 'SecureHeadersMiddleware, or leave SecureHeadersConfig::csp empty.',
+        );
+    }
 }

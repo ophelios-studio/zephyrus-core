@@ -71,7 +71,8 @@ use Zephyrus\Http\Response;
  * outer one, so SecureHeadersMiddleware's csp, written first from the inside,
  * reaches the client: the policy built here, nonce included, silently
  * disappears and the inline scripts relying on that nonce stop running. Only
- * one of the two should own the CSP header.
+ * one of the two should own the CSP header. KernelBuilder::build() refuses
+ * this order among global middlewares when the csp is set.
  */
 final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterface
 {
@@ -108,6 +109,16 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         }
 
         $this->nonceTemplate = $policy instanceof ContentSecurityPolicy ? $policy : null;
+    }
+
+    /**
+     * Whether this middleware can send a non-blank enforced header on a response.
+     *
+     * @internal Read by KernelBuilder only.
+     */
+    public function sendsEnforcedPolicy(): bool
+    {
+        return !$this->reportOnly && ($this->policy !== '' || $this->nonceDirectives !== []);
     }
 
     public function process(Request $request, callable $next): Response
@@ -157,9 +168,10 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
     }
 
     /**
-     * Debug only. The usual cause is SecureHeadersMiddleware registered after
-     * this middleware: it is the inner one, so its csp is already on the
-     * response when this middleware sees it.
+     * Debug only. The header was already on the response when this middleware
+     * ran. Causes: SecureHeadersMiddleware registered after this middleware, whose
+     * csp it then sees, a route setting the header itself, or a stack built
+     * without KernelBuilder, which cannot refuse that order.
      */
     private function warnNoncePolicyNotApplied(): void
     {

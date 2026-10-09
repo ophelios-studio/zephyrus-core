@@ -50,6 +50,12 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
         return $this->applyHeaders($request, $response);
     }
 
+    /** Whether the configured csp is set, so it would replace a policy registered outside this middleware. */
+    public function hasContentSecurityPolicy(): bool
+    {
+        return trim($this->config->csp) !== '';
+    }
+
     private function applyHeaders(Request $request, Response $response): Response
     {
         if ($this->config->xFrameOptions !== '') {

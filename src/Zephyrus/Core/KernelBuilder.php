@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use Zephyrus\Container\ContainerInterface;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
@@ -13,6 +14,8 @@ use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\HandlerResolver;
 use Zephyrus\Routing\RouteDispatcher;
 use Zephyrus\Routing\Router;
+use Zephyrus\Security\ContentSecurityPolicyMiddleware;
+use Zephyrus\Security\SecureHeadersMiddleware;
 
 /**
  * Fluent builder that assembles a ready-to-use HttpKernel from high-level
@@ -232,9 +235,14 @@ final class KernelBuilder
      *
      * The builder itself is unchanged after this call and may be reused to
      * produce additional kernels (e.g. in tests).
+     *
+     * @throws ConfigurationException When an enforced ContentSecurityPolicyMiddleware is registered
+     *   before a SecureHeadersMiddleware that sets a csp. The check covers GLOBAL middlewares only.
      */
     public function build(): HttpKernel
     {
+        $this->assertNoShadowedContentSecurityPolicy();
+
         $router = $this->router ?? new Router();
         $namedMiddlewares = $this->namedRouteMiddlewares;
 
@@ -265,5 +273,28 @@ final class KernelBuilder
         }
 
         return new HttpKernel($dispatcher, $responder, $this->eventDispatcher, $globalPipeline);
+    }
+
+    /**
+     * The outer middleware sees the inner csp already on the response and
+     * leaves it, so the csp wins and the policy registered outside is never sent.
+     *
+     * @throws ConfigurationException
+     */
+    private function assertNoShadowedContentSecurityPolicy(): void
+    {
+        $enforcedPolicyOutside = false;
+
+        foreach ($this->globalMiddlewares as $middleware) {
+            if ($middleware instanceof ContentSecurityPolicyMiddleware && $middleware->sendsEnforcedPolicy()) {
+                $enforcedPolicyOutside = true;
+
+                continue;
+            }
+
+            if ($enforcedPolicyOutside && $middleware instanceof SecureHeadersMiddleware && $middleware->hasContentSecurityPolicy()) {
+                throw ConfigurationException::shadowedContentSecurityPolicy();
+            }
+        }
     }
 }

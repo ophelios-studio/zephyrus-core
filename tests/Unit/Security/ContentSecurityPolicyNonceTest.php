@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Security;
 
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
+use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Router;
@@ -373,12 +378,10 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
 
-        $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()
-            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
-            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
-            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
-            ->build()
-            ->handle(Request::fromArray('GET', '/p')));
+        $warnings = $this->captureUserWarnings(fn () => $this->handleOutsideBuilder(
+            new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+        ));
 
         self::assertCount(1, $warnings);
         self::assertStringContainsString('the nonce policy was not applied', $warnings[0]);
@@ -404,34 +407,119 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => false]]));
 
-        $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()
-            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
-            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
-            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
-            ->build()
-            ->handle(Request::fromArray('GET', '/p')));
+        $warnings = $this->captureUserWarnings(fn () => $this->handleOutsideBuilder(
+            new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+        ));
 
         self::assertSame([], $warnings);
     }
 
     /**
-     * The trap that remains: registered before SecureHeadersMiddleware, the nonce
-     * policy is the outer middleware, so SecureHeadersMiddleware's csp, written
-     * first from the inside, reaches the client and the nonce is gone.
+     * Runs the stack without KernelBuilder, which refuses this order at build
+     * time. The runtime warning stays for stacks the builder cannot inspect.
      */
-    public function testSecureHeadersRegisteredAfterTheNoncedPolicyReplacesIt(): void
+    private function handleOutsideBuilder(MiddlewareInterface $outer, MiddlewareInterface $inner): Response
     {
-        $cspMiddleware = new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']);
-        $secureHeaders = new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"]));
+        return (new MiddlewarePipeline([$outer, $inner]))->handle(
+            Request::fromArray('GET', '/p'),
+            static fn (Request $request): Response => Response::text(nonce()),
+        );
+    }
 
-        $response = KernelBuilder::create()
-            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
-            ->withMiddleware($cspMiddleware)
-            ->withMiddleware($secureHeaders)
-            ->build()
-            ->handle(Request::fromArray('GET', '/p'));
+    /**
+     * Registered before SecureHeadersMiddleware, this middleware is the outer
+     * one: SecureHeadersMiddleware's csp is already on the response when it
+     * runs, so the nonce policy is dropped on every request. Refused at build.
+     */
+    public function testBuildRefusesNoncedPolicyRegisteredBeforeSecureHeadersWithACsp(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('ContentSecurityPolicyMiddleware');
+        $this->expectExceptionMessage('SecureHeadersMiddleware');
 
-        self::assertSame("default-src 'none'", $response->headers['content-security-policy']);
+        KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build();
+    }
+
+    public function testBuildRefusesPlainPolicyRegisteredBeforeSecureHeadersWithACsp(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy()))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build();
+    }
+
+    public function testBuildAcceptsPolicyRegisteredBeforeSecureHeadersWithoutACsp(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy()))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray([])))
+            ->build();
+
+        self::assertInstanceOf(HttpKernel::class, $kernel);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function blankPolicies(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'whitespace' => [" \t\n "];
+    }
+
+    #[DataProvider('blankPolicies')]
+    public function testBuildAcceptsBlankPolicyRegisteredBeforeSecureHeadersWithACsp(string $blank): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($blank))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build();
+
+        self::assertInstanceOf(HttpKernel::class, $kernel);
+    }
+
+    public function testBuildAcceptsEmptyObjectPolicyRegisteredBeforeSecureHeadersWithACsp(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware(ContentSecurityPolicy::create()))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build();
+
+        self::assertInstanceOf(HttpKernel::class, $kernel);
+    }
+
+    public function testBuildRefusesEmptyPolicyWithANonceRegisteredBeforeSecureHeadersWithACsp(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware(ContentSecurityPolicy::create(), nonceDirectives: ['script-src']))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build();
+    }
+
+    public function testBuildAcceptsBlankCspOnSecureHeadersAsNotConfigured(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy()))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => " \t "])))
+            ->build();
+
+        self::assertInstanceOf(HttpKernel::class, $kernel);
+    }
+
+    public function testBuildAcceptsReportOnlyPolicyRegisteredBeforeSecureHeadersWithACsp(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), reportOnly: true))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])))
+            ->build();
+
+        self::assertInstanceOf(HttpKernel::class, $kernel);
     }
 }
 
