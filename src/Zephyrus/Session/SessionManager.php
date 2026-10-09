@@ -88,20 +88,29 @@ final class SessionManager
      * Register a custom session save handler.
      *
      * Must be called **before** start() so that PHP uses the handler when
-     * opening the session. No-op in override-storage (test) mode.
+     * opening the session. Throws SessionException when PHP refuses the
+     * registration (a session is already active), and then keeps no handler,
+     * so handler() never reports one PHP is not using. In override-storage
+     * (test) mode the handler is recorded but not registered.
+     *
+     * @throws SessionException
      */
     public function setHandler(\SessionHandlerInterface $handler): void
     {
-        $this->handler = $handler;
-
         if ($this->overrideStorage !== null) {
             // Recorded but not registered: override mode never opens a real
             // PHP session, so there is nothing for PHP to call. Recording it
             // is what lets a consumer test assert the wiring it just built.
+            $this->handler = $handler;
+
             return;
         }
 
-        session_set_save_handler($handler, true);
+        if (!self::quietly(static fn (): bool => session_set_save_handler($handler, true))) {
+            throw SessionException::saveHandlerRefused();
+        }
+
+        $this->handler = $handler;
     }
 
     /** The handler registered through setHandler(), or null when none was. */
@@ -382,6 +391,26 @@ final class SessionManager
     {
         if ($key === '') {
             throw SessionException::invalidKey($key);
+        }
+    }
+
+    /**
+     * Runs a session_*() call with PHP's warning swallowed, so its boolean
+     * answer is the signal and the SessionException is the only one raised.
+     *
+     * PHP's warning text names absolute server paths, which must not reach an
+     * exception message, so it is discarded rather than re-raised.
+     *
+     * @param callable(): bool $call
+     */
+    private static function quietly(callable $call): bool
+    {
+        set_error_handler(static fn (): bool => true);
+
+        try {
+            return $call();
+        } finally {
+            restore_error_handler();
         }
     }
 }

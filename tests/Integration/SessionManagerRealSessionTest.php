@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Integration;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\SessionConfig;
+use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
 
 /**
@@ -29,6 +30,33 @@ final class SessionManagerRealSessionTest extends TestCase
 
         self::assertFalse($session->isStarted());
         self::assertSame(PHP_SESSION_NONE, session_status());
+    }
+
+    // ── setHandler ────────────────────────────────────────────────────────────
+
+    /**
+     * PHP refuses to swap the save handler while a session is active. It warns
+     * and answers false, and the old code kept the handler anyway, so the app
+     * believed sessions went to the database while PHP kept writing them to
+     * files.
+     */
+    #[RunInSeparateProcess]
+    public function testSetHandlerThrowsWhenPhpRefusesTheHandlerBecauseASessionIsActive(): void
+    {
+        session_start();
+
+        $session = new SessionManager();
+        $thrown  = null;
+
+        try {
+            $session->setHandler(new StrictModeAwareHandler());
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertNull($session->handler(), 'a handler PHP refused must not be kept');
+        self::assertSame('files', ini_get('session.save_handler'));
     }
 
     // ── start ─────────────────────────────────────────────────────────────────
