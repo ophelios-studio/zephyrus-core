@@ -6,6 +6,10 @@ namespace Zephyrus\Core;
 
 use Closure;
 use Tracy\Debugger;
+use Tracy\Dumper;
+use Tracy\Dumper\Describer;
+use Tracy\Dumper\Value;
+use Zephyrus\Core\Config\ConfigSection;
 
 /**
  * Wires Tracy Debugger integration based on application configuration.
@@ -106,7 +110,7 @@ final class DebugIntegration
      *
      * dump() and the debug bar do not apply this pattern; only the exact names
      * (SENSITIVE_KEYS, SENSITIVE_PROPERTIES and the session name) reach them.
-     * A replacement scrubber should call isSensitiveKey().
+     * The Bluescreen skips int, float, bool and null values; exact names mask any value.
      */
     public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
@@ -172,7 +176,7 @@ final class DebugIntegration
     }
 
     /**
-     * Teach Tracy the framework's own secret-bearing key names.
+     * Teach Tracy the framework's own secret-bearing key names and how to render config sections.
      *
      * Both registries are written because they feed different renderers:
      * Debugger::$keysToHide reaches dump() and the debug bar, while the
@@ -183,6 +187,14 @@ final class DebugIntegration
         if ($sessionName !== null) {
             self::$applicationKeys = array_values(array_unique([...self::$applicationKeys, $sessionName]));
         }
+
+        // Entries become public properties so Tracy's sensitivity check still sees them.
+        // @phpstan-ignore assign.propertyType (Tracy's phpdoc omits callables, its Describer invokes any)
+        Dumper::$objectExporters[ConfigSection::class] = static function (ConfigSection $section, Value $value, Describer $describer): void {
+            foreach ($section->toArray() as $key => $entry) {
+                $describer->addPropertyTo($value, (string) $key, $entry, Value::PropertyPublic, null, $section::class);
+            }
+        };
 
         $hidden = array_values(array_unique([
             ...self::SENSITIVE_KEYS,
@@ -206,7 +218,7 @@ final class DebugIntegration
         // Composed, not replaced: an application scrubber set before boot still applies.
         $previous = $current;
         $frameworkScrubber = static fn (string $key, mixed $value, ?string $class): bool
-            => self::isSensitiveKey($key)
+            => self::isSensitiveEntry($key, $value)
             || ($previous !== null && (bool) $previous($key, $value, $class));
 
         self::$frameworkScrubber = $frameworkScrubber;
@@ -214,15 +226,36 @@ final class DebugIntegration
     }
 
     /**
-     * Whether the framework masks this name on the Bluescreen, ignoring case and a leading dollar sign.
+     * Whether the name matches an exact sensitive name or SENSITIVE_KEY_PATTERN, ignoring case and a leading dollar sign.
      */
     public static function isSensitiveKey(string $key): bool
     {
-        $name = strtolower(ltrim($key, '$'));
+        return self::matchesSensitivePattern($key) || self::isExactSensitiveName($key);
+    }
 
-        if (preg_match(self::SENSITIVE_KEY_PATTERN, $name) === 1) {
+    /**
+     * Exact names mask any value; the name pattern skips int, float, bool and null,
+     * so a numeric setting such as a minimum password length stays readable.
+     */
+    private static function isSensitiveEntry(string $key, mixed $value): bool
+    {
+        if (self::isExactSensitiveName($key)) {
             return true;
         }
+
+        $isReadableScalar = $value === null || is_bool($value) || is_int($value) || is_float($value);
+
+        return !$isReadableScalar && self::matchesSensitivePattern($key);
+    }
+
+    private static function matchesSensitivePattern(string $key): bool
+    {
+        return preg_match(self::SENSITIVE_KEY_PATTERN, strtolower(ltrim($key, '$'))) === 1;
+    }
+
+    private static function isExactSensitiveName(string $key): bool
+    {
+        $name = strtolower(ltrim($key, '$'));
 
         return in_array($name, array_map(strtolower(...), [...self::SENSITIVE_KEYS, ...self::$applicationKeys]), true);
     }

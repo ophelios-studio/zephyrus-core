@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Tracy\Debugger;
+use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Data\DatabaseException;
 
@@ -258,6 +259,123 @@ final class DebugIntegrationTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
+    public function testBlueScreenKeepsScalarValuesOfPatternKeysVisible(): void
+    {
+        $html = $this->renderBlueScreenWithArgument([
+            'passwordMinLength' => 424242,
+            'tokenTtl' => 1.5,
+            'passwordResetEnabled' => true,
+            'apiKeyHint' => null,
+        ]);
+
+        self::assertTrue(str_contains($html, '["passwordMinLength",424242]'), 'A pattern key masked an int value.');
+        self::assertTrue(str_contains($html, '["tokenTtl",1.5]'), 'A pattern key masked a float value.');
+        self::assertTrue(str_contains($html, '["passwordResetEnabled",true]'), 'A pattern key masked a bool value.');
+        self::assertTrue(str_contains($html, '["apiKeyHint",null]'), 'A pattern key masked a null value.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksArraysAndObjectsOfPatternKeys(): void
+    {
+        $token = self::marker('tokens');
+        $objectSecret = self::marker('apikeys');
+        $html = $this->renderBlueScreenWithArgument([
+            'tokens' => [$token],
+            'apiKeys' => (object) ['stripe' => $objectSecret],
+        ]);
+
+        self::assertFalse(str_contains($html, $token), 'A pattern key rendered an array value.');
+        self::assertFalse(str_contains($html, $objectSecret), 'A pattern key rendered an object value.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksArrayValuesOfExactSecretKeys(): void
+    {
+        $secret = self::marker('secret');
+        $html = $this->renderBlueScreenWithArgument(['password' => ['nested' => $secret]]);
+
+        self::assertFalse(str_contains($html, $secret), 'An exact secret key rendered its array value.');
+    }
+
+    public function testDumpRendersConfigSectionSecretsRedacted(): void
+    {
+        $secret = self::marker('section');
+
+        $stdout = $this->runChildProcess(
+            '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . ' $section = new class(["api" => ["signing" => ' . var_export($secret, true) . ', "host" => "visible-host"]]) extends Zephyrus\\Core\\Config\\ConfigSection { protected array $secretKeys = ["api.signing"]; };'
+            . ' Tracy\\Debugger::dump($section);'
+            . " echo 'SENTINEL';",
+        );
+
+        self::assertTrue(str_contains($stdout, 'visible-host'), 'Control: an unlisted value must still be dumped.');
+        self::assertTrue(str_contains($stdout, ConfigSection::REDACTED), 'dump() did not redact the section secret.');
+        self::assertFalse(str_contains($stdout, $secret), 'dump() rendered a config section secret.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenRendersConfigSectionSecretsRedacted(): void
+    {
+        $secret = self::marker('section');
+        $section = new class(['api' => ['signing' => $secret, 'host' => 'visible-host']]) extends ConfigSection {
+            protected array $secretKeys = ['api.signing'];
+        };
+
+        $html = $this->renderBlueScreenWithArgument(['section' => $section]);
+
+        self::assertTrue(str_contains($html, 'visible-host'), 'Control: an unlisted value must still render.');
+        self::assertTrue(str_contains($html, ConfigSection::REDACTED), 'The bluescreen did not redact the section secret.');
+        self::assertFalse(str_contains($html, $secret), 'The bluescreen rendered a config section secret.');
+    }
+
+    public function testDumpMasksUndeclaredConfigSectionSecrets(): void
+    {
+        $password = self::marker('password');
+        $token = self::marker('token');
+        $apiKey = self::marker('apikey');
+
+        $stdout = $this->runChildProcess(
+            '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . ' $section = new class(["password" => ' . var_export($password, true)
+            . ', "token" => ' . var_export($token, true)
+            . ', "apiKey" => ' . var_export($apiKey, true)
+            . ', "host" => "visible-host"]) extends Zephyrus\\Core\\Config\\ConfigSection {};'
+            . ' Tracy\\Debugger::dump($section);'
+            . " echo 'SENTINEL';",
+        );
+
+        self::assertTrue(str_contains($stdout, 'visible-host'), 'Control: an unlisted value must still be dumped.');
+        self::assertFalse(str_contains($stdout, $password), 'dump() rendered an undeclared config section password.');
+        self::assertFalse(str_contains($stdout, $token), 'dump() rendered an undeclared config section token.');
+        self::assertFalse(str_contains($stdout, $apiKey), 'dump() rendered an undeclared config section api key.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksUndeclaredConfigSectionSecrets(): void
+    {
+        $password = self::marker('password');
+        $token = self::marker('token');
+        $apiKey = self::marker('apikey');
+        $dbPassword = self::marker('dbpassword');
+        $section = new class(['password' => $password, 'token' => $token, 'apiKey' => $apiKey, 'dbPassword' => $dbPassword, 'host' => 'visible-host']) extends ConfigSection {};
+
+        $html = $this->renderBlueScreenWithArgument(['section' => $section]);
+
+        self::assertTrue(str_contains($html, 'visible-host'), 'Control: an unlisted value must still render.');
+        self::assertFalse(str_contains($html, $password), 'The bluescreen rendered an undeclared config section password.');
+        self::assertFalse(str_contains($html, $token), 'The bluescreen rendered an undeclared config section token.');
+        self::assertFalse(str_contains($html, $apiKey), 'The bluescreen rendered an undeclared config section api key.');
+        self::assertFalse(str_contains($html, $dbPassword), 'The bluescreen rendered an undeclared config section pattern-only password.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testBlueScreenOmitsTheEnvironmentSection(): void
     {
         $_SERVER['SERVER_NAME'] = self::marker('visible');
@@ -340,7 +458,7 @@ final class DebugIntegrationTest extends TestCase
      * Throws from a frame whose argument carries $config, so the bluescreen
      * renders that argument as part of the stack trace.
      *
-     * @param array<string, string> $config
+     * @param array<string, mixed> $config
      */
     private function renderBlueScreenWithArgument(array $config): string
     {
@@ -362,7 +480,7 @@ final class DebugIntegrationTest extends TestCase
     }
 
     /**
-     * @param array<string, string> $config
+     * @param array<string, mixed> $config
      */
     private function throwWithConfig(array $config): never
     {
