@@ -33,6 +33,10 @@ final class EnvironmentVariable
      */
     public static function read(string $name): ?string
     {
+        if (str_contains($name, "\0")) {
+            throw new \InvalidArgumentException('Environment variable names must not contain a NUL byte.');
+        }
+
         $upper = strtoupper($name);
 
         if (in_array($upper, self::REFUSED_NAMES, true)) {

@@ -47,11 +47,17 @@ final class EnvironmentVariableTest extends TestCase
         'h2_stream_tag',
     ];
 
+    private const NUL_NAMES = ["QUERY_STRING\0x", "ZEPHYRUS_TEST_X\0", "HTTP_ZEPHYRUS_TEST\0x"];
+
     protected function tearDown(): void
     {
         foreach (self::NAMES as $name) {
             unset($_ENV[$name], $_SERVER[$name]);
             putenv($name);
+        }
+
+        foreach (self::NUL_NAMES as $name) {
+            unset($_ENV[$name]);
         }
 
         parent::tearDown();
@@ -241,6 +247,40 @@ final class EnvironmentVariableTest extends TestCase
         putenv('SERVER_NAME_ALIAS=edge');
 
         self::assertSame('edge', EnvironmentVariable::read('SERVER_NAME_ALIAS'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function namesWithANulByte(): iterable
+    {
+        foreach (self::NUL_NAMES as $name) {
+            yield addcslashes($name, "\0") => [$name];
+        }
+    }
+
+    #[DataProvider('namesWithANulByte')]
+    public function testANameContainingANulByteIsRefusedWhenTheEnvSuperglobalHoldsIt(string $name): void
+    {
+        $_ENV[$name] = 'client';
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('NUL byte');
+
+        EnvironmentVariable::read($name);
+    }
+
+    #[DataProvider('namesWithANulByte')]
+    public function testANameContainingANulByteIsRefusedWhenTheProcessEnvironmentHoldsTheTruncatedName(string $name): void
+    {
+        putenv('QUERY_STRING=client');
+        putenv('ZEPHYRUS_TEST_X=1');
+        putenv('HTTP_ZEPHYRUS_TEST=1');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('NUL byte');
+
+        EnvironmentVariable::read($name);
     }
 
     public function testAMissingVariableReadsAsNull(): void
