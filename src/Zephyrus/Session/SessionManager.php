@@ -178,6 +178,14 @@ final class SessionManager
             return;
         }
 
+        if (headers_sent($file, $line)) {
+            throw SessionException::startRefused(sprintf(
+                'Session cannot be started after headers have already been sent (sent from %s on line %d)',
+                $file,
+                $line,
+            ));
+        }
+
         ini_set('session.use_strict_mode', '1');
 
         if ($config->idleTimeout !== null) {

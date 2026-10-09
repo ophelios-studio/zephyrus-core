@@ -328,17 +328,21 @@ final class SessionManagerRealSessionTest extends TestCase
 
     /**
      * PHP refuses to start a session once output is sent. The app would then
-     * write data that is never saved, so start() must say so.
+     * write data that is never saved, so start() must say so, before any ini
+     * or cookie setting raises a warning of its own with absolute paths.
      */
     #[RunInSeparateProcess]
-    public function testStartThrowsWhenPhpRefusesToStartTheSession(): void
+    public function testStartThrowsWithoutAWarningOnceOutputIsSent(): void
     {
         $session = new SessionManager();
         $this->sendOutputToBrowser();
 
-        // PHP also warns about each ini and cookie setting start() applies after
-        // output, and those warnings are expected here, so they are set aside.
-        set_error_handler(static fn (): bool => true);
+        $warnings = [];
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        });
         $thrown = null;
         try {
             $session->start(SessionConfig::fromArray([]));
@@ -349,6 +353,7 @@ final class SessionManagerRealSessionTest extends TestCase
         }
 
         self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertSame([], $warnings);
         self::assertSame(PHP_SESSION_NONE, session_status());
         self::assertStringContainsString('headers', (string) $thrown->phpReason());
     }
