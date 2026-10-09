@@ -136,6 +136,18 @@ final class MailerTest extends TestCase
         $mailer->template('emails/welcome');
     }
 
+    public function testInvalidRecipientMessageNamesMethodNotAddress(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        try {
+            $mailer->cc('not an address');
+            self::fail('An invalid address was accepted.');
+        } catch (MailerException $e) {
+            self::assertSame('Invalid email address given to cc().', $e->getMessage());
+        }
+    }
+
     public function testAttachThrowsForMissingFile(): void
     {
         $mailer = new Mailer($this->config);

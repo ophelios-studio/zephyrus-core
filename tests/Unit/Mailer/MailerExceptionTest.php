@@ -16,10 +16,12 @@ final class MailerExceptionTest extends TestCase
         self::assertInstanceOf(ZephyrusRuntimeException::class, $exception);
     }
 
-    public function testSendFailed(): void
+    public function testSendFailedKeepsTransportTextOffTheMessage(): void
     {
-        $exception = MailerException::sendFailed('SMTP timeout');
-        self::assertStringContainsString('SMTP timeout', $exception->getMessage());
+        $exception = MailerException::sendFailed('550 jane@example.com mailbox unavailable');
+
+        self::assertSame('The mail transport refused the message.', $exception->getMessage());
+        self::assertSame('550 jane@example.com mailbox unavailable', $exception->transportMessage);
     }
 
     public function testSendFailedWithPrevious(): void
@@ -29,10 +31,11 @@ final class MailerExceptionTest extends TestCase
         self::assertSame($previous, $exception->getPrevious());
     }
 
-    public function testInvalidAddress(): void
+    public function testInvalidAddressNamesTheMethodNotTheAddress(): void
     {
-        $exception = MailerException::invalidAddress('not-an-email');
-        self::assertStringContainsString('not-an-email', $exception->getMessage());
+        $exception = MailerException::invalidAddress('cc');
+
+        self::assertSame('Invalid email address given to cc().', $exception->getMessage());
     }
 
     public function testAttachmentNotFound(): void

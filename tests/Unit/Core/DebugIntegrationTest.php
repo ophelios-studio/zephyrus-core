@@ -12,6 +12,7 @@ use Tracy\Debugger;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Data\DatabaseException;
+use Zephyrus\Mailer\MailerException;
 
 final class DebugIntegrationTest extends TestCase
 {
@@ -255,6 +256,26 @@ final class DebugIntegrationTest extends TestCase
         }
 
         self::assertFalse(str_contains($html, $email), 'The bluescreen rendered the driver message with a column value.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksTheMailerTransportMessage(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $email = 'jane-' . self::marker('email') . '@example.com';
+
+        $exception = MailerException::sendFailed('550 ' . $email . ' mailbox unavailable');
+        $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . bin2hex(random_bytes(8)) . '.html';
+
+        try {
+            Debugger::getBlueScreen()->renderToFile($exception, $file);
+            $html = (string) file_get_contents($file);
+        } finally {
+            @unlink($file);
+        }
+
+        self::assertFalse(str_contains($html, $email), 'The bluescreen rendered the mailer transport message.');
     }
 
     #[RunInSeparateProcess]

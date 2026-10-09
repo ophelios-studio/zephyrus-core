@@ -103,6 +103,7 @@ final class DebugIntegration
     public const array SENSITIVE_PROPERTIES = [
         'Zephyrus\Http\RequestBody::$raw',
         'Zephyrus\Data\DatabaseException::$driverMessage',
+        'Zephyrus\Mailer\MailerException::$transportMessage',
     ];
 
     /**

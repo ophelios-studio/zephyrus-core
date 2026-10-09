@@ -65,7 +65,7 @@ final class Mailer
         try {
             $this->mail->addAddress($address, $name);
         } catch (PHPMailerException $e) {
-            throw MailerException::invalidAddress($address);
+            throw MailerException::invalidAddress('to');
         }
 
         return $this;
@@ -79,7 +79,7 @@ final class Mailer
         try {
             $this->mail->addCC($address, $name);
         } catch (PHPMailerException $e) {
-            throw MailerException::invalidAddress($address);
+            throw MailerException::invalidAddress('cc');
         }
 
         return $this;
@@ -93,7 +93,7 @@ final class Mailer
         try {
             $this->mail->addBCC($address, $name);
         } catch (PHPMailerException $e) {
-            throw MailerException::invalidAddress($address);
+            throw MailerException::invalidAddress('bcc');
         }
 
         return $this;
@@ -107,7 +107,7 @@ final class Mailer
         try {
             $this->mail->addReplyTo($address, $name);
         } catch (PHPMailerException $e) {
-            throw MailerException::invalidAddress($address);
+            throw MailerException::invalidAddress('replyTo');
         }
 
         return $this;
@@ -222,8 +222,8 @@ final class Mailer
 
         try {
             $this->mail->addAttachment($path, $name);
-        } catch (PHPMailerException $e) {
-            throw MailerException::sendFailed('Failed to add attachment: ' . $e->getMessage(), $e);
+        } catch (PHPMailerException) {
+            throw MailerException::attachmentRejected($path, 'could not be attached');
         }
 
         return $this;
@@ -239,7 +239,7 @@ final class Mailer
         try {
             $this->mail->send();
         } catch (PHPMailerException $e) {
-            throw MailerException::sendFailed($e->getMessage(), $e);
+            throw MailerException::sendFailed($e->getMessage());
         }
     }
 
@@ -331,7 +331,7 @@ final class Mailer
             try {
                 $this->mail->setFrom($config->fromAddress, $config->fromName);
             } catch (PHPMailerException $e) {
-                throw MailerException::invalidAddress($config->fromAddress);
+                throw MailerException::invalidAddress('from');
             }
         }
     }

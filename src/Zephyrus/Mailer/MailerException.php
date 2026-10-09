@@ -11,14 +11,30 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  */
 final class MailerException extends ZephyrusRuntimeException
 {
-    public static function sendFailed(string $reason, ?\Throwable $previous = null): self
-    {
-        return new self(sprintf('Failed to send email: %s', $reason), previous: $previous);
+    public function __construct(
+        string $message,
+        ?\Throwable $previous = null,
+        #[\SensitiveParameter] public readonly ?string $transportMessage = null,
+    ) {
+        parent::__construct($message, previous: $previous);
     }
 
-    public static function invalidAddress(string $address): self
+    /**
+     * Failure to send. The transport's reply goes to transportMessage, not the message, because it can name recipients.
+     *
+     * @param string $transportMessage The transport's own reply.
+     */
+    public static function sendFailed(#[\SensitiveParameter] string $transportMessage, ?\Throwable $previous = null): self
     {
-        return new self(sprintf('Invalid email address: %s', $address));
+        return new self('The mail transport refused the message.', $previous, $transportMessage);
+    }
+
+    /**
+     * @param string $method The recipient method that received the address (to, cc, bcc, replyTo, from).
+     */
+    public static function invalidAddress(string $method): self
+    {
+        return new self(sprintf('Invalid email address given to %s().', $method));
     }
 
     public static function attachmentNotFound(string $path): self
