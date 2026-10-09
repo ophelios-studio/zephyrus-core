@@ -356,6 +356,7 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame([], $warnings);
         self::assertSame(PHP_SESSION_NONE, session_status());
         self::assertStringContainsString('headers', (string) $thrown->phpReason());
+        self::assertInstanceOf(\ErrorException::class, $thrown->getPrevious());
     }
 
     #[RunInSeparateProcess]
@@ -534,7 +535,8 @@ final class SessionManagerRealSessionTest extends TestCase
 
     /**
      * PHP's warning says why it refused, and that text must not reach the
-     * message, which travels to logs and pages. It stays on phpReason().
+     * message, which travels to logs and pages. It stays on phpReason() and on
+     * the chained ErrorException a logger records.
      */
     #[RunInSeparateProcess]
     public function testRegenerateKeepsPhpReasonOffTheMessageButExposesIt(): void
@@ -553,6 +555,8 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertInstanceOf(SessionException::class, $thrown);
         self::assertStringContainsString('headers', (string) $thrown->phpReason());
         self::assertStringNotContainsString('headers', $thrown->getMessage());
+        self::assertInstanceOf(\ErrorException::class, $thrown->getPrevious());
+        self::assertSame(E_WARNING, $thrown->getPrevious()->getSeverity());
         self::assertStringNotContainsString(__FILE__, $thrown->getMessage());
     }
 

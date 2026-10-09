@@ -10,51 +10,50 @@ use Zephyrus\Exceptions\ZephyrusException;
  * Thrown when PHP refuses a session operation or the session storage is misconfigured.
  *
  * The message names the possible causes and never the warning PHP raised, since
- * that warning carries absolute server paths. The warning is kept on
- * phpReason() for the caller who needs to know which cause it was.
+ * that warning carries absolute server paths. The warning is chained as the
+ * previous exception, an ErrorException, so a logger recording the chain keeps
+ * the cause.
  */
 final class SessionException extends ZephyrusException
 {
-    private ?string $phpReason = null;
-
     public static function invalidKey(string $key): self
     {
         return new self(sprintf('Session key must be a non-empty string. Got "%s".', $key));
     }
 
-    public static function saveHandlerRefused(?string $phpReason = null): self
+    public static function saveHandlerRefused(?\ErrorException $phpWarning = null): self
     {
         return self::withReason(
             'PHP refused to install the session save handler, so sessions would keep going to the previous storage. '
             . 'Register the handler before the session starts.',
-            $phpReason,
+            $phpWarning,
         );
     }
 
-    public static function startRefused(?string $phpReason = null): self
+    public static function startRefused(?\ErrorException $phpWarning = null): self
     {
         return self::withReason(
             'PHP refused to start the session. The usual causes are output already sent to the browser, '
             . 'or a save handler that could not open or read the session.',
-            $phpReason,
+            $phpWarning,
         );
     }
 
-    public static function regenerationRefused(?string $phpReason = null): self
+    public static function regenerationRefused(?\ErrorException $phpWarning = null): self
     {
         return self::withReason(
             'PHP refused to regenerate the session id. The usual causes are output already sent to the browser, '
             . 'a save handler that could not destroy the previous session, or a save handler that could not write '
             . 'the session (its row may have been deleted by a concurrent logout).',
-            $phpReason,
+            $phpWarning,
         );
     }
 
-    public static function destructionRefused(?string $phpReason = null): self
+    public static function destructionRefused(?\ErrorException $phpWarning = null): self
     {
         return self::withReason(
             'PHP refused to destroy the session, so the stored session may still be live.',
-            $phpReason,
+            $phpWarning,
         );
     }
 
@@ -80,17 +79,19 @@ final class SessionException extends ZephyrusException
         );
     }
 
-    /** PHP's own reason for the refusal, or null when PHP gave none. */
+    /**
+     * PHP's reason for the refusal, or null when it gave none. It carries
+     * absolute paths: log it, never display it.
+     */
     public function phpReason(): ?string
     {
-        return $this->phpReason;
+        $warning = $this->getPrevious();
+
+        return $warning instanceof \ErrorException ? $warning->getMessage() : null;
     }
 
-    private static function withReason(string $message, ?string $phpReason): self
+    private static function withReason(string $message, ?\ErrorException $phpWarning): self
     {
-        $exception = new self($message);
-        $exception->phpReason = $phpReason;
-
-        return $exception;
+        return new self($message, 0, $phpWarning);
     }
 }

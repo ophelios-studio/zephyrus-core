@@ -106,8 +106,8 @@ final class SessionManager
             return;
         }
 
-        if (!self::quietly(static fn (): bool => session_set_save_handler($handler, true), $phpReason)) {
-            throw SessionException::saveHandlerRefused($phpReason);
+        if (!self::quietly(static fn (): bool => session_set_save_handler($handler, true), $phpWarning)) {
+            throw SessionException::saveHandlerRefused($phpWarning);
         }
 
         $this->handler = $handler;
@@ -179,8 +179,10 @@ final class SessionManager
         }
 
         if (headers_sent($file, $line)) {
-            throw SessionException::startRefused(sprintf(
-                'Session cannot be started after headers have already been sent (sent from %s on line %d)',
+            throw SessionException::startRefused(new \ErrorException(
+                sprintf('Session cannot be started after headers have already been sent (sent from %s on line %d)', $file, $line),
+                0,
+                E_WARNING,
                 $file,
                 $line,
             ));
@@ -203,8 +205,8 @@ final class SessionManager
             'samesite' => $config->sameSite,
         ]);
 
-        if (!self::quietly(static fn (): bool => session_start(), $phpReason)) {
-            throw SessionException::startRefused($phpReason);
+        if (!self::quietly(static fn (): bool => session_start(), $phpWarning)) {
+            throw SessionException::startRefused($phpWarning);
         }
     }
 
@@ -302,8 +304,8 @@ final class SessionManager
             throw SessionException::noActiveSession('regenerate the session id');
         }
 
-        if (!self::quietly(static fn (): bool => session_regenerate_id($deleteOld), $phpReason)) {
-            throw SessionException::regenerationRefused($phpReason);
+        if (!self::quietly(static fn (): bool => session_regenerate_id($deleteOld), $phpWarning)) {
+            throw SessionException::regenerationRefused($phpWarning);
         }
     }
 
@@ -328,8 +330,8 @@ final class SessionManager
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION = [];
 
-            if (!self::quietly(static fn (): bool => session_destroy(), $phpReason)) {
-                throw SessionException::destructionRefused($phpReason);
+            if (!self::quietly(static fn (): bool => session_destroy(), $phpWarning)) {
+                throw SessionException::destructionRefused($phpWarning);
             }
 
             return;
@@ -464,15 +466,15 @@ final class SessionManager
     /**
      * Runs a session_*() call with PHP's warning swallowed, so its boolean
      * answer is the only signal. The warning is not re-raised, since its text
-     * carries absolute server paths; it is handed back through $phpReason.
+     * carries absolute server paths; it is handed back through $phpWarning.
      *
      * @param callable(): bool $call
      */
-    private static function quietly(callable $call, ?string &$phpReason = null): bool
+    private static function quietly(callable $call, ?\ErrorException &$phpWarning): bool
     {
-        $phpReason = null;
-        set_error_handler(static function (int $severity, string $message) use (&$phpReason): bool {
-            $phpReason = $message;
+        $phpWarning = null;
+        set_error_handler(static function (int $severity, string $message, string $file, int $line) use (&$phpWarning): bool {
+            $phpWarning = new \ErrorException($message, 0, $severity, $file, $line);
 
             return true;
         });
