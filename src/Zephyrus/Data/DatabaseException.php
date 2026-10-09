@@ -60,6 +60,14 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
+     * Thrown before any statement runs. The message holds no SQL text.
+     */
+    public static function lastInsertIdRefused(): self
+    {
+        return new self('lastInsertId() is refused on PostgreSQL: use insertGetId() with INSERT ... RETURNING id.');
+    }
+
+    /**
      * PostgreSQL generated ids are only read reliably through INSERT ... RETURNING: LASTVAL() can
      * name another table's sequence. The message holds no SQL text.
      */

@@ -407,14 +407,14 @@ final class DatabaseTransactionTest extends TestCase
         $db = $this->database(new LastInsertIdFailingPdo());
 
         try {
-            $db->insertGetId('INSERT INTO entry (label) VALUES (?)', ['written']);
-            self::fail('expected the last insert id to be refused');
+            $db->lastInsertId();
+            self::fail('expected the last insert id to be reported as failed');
         } catch (DatabaseException $e) {
-            self::assertSame('55000', $e->sqlState());
-            self::assertSame('SELECT LASTVAL()', $e->sql());
-            self::assertStringContainsString('[SQLSTATE 55000]', $e->getMessage());
+            self::assertSame('HY000', $e->sqlState());
+            self::assertSame('lastInsertId()', $e->sql());
+            self::assertStringContainsString('[SQLSTATE HY000]', $e->getMessage());
             self::assertStringNotContainsString('Transaction failed', $e->getMessage());
-            self::assertStringContainsString('lastval is not yet defined', (string) $e->driverMessage());
+            self::assertStringContainsString('last insert id unavailable', (string) $e->driverMessage());
             self::assertNull($e->getPrevious());
         }
     }
@@ -577,8 +577,8 @@ final class DatabaseTransactionTest extends TestCase
     private function swallowALastInsertIdFailure(Database $db): void
     {
         try {
-            $db->insertGetId('INSERT INTO entry (label) VALUES (?)', ['written']);
-            self::fail('expected the last insert id to be refused');
+            $db->lastInsertId();
+            self::fail('expected the last insert id to be reported as failed');
         } catch (DatabaseException) {
         }
     }
@@ -727,8 +727,7 @@ final class ProbeFailingPdo extends PDO
 }
 
 /**
- * A real SQLite connection whose lastInsertId() fails as it does on PostgreSQL
- * for a table without a sequence.
+ * A real SQLite connection whose lastInsertId() fails, as a driver that cannot report the id does.
  */
 final class LastInsertIdFailingPdo extends PDO
 {
@@ -739,7 +738,7 @@ final class LastInsertIdFailingPdo extends PDO
 
     public function lastInsertId(?string $name = null): string|false
     {
-        throw DatabaseTransactionTest::driverError('55000', 'lastval is not yet defined in this session');
+        throw DatabaseTransactionTest::driverError('HY000', 'last insert id unavailable');
     }
 }
 
@@ -763,7 +762,7 @@ final class AbortingPdo extends PDO
     }
 
     /**
-     * The next lastInsertId() fails and aborts the transaction, as a failed lastval() does on PostgreSQL.
+     * The next lastInsertId() fails and aborts the transaction, as a driver that aborts on error does.
      */
     public function breakLastInsertId(): void
     {
@@ -775,7 +774,7 @@ final class AbortingPdo extends PDO
         if ($this->lastInsertIdFails) {
             $this->aborted = true;
 
-            throw DatabaseTransactionTest::driverError('55000', 'lastval is not yet defined in this session');
+            throw DatabaseTransactionTest::driverError('HY000', 'last insert id unavailable');
         }
 
         return parent::lastInsertId($name);

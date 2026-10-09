@@ -955,20 +955,23 @@ final class Database
     }
 
     /**
-     * Return the last sequence value of the session. On PostgreSQL this is LASTVAL(), which may
-     * belong to another table (a trigger can bump one): prefer INSERT ... RETURNING id with selectValue().
+     * Return the last generated id of the session. Refused on PostgreSQL, where it can name another table's
+     * sequence: use insertGetId() with INSERT ... RETURNING id.
      *
-     * @throws DatabaseException when the driver cannot report it.
+     * @throws DatabaseException on PostgreSQL, or when the driver cannot report the id.
      */
     public function lastInsertId(): string|false
     {
+        if ($this->isPostgres()) {
+            throw DatabaseException::lastInsertIdRefused();
+        }
+
         try {
             return $this->pdo->lastInsertId();
         } catch (PDOException $e) {
-            // PostgreSQL aborts the open transaction when lastval() fails, so the level must be marked.
             $this->markFailedLevel();
 
-            throw DatabaseException::queryExecutionFailed('SELECT LASTVAL()', $e);
+            throw DatabaseException::queryExecutionFailed('lastInsertId()', $e);
         }
     }
 

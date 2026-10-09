@@ -101,6 +101,14 @@ final class DatabaseInsertIdPostgresTest extends TestCase
         $this->db->insertGetId("INSERT INTO items (label) VALUES ('RETURNING id')", []);
     }
 
+    public function testLastInsertIdIsRefusedOnPostgresEvenAfterAReturningInsert(): void
+    {
+        $this->db->insertGetId('INSERT INTO items (label) VALUES (?) RETURNING id', ['first']);
+
+        $this->expectException(DatabaseException::class);
+        $this->db->lastInsertId();
+    }
+
     public function testRefusalInsideTransactionLeavesTheTransactionUsable(): void
     {
         $refused = false;

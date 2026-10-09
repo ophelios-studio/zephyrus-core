@@ -865,6 +865,28 @@ final class DatabaseTest extends TestCase
         self::assertGreaterThan(0, (int) $id);
     }
 
+    public function testLastInsertIdIsRefusedOnPostgresWithoutCallingTheDriver(): void
+    {
+        $pdo = new DriverNamePdo('sqlite::memory:');
+        $db = new Database($pdo);
+
+        try {
+            $db->lastInsertId();
+            self::fail('expected lastInsertId() to be refused on PostgreSQL');
+        } catch (DatabaseException $e) {
+            self::assertStringContainsString('insertGetId()', $e->getMessage());
+        }
+
+        self::assertFalse($pdo->lastInsertIdCalled);
+    }
+
+    public function testLastInsertIdTakesNoSequenceName(): void
+    {
+        $method = new \ReflectionMethod(Database::class, 'lastInsertId');
+
+        self::assertSame(0, $method->getNumberOfParameters());
+    }
+
     public function testInTransactionReflectsActiveTransactionState(): void
     {
         self::assertFalse($this->db->inTransaction());
@@ -999,17 +1021,21 @@ final class AttributeSpyPdo extends PDO
 }
 
 /**
- * A SQLite connection that reports another driver name, so the PostgreSQL rules run without a server.
+ * A SQLite connection that reports the PostgreSQL driver name, so its rules run without a server.
  */
 final class DriverNamePdo extends PDO
 {
-    public function __construct(string $dsn, private readonly string $driverName = 'pgsql')
+    public bool $lastInsertIdCalled = false;
+
+    public function lastInsertId(?string $name = null): string|false
     {
-        parent::__construct($dsn);
+        $this->lastInsertIdCalled = true;
+
+        return '42';
     }
 
     public function getAttribute(int $attribute): mixed
     {
-        return $attribute === PDO::ATTR_DRIVER_NAME ? $this->driverName : parent::getAttribute($attribute);
+        return $attribute === PDO::ATTR_DRIVER_NAME ? 'pgsql' : parent::getAttribute($attribute);
     }
 }

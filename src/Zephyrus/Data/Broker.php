@@ -34,11 +34,10 @@ namespace Zephyrus\Data;
  *
  *       public function insert(array $data): int
  *       {
- *           $this->execute(
- *               'INSERT INTO users (name, email) VALUES (?, ?)',
+ *           return (int) $this->insertRowGetId(
+ *               'INSERT INTO users (name, email) VALUES (?, ?) RETURNING id',
  *               [$data['name'], $data['email']]
  *           );
- *           return (int) $this->lastInsertId();
  *       }
  *   }
  */
@@ -437,8 +436,9 @@ abstract class Broker
     }
 
     /**
-     * Return the last auto-increment ID produced by an INSERT in this
-     * broker's connection.
+     * Return the last generated ID of this broker's connection. Refused on PostgreSQL: use insertRowGetId().
+     *
+     * @throws DatabaseException on PostgreSQL, or when the driver cannot report the ID.
      */
     protected function lastInsertId(): string|false
     {
