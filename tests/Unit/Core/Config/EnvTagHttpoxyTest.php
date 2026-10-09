@@ -97,7 +97,9 @@ final class EnvTagHttpoxyTest extends TestCase
         $_SERVER['PHP_AUTH_PW'] = 'typed-by-client';
         unset($_ENV['PHP_AUTH_PW']);
 
-        self::assertNull($this->resolve('PHP_AUTH_PW'));
+        $this->expectException(\Zephyrus\Core\Config\ConfigurationException::class);
+
+        $this->resolve('PHP_AUTH_PW');
     }
 
     public function testEnvTakesPrecedenceAndDefaultsStillApply(): void

@@ -17,8 +17,8 @@ if (!function_exists('env')) {
      * Read an environment variable, with $_ENV and the process environment as sources.
      *
      * $_SERVER is never consulted: it also carries request data, so a value
-     * there is client-controlled. Names starting with HTTP_ or REDIRECT_ are
-     * refused with an InvalidArgumentException.
+     * there is client-controlled. Names starting with HTTP_ or REDIRECT_, and CGI
+     * meta-variables such as QUERY_STRING, are refused with an InvalidArgumentException.
      *
      * @param string $key     The environment variable name.
      * @param mixed  $default Default value when the variable is not set.

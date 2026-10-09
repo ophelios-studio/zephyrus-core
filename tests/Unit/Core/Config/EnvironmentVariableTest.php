@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\EnvironmentVariable;
 
@@ -17,8 +18,18 @@ final class EnvironmentVariableTest extends TestCase
         'ZEPHYRUS_TEST_NON_SCALAR',
         'PHP_AUTH_PW',
         'HTTP_ZEPHYRUS_TEST',
+        'http_zephyrus_test',
         'REDIRECT_ZEPHYRUS_TEST',
         'APP_HTTP_TIMEOUT',
+        'SERVER_NAME_ALIAS',
+        'QUERY_STRING',
+        'CONTENT_TYPE',
+        'REQUEST_URI',
+        'SERVER_NAME',
+        'HTTPS',
+        'PHP_AUTH_USER',
+        'DOCUMENT_ROOT',
+        'query_string',
     ];
 
     protected function tearDown(): void
@@ -58,7 +69,9 @@ final class EnvironmentVariableTest extends TestCase
         // Set by mod_php under Apache: the client's typed password.
         $_SERVER['PHP_AUTH_PW'] = 'typed';
 
-        self::assertNull(EnvironmentVariable::read('PHP_AUTH_PW'));
+        $this->expectException(\InvalidArgumentException::class);
+
+        EnvironmentVariable::read('PHP_AUTH_PW');
     }
 
     public function testZeroIsReturnedAsTheStringZero(): void
@@ -125,6 +138,62 @@ final class EnvironmentVariableTest extends TestCase
         putenv('APP_HTTP_TIMEOUT=5');
 
         self::assertSame('5', EnvironmentVariable::read('APP_HTTP_TIMEOUT'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function cgiMetaVariableNames(): iterable
+    {
+        foreach (['QUERY_STRING', 'CONTENT_TYPE', 'REQUEST_URI', 'SERVER_NAME', 'HTTPS', 'PHP_AUTH_USER', 'DOCUMENT_ROOT'] as $name) {
+            yield $name => [$name];
+        }
+    }
+
+    #[DataProvider('cgiMetaVariableNames')]
+    public function testACgiMetaVariableIsRefusedWhenTheEnvSuperglobalHoldsIt(string $name): void
+    {
+        $_ENV[$name] = 'client';
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage($name);
+
+        EnvironmentVariable::read($name);
+    }
+
+    #[DataProvider('cgiMetaVariableNames')]
+    public function testACgiMetaVariableIsRefusedWhenTheProcessEnvironmentHoldsIt(string $name): void
+    {
+        putenv($name . '=client');
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        EnvironmentVariable::read($name);
+    }
+
+    public function testACgiMetaVariableNameIsRefusedInAnyCase(): void
+    {
+        putenv('query_string=client');
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        EnvironmentVariable::read('query_string');
+    }
+
+    public function testAnHttpPrefixedNameIsRefusedInLowercase(): void
+    {
+        $_ENV['http_zephyrus_test'] = '1';
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        EnvironmentVariable::read('http_zephyrus_test');
+    }
+
+    public function testANameMerelyStartingLikeACgiMetaVariableIsStillRead(): void
+    {
+        putenv('SERVER_NAME_ALIAS=edge');
+
+        self::assertSame('edge', EnvironmentVariable::read('SERVER_NAME_ALIAS'));
     }
 
     public function testAMissingVariableReadsAsNull(): void

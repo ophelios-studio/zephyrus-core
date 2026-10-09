@@ -51,7 +51,9 @@ final class FunctionsTest extends TestCase
         $_SERVER['PHP_AUTH_PW'] = 'typed';
 
         try {
-            self::assertNull(env('PHP_AUTH_PW'));
+            $this->expectException(\InvalidArgumentException::class);
+
+            env('PHP_AUTH_PW');
         } finally {
             unset($_SERVER['PHP_AUTH_PW']);
         }

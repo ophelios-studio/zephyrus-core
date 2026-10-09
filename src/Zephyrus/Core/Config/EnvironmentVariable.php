@@ -9,18 +9,39 @@ namespace Zephyrus\Core\Config;
  */
 final class EnvironmentVariable
 {
+    private const REFUSED_PREFIXES = ['HTTP_', 'REDIRECT_'];
+
+    /** @var list<string> */
+    private const CGI_META_VARIABLES = [
+        'AUTH_TYPE', 'CONTENT_LENGTH', 'CONTENT_TYPE', 'GATEWAY_INTERFACE', 'PATH_INFO',
+        'PATH_TRANSLATED', 'QUERY_STRING', 'REMOTE_ADDR', 'REMOTE_HOST', 'REMOTE_IDENT',
+        'REMOTE_USER', 'REQUEST_METHOD', 'SCRIPT_NAME', 'SERVER_NAME', 'SERVER_PORT',
+        'SERVER_PROTOCOL', 'SERVER_SOFTWARE', 'REQUEST_URI', 'DOCUMENT_URI', 'DOCUMENT_ROOT',
+        'SCRIPT_FILENAME', 'REQUEST_SCHEME', 'HTTPS', 'PHP_AUTH_USER', 'PHP_AUTH_PW',
+        'PHP_AUTH_DIGEST',
+    ];
+
     /**
-     * Names starting with HTTP_ or REDIRECT_ are refused with an InvalidArgumentException.
+     * Refuses request-carrying names with an InvalidArgumentException.
      *
-     * Under plain CGI the process environment is built from request headers, so
-     * such a name can carry client data. Refusing it loudly beats a silent default.
+     * Names starting with HTTP_ or REDIRECT_, and CGI meta-variables such as QUERY_STRING,
+     * hold client data under CGI and php-fpm. They are matched case-insensitively.
      *
      * @throws \InvalidArgumentException
      */
     public static function read(string $name): ?string
     {
-        foreach (['HTTP_', 'REDIRECT_'] as $prefix) {
-            if (str_starts_with($name, $prefix)) {
+        $upper = strtoupper($name);
+
+        if (in_array($upper, self::CGI_META_VARIABLES, true)) {
+            throw new \InvalidArgumentException(sprintf(
+                '%s: CGI meta-variables carry request data and are never read as configuration; rename the variable.',
+                $name,
+            ));
+        }
+
+        foreach (self::REFUSED_PREFIXES as $prefix) {
+            if (str_starts_with($upper, $prefix)) {
                 throw new \InvalidArgumentException(sprintf(
                     '%s: names starting with %s carry request data under CGI and are never read as configuration; rename the variable.',
                     $name,
