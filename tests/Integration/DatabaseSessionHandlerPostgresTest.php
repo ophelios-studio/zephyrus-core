@@ -296,8 +296,9 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertTrue($reader->write($id, $read));
         $reader->close();
 
-        self::assertSame($payload, $this->handler()->read($id));
-        self::assertEquals($cart, unserialize(substr($payload, strlen('user_id|i:1;cart|'))));
+        $roundTripped = $this->handler()->read($id);
+        self::assertSame($payload, $roundTripped);
+        self::assertEquals($cart, unserialize(substr($roundTripped, strlen('user_id|i:1;cart|'))));
     }
 
     public function testAPayloadThatIsNotUtf8RoundTrips(): void
