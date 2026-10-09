@@ -382,7 +382,8 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
         self::assertCount(1, $warnings);
         self::assertStringContainsString('the nonce policy was not applied', $warnings[0]);
-        self::assertStringContainsString('after SecureHeadersMiddleware', $warnings[0]);
+        self::assertStringContainsString('by SecureHeadersMiddleware registered after this middleware', $warnings[0]);
+        self::assertStringContainsString('Register ContentSecurityPolicyMiddleware after SecureHeadersMiddleware', $warnings[0]);
     }
 
     public function testNoNonceWarningWhenTheNoncePolicyIsAppliedInDebugMode(): void

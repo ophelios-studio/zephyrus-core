@@ -157,9 +157,9 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
     }
 
     /**
-     * Debug only. The usual cause is SecureHeadersMiddleware registered before
-     * this middleware: it wrote its csp first from the inside, so the nonce
-     * policy is silently dropped. Say so, with the fix.
+     * Debug only. The usual cause is SecureHeadersMiddleware registered after
+     * this middleware: it is the inner one, so its csp is already on the
+     * response when this middleware sees it.
      */
     private function warnNoncePolicyNotApplied(): void
     {
@@ -170,7 +170,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         trigger_error(
             sprintf(
                 'Content-Security-Policy: the nonce policy was not applied because %s is already set on the '
-                . 'response, by SecureHeadersMiddleware registered before this middleware or by a route. '
+                . 'response, by SecureHeadersMiddleware registered after this middleware or by a route. '
                 . 'Register ContentSecurityPolicyMiddleware after SecureHeadersMiddleware, or leave '
                 . 'SecureHeadersConfig::csp empty.',
                 $this->headerName(),
