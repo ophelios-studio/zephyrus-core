@@ -129,7 +129,7 @@ final class Mailer
     }
 
     /**
-     * Set a raw HTML body.
+     * Set a raw HTML body. The PHPMailer body is recomposed on each call, so an AltBody set on getPhpMailer() is replaced.
      */
     public function html(string $body): self
     {
@@ -139,7 +139,7 @@ final class Mailer
     }
 
     /**
-     * Set a plain text body (or alternative text for HTML emails).
+     * Set a plain text body (or alternative text for HTML emails). The PHPMailer body is recomposed on each call, so an AltBody set on getPhpMailer() is replaced.
      */
     public function text(string $body): self
     {
