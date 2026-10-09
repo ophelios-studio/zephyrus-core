@@ -33,8 +33,9 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * process-wide flag would put row values back into every sink that prints an
  * exception, production included. Diagnosis reads driverMessage() on purpose.
  *
- * queryFailed() and connectionFailed() print what their caller passes; Database::fromConfig() passes the driver's connect error, which
- * names the server and user but holds no row data.
+ * queryFailed() and connectionFailed() print what their caller passes.
+ * Database::fromConfig() passes the driver's connect error, which names the
+ * server and user but holds no row data.
  */
 final class DatabaseException extends ZephyrusRuntimeException
 {
