@@ -123,6 +123,8 @@ final readonly class Request
         'x-client-ip',
     ];
 
+    /** @var array<string, mixed> */
+    public array $query;
     private Uri $uri;
     private RequestBody $body;
     private HeaderBag $headerBag;
@@ -130,7 +132,7 @@ final readonly class Request
 
     /**
      * @param RequestBody|array<string, mixed> $body
-     * @param array<string, mixed> $query
+     * @param array<string, mixed>|null $query Null derives the query from the URI.
      * @param HeaderBag|array<string, mixed> $headers
      * @param CookieJar|array<string, string> $cookies
      * @param array<string, mixed> $attributes
@@ -143,7 +145,7 @@ final readonly class Request
         public string $method,
         Uri|string $uri,
         RequestBody|array $body = [],
-        public array $query = [],
+        ?array $query = null,
         HeaderBag|array $headers = [],
         CookieJar|array $cookies = [],
         public array $attributes = [],
@@ -153,6 +155,7 @@ final readonly class Request
         public array $routeParameters = [],
     ) {
         $this->uri = self::canonicalizeUri($uri);
+        $this->query = $query ?? self::parseQueryString($this->uri->queryString());
         $this->body = $body instanceof RequestBody
             ? $body
             : new RequestBody($body, $rawBody);
@@ -231,7 +234,7 @@ final readonly class Request
      * and constructs sub-objects internally.
      *
      * @param array<string, mixed> $body
-     * @param array<string, mixed> $query
+     * @param array<string, mixed>|null $query Null derives the query from the URI.
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
@@ -243,7 +246,7 @@ final readonly class Request
         string $method,
         string $uri,
         array $body = [],
-        array $query = [],
+        ?array $query = null,
         array $headers = [],
         array $cookies = [],
         array $attributes = [],
@@ -571,6 +574,16 @@ final readonly class Request
         $canonical = self::canonicalizeUrl($uri->full());
 
         return $canonical === $uri->full() ? $uri : new Uri($canonical);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function parseQueryString(string $queryString): array
+    {
+        parse_str($queryString, $query);
+
+        return $query;
     }
 
     /**

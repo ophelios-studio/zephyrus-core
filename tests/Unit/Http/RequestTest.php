@@ -1752,6 +1752,30 @@ final class RequestTest extends TestCase
         self::assertSame([], $request->getParameters());
     }
 
+    public function testQueryIsDerivedFromUriWhenOmitted(): void
+    {
+        $request = new Request('GET', '/p?a=1&b[]=2');
+
+        self::assertSame('1', $request->query('a'));
+        self::assertSame(['2'], $request->query('b'));
+        self::assertSame(['a' => '1', 'b' => ['2']], $request->query);
+    }
+
+    public function testExplicitEmptyQueryOverridesUriQueryString(): void
+    {
+        $request = new Request('GET', '/p?periode=x', query: []);
+
+        self::assertSame([], $request->query);
+        self::assertNull($request->query('periode'));
+    }
+
+    public function testExplicitQueryIsUsedAsIs(): void
+    {
+        $request = new Request('GET', '/p?periode=x', query: ['page' => '2']);
+
+        self::assertSame(['page' => '2'], $request->query);
+    }
+
     public function testGetHeaderReturnsHeaderValue(): void
     {
         $request = Request::fromArray(
@@ -1770,5 +1794,21 @@ final class RequestTest extends TestCase
 
         self::assertNull($request->getHeader('X-Missing'));
         self::assertSame('text/html', $request->getHeader('Accept', 'text/html'));
+    }
+
+    public function testFromArrayDerivesTheQueryFromTheUriWhenNoneIsGiven(): void
+    {
+        $request = Request::fromArray(method: 'GET', uri: '/p?periode=x&page=2');
+
+        self::assertSame('x', $request->query('periode'));
+        self::assertSame(['periode' => 'x', 'page' => '2'], $request->query);
+    }
+
+    public function testFromArrayKeepsAnExplicitEmptyQuery(): void
+    {
+        $request = Request::fromArray(method: 'GET', uri: '/p?periode=x', query: []);
+
+        self::assertSame([], $request->query);
+        self::assertNull($request->query('periode'));
     }
 }
