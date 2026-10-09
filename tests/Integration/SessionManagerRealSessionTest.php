@@ -433,6 +433,30 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     /**
+     * With regenerate(false) the old row is kept, so PHP writes through the
+     * handler, and a refused write is a cause the message must name.
+     */
+    #[RunInSeparateProcess]
+    public function testRegenerateMessageNamesAHandlerThatRefusesToWrite(): void
+    {
+        $session = new SessionManager();
+        $session->setHandler(new WriteRefusingHandler());
+        $session->start(SessionConfig::fromArray([]));
+
+        $thrown = null;
+        try {
+            $session->regenerate(false);
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertStringContainsString('write', $thrown->getMessage());
+        self::assertStringContainsString('destroy', $thrown->getMessage());
+        self::assertStringContainsString('output', $thrown->getMessage());
+    }
+
+    /**
      * PHP will not rotate an id once output has reached the browser, because
      * the new id could never be sent in a cookie. The old code reported success
      * anyway, so a login could finish with the pre-login id still live.
@@ -540,5 +564,16 @@ final class RecordingDestroyHandler implements \SessionHandlerInterface
         return true;
     }
 
+    public function gc(int $maxLifetime): int|false { return 0; }
+}
+
+/** A handler whose write() always fails, as a database handler can when its update query fails. */
+final class WriteRefusingHandler implements \SessionHandlerInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return false; }
+    public function destroy(string $id): bool { return true; }
     public function gc(int $maxLifetime): int|false { return 0; }
 }
