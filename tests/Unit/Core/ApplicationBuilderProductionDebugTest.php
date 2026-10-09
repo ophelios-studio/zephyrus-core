@@ -141,11 +141,18 @@ final class ApplicationBuilderProductionDebugTest extends TestCase
         // The guard logs, and in a child process error_log() would go to stderr
         // and be read as a failure. Redirect it; testTheRefusalIsWritten...
         // above is what asserts the content.
-        ini_set('error_log', (string) tempnam(sys_get_temp_dir(), 'zephyrus-debug-guard-'));
+        $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-debug-guard-');
+        self::assertIsString($logFile);
+        ini_set('error_log', $logFile);
 
-        ApplicationBuilder::fromConfiguration(Configuration::fromArray([
-            'application' => ['environment' => 'production', 'debug' => true],
-        ]))->build();
+        try {
+            ApplicationBuilder::fromConfiguration(Configuration::fromArray([
+                'application' => ['environment' => 'production', 'debug' => true],
+            ]))->build();
+        } finally {
+            ini_set('error_log', '');
+            @unlink($logFile);
+        }
 
         self::assertFalse(Debugger::isEnabled());
     }

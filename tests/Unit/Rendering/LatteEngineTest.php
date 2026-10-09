@@ -17,13 +17,14 @@ final class LatteEngineTest extends TestCase
     protected function setUp(): void
     {
         $this->viewsDir = __DIR__ . '/fixtures/views';
-        $this->cacheDir = __DIR__ . '/fixtures/cache';
+        $this->cacheDir = sys_get_temp_dir() . '/zephyrus-latte-' . bin2hex(random_bytes(8));
+        mkdir($this->cacheDir, 0775, true);
     }
 
     protected function tearDown(): void
     {
-        // Clean up generated cache files.
         $this->cleanDirectory($this->cacheDir);
+        @rmdir($this->cacheDir);
     }
 
     public function testImplementsRenderEngine(): void

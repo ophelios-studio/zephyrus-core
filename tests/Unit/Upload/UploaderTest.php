@@ -11,6 +11,16 @@ use Zephyrus\Upload\Uploader;
 
 final class UploaderTest extends TestCase
 {
+    /** @var list<string> */
+    private array $tempPaths = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->tempPaths as $path) {
+            is_dir($path) ? $this->removeDir($path) : @unlink($path);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
@@ -22,6 +32,7 @@ final class UploaderTest extends TestCase
             self::fail('Unable to create temp file for upload tests.');
         }
         file_put_contents($path, $contents);
+        $this->tempPaths[] = $path;
 
         return $path;
     }
@@ -30,6 +41,7 @@ final class UploaderTest extends TestCase
     {
         $path = sys_get_temp_dir() . '/zep-uploader-' . bin2hex(random_bytes(8));
         mkdir($path, 0775, true);
+        $this->tempPaths[] = $path;
 
         return $path;
     }
