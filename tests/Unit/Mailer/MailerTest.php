@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Mailer;
 
+use PHPMailer\PHPMailer\Exception as PHPMailerException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Mailer\Mailer;
 use Zephyrus\Mailer\MailerConfig;
 use Zephyrus\Mailer\MailerException;
+use Zephyrus\Mailer\MailerFailure;
 use Zephyrus\Rendering\RenderEngine;
 
 final class MailerTest extends TestCase
@@ -220,6 +222,57 @@ final class MailerTest extends TestCase
         } catch (MailerException $e) {
             self::assertSame('Invalid email address given to cc().', $e->getMessage());
         }
+    }
+
+    public function testPartialRefusalFromTheTransportMapsToRecipientsRefused(): void
+    {
+        $mailer = new Mailer($this->config);
+        $reason = $mailer->getPhpMailer()->getTranslations()['recipients_failed'];
+
+        $mapped = $this->mapTransportFailure(
+            $mailer,
+            new PHPMailerException($reason . 'a@example.test: 550 no such user', PHPMailer::STOP_CONTINUE),
+        );
+
+        self::assertSame(MailerFailure::RecipientsRefused, $mapped->failure);
+        self::assertSame($reason . 'a@example.test: 550 no such user', $mapped->transportMessage());
+        foreach ($mapped->getTrace() as $frame) {
+            if (($frame['function'] ?? null) === 'transportFailure') {
+                self::assertStringNotContainsString('a@example.test', print_r($frame['args'] ?? [], true));
+            }
+        }
+        self::assertNull($mapped->getPrevious());
+    }
+
+    public function testAttachmentUnreadableAtSendTimeIsNotARecipientRefusal(): void
+    {
+        $mailer = new Mailer($this->config);
+        $reason = $mailer->getPhpMailer()->getTranslations()['file_open'];
+
+        $mapped = $this->mapTransportFailure(
+            $mailer,
+            new PHPMailerException($reason . '/missing/report.pdf', PHPMailer::STOP_CONTINUE),
+        );
+
+        self::assertSame(MailerFailure::SendFailed, $mapped->failure);
+    }
+
+    public function testUncodedTransportErrorMapsToSendFailed(): void
+    {
+        $mapped = $this->mapTransportFailure(
+            new Mailer($this->config),
+            new PHPMailerException('SMTP connect() failed.', PHPMailer::STOP_CRITICAL),
+        );
+
+        self::assertSame(MailerFailure::SendFailed, $mapped->failure);
+    }
+
+    private function mapTransportFailure(Mailer $mailer, PHPMailerException $error): MailerException
+    {
+        $mapped = (new \ReflectionMethod(Mailer::class, 'transportFailure'))->invoke($mailer, $error);
+        self::assertInstanceOf(MailerException::class, $mapped);
+
+        return $mapped;
     }
 
     public function testAttachThrowsForMissingFile(): void

@@ -261,14 +261,14 @@ final class Mailer
     /**
      * Send the email.
      *
-     * @throws MailerException if sending fails; its transportMessage() may name recipients.
+     * @throws MailerException if sending fails, with a MailerFailure of SendFailed or RecipientsRefused; its transportMessage() may name recipients.
      */
     public function send(): void
     {
         try {
             $this->mail->send();
         } catch (PHPMailerException $e) {
-            throw MailerException::sendFailed($e->getMessage());
+            throw $this->transportFailure($e);
         }
     }
 
@@ -278,6 +278,21 @@ final class Mailer
     public function getPhpMailer(): PHPMailer
     {
         return $this->mail;
+    }
+
+    /**
+     * PHPMailer raises STOP_CONTINUE after DATA went to the accepted recipients,
+     * but also when an attachment cannot be read while the body is built, before
+     * any DATA. Only the first one means recipients were refused.
+     */
+    private function transportFailure(#[\SensitiveParameter] PHPMailerException $e): MailerException
+    {
+        $recipientsRefused = $e->getCode() === PHPMailer::STOP_CONTINUE
+            && str_starts_with($e->getMessage(), $this->mail->getTranslations()['recipients_failed']);
+
+        return $recipientsRefused
+            ? MailerException::recipientsRefused($e->getMessage())
+            : MailerException::sendFailed($e->getMessage());
     }
 
     /**

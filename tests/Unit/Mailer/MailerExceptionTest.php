@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Mailer;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 use Zephyrus\Mailer\MailerException;
@@ -27,6 +28,28 @@ final class MailerExceptionTest extends TestCase
             $exception->getMessage(),
         );
         self::assertSame('550 jane@example.com mailbox unavailable', $exception->transportMessage());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function transportReasonFactoryProvider(): iterable
+    {
+        yield 'sendFailed' => ['sendFailed'];
+        yield 'recipientsRefused' => ['recipientsRefused'];
+    }
+
+    #[DataProvider('transportReasonFactoryProvider')]
+    public function testTransportReplyIsAbsentFromTheTrace(string $factory): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            $exception = MailerException::$factory('550 jane.tremblay@example.test mailbox unavailable');
+            self::assertStringNotContainsString('jane.tremblay', print_r($exception->getTrace(), true));
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
     }
 
     public function testTransportTextIsNotAPublicProperty(): void

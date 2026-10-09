@@ -31,14 +31,27 @@ final class MailerException extends ZephyrusRuntimeException
      */
     public static function sendFailed(#[\SensitiveParameter] string $transportMessage): self
     {
-        $exception = new self(
+        return self::withheldReason(
             'The mail transport did not accept the message; the reason is withheld, '
             . 'read transportMessage() (it may name recipients).',
             MailerFailure::SendFailed,
+            $transportMessage,
         );
-        $exception->transportMessage = $transportMessage;
+    }
 
-        return $exception;
+    /**
+     * One or more recipients were refused. Its reply goes to transportMessage(), not the message, because it can name recipients.
+     *
+     * @param string $transportMessage The transport's own reply.
+     */
+    public static function recipientsRefused(#[\SensitiveParameter] string $transportMessage): self
+    {
+        return self::withheldReason(
+            'One or more recipients were refused and others may have received the message; the reason is withheld, '
+            . 'read transportMessage() (it may name recipients).',
+            MailerFailure::RecipientsRefused,
+            $transportMessage,
+        );
     }
 
     /**
@@ -77,5 +90,17 @@ final class MailerException extends ZephyrusRuntimeException
     public static function configurationMissing(string $detail): self
     {
         return new self(sprintf('Mailer configuration missing: %s', $detail), MailerFailure::ConfigurationMissing);
+    }
+
+    private static function withheldReason(
+        string $message,
+        MailerFailure $failure,
+        #[\SensitiveParameter] string $transportMessage,
+    ): self
+    {
+        $exception = new self($message, $failure);
+        $exception->transportMessage = $transportMessage;
+
+        return $exception;
     }
 }
