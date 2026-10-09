@@ -6,38 +6,138 @@ on:
   pull_request:
     branches: [dev, main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    name: PHP ${{ matrix.php }} (${{ matrix.deps }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.4'
+            deps: locked
+            coverage: true
+            checks: true
+          - php: '8.5'
+            deps: locked
+            coverage: false
+            checks: false
+          - php: '8.4'
+            deps: lowest
+            coverage: false
+            checks: false
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          php-version: '8.4'
-          extensions: mbstring, pdo, pdo_sqlite, intl, sodium, fileinfo
-          coverage: xdebug
+          persist-credentials: false
 
-      - run: composer install --no-interaction --prefer-dist
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo, pdo_sqlite, intl, sodium, fileinfo, apcu
+          ini-values: apc.enable_cli=1
+          coverage: ${{ matrix.coverage && 'xdebug' || 'none' }}
 
-      # Fails the build on a known-vulnerable dependency. A framework that sells security
-      # must not ship one. Three symfony/yaml DoS advisories sat in the lock unnoticed
-      # until a hand-run audit found them, because nothing checked.
+      - name: Validate composer.json
+        if: matrix.checks
+        run: composer validate --strict --no-interaction
+
+      - name: Install locked dependencies
+        if: matrix.deps == 'locked'
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install lowest dependencies
+        if: matrix.deps == 'lowest'
+        run: composer update --prefer-lowest --prefer-stable --no-interaction
+
+      # Fails on a known-vulnerable dependency: a security framework must not ship one.
       - name: Dependency audit
+        if: matrix.checks
         run: composer audit --no-interaction
 
       - name: Static analysis
+        if: matrix.checks
         run: php vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
       - name: Run tests with coverage
+        if: matrix.coverage
         run: php vendor/bin/phpunit --coverage-clover coverage.xml
 
+      - name: Run tests
+        if: ${{ !matrix.coverage }}
+        run: php vendor/bin/phpunit
+
       - name: Upload coverage to Codecov
-        if: success()
-        uses: codecov/codecov-action@v5
+        if: success() && matrix.coverage
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: coverage.xml
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  commits:
+    runs-on: ubuntu-24.04
+    name: Commit messages
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compute commit range
+        id: range
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          is_sha() { [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if ! is_sha "$PR_BASE_SHA" || ! is_sha "$PR_HEAD_SHA"; then
+              echo "::error::unexpected base or head SHA"
+              exit 1
+            fi
+            range="$PR_BASE_SHA..$PR_HEAD_SHA"
+          else
+            if ! is_sha "$HEAD_SHA"; then
+              echo "::error::unexpected commit SHA"
+              exit 1
+            fi
+            range="$HEAD_SHA^!"
+            if is_sha "$PUSH_BEFORE_SHA" && ! [[ "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
+              if git merge-base --is-ancestor "$PUSH_BEFORE_SHA" "$HEAD_SHA" 2>/dev/null; then
+                range="$PUSH_BEFORE_SHA..$HEAD_SHA"
+              else
+                git fetch --no-tags origin "$PUSH_BEFORE_SHA" >/dev/null 2>&1 \
+                  || echo "could not fetch $PUSH_BEFORE_SHA; trying the local history"
+                if base=$(git merge-base "$PUSH_BEFORE_SHA" "$HEAD_SHA" 2>/dev/null); then
+                  range="$base..$HEAD_SHA"
+                  echo "The previous tip is not an ancestor (force push): checking $base..$HEAD_SHA"
+                else
+                  echo "No merge base with the previous tip: checking the new tip only"
+                fi
+              fi
+            fi
+          fi
+
+          echo "range=$range" >> "$GITHUB_OUTPUT"
+
+      - name: Check commit messages
+        env:
+          RANGE: ${{ steps.range.outputs.range }}
+        run: .github/scripts/check-commit-messages.sh "$RANGE"
