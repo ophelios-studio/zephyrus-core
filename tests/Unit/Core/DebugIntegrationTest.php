@@ -33,7 +33,7 @@ final class DebugIntegrationTest extends TestCase
             $this->markTestSkipped('Tracy not installed.');
         }
 
-        $logDir = sys_get_temp_dir() . '/zephyrus-tracy-test-' . uniqid('', true);
+        $logDir = sys_get_temp_dir() . '/zephyrus-tracy-test-' . bin2hex(random_bytes(8));
         mkdir($logDir, 0755, true);
 
         try {
@@ -244,7 +244,7 @@ final class DebugIntegrationTest extends TestCase
         $driverMessage = 'SQLSTATE[23505]: DETAIL: Key (email)=(' . $email . ') already exists.';
 
         $exception = DatabaseException::queryExecutionFailed('insert into users', new \PDOException($driverMessage));
-        $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . uniqid('', true) . '.html';
+        $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . bin2hex(random_bytes(8)) . '.html';
 
         try {
             Debugger::getBlueScreen()->renderToFile($exception, $file);
@@ -349,7 +349,7 @@ final class DebugIntegrationTest extends TestCase
         try {
             $this->throwWithConfig($config);
         } catch (\RuntimeException $exception) {
-            $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . uniqid('', true) . '.html';
+            $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . bin2hex(random_bytes(8)) . '.html';
 
             try {
                 Debugger::getBlueScreen()->renderToFile($exception, $file);
