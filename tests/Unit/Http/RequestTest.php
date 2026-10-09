@@ -1865,15 +1865,15 @@ final class RequestTest extends TestCase
 
     public function testExplicitEmptyQueryOverridesUriQueryString(): void
     {
-        $request = new Request('GET', '/p?periode=x', query: []);
+        $request = new Request('GET', '/p?period=x', query: []);
 
         self::assertSame([], $request->query);
-        self::assertNull($request->query('periode'));
+        self::assertNull($request->query('period'));
     }
 
     public function testExplicitQueryIsUsedAsIs(): void
     {
-        $request = new Request('GET', '/p?periode=x', query: ['page' => '2']);
+        $request = new Request('GET', '/p?period=x', query: ['page' => '2']);
 
         self::assertSame(['page' => '2'], $request->query);
     }
@@ -1900,18 +1900,18 @@ final class RequestTest extends TestCase
 
     public function testFromArrayDerivesTheQueryFromTheUriWhenNoneIsGiven(): void
     {
-        $request = Request::fromArray(method: 'GET', uri: '/p?periode=x&page=2');
+        $request = Request::fromArray(method: 'GET', uri: '/p?period=x&page=2');
 
-        self::assertSame('x', $request->query('periode'));
-        self::assertSame(['periode' => 'x', 'page' => '2'], $request->query);
+        self::assertSame('x', $request->query('period'));
+        self::assertSame(['period' => 'x', 'page' => '2'], $request->query);
     }
 
     public function testFromArrayKeepsAnExplicitEmptyQuery(): void
     {
-        $request = Request::fromArray(method: 'GET', uri: '/p?periode=x', query: []);
+        $request = Request::fromArray(method: 'GET', uri: '/p?period=x', query: []);
 
         self::assertSame([], $request->query);
-        self::assertNull($request->query('periode'));
+        self::assertNull($request->query('period'));
     }
 
     public function testRouteIsNullBeforeRouting(): void

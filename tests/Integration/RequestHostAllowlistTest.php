@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -40,7 +41,7 @@ final class RequestHostAllowlistTest extends TestCase
         ];
     }
 
-    private function kernel(): \Zephyrus\Core\HttpKernel
+    private function kernel(): HttpKernel
     {
         $router = (new Router())->get('/p', HostAllowlistController::class . '@page');
 

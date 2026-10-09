@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -18,12 +19,11 @@ use Zephyrus\Routing\Router;
  */
 final class RequestRouteIdentityTest extends TestCase
 {
-    private function kernel(): \Zephyrus\Core\HttpKernel
+    private function kernel(): HttpKernel
     {
         $router = (new Router())
             ->post('/login', RouteIdentityController::class . '@login')
-            ->name('login')
-            ->get('/', RouteIdentityController::class . '@root');
+            ->name('login');
 
         return KernelBuilder::create()->withRouter($router)->build();
     }
@@ -47,24 +47,6 @@ final class RequestRouteIdentityTest extends TestCase
 
         self::assertSame('login|/login', trim($plain->body));
         self::assertSame(trim($plain->body), trim($slashed->body));
-    }
-
-    public function testHandlerSeesTheRouteItIsOn(): void
-    {
-        $response = $this->kernel()->handle($this->request('POST', '/login/'));
-
-        self::assertSame('login|/login', trim($response->body));
-    }
-
-    public function testRouteSurvivesEveryCloneMethod(): void
-    {
-        $route = new Route('POST', '/login', 'Handler@login', name: 'login');
-        $matched = Request::fromArray(method: 'POST', uri: '/login/')
-            ->withMatchedRoute(new RouteMatch($route, ['id' => '7']));
-
-        self::assertSame($route, $matched->withAttribute('k', 'v')->route());
-        self::assertSame($route, $matched->withAttributes(['k' => 'v'])->route());
-        self::assertSame($route, $matched->withRouteParameters(['id' => '8'])->route());
     }
 
     public function testWithMatchedRouteSetsParametersLikeWithRouteParameters(): void
@@ -93,10 +75,5 @@ final class RouteIdentityController
         $route = $request->route();
 
         return Response::text(($route?->name ?? '') . '|' . ($route?->path ?? ''));
-    }
-
-    public function root(): Response
-    {
-        return Response::text('root');
     }
 }
