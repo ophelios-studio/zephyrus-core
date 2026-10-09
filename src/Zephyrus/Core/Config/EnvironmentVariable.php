@@ -23,10 +23,11 @@ final class EnvironmentVariable
     ];
 
     /**
-     * Refuses request-carrying names with an InvalidArgumentException.
+     * Reads a configuration value from $_ENV, then from the process environment.
      *
-     * Names starting with HTTP_ or REDIRECT_, and CGI meta-variables such as QUERY_STRING,
-     * hold client data under CGI and php-fpm. They are matched case-insensitively.
+     * Names that carry request data under CGI, php-fpm or Apache are refused: those starting
+     * with a REFUSED_PREFIXES entry, and those listed in CGI_META_VARIABLES. Matching ignores
+     * case. A server may pass other request-derived names.
      *
      * @throws \InvalidArgumentException
      */
