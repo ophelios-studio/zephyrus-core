@@ -837,12 +837,12 @@ final class Database
     }
 
     /**
-     * Execute an INSERT ... RETURNING id and return the id it yields, or false when no row comes back
-     * (e.g. ON CONFLICT DO NOTHING). Other drivers without RETURNING fall back to lastInsertId().
+     * Execute an INSERT ... RETURNING id and return the single RETURNING column of its first row, or false when
+     * no row comes back (e.g. ON CONFLICT DO NOTHING). Other drivers without RETURNING fall back to lastInsertId().
      *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on PostgreSQL and SQLite when the SQL has no RETURNING clause, before it runs, or
-     *         when the statement returns no column or more than one, after it ran.
+     *         when RETURNING yields no column or more than one, after it ran.
      */
     public function insertGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {

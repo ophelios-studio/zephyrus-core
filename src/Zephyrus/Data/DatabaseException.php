@@ -60,7 +60,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * Thrown before any statement runs. The message holds no SQL text.
+     * The message holds no SQL text.
      */
     public static function lastInsertIdRefused(): self
     {
