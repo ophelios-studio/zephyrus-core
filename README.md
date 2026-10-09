@@ -140,11 +140,12 @@ $request->files      // uploaded files
 Response::json(['key' => 'value']);
 Response::json($data, 201);
 Response::redirect('/login');
+Response::localRedirect($request->query['next'] ?? '/'); // a target from the request: local paths only
 Response::html('<p>Hello</p>');
-Response::plain('OK');
+Response::text('OK');
 ```
 
-Responses are immutable — `withHeader()`, `withStatus()`, and `withBody()` return new instances.
+Responses are immutable: `withHeader()`, `withHeaders()`, `withoutHeader()` and `withStatus()` return new instances.
 
 ### Validation
 

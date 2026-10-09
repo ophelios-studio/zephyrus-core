@@ -19,6 +19,12 @@ final readonly class Response
      */
     private const HEADER_NAME_PATTERN = "/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/D";
 
+    /**
+     * One leading "/" that is not followed by another "/" or a backslash, then
+     * no backslash and no ASCII control character (0x00-0x1F, 0x7F).
+     */
+    private const LOCAL_PATH_PATTERN = '#^/(?![/\\\\])[^\x00-\x1F\x7F\\\\]*+$#D';
+
     private const STATUS_PHRASES = [
         100 => 'Continue',
         101 => 'Switching Protocols',
@@ -97,7 +103,8 @@ final readonly class Response
 
     /**
      * Returns a redirect response. The given URL is placed in the Location
-     * header and the body is empty.
+     * header and the body is empty. Never pass user input here: use
+     * localRedirect() for a target that comes from a request.
      *
      * Default status is 302 Found. Common alternatives:
      *   301  Moved Permanently  -- cacheable, only safe to use for GET/HEAD.
@@ -108,6 +115,37 @@ final readonly class Response
     public static function redirect(string $url, int $status = 302): self
     {
         return new self(body: '', status: $status, headers: ['location' => $url]);
+    }
+
+    /**
+     * Redirects to $target only when it is a path on this site, otherwise to
+     * $fallback. Use it for a target read from a request, such as a "next"
+     * parameter, which would otherwise be an open redirect.
+     *
+     * A local path starts with exactly one "/", has no backslash anywhere and
+     * no ASCII control character (tab, CR, LF and NUL included). Those are the
+     * forms a browser reads as another host or that break the header line. A
+     * percent-encoded CRLF stays local: it is inert in a Location header.
+     *
+     * A non-string target, such as an array from ?next[]=x, falls back too. $fallback
+     * is chosen by the code, not by a user, so a non-local fallback is a
+     * programming error and throws instead of redirecting.
+     *
+     * @throws InvalidArgumentException When $fallback is not a local path.
+     */
+    public static function localRedirect(mixed $target, string $fallback = '/', int $status = 302): self
+    {
+        if (preg_match(self::LOCAL_PATH_PATTERN, $fallback) !== 1) {
+            throw new InvalidArgumentException(sprintf(
+                'The redirect fallback "%s" must be a local path starting with a single "/".',
+                $fallback,
+            ));
+        }
+
+        $isLocal = is_string($target) && preg_match(self::LOCAL_PATH_PATTERN, $target) === 1;
+        $location = $isLocal ? $target : $fallback;
+
+        return self::redirect($location, $status);
     }
 
     /**
@@ -165,6 +203,30 @@ final readonly class Response
                 $name,
             ));
         }
+    }
+
+    /**
+     * Whether a header of this name is present, whatever its value. The name is
+     * compared case-insensitively because the constructor does not normalise it.
+     */
+    public function hasHeader(string $name): bool
+    {
+        return $this->getHeader($name) !== null;
+    }
+
+    /**
+     * The stored value of a header, or null when it is absent. Case-insensitive,
+     * for the same reason as hasHeader().
+     */
+    public function getHeader(string $name): ?string
+    {
+        foreach ($this->headers as $existing => $value) {
+            if (strcasecmp((string) $existing, $name) === 0) {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     public function withoutHeader(string $name): self

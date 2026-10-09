@@ -35,6 +35,11 @@ final class SampleController extends Controller
         return $this->text('pong');
     }
 
+    public function follow(mixed $target): Response
+    {
+        return $this->localRedirect($target);
+    }
+
     public function pingWithStatus(): Response
     {
         return $this->text('pong', 202);
@@ -134,6 +139,21 @@ final class ControllerTest extends TestCase
     protected function setUp(): void
     {
         $this->controller = new SampleController();
+    }
+
+    public function testLocalRedirectHelperRefusesAnExternalTarget(): void
+    {
+        $response = $this->controller->follow('//evil.example');
+
+        self::assertSame(302, $response->status);
+        self::assertSame('/', $response->headers['location']);
+    }
+
+    public function testLocalRedirectHelperFollowsALocalTarget(): void
+    {
+        $response = $this->controller->follow('/account?tab=profile');
+
+        self::assertSame('/account?tab=profile', $response->headers['location']);
     }
 
     public function testJsonHelperReturns200WithJsonContentType(): void

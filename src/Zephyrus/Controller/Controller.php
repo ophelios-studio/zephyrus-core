@@ -145,11 +145,20 @@ abstract class Controller implements ControllerLifecycleInterface
     }
 
     /**
-     * Returns a redirect response.
+     * Returns a redirect response. Never pass user input here: see localRedirect().
      */
     protected function redirect(string $url, int $status = 302): Response
     {
         return Response::redirect($url, $status);
+    }
+
+    /**
+     * Redirects to a local path, or to $fallback when $target is not one. Use it
+     * for a target read from the request. See Response::localRedirect().
+     */
+    protected function localRedirect(mixed $target, string $fallback = '/', int $status = 302): Response
+    {
+        return Response::localRedirect($target, $fallback, $status);
     }
 
     /**

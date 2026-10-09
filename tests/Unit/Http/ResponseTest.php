@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Http;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
@@ -482,5 +483,126 @@ final class ResponseTest extends TestCase
         // Header content is validated via toHeaderLines(); SAPI header list is
         // only available in CGI/FPM contexts, not PHP CLI.
         self::assertSame(['allow: GET, POST'], $response->toHeaderLines());
+    }
+
+    /**
+     * A target taken from a request must stay on this site. Anything that a
+     * browser could read as another origin, or as a header break, falls back.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function localRedirectTargets(): iterable
+    {
+        yield 'plain path' => ['/account', '/account'];
+        yield 'path with query and fragment' => ['/a?b=c#d', '/a?b=c#d'];
+        yield 'root' => ['/', '/'];
+        yield 'encoded CRLF is still a local path' => ['/a%0d%0aSet-Cookie', '/a%0d%0aSet-Cookie'];
+        yield 'non-ASCII path' => ['/café', '/café'];
+        yield 'protocol-relative URL' => ['//evil.example', '/'];
+        yield 'slash then backslash' => ['/\evil.example', '/'];
+        yield 'double backslash' => ['\\\\evil', '/'];
+        yield 'absolute URL' => ['https://evil.example', '/'];
+        yield 'javascript scheme' => ['javascript:alert(1)', '/'];
+        yield 'tab inside the path' => ["/a\tb", '/'];
+        yield 'CRLF inside the path' => ["/a\r\nSet-Cookie: x=1", '/'];
+        yield 'NUL byte' => ["/a\0b", '/'];
+        yield 'backslash inside the path' => ['/a\\b', '/'];
+        yield 'empty string' => ['', '/'];
+        yield 'relative path without a slash' => ['evil.example', '/'];
+        yield 'leading space' => [' /account', '/'];
+    }
+
+    #[DataProvider('localRedirectTargets')]
+    public function testLocalRedirectKeepsOnlyLocalTargets(string $target, string $expected): void
+    {
+        $response = Response::localRedirect($target);
+
+        self::assertSame(302, $response->status);
+        self::assertSame($expected, $response->headers['location']);
+    }
+
+    /**
+     * A request parameter can arrive as an array (?next[]=x), so a non-string
+     * target must fall back rather than raise a TypeError on every such request.
+     *
+     * @return iterable<string, array{mixed}>
+     */
+    public static function nonStringLocalRedirectTargets(): iterable
+    {
+        yield 'array' => [['/account']];
+        yield 'empty array' => [[]];
+        yield 'integer' => [42];
+        yield 'null' => [null];
+        yield 'boolean' => [true];
+    }
+
+    #[DataProvider('nonStringLocalRedirectTargets')]
+    public function testLocalRedirectFallsBackForANonStringTarget(mixed $target): void
+    {
+        $response = Response::localRedirect($target);
+
+        self::assertSame('/', $response->headers['location']);
+    }
+
+    public function testLocalRedirectUsesAFallbackThatIsNotTheRoot(): void
+    {
+        $response = Response::localRedirect('//evil.example', '/home', 303);
+
+        self::assertSame(303, $response->status);
+        self::assertSame('/home', $response->headers['location']);
+    }
+
+    public function testLocalRedirectRefusesAFallbackThatIsNotLocal(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Response::localRedirect('/account', 'https://evil.example');
+    }
+
+    public function testHasHeaderIsFalseOnAFreshResponse(): void
+    {
+        self::assertFalse(Response::text('ok')->hasHeader('X-Frame-Options'));
+    }
+
+    public function testHasHeaderIsCaseInsensitiveAfterWithHeader(): void
+    {
+        $response = Response::text('ok')->withHeader('Referrer-Policy', 'no-referrer');
+
+        self::assertTrue($response->hasHeader('referrer-policy'));
+        self::assertTrue($response->hasHeader('REFERRER-POLICY'));
+    }
+
+    public function testHasHeaderFindsANameSetByTheConstructorInAnyCase(): void
+    {
+        $response = new Response(headers: ['X-Frame-Options' => 'DENY']);
+
+        self::assertTrue($response->hasHeader('x-frame-options'));
+    }
+
+    public function testHasHeaderIsAPresenceCheckSoAnEmptyValueCounts(): void
+    {
+        $response = Response::text('ok')->withHeader('X-Frame-Options', '');
+
+        self::assertTrue($response->hasHeader('X-Frame-Options'));
+    }
+
+    public function testGetHeaderReturnsTheStoredValueInAnyCase(): void
+    {
+        $response = Response::text('ok')->withHeader('Referrer-Policy', 'no-referrer');
+
+        self::assertSame('no-referrer', $response->getHeader('REFERRER-POLICY'));
+    }
+
+    public function testGetHeaderReturnsNullWhenTheHeaderIsAbsent(): void
+    {
+        self::assertNull(Response::text('ok')->getHeader('Referrer-Policy'));
+    }
+
+    public function testHasHeaderIsFalseForAnEmptyNameAndADifferentName(): void
+    {
+        $response = Response::text('ok')->withHeader('X-Frame-Options', 'DENY');
+
+        self::assertFalse($response->hasHeader(''));
+        self::assertFalse($response->hasHeader('X-Frame'));
     }
 }
