@@ -404,8 +404,8 @@ final class Mailer
         if ($config->fromAddress !== '') {
             try {
                 $this->mail->setFrom($config->fromAddress, $config->fromName);
-            } catch (PHPMailerException $e) {
-                throw MailerException::invalidAddress('from');
+            } catch (PHPMailerException) {
+                throw MailerException::invalidFromAddress();
             }
         }
     }

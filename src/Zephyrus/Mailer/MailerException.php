@@ -63,6 +63,13 @@ final class MailerException extends ZephyrusRuntimeException
     }
 
     /**
+     * The address in the from.address configuration is invalid.
+     */
+    public static function invalidFromAddress(): self
+    {
+        return new self('Invalid email address in the from.address configuration.', MailerFailure::InvalidAddress);
+    }
+    /**
      * @param string $method The recipient method that received the address (to, cc, bcc, replyTo).
      */
     public static function invalidAddress(string $method): self

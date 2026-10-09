@@ -212,6 +212,22 @@ final class MailerTest extends TestCase
         }
     }
 
+    public function testAnInvalidFromAddressNamesTheConfigurationKey(): void
+    {
+        $config = MailerConfig::fromArray([
+            'smtp' => ['host' => 'localhost', 'port' => 2525, 'encryption' => ''],
+            'from' => ['address' => 'not an address', 'name' => 'Test App'],
+        ]);
+
+        try {
+            new Mailer($config);
+            self::fail('An invalid from address was accepted.');
+        } catch (MailerException $e) {
+            self::assertSame('Invalid email address in the from.address configuration.', $e->getMessage());
+            self::assertSame(MailerFailure::InvalidAddress, $e->failure);
+        }
+    }
+
     public function testInvalidRecipientMessageNamesMethodNotAddress(): void
     {
         $mailer = new Mailer($this->config);
