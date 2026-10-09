@@ -167,4 +167,36 @@ final class ApplicationBuilderProductionDebugTest extends TestCase
         self::assertTrue(Debugger::isEnabled());
         self::assertTrue(Debugger::$productionMode, 'The remote client must still be refused the Bluescreen.');
     }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBuildWithoutConfigurationKeepsDumpSilent(): void
+    {
+        ApplicationBuilder::create()->build();
+
+        self::assertTrue(Debugger::$productionMode, 'dump() must stay silent when no configuration chose debug mode.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBuildWithoutConfigurationLeavesAHandEnabledDebuggerAlone(): void
+    {
+        Debugger::enable(Debugger::Development);
+
+        ApplicationBuilder::create()->build();
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBuildHandsTheConfiguredSessionNameToTheDebugger(): void
+    {
+        ApplicationBuilder::fromConfiguration(Configuration::fromArray([
+            'application' => ['environment' => 'development', 'debug' => true],
+            'session' => ['name' => 'app_session'],
+        ]))->build();
+
+        self::assertContains('app_session', Debugger::$keysToHide);
+    }
 }

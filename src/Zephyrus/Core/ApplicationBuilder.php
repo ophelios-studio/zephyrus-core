@@ -424,13 +424,16 @@ final class ApplicationBuilder
     }
 
     /**
-     * Name the clients allowed to receive the debugger's rendered output.
+     * Name the clients allowed to receive the rendered debugger output.
      *
-     * Entries are addresses, or `secret@address` pairs matched against the
-     * `tracy-debug` cookie. Loopback is always permitted by Tracy itself when
-     * the request did not arrive through a proxy, so a local developer never
-     * needs this. It exists for debugging a deployed tier from one known
-     * address.
+     * Each entry is an address, or `secret@address` matched against the
+     * `tracy-debug` cookie. Exact addresses only: Tracy does not accept ranges.
+     * A bare gateway address admits anyone who can reach the published port.
+     *
+     * Behind Docker, REMOTE_ADDR is the bridge gateway, not your machine, so
+     * Tracy does not grant loopback. Pass `secret@<gateway-ip>` (find the
+     * address with `docker network inspect <net>`), then set the cookie
+     * `tracy-debug=<secret>`.
      *
      * @param string|string[]|null $clients
      */
@@ -631,12 +634,15 @@ final class ApplicationBuilder
             DebugIntegration::initialize(
                 debug: $debug,
                 allowedClients: $this->debugAllowedClients,
+                sessionName: $this->configuration->session->name,
             );
 
             $timezone = $this->configuration->localization->timezone;
             if ($timezone !== '') {
                 date_default_timezone_set($timezone);
             }
+        } else {
+            DebugIntegration::initializeWithoutConfiguration();
         }
 
         $loader = $this->localeLoader ?? new class implements LocaleLoaderInterface {

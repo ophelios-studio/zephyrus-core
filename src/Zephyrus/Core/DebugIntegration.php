@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
+use Closure;
 use Tracy\Debugger;
 
 /**
@@ -59,23 +60,22 @@ use Tracy\Debugger;
  */
 final class DebugIntegration
 {
-    /**
-     * Property and array keys whose value Tracy must never render.
-     *
-     * Tracy already hides a short default list ('password', 'pass', 'pwd',
-     * 'authorization', ...), which covers the RAW config array where the SMTP
-     * password sits under the key `password`. It does NOT cover the typed
-     * property the framework hydrates next to it: MailerConfig::$smtpPassword
-     * is a different key name, so the same secret rendered twice and was masked
-     * once. These names close that gap for every surface Tracy dumps: the
-     * Bluescreen, the debug bar and Debugger::dump().
-     *
-     * Matching is case-insensitive; Tracy lowercases both sides.
-     *
-     * @var list<string>
-     */
+    /** The scrubber this class installed, so a repeated initialize() does not wrap it again. */
+    private static ?Closure $frameworkScrubber = null;
+
+    /** @var list<string> Application-specific exact names (the session cookie), set by initialize(). */
+    private static array $applicationKeys = [];
+
+    /** Exact key names masked on dump(), the debug bar and the Bluescreen. dump() has no default list of its own. */
     public const array SENSITIVE_KEYS = [
         'smtpPassword',
+        'password',
+        'passwordPepper',
+        'password_pepper',
+        'pepper',
+        'throttleKey',
+        'throttle_key',
+        '_csrf_token',
         'encryptionKey',
         'encryption_key',
         'secret',
@@ -84,13 +84,34 @@ final class DebugIntegration
         'api_key',
         'privateKey',
         'private_key',
+        'cookie',
+        'set-cookie',
+        'authorization',
+        'proxy-authorization',
+        'x-csrf-token',
+        'tracy-debug',
     ];
+
+    /** Class properties masked by Tracy's Class::$property form. Tracy's own "POST (preview)" still shows the request body. */
+    public const array SENSITIVE_PROPERTIES = [
+        'Zephyrus\Http\RequestBody::$raw',
+    ];
+
+    /**
+     * Name patterns the Bluescreen scrubber masks.
+     *
+     * dump() and the debug bar do not apply this pattern; only the exact names
+     * (SENSITIVE_KEYS, SENSITIVE_PROPERTIES and the session name) reach them.
+     * A replacement scrubber should call isSensitiveKey().
+     */
+    public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
     /**
      * Initialize Tracy Debugger if debug mode is enabled.
      *
-     * When debug is false, this method is a no-op: Tracy is not initialized at
-     * all, and in particular none of its ini_set() calls run.
+     * When debug is false, Tracy is never enabled, so none of its ini_set()
+     * calls run. productionMode is still set to true, because Tracy's dump()
+     * prints unless it is true, and it defaults to null.
      *
      * @param bool                    $debug          Whether the application is in debug mode.
      * @param string|null             $logDirectory   Directory for Tracy log files. Null uses Tracy's default.
@@ -101,20 +122,23 @@ final class DebugIntegration
      *                                                the cookie only. Never grant this to a range you
      *                                                do not control: an entry here can read the
      *                                                application's live secrets out of a stack trace.
+     * @param string|null             $sessionName    The application's session cookie name, masked like SENSITIVE_KEYS.
      */
     public static function initialize(
         bool $debug,
         ?string $logDirectory = null,
         ?string $email = null,
         string|array|null $allowedClients = null,
+        ?string $sessionName = null,
     ): void {
         if (!$debug) {
+            Debugger::$productionMode = true;
+
             return;
         }
 
-        if (!class_exists(Debugger::class)) {
-            return; // @codeCoverageIgnore
-        }
+        // Tracy re-detects only when productionMode is null: a debug-off boot set it.
+        Debugger::$productionMode = null;
 
         // Debugger::Detect is null, and Tracy reads a string or an array as the
         // allowlist for the very same detection. Passing $allowedClients
@@ -126,7 +150,21 @@ final class DebugIntegration
             $email,
         );
 
-        self::hideFrameworkSecrets();
+        self::hideFrameworkSecrets($sessionName);
+    }
+
+    /**
+     * Keep dump() silent when no configuration decided debug mode.
+     *
+     * An application that enables Tracy by hand must do so before build(), or
+     * pass an explicit mode to Debugger::enable(); otherwise this forces
+     * production mode on it.
+     */
+    public static function initializeWithoutConfiguration(): void
+    {
+        if (!Debugger::isEnabled()) {
+            self::initialize(debug: false);
+        }
     }
 
     /**
@@ -136,17 +174,52 @@ final class DebugIntegration
      * Debugger::$keysToHide reaches dump() and the debug bar, while the
      * Bluescreen keeps its own list.
      */
-    private static function hideFrameworkSecrets(): void
+    private static function hideFrameworkSecrets(?string $sessionName): void
     {
-        Debugger::$keysToHide = array_values(array_unique(array_merge(
-            Debugger::$keysToHide,
-            self::SENSITIVE_KEYS,
-        )));
+        if ($sessionName !== null) {
+            self::$applicationKeys = array_values(array_unique([...self::$applicationKeys, $sessionName]));
+        }
+
+        $hidden = array_values(array_unique([
+            ...self::SENSITIVE_KEYS,
+            ...self::SENSITIVE_PROPERTIES,
+            ...self::$applicationKeys,
+        ]));
+
+        Debugger::$keysToHide = array_values(array_unique(array_merge(Debugger::$keysToHide, $hidden)));
 
         $blueScreen = Debugger::getBlueScreen();
-        $blueScreen->keysToHide = array_values(array_unique(array_merge(
-            $blueScreen->keysToHide,
-            self::SENSITIVE_KEYS,
-        )));
+        $blueScreen->keysToHide = array_values(array_unique(array_merge($blueScreen->keysToHide, $hidden)));
+
+        // Not scrubbable (phpinfo output): an app wanting it back sets showEnvironment = true after build().
+        $blueScreen->showEnvironment = false;
+
+        $current = $blueScreen->scrubber;
+        if ($current !== null && $current === self::$frameworkScrubber) {
+            return;
+        }
+
+        // Composed, not replaced: an application scrubber set before boot still applies.
+        $previous = $current;
+        $frameworkScrubber = static fn (string $key, mixed $value, ?string $class): bool
+            => self::isSensitiveKey($key)
+            || ($previous !== null && (bool) $previous($key, $value, $class));
+
+        self::$frameworkScrubber = $frameworkScrubber;
+        $blueScreen->scrubber = $frameworkScrubber;
+    }
+
+    /**
+     * Whether the framework masks this name on the Bluescreen, ignoring case and a leading dollar sign.
+     */
+    public static function isSensitiveKey(string $key): bool
+    {
+        $name = strtolower(ltrim($key, '$'));
+
+        if (preg_match(self::SENSITIVE_KEY_PATTERN, $name) === 1) {
+            return true;
+        }
+
+        return in_array($name, array_map(strtolower(...), [...self::SENSITIVE_KEYS, ...self::$applicationKeys]), true);
     }
 }
