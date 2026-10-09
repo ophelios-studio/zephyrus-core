@@ -156,6 +156,8 @@ final class Database
      */
     private const APCU_TTL = 3600;
 
+    private const RETURNING_PATTERN = '/\bRETURNING\b/i';
+
     /**
      * Built-in PostgreSQL native type conversions matching v1 DatabaseStatement behavior.
      * Integer types → intval, float/decimal types → floatval, boolean → boolval,
@@ -835,16 +837,32 @@ final class Database
     }
 
     /**
-     * Execute an INSERT and return the sequence value it generated. On PostgreSQL this is LASTVAL()
-     * and may name another table's sequence: prefer INSERT ... RETURNING id with selectValue().
+     * Execute an INSERT ... RETURNING id and return the id it yields, or false when no row comes back
+     * (e.g. ON CONFLICT DO NOTHING). Other drivers without RETURNING fall back to lastInsertId().
      *
      * @param array<int|string, mixed> $params
+     * @throws DatabaseException on PostgreSQL when the SQL has no RETURNING clause, before it runs, or when
+     *         the word only occurs in a literal and the statement returned no column, after it ran.
      */
     public function insertGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {
-        $this->insert($sql, $params);
+        $postgres = $this->isPostgres();
+        if ($postgres && preg_match(self::RETURNING_PATTERN, $sql) !== 1) {
+            throw DatabaseException::returningRequired();
+        }
 
-        return $this->lastInsertId();
+        $stmt = $this->query($sql, $params);
+        if ($stmt->columnCount() === 0) {
+            if ($postgres) {
+                throw DatabaseException::returningRequired();
+            }
+
+            return $this->lastInsertId();
+        }
+
+        $id = $stmt->fetchColumn();
+
+        return $id === false || $id === null ? false : (string) $id;
     }
 
     /**
@@ -952,6 +970,11 @@ final class Database
 
             throw DatabaseException::queryExecutionFailed('SELECT LASTVAL()', $e);
         }
+    }
+
+    private function isPostgres(): bool
+    {
+        return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
     }
 
     private function markFailedLevel(): void

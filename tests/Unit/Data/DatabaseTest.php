@@ -783,6 +783,78 @@ final class DatabaseTest extends TestCase
         self::assertTrue($this->db->exists('SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)', ['eli@example.com']));
     }
 
+    // ── insertGetId() ────────────────────────────────────────────────────────
+
+    public function testInsertGetIdReturnsTheReturningIdOnSqlite(): void
+    {
+        self::assertSame('1', $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?) RETURNING id', ['Frank', 'frank@example.com']));
+    }
+
+    public function testInsertGetIdReturnsFalseWhenReturningYieldsNoRow(): void
+    {
+        $this->db->query('INSERT INTO users (id, name, email) VALUES (?, ?, ?)', [1, 'Gina', 'gina@example.com']);
+
+        $id = $this->db->insertGetId(
+            'INSERT INTO users (id, name, email) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING RETURNING id',
+            [1, 'Hugo', 'hugo@example.com'],
+        );
+
+        self::assertFalse($id);
+    }
+
+    public function testInsertGetIdWithoutReturningKeepsLastInsertIdOnSqlite(): void
+    {
+        self::assertSame('1', $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Ivan', 'ivan@example.com']));
+    }
+
+    public function testInsertGetIdRefusesPostgresStatementWithoutReturningBeforeRunningIt(): void
+    {
+        $pdo = new DriverNamePdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL)');
+        $db = new Database($pdo);
+
+        try {
+            $db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Judy', 'judy@example.com']);
+            self::fail('expected the statement without RETURNING to be refused');
+        } catch (DatabaseException $e) {
+            self::assertStringContainsString('INSERT ... RETURNING id', $e->getMessage());
+            self::assertStringNotContainsString('Judy', $e->getMessage());
+            self::assertNull($e->sql());
+        }
+
+        self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn());
+    }
+
+    public function testInsertGetIdMatchesReturningAsAWholeWordOnPostgres(): void
+    {
+        $pdo = new DriverNamePdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, returning_id INTEGER, name TEXT NOT NULL)');
+        $db = new Database($pdo);
+
+        $this->expectException(DatabaseException::class);
+        try {
+            $db->insertGetId('INSERT INTO users (returning_id, name) VALUES (?, ?)', [7, 'Kim']);
+        } finally {
+            self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn());
+        }
+    }
+
+    public function testInsertGetIdAcceptsLowercaseReturningOnPostgres(): void
+    {
+        $pdo = new DriverNamePdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
+        $db = new Database($pdo);
+
+        self::assertSame('1', $db->insertGetId('insert into users (name) values (?) returning id', ['Lou']));
+    }
+
+    public function testInsertGetIdRejectsNulByteBeforeTheStatementRuns(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->db->insertGetId("INSERT INTO users (name, email) VALUES ('a', 'b') RETURNING id\0", []);
+    }
+
     // ── lastInsertId() ───────────────────────────────────────────────────────
 
     public function testLastInsertIdAfterInsert(): void
@@ -923,5 +995,21 @@ final class AttributeSpyPdo extends PDO
         }
 
         return parent::setAttribute($attribute, $value);
+    }
+}
+
+/**
+ * A SQLite connection that reports another driver name, so the PostgreSQL rules run without a server.
+ */
+final class DriverNamePdo extends PDO
+{
+    public function __construct(string $dsn, private readonly string $driverName = 'pgsql')
+    {
+        parent::__construct($dsn);
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return $attribute === PDO::ATTR_DRIVER_NAME ? $this->driverName : parent::getAttribute($attribute);
     }
 }
