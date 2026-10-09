@@ -1005,15 +1005,22 @@ final class Database
     private static function assertPositionalKeysAreZeroToN(#[\SensitiveParameter] array $params): void
     {
         $keys = array_keys($params);
-        if ($keys === [] || !array_all($keys, static fn (int|string $key): bool => is_int($key))) {
+        $positional = array_filter($keys, static fn (int|string $key): bool => is_int($key));
+        if ($positional === []) {
             return;
         }
 
-        sort($keys);
-        if ($keys !== range(0, count($keys) - 1)) {
-            throw new \InvalidArgumentException(
-                'Positional query parameters must use the keys 0 to n-1: renumber them or use named parameters.',
-            );
+        if (count($positional) !== count($keys)) {
+            throw new \InvalidArgumentException('Query parameters cannot mix positional and named keys.');
+        }
+
+        $sorted = $keys;
+        sort($sorted);
+        if ($sorted !== range(0, count($keys) - 1)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Positional query parameters must use the keys 0 to n-1 (got keys %s): renumber them or use named parameters.',
+                implode(', ', $keys),
+            ));
         }
     }
 

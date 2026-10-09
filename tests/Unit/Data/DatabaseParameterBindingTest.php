@@ -141,6 +141,14 @@ final class DatabaseParameterBindingTest extends TestCase
         $this->db->selectValue('SELECT ?', [1 => 'x']);
     }
 
+    public function testAParameterListMixingPositionalAndNamedKeysIsRefusedBeforeTheQuery(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Query parameters cannot mix positional and named keys.');
+
+        $this->db->selectOne('SELECT ? AS a, :n AS b', [1 => 'x', 'n' => 'y']);
+    }
+
     public function testANamedParameterMissingFromTheStatementStillFailsAsAQueryError(): void
     {
         $this->expectException(DatabaseException::class);

@@ -394,23 +394,24 @@ final class DatabaseTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{array<int|string, mixed>}>
+     * @return iterable<string, array{array<int|string, mixed>, string}>
      */
-    public static function nonListPositionalParameters(): iterable
+    public static function positionalKeysOutsideZeroToN(): iterable
     {
-        yield 'keys start at 1' => [[1 => 'Alice']];
-        yield 'a hole after the first key' => [[0 => 'Alice', 2 => 'Bob']];
+        yield 'keys start at 1' => [[1 => 'Alice'], '1'];
+        yield 'a hole after the first key' => [[0 => 'Alice', 2 => 'Bob'], '0, 2'];
+        yield 'keys out of order' => [[1 => 'Bob', 0 => 'Alice', 5 => 'Eve'], '1, 0, 5'];
     }
 
-    #[DataProvider('nonListPositionalParameters')]
-    public function testQueryRefusesPositionalParametersThatAreNotAList(array $params): void
+    #[DataProvider('positionalKeysOutsideZeroToN')]
+    public function testQueryRefusesPositionalKeysThatAreNotZeroToN(array $params, string $keys): void
     {
         try {
             $this->db->query('SELECT ?, ?', $params);
             self::fail('expected the parameters to be refused');
         } catch (\InvalidArgumentException $e) {
             self::assertSame(
-                'Positional query parameters must use the keys 0 to n-1: renumber them or use named parameters.',
+                "Positional query parameters must use the keys 0 to n-1 (got keys {$keys}): renumber them or use named parameters.",
                 $e->getMessage(),
             );
         }
