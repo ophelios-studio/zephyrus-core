@@ -4,27 +4,12 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 /**
- * env() is the unhardened twin of ConfigurationFile::resolveEnvTag(), and it
- * was wrong in BOTH directions.
- *
- * Its sibling carries a sixteen-line docblock naming the two hazards and
- * handles both. env() read `$_ENV[$key] ?? $_SERVER[$key]` and handled
- * neither:
- *
- * (a) httpoxy, CVE-2016-5385. PHP writes every request header into $_SERVER as
- *     HTTP_<NAME>, so a caller sending `Proxy: http://attacker/` makes
- *     $_SERVER['HTTP_PROXY'] exist and env('HTTP_PROXY') return the attacker's
- *     value. The request writes the configuration.
- *
- * (b) A silent fail-open under php-fpm. The default variables_order is "GPCS",
- *     with no E, so $_ENV is EMPTY and every value the platform set lives only
- *     in getenv(). env() never called getenv(), so env('WEBHOOK_SECRET') was
- *     NULL where getenv() had the real value, and env('REQUIRE_MFA', false)
- *     resolved to the DEFAULT on production while resolving correctly on a
- *     developer's CLI.
+ * env() reads $_ENV and the process environment, never request data, and
+ * refuses HTTP_ and REDIRECT_ names.
  */
 final class EnvHelperHardeningTest extends TestCase
 {
@@ -38,6 +23,7 @@ final class EnvHelperHardeningTest extends TestCase
     private array $names = [
         'HTTP_PROXY',
         'HTTP_ZEPHYRUS_ANYTHING',
+        'REDIRECT_HTTP_AUTHORIZATION',
         'ZEPHYRUS_FPM_SECRET',
         'ZEPHYRUS_FPM_FLAG',
         'ZEPHYRUS_FASTCGI_PARAM',
@@ -69,74 +55,58 @@ final class EnvHelperHardeningTest extends TestCase
         }
     }
 
-    // -- (a) httpoxy ---------------------------------------------------------
-
-    public function testARequestHeaderCannotBecomeAnEnvironmentValue(): void
+    public function testAnHttpPrefixedNameIsRefusedWhateverItsSource(): void
     {
         // Exactly what PHP does with an inbound `Proxy:` header.
         $_SERVER['HTTP_PROXY'] = 'http://attacker.test:3128';
+        putenv('HTTP_PROXY=http://corporate-proxy.internal:3128');
 
-        self::assertNull(env('HTTP_PROXY'));
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('HTTP_PROXY');
+
+        env('HTTP_PROXY');
     }
 
-    public function testTheDefaultIsReturnedRatherThanTheHeaderValue(): void
+    public function testARedirectPrefixedNameIsRefused(): void
     {
-        $_SERVER['HTTP_PROXY'] = 'http://attacker.test:3128';
+        $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Basic c2VjcmV0';
 
-        self::assertSame('none', env('HTTP_PROXY', 'none'));
+        $this->expectException(InvalidArgumentException::class);
+
+        env('REDIRECT_HTTP_AUTHORIZATION', 'none');
     }
 
-    public function testTheExclusionCoversTheWholeHttpFamilyAndNotJustProxy(): void
+    public function testAnyHttpNamedServerKeyIsRefusedRatherThanReturningItsValue(): void
     {
         $_SERVER['HTTP_ZEPHYRUS_ANYTHING'] = 'attacker-chosen';
 
-        self::assertNull(env('HTTP_ZEPHYRUS_ANYTHING'));
+        $this->expectException(InvalidArgumentException::class);
+
+        env('HTTP_ZEPHYRUS_ANYTHING');
     }
 
-    /**
-     * A real HTTP_-named variable set by the OPERATOR is still readable: the
-     * exclusion is on the untrusted source, not on the name.
-     */
-    public function testAnOperatorSetHttpNamedVariableIsStillRead(): void
+    public function testAProcessEnvironmentValueIsReturned(): void
     {
-        putenv('HTTP_PROXY=http://corporate-proxy.internal:3128');
-
-        self::assertSame('http://corporate-proxy.internal:3128', env('HTTP_PROXY'));
-    }
-
-    // -- (b) the php-fpm blind spot ------------------------------------------
-
-    public function testAValueThatExistsOnlyInTheProcessEnvironmentIsFound(): void
-    {
-        // The php-fpm shape: variables_order without E, so $_ENV never got it.
         putenv('ZEPHYRUS_FPM_SECRET=whsec_LIVE_abc123');
 
         self::assertSame('whsec_LIVE_abc123', env('ZEPHYRUS_FPM_SECRET'));
     }
 
-    /**
-     * The dangerous flavour of the same bug: a flag the operator turned ON in
-     * the process environment used to read as the caller's default, so a
-     * security switch was off on production and on in development.
-     */
-    public function testAFlagSetOnlyInTheProcessEnvironmentIsNotSilentlyOff(): void
+    public function testAProcessEnvironmentFlagIsReadAsTrue(): void
     {
         putenv('ZEPHYRUS_FPM_FLAG=true');
 
         self::assertTrue(env('ZEPHYRUS_FPM_FLAG', false));
     }
 
-    // -- what must NOT change ------------------------------------------------
-
-    public function testTheServerFallbackStillWorksForANonHttpName(): void
+    public function testAFastcgiParamIsNotReadAsConfiguration(): void
     {
-        // fastcgi_param / SetEnv is a documented deployment pattern.
         $_SERVER['ZEPHYRUS_FASTCGI_PARAM'] = 'from-fastcgi';
 
-        self::assertSame('from-fastcgi', env('ZEPHYRUS_FASTCGI_PARAM'));
+        self::assertNull(env('ZEPHYRUS_FASTCGI_PARAM'));
     }
 
-    public function testTheResolutionOrderIsEnvThenGetenvThenServer(): void
+    public function testTheResolutionOrderIsEnvThenProcessEnvironment(): void
     {
         $_SERVER['ZEPHYRUS_PRECEDENCE'] = 'from-server';
         putenv('ZEPHYRUS_PRECEDENCE=from-getenv');
@@ -148,18 +118,6 @@ final class EnvHelperHardeningTest extends TestCase
         self::assertSame('from-getenv', env('ZEPHYRUS_PRECEDENCE'));
 
         putenv('ZEPHYRUS_PRECEDENCE');
-        self::assertSame('from-server', env('ZEPHYRUS_PRECEDENCE'));
-    }
-
-    public function testThisMatchesResolveEnvTagWhichAlreadyGotItRight(): void
-    {
-        // The two helpers are meant to agree. resolveEnvTag() has been ordering
-        // $_ENV, getenv(), then non-HTTP_ $_SERVER since it was hardened; this
-        // pins that env() now says the same thing.
-        $_SERVER['HTTP_PROXY'] = 'http://attacker.test:3128';
-        putenv('ZEPHYRUS_FPM_SECRET=only-in-process-env');
-
-        self::assertNull(env('HTTP_PROXY'));
-        self::assertSame('only-in-process-env', env('ZEPHYRUS_FPM_SECRET'));
+        self::assertNull(env('ZEPHYRUS_PRECEDENCE'));
     }
 }

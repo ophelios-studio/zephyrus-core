@@ -147,7 +147,29 @@ final class EnvironmentContract
 
         foreach ($this->rules as $rule) {
             $name = (string) $rule['name'];
-            $raw = $values === null ? self::readEnvironment($name) : ($values[$name] ?? null);
+
+            if ($values === null) {
+                try {
+                    $raw = EnvironmentVariable::read($name);
+                } catch (\InvalidArgumentException $e) {
+                    $reasons[] = $e->getMessage();
+
+                    continue;
+                }
+
+                // Reported without the value: the web server may hold a secret here.
+                if ($raw === null && array_key_exists($name, $_SERVER)) {
+                    $reasons[] = sprintf(
+                        '%s is set only by the web server (fastcgi_param/SetEnv), which is not read; export it to the process environment.',
+                        $name,
+                    );
+
+                    continue;
+                }
+            } else {
+                $raw = $values[$name] ?? null;
+            }
+
             $value = is_string($raw) ? trim($raw) : '';
 
             $reason = match ($rule['type']) {
@@ -369,7 +391,7 @@ final class EnvironmentContract
             }
 
             $name = (string) $rule['name'];
-            $raw = $values === null ? self::readEnvironment($name) : ($values[$name] ?? null);
+            $raw = $values === null ? EnvironmentVariable::read($name) : ($values[$name] ?? null);
             $value = is_string($raw) ? trim($raw) : '';
 
             /** @var list<string> $allowed */
@@ -404,12 +426,5 @@ final class EnvironmentContract
         }
 
         return null;
-    }
-
-    private static function readEnvironment(string $name): ?string
-    {
-        $value = $_ENV[$name] ?? $_SERVER[$name] ?? getenv($name);
-
-        return is_string($value) ? $value : null;
     }
 }

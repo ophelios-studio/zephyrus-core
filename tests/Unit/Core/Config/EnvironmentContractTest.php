@@ -212,6 +212,81 @@ final class EnvironmentContractTest extends TestCase
         putenv('CONTRACT_TEST_MODE');
     }
 
+    public function testARequiredVariableSetOnlyInServerIsReportedMissing(): void
+    {
+        $_SERVER['CONTRACT_TEST_SERVER_ONLY'] = 'set';
+
+        try {
+            self::assertFalse(EnvironmentContract::create()
+                ->requireSet('CONTRACT_TEST_SERVER_ONLY')
+                ->isSatisfied());
+        } finally {
+            unset($_SERVER['CONTRACT_TEST_SERVER_ONLY']);
+        }
+    }
+
+    public function testARequiredVariableFromTheProcessEnvironmentIsSatisfied(): void
+    {
+        putenv('CONTRACT_TEST_PROCESS_ONLY=set');
+
+        try {
+            self::assertTrue(EnvironmentContract::create()
+                ->requireSet('CONTRACT_TEST_PROCESS_ONLY')
+                ->isSatisfied());
+        } finally {
+            putenv('CONTRACT_TEST_PROCESS_ONLY');
+        }
+    }
+
+    public function testAnAllowlistedVariableSetOnlyInServerIsNotSatisfied(): void
+    {
+        $_SERVER['CONTRACT_TEST_SERVER_MODE'] = 'web';
+
+        try {
+            self::assertFalse(EnvironmentContract::create()
+                ->requireOneOf('CONTRACT_TEST_SERVER_MODE', ['WEB', 'API'], canonicalise: true)
+                ->isSatisfied());
+            self::assertArrayNotHasKey('CONTRACT_TEST_SERVER_MODE', $_ENV);
+        } finally {
+            unset($_SERVER['CONTRACT_TEST_SERVER_MODE'], $_ENV['CONTRACT_TEST_SERVER_MODE']);
+        }
+    }
+
+    public function testAnHttpPrefixedRequirementReportsTheRefusalNotAMissingValue(): void
+    {
+        $_ENV['HTTP_TIMEOUT'] = '5';
+
+        try {
+            $violations = EnvironmentContract::create()
+                ->requireSet('HTTP_TIMEOUT')
+                ->violations();
+        } finally {
+            unset($_ENV['HTTP_TIMEOUT']);
+        }
+
+        self::assertCount(1, $violations);
+        self::assertStringContainsString('HTTP_TIMEOUT', $violations[0]);
+        self::assertStringContainsString('rename the variable', $violations[0]);
+        self::assertStringNotContainsString('is not set', $violations[0]);
+    }
+
+    public function testAVariableSetOnlyByTheWebServerIsReportedWithoutItsValue(): void
+    {
+        $_SERVER['CONTRACT_TEST_WEB_SERVER'] = 'secret-value-123';
+
+        try {
+            $violations = EnvironmentContract::create()
+                ->requireSet('CONTRACT_TEST_WEB_SERVER')
+                ->violations();
+        } finally {
+            unset($_SERVER['CONTRACT_TEST_WEB_SERVER']);
+        }
+
+        self::assertCount(1, $violations);
+        self::assertStringContainsString('fastcgi_param/SetEnv', $violations[0]);
+        self::assertStringNotContainsString('secret-value-123', $violations[0]);
+    }
+
     public function testCanonicaliseIsNotAppliedWithoutTheFlag(): void
     {
         unset($_ENV['CONTRACT_TEST_PLAIN'], $_SERVER['CONTRACT_TEST_PLAIN']);

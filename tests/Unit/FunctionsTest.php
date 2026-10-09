@@ -33,14 +33,27 @@ final class FunctionsTest extends TestCase
         }
     }
 
-    public function testEnvReturnsValueFromServerSuperglobal(): void
+    public function testEnvIgnoresAKeyOnlyInServerAndReturnsTheDefault(): void
     {
         $_SERVER['ZEPHYRUS_SERVER_VAR'] = 'world';
 
         try {
-            self::assertSame('world', env('ZEPHYRUS_SERVER_VAR'));
+            self::assertNull(env('ZEPHYRUS_SERVER_VAR'));
+            self::assertSame('fallback', env('ZEPHYRUS_SERVER_VAR', 'fallback'));
         } finally {
             unset($_SERVER['ZEPHYRUS_SERVER_VAR']);
+        }
+    }
+
+    public function testEnvNeverReadsServerEvenForANonHttpRequestValue(): void
+    {
+        // Set by mod_php under Apache: the client's typed password.
+        $_SERVER['PHP_AUTH_PW'] = 'typed';
+
+        try {
+            self::assertNull(env('PHP_AUTH_PW'));
+        } finally {
+            unset($_SERVER['PHP_AUTH_PW']);
         }
     }
 

@@ -61,7 +61,28 @@ class MultipleClassEnvController
     public function regional(): void {}
 }
 
+#[RequiresEnvAttribute('APP_FLAG', '0')]
+class ZeroFlagController
+{
+    #[GetAttribute('/zero-flag')]
+    public function zeroFlag(): void {}
+}
+
+#[RequiresEnvAttribute('APP_FLAG', '')]
+class EmptyFlagController
+{
+    #[GetAttribute('/empty-flag')]
+    public function emptyFlag(): void {}
+}
+
 // ---------------------------------------------------------------------------
+
+#[RequiresEnvAttribute('HTTP_PORT', '8080')]
+class HttpPortController
+{
+    #[GetAttribute('/port')]
+    public function port(): void {}
+}
 
 final class RequiresEnvTest extends TestCase
 {
@@ -77,7 +98,8 @@ final class RequiresEnvTest extends TestCase
         putenv('APP_MODE');
         putenv('APP_FEATURE');
         putenv('APP_REGION');
-        unset($_ENV['APP_MODE'], $_ENV['APP_FEATURE'], $_ENV['APP_REGION']);
+        unset($_ENV['APP_MODE'], $_ENV['APP_FEATURE'], $_ENV['APP_REGION'], $_ENV['APP_FLAG']);
+        putenv('APP_FLAG');
     }
 
     public function testClassLevelRouteRegisteredWhenEnvMatches(): void
@@ -204,5 +226,43 @@ final class RequiresEnvTest extends TestCase
         $routes = $this->reader->read(MultipleClassEnvController::class);
 
         self::assertSame([], $routes);
+    }
+
+    public function testZeroValueMatchesRequiresEnvWhenSet(): void
+    {
+        putenv('APP_FLAG=0');
+        $_ENV['APP_FLAG'] = '0';
+
+        $routes = $this->reader->read(ZeroFlagController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/zero-flag', $routes[0]->path);
+    }
+
+    public function testAnotherValueDoesNotMatchTheZeroRequirement(): void
+    {
+        putenv('APP_FLAG=1');
+        $_ENV['APP_FLAG'] = '1';
+
+        self::assertSame([], $this->reader->read(ZeroFlagController::class));
+    }
+
+    public function testAnEmptyValueMatchesAnEmptyRequirement(): void
+    {
+        putenv('APP_FLAG=');
+        $_ENV['APP_FLAG'] = '';
+
+        $routes = $this->reader->read(EmptyFlagController::class);
+
+        self::assertCount(1, $routes);
+        self::assertSame('/empty-flag', $routes[0]->path);
+    }
+
+    public function testAnHttpPrefixedRequirementAbortsRouteDiscovery(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('HTTP_PORT');
+
+        $this->reader->read(HttpPortController::class);
     }
 }

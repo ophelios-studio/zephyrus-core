@@ -10,63 +10,29 @@ declare(strict_types=1);
  */
 
 use Zephyrus\Core\App;
+use Zephyrus\Core\Config\EnvironmentVariable;
 
 if (!function_exists('env')) {
     /**
-     * Read an environment variable.
+     * Read an environment variable, with $_ENV and the process environment as sources.
      *
-     * Sources are consulted in this order, and the order is the whole point:
-     *
-     *   1. $_ENV        the process environment as PHP imported it.
-     *   2. getenv()     the REAL process environment. Under php-fpm the default
-     *                   variables_order is "GPCS", with no E, so $_ENV is EMPTY
-     *                   and every value set by the platform lives only here.
-     *   3. $_SERVER     but ONLY for a name that does not start with HTTP_.
-     *
-     * ## Why the two rules exist
-     *
-     * Without (2) this helper failed OPEN and silently. `env('WEBHOOK_SECRET')`
-     * came back NULL on a php-fpm tier where getenv() had the real value, so a
-     * verification that read its secret through here verified nothing; and
-     * `env('REQUIRE_MFA', false)` resolved to the DEFAULT on production while
-     * resolving correctly on a developer's CLI, which is the worst possible
-     * split.
-     *
-     * Without (3)'s HTTP_ exclusion it fails OPEN in the other direction. PHP
-     * writes every request header into $_SERVER as HTTP_<NAME>, so a caller
-     * sending `Proxy: http://attacker/` makes $_SERVER['HTTP_PROXY'] exist and
-     * `env('HTTP_PROXY')` return the attacker's value. That is httpoxy,
-     * CVE-2016-5385. The rest of $_SERVER is KEPT, because configuring an
-     * application through fastcgi_param or SetEnv is a documented deployment
-     * pattern and dropping it would swap live values for defaults.
-     *
-     * This is the same resolution order as ConfigurationFile::resolveEnvTag();
-     * the two are meant to agree, and they used not to.
+     * $_SERVER is never consulted: it also carries request data, so a value
+     * there is client-controlled. Names starting with HTTP_ or REDIRECT_ are
+     * refused with an InvalidArgumentException.
      *
      * @param string $key     The environment variable name.
      * @param mixed  $default Default value when the variable is not set.
      */
     function env(string $key, mixed $default = null): mixed
     {
-        $value = null;
-
-        if (array_key_exists($key, $_ENV)) {
-            $value = $_ENV[$key];
-        } else {
-            $fromProcessEnvironment = getenv($key);
-            if ($fromProcessEnvironment !== false) {
-                $value = $fromProcessEnvironment;
-            } elseif (!str_starts_with($key, 'HTTP_') && array_key_exists($key, $_SERVER)) {
-                $value = $_SERVER[$key];
-            }
-        }
+        $value = EnvironmentVariable::read($key);
 
         if ($value === null) {
             return $default;
         }
 
         // Cast common string representations to their native types.
-        return match (strtolower((string) $value)) {
+        return match (strtolower($value)) {
             'true', '(true)'   => true,
             'false', '(false)' => false,
             'null', '(null)'   => null,

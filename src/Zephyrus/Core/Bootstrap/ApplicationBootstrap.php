@@ -7,6 +7,7 @@ namespace Zephyrus\Core\Bootstrap;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Core\Config\EnvironmentVariable;
 
 final class ApplicationBootstrap
 {
@@ -54,20 +55,16 @@ final class ApplicationBootstrap
      */
     public static function fromEnvironment(): Application
     {
-        $dir = getenv('APP_CONFIG_DIR');
-        $base = getenv('APP_CONFIG_BASE');
-        $env = getenv('APP_ENV');
-        $extra = getenv('APP_CONFIG_EXTRA');
+        $dir = trim(EnvironmentVariable::read('APP_CONFIG_DIR') ?? '');
+        $base = trim(EnvironmentVariable::read('APP_CONFIG_BASE') ?? '');
+        $extra = trim(EnvironmentVariable::read('APP_CONFIG_EXTRA') ?? '');
 
-        $configDir = is_string($dir) && trim($dir) !== ''
-            ? trim($dir)
-            : rtrim((string) getcwd(), '/\\') . '/config';
-
-        $baseName = is_string($base) && trim($base) !== '' ? trim($base) : 'app';
-        $environment = is_string($env) ? $env : null;
+        $configDir = $dir !== '' ? $dir : rtrim((string) getcwd(), '/\\') . '/config';
+        $baseName = $base !== '' ? $base : 'app';
+        $environment = EnvironmentVariable::read('APP_ENV');
 
         $extraOptionalNames = [];
-        if (is_string($extra) && trim($extra) !== '') {
+        if ($extra !== '') {
             $extraOptionalNames = array_values(array_filter(array_map(
                 static fn (string $name): string => trim($name),
                 explode(',', $extra),
@@ -89,7 +86,7 @@ final class ApplicationBootstrap
      * Optional files:  <configDir>/<baseName>.local.php
      *                  <configDir>/<baseName>.<environment>.php
      *
-     * $environment defaults to APP_ENV (when set); pass null to disable
+     * A null $environment falls back to APP_ENV; pass an empty string to disable
      * environment-specific optional loading.
      */
     public static function fromConfigDirectory(
@@ -159,8 +156,7 @@ final class ApplicationBootstrap
 
         $resolvedEnvironment = $environment;
         if ($resolvedEnvironment === null) {
-            $appEnv = getenv('APP_ENV');
-            $resolvedEnvironment = is_string($appEnv) ? $appEnv : '';
+            $resolvedEnvironment = EnvironmentVariable::read('APP_ENV') ?? '';
         }
 
         $resolvedEnvironment = self::normalizeEnvironmentName($resolvedEnvironment);

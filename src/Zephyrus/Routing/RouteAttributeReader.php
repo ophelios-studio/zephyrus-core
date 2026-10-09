@@ -7,6 +7,7 @@ namespace Zephyrus\Routing;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionMethod;
+use Zephyrus\Core\Config\EnvironmentVariable;
 use Zephyrus\Routing\Attribute\Delete as DeleteAttribute;
 use Zephyrus\Routing\Attribute\Get as GetAttribute;
 use Zephyrus\Routing\Attribute\Head as HeadAttribute;
@@ -252,9 +253,7 @@ final class RouteAttributeReader
         foreach ($attributes as $attributeRef) {
             /** @var RequiresEnvAttribute $attr */
             $attr = $attributeRef->newInstance();
-            $actual = $_ENV[$attr->variable] ?? getenv($attr->variable) ?: null;
-
-            if ($actual !== $attr->value) {
+            if (EnvironmentVariable::read($attr->variable) !== $attr->value) {
                 return false;
             }
         }

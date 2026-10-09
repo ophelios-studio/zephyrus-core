@@ -18,8 +18,9 @@ use Symfony\Component\Yaml\Yaml;
  *
  * The tag format is: !env VAR_NAME[, default_value]
  *
- * Environment variables are resolved from $_ENV and $_SERVER at parse time,
- * so .env files must be loaded before this class is used.
+ * Environment variables are resolved from $_ENV and the process environment at
+ * parse time, so .env files must be loaded before this class is used. Names
+ * starting with HTTP_ or REDIRECT_ are refused with a ConfigurationException.
  */
 final class ConfigurationFile
 {
@@ -139,26 +140,8 @@ final class ConfigurationFile
     }
 
     /**
-     * Resolve an !env tag value.
-     *
-     * Format: VAR_NAME[, default_value]
-     *
-     * ## An HTTP_-prefixed name is never read from $_SERVER: CVE-2016-5385
-     *
-     * $_SERVER is not the process environment. Under CGI and FastCGI every
-     * request header arrives in it as HTTP_<NAME>, so "!env HTTP_PROXY" used to
-     * resolve to whatever a caller put in a "Proxy:" header. That is httpoxy,
-     * and it turns one line of configuration into a caller-chosen outbound
-     * proxy for the whole application.
-     *
-     * The trustworthy sources are consulted first and unconditionally: $_ENV,
-     * then getenv(), which reads the real process environment even when
-     * variables_order leaves $_ENV empty, as it does under php-fpm by default.
-     *
-     * The $_SERVER fallback is KEPT for every other name, because setting
-     * configuration through fastcgi_param / SetEnv is a documented deployment
-     * pattern and removing it would silently swap live values for defaults. It
-     * is the HTTP_ family, and only that family, that a client can write.
+     * Resolve an !env tag value (VAR_NAME[, default_value]) from $_ENV or the process environment.
+     * Names starting with HTTP_ or REDIRECT_ are refused with a ConfigurationException.
      */
     private function resolveEnvTag(mixed $value): mixed
     {
@@ -167,19 +150,10 @@ final class ConfigurationFile
         $envKey = trim($arguments[0], " \t\n\r\0\x0B\"'");
         $default = isset($arguments[1]) ? trim($arguments[1], " \t\n\r\0\x0B\"'") : null;
 
-        if (array_key_exists($envKey, $_ENV)) {
-            return $_ENV[$envKey];
+        try {
+            return EnvironmentVariable::read($envKey) ?? $default;
+        } catch (\InvalidArgumentException $e) {
+            throw new ConfigurationException('!env tag: ' . $e->getMessage(), previous: $e);
         }
-
-        $fromProcessEnvironment = getenv($envKey);
-        if ($fromProcessEnvironment !== false) {
-            return $fromProcessEnvironment;
-        }
-
-        if (!str_starts_with($envKey, 'HTTP_') && array_key_exists($envKey, $_SERVER)) {
-            return $_SERVER[$envKey];
-        }
-
-        return $default;
     }
 }

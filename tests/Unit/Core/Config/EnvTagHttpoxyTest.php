@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 
 /**
- * The !env tag used to fall back to $_SERVER, which under CGI and FastCGI
- * carries every request header as HTTP_<NAME>. "!env HTTP_PROXY" therefore
- * resolved to whatever a caller put in a "Proxy:" header. That is httpoxy,
- * CVE-2016-5385.
+ * The !env tag refuses HTTP_ and REDIRECT_ names rather than reading request data.
  */
 final class EnvTagHttpoxyTest extends TestCase
 {
@@ -54,42 +52,52 @@ final class EnvTagHttpoxyTest extends TestCase
         return $parsed['app']['value'];
     }
 
-    public function testAnHttpPrefixedNameIsNeverReadFromServer(): void
+    public function testAnHttpPrefixedTagIsRefusedNamingTheKey(): void
     {
         // Exactly what a "Proxy: evil.test:8080" request header lands as.
         $_SERVER['HTTP_PROXY'] = 'http://evil.test:8080';
-        unset($_ENV['HTTP_PROXY']);
 
-        // Pre-fix this returned "http://evil.test:8080".
-        self::assertSame('none', $this->resolve('HTTP_PROXY, none'));
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('HTTP_PROXY');
+
+        $this->resolve('HTTP_PROXY, none');
     }
 
-    public function testAnHttpPrefixedNameWithNoDefaultResolvesToNull(): void
+    public function testAnHttpPrefixedTagIsRefusedEvenWhenTheEnvSuperglobalHoldsIt(): void
     {
-        $_SERVER['HTTP_X_ANYTHING'] = 'attacker-chosen';
-        unset($_ENV['HTTP_X_ANYTHING']);
-
-        self::assertNull($this->resolve('HTTP_X_ANYTHING'));
-    }
-
-    public function testARealProcessEnvironmentVariableStillWinsEvenWhenHttpPrefixed(): void
-    {
-        // $_ENV is not client-writable, so an operator who genuinely exports
-        // HTTP_PROXY still gets it.
         $_ENV['HTTP_PROXY'] = 'http://corporate-proxy.internal:3128';
-        $_SERVER['HTTP_PROXY'] = 'http://evil.test:8080';
 
-        self::assertSame('http://corporate-proxy.internal:3128', $this->resolve('HTTP_PROXY, none'));
+        $this->expectException(ConfigurationException::class);
+
+        $this->resolve('HTTP_PROXY, none');
     }
 
-    public function testANonHttpNameIsStillReadFromServer(): void
+    public function testARedirectPrefixedTagIsRefused(): void
     {
-        // Non-breakage: setting configuration through fastcgi_param / SetEnv is
-        // a documented deployment pattern and it lands in $_SERVER only.
+        $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Basic c2VjcmV0';
+
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('REDIRECT_HTTP_AUTHORIZATION');
+
+        $this->resolve('REDIRECT_HTTP_AUTHORIZATION');
+    }
+
+    public function testANonHttpNameSetOnlyInServerFallsBackToTheDefault(): void
+    {
+        // $_SERVER also carries request data (PHP_AUTH_PW, QUERY_STRING, ...),
+        // so it is never a configuration source.
         unset($_ENV['ZEPHYRUS_TEST_DB_HOST']);
         $_SERVER['ZEPHYRUS_TEST_DB_HOST'] = 'db.internal';
 
-        self::assertSame('db.internal', $this->resolve('ZEPHYRUS_TEST_DB_HOST, localhost'));
+        self::assertSame('localhost', $this->resolve('ZEPHYRUS_TEST_DB_HOST, localhost'));
+    }
+
+    public function testARequestParameterCannotBecomeConfiguration(): void
+    {
+        $_SERVER['PHP_AUTH_PW'] = 'typed-by-client';
+        unset($_ENV['PHP_AUTH_PW']);
+
+        self::assertNull($this->resolve('PHP_AUTH_PW'));
     }
 
     public function testEnvTakesPrecedenceAndDefaultsStillApply(): void
@@ -98,6 +106,9 @@ final class EnvTagHttpoxyTest extends TestCase
         $_SERVER['ZEPHYRUS_TEST_ONLY_ENV'] = 'from-server';
 
         self::assertSame('from-env', $this->resolve('ZEPHYRUS_TEST_ONLY_ENV, fallback'));
+
+        unset($_ENV['ZEPHYRUS_TEST_ONLY_ENV']);
+        self::assertSame('fallback', $this->resolve('ZEPHYRUS_TEST_ONLY_ENV, fallback'));
 
         unset($_ENV['ZEPHYRUS_TEST_ABSENT'], $_SERVER['ZEPHYRUS_TEST_ABSENT']);
         self::assertSame('fallback', $this->resolve('ZEPHYRUS_TEST_ABSENT, fallback'));
