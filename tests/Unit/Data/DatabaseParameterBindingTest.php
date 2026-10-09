@@ -281,6 +281,69 @@ final class DatabaseParameterBindingTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function textWithANulByte(): iterable
+    {
+        yield 'nul in the middle' => ["secret\0value"];
+        yield 'leading nul' => ["\0secret-value"];
+        yield 'trailing nul' => ["secret-value\0"];
+        yield 'nul only' => ["\0"];
+        yield 'nul after unicode' => ["Zoë\0secret-value"];
+        yield 'nul after a megabyte' => [str_repeat('a', 1 << 20) . "\0secret-value"];
+        yield 'stringable' => [new class () implements Stringable {
+            public function __toString(): string
+            {
+                return "secret\0value";
+            }
+        }];
+        yield 'backed enum' => [BindingTestNulStatus::Split];
+    }
+
+    #[DataProvider('textWithANulByte')]
+    public function testAPositionalTextWithANulByteIsRefusedNamingItsPlaceholder(mixed $value): void
+    {
+        try {
+            $this->db->selectValue('SELECT ?, ?', ['first', $value]);
+            self::fail('expected the value to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertStringContainsString('#2', $e->getMessage());
+            self::assertStringContainsString(Binary::class, $e->getMessage());
+            self::assertStringNotContainsString('secret', $e->getMessage());
+        }
+    }
+
+    #[DataProvider('textWithANulByte')]
+    public function testANamedTextWithANulByteIsRefusedNamingItsPlaceholder(mixed $value): void
+    {
+        try {
+            $this->db->selectValue('SELECT :payload', ['payload' => $value]);
+            self::fail('expected the value to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertStringContainsString(':payload', $e->getMessage());
+            self::assertStringNotContainsString('secret', $e->getMessage());
+        }
+    }
+
+    public function testATextWithANulByteIsRefusedBeforeAnyStatementRuns(): void
+    {
+        $this->db->execute('CREATE TABLE account (email TEXT)');
+
+        try {
+            $this->db->execute('INSERT INTO account (email) VALUES (?), (?)', ['first@example.com', "second@example.com\0"]);
+            self::fail('expected the value to be refused');
+        } catch (\InvalidArgumentException) {
+        }
+
+        self::assertSame(0, $this->db->selectValue('SELECT COUNT(*) FROM account'));
+    }
+
+    public function testBytesWithANulByteStillBindAsBinary(): void
+    {
+        self::assertSame("a\0b", $this->db->selectValue('SELECT ?', [new Binary("a\0b")]));
+    }
+
+    /**
      * @return iterable<string, array{array<int|string, mixed>}>
      */
     public static function invalidKeys(): iterable
@@ -363,6 +426,11 @@ final class BindingSpyStatement extends PDOStatement
 enum BindingTestStatus: string
 {
     case Active = 'active';
+}
+
+enum BindingTestNulStatus: string
+{
+    case Split = "secret\0value";
 }
 
 enum BindingTestRank: int

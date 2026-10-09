@@ -396,7 +396,7 @@ final class Database
      * @throws DatabaseException on prepare or execution failure. Its message
      *         carries the SQLSTATE only; the statement and the driver text are
      *         reachable through DatabaseException::sql() and driverMessage().
-     * @throws \InvalidArgumentException when a key is not a valid placeholder or a value has no SQL form.
+     * @throws \InvalidArgumentException when a key is not a valid placeholder, a value has no SQL form or text holds a NUL byte.
      */
     public function query(string $sql, #[\SensitiveParameter] array $params = []): PDOStatement
     {
@@ -1003,20 +1003,41 @@ final class Database
             // As 0/1 rather than PARAM_BOOL's 't'/'f', which a text column keeps and reads back as true.
             is_bool($value) => [(int) $value, PDO::PARAM_INT],
             is_int($value) => [$value, PDO::PARAM_INT],
-            is_string($value) => [$value, PDO::PARAM_STR],
+            is_string($value) => [self::text($placeholder, $value), PDO::PARAM_STR],
             is_float($value) => [self::floatLiteral($value), PDO::PARAM_STR],
             $value instanceof Binary => [$value->bytes, PDO::PARAM_LOB],
             $value instanceof \DateTimeInterface => [$value->format('Y-m-d H:i:s.uP'), PDO::PARAM_STR],
             $value instanceof \BackedEnum => self::bindable($placeholder, $value->value),
-            $value instanceof \Stringable => [(string) $value, PDO::PARAM_STR],
+            $value instanceof \Stringable => [self::text($placeholder, (string) $value), PDO::PARAM_STR],
             is_resource($value) && get_resource_type($value) === 'stream' => [$value, PDO::PARAM_LOB],
             default => throw new \InvalidArgumentException(sprintf(
                 'Query parameter %s cannot be bound: %s has no SQL form. Bind a scalar, null, a '
                 . 'DateTimeInterface, a BackedEnum, a Stringable, a Binary or a stream.',
-                is_int($placeholder) ? '#' . $placeholder : ':' . ltrim($placeholder, ':'),
+                self::placeholderName($placeholder),
                 get_debug_type($value),
             )),
         };
+    }
+
+    /**
+     * Refuse text holding a NUL byte, which pdo_pgsql would cut short there.
+     */
+    private static function text(int|string $placeholder, #[\SensitiveParameter] string $value): string
+    {
+        if (str_contains($value, "\0")) {
+            throw new \InvalidArgumentException(sprintf(
+                'Query parameter %s cannot be bound: text cannot hold a NUL byte. Bind binary data as a %s.',
+                self::placeholderName($placeholder),
+                Binary::class,
+            ));
+        }
+
+        return $value;
+    }
+
+    private static function placeholderName(int|string $placeholder): string
+    {
+        return is_int($placeholder) ? '#' . $placeholder : ':' . ltrim($placeholder, ':');
     }
 
     /**

@@ -117,6 +117,28 @@ final class DatabaseParameterBindingPostgresTest extends TestCase
         self::assertSame($bytes, $this->readPayload(1));
     }
 
+    public function testATextWithANulByteIsRefusedRatherThanComparedUpToTheNul(): void
+    {
+        $this->db->execute('INSERT INTO sample (id, label) VALUES (?, ?)', [1, 'victim@example.com']);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('#1');
+
+        $this->db->selectValue('SELECT id FROM sample WHERE label = ?', ["victim@example.com\0other"]);
+    }
+
+    public function testATextWithANulByteIsRefusedRatherThanStoredUpToTheNul(): void
+    {
+        try {
+            $this->db->execute('INSERT INTO sample (id, label) VALUES (:id, :label)', ['id' => 1, 'label' => "kept\0dropped"]);
+            self::fail('expected the value to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertStringContainsString(':label', $e->getMessage());
+        }
+
+        self::assertSame(0, $this->db->selectValue('SELECT COUNT(*) FROM sample'));
+    }
+
     public function testAnEmptyBinaryIsStoredAsAnEmptyByteaRatherThanNull(): void
     {
         $this->db->execute('INSERT INTO sample (id, payload) VALUES (?, ?)', [1, new Binary('')]);
