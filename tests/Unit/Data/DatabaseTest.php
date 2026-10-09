@@ -895,7 +895,7 @@ final class DatabaseTest extends TestCase
         self::assertSame('1', $db->insertGetId('insert into users (name) values (?) returning id', ['Lou']));
     }
 
-    public function testInsertGetIdRejectsNulByteBeforeTheStatementRuns(): void
+    public function testInsertGetIdRejectsNulByteInSqlWithInvalidArgument(): void
     {
         $this->expectException(\InvalidArgumentException::class);
 
