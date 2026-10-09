@@ -468,9 +468,23 @@ final class MailerTest extends TestCase
         yield 'extra segment' => ['application/pdf/extra'];
         yield 'leading space' => [' application/pdf'];
         yield 'CRLF header injection' => ["text/plain\r\nX-Injected: 1"];
-        yield 'parameter with CRLF injection' => ["application/pdf\r\nX-Inj: 1"];
-        yield 'bare type' => ['text'];
-        yield 'three segments' => ['a/b/c'];
+        yield 'CR LF inside a quoted value' => ["text/plain; charset=\"a\r\nX-Injected: 1\""];
+        yield 'CR LF after a bare value' => ["text/plain; charset=utf-8\r\nX-Injected: 1"];
+        yield 'backslash inside quotes' => ['text/plain; charset="a\\"b"'];
+        yield 'vertical tab inside quotes' => ["text/plain; charset=\"a\x0Bb\""];
+        yield 'non-ASCII inside quotes' => ['text/plain; charset="caf' . "\u{e9}" . '"'];
         yield 'unterminated quote' => ['text/plain; name="x'];
+        yield 'name parameter' => ['application/pdf; name=evil.exe'];
+        yield 'filename parameter' => ['application/pdf; filename="../../evil.exe"'];
+        yield 'boundary parameter' => ['multipart/mixed; boundary=x'];
+        yield 'upper case reserved parameter' => ['application/pdf; NAME=evil.exe'];
+    }
+
+    public function testAttachContentAcceptsWhitespaceBeforeTheParameterSeparator(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attachContent('content', 'notes.txt', 'text/plain ; charset=utf-8');
+
+        self::assertSame('text/plain ; charset=utf-8', $mailer->getPhpMailer()->getAttachments()[0][4]);
     }
 }

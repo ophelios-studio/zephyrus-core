@@ -51,7 +51,7 @@ final class Mailer
     private ?string $htmlBody = null;
     private ?string $textBody = null;
 
-    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*(?:;[ \t]*[a-z0-9][a-z0-9!#$&^_.+-]*=(?:[a-z0-9!#$&^_.+-]+|"[^"\r\n\0\\\\]*"))*\z~i';
+    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*(?:[ \t]*;[ \t]*(?!(?:name|filename|boundary)=)[a-z0-9][a-z0-9!#$&^_.+-]*=(?:[a-z0-9!#$&^_.+-]+|"[\x20\x21\x23-\x5B\x5D-\x7E]*"))*\z~i';
 
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
@@ -233,7 +233,7 @@ final class Mailer
      * @param string      $content  The file contents.
      * @param string      $name     Display name the recipient's client writes to disk: non-empty,
      *                              not "0", without NUL, CR, LF or a path separator.
-     * @param string|null $mimeType Media type as type/subtype, optionally followed by parameters such as "; method=REQUEST". Null lets PHPMailer infer it from $name.
+     * @param string|null $mimeType Media type as type/subtype, optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
      */
@@ -250,7 +250,7 @@ final class Mailer
         $this->assertDisplayName($name);
 
         if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {
-            throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype');
+            throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype optionally followed by ; name=value parameters other than name, filename or boundary');
         }
 
         $this->mail->addStringAttachment($content, $name, PHPMailer::ENCODING_BASE64, $mimeType ?? '');
