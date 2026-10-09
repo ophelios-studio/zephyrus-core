@@ -13,61 +13,41 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * Use the named factory methods to create descriptive instances without
  * catching raw PDOExceptions throughout application code.
  *
- * WHY THE MESSAGE IS TERSE BY DEFAULT
+ * WHY THE MESSAGE IS TERSE
  *
  * A driver error message is not a safe string, and native prepares do not make
- * it one. Zephyrus no longer interpolates parameters client-side, so the old
- * worst case is gone (the whole statement echoed back with every value inlined:
- * `LINE 1: ... VALUES ('1','Jane Roe','a private note', ...`). What remains is
- * still enough to leak, and both halves were measured against PostgreSQL 16 on
- * native prepares:
+ * it one. Measured against PostgreSQL 16:
  *
  *   DETAIL:  Key (email)=(jane@example.com) already exists.
  *   CONTEXT: unnamed portal parameter $1 = 'jane@example.com'
  *
- * The first is emitted for any unique or foreign-key violation, the second for
- * any parameter PostgreSQL fails to coerce. That message then travels wherever
- * exceptions travel: logs, alert emails, debug error pages.
- * queryExecutionFailed() therefore keeps the SQLSTATE (a condition code, never
- * a value) in the message and holds the statement and the driver text in sql()
- * and driverMessage(), where a caller must ask for them and can scrub them
- * first.
+ * The first is emitted for any unique or foreign-key violation, including one
+ * deferred to COMMIT, the second for any parameter PostgreSQL fails to coerce.
+ * That message then travels wherever exceptions travel: logs, alert emails,
+ * debug error pages. queryExecutionFailed() and transactionExecutionFailed()
+ * therefore keep the SQLSTATE (a condition code, never a value) in the message
+ * and in sqlState(), and hold the driver text in driverMessage() (and the
+ * statement in sql()), where a caller must ask for them and can scrub them first.
  *
- * enableVerboseMessages() restores the previous, fully detailed message shape
- * verbatim. It is a development and diagnosis switch: turning it on in a
- * production process puts row values back into every sink that prints an
- * exception message.
+ * There is deliberately no switch that restores the detailed message: a
+ * process-wide flag would put row values back into every sink that prints an
+ * exception, production included. Diagnosis reads driverMessage() on purpose.
  *
- * The hand-called factories (queryFailed, connectionFailed, transactionFailed)
- * are unchanged. Their arguments are chosen by the caller rather than lifted off
- * a driver, so they carry nothing the caller did not put there.
+ * queryFailed(), connectionFailed() and transactionFailed() print what their
+ * caller passes; Database::fromConfig() passes the driver's connect error, which
+ * names the server and user but holds no row data.
  */
 final class DatabaseException extends ZephyrusRuntimeException
 {
-    /**
-     * Process-wide, and deliberately so: the decision is "is this process running
-     * in a diagnosis mode", which is a property of the process and not of any one
-     * connection or query. Off by default, so an application that upgrades without
-     * reading this file gets the safe behaviour.
-     */
-    private static bool $verboseMessages = false;
-
     /**
      * The statement that failed, and the driver's own error text. Held as fields
      * rather than folded into the message so that reaching them is an explicit act.
      */
     private ?string $sql = null;
     private ?string $driverMessage = null;
+    private ?string $sqlState = null;
 
-    public static function enableVerboseMessages(bool $enabled = true): void
-    {
-        self::$verboseMessages = $enabled;
-    }
-
-    public static function verboseMessagesEnabled(): bool
-    {
-        return self::$verboseMessages;
-    }
+    private const SQLSTATE_PATTERN = '/\A[0-9A-Z]{5}\z/';
 
     public static function connectionFailed(string $dsn, string $reason, ?\Throwable $previous = null): self
     {
@@ -85,34 +65,68 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * Wrap a failure raised by the driver while executing a statement.
-     *
-     * This is the factory for anything whose text came OUT of PDO. The statement
-     * and the driver message are kept off the message unless verbose messages are
-     * enabled; both stay reachable through sql() and driverMessage().
+     * Wrap a failure raised by the driver while executing a statement. The
+     * statement and the driver text stay off the message; sql() and
+     * driverMessage() return them.
      */
-    public static function queryExecutionFailed(string $sql, PDOException $previous): self
+    public static function queryExecutionFailed(string $sql, #[\SensitiveParameter] PDOException $previous): self
     {
-        $driverMessage = $previous->getMessage();
-
-        if (self::$verboseMessages) {
-            $message = "Query failed [{$sql}]: {$driverMessage}";
-        } else {
-            $sqlState = self::extractSqlState($previous);
-            $message = "Query failed [SQLSTATE {$sqlState}]: statement and driver detail withheld "
-                . '(read DatabaseException::sql() / driverMessage(), or call '
-                . 'DatabaseException::enableVerboseMessages() to inline them)';
-        }
-
-        // The PDOException is deliberately NOT attached as the previous exception,
-        // which matches what this class did before: a handler that walks the chain
-        // (Tracy, a JSON error renderer) prints every previous message, and that
-        // would re-open the exact channel the terse message closes.
-        $exception = new self($message);
+        $sqlState = self::extractSqlState($previous);
+        $exception = self::fromDriverError(
+            "Query failed [SQLSTATE {$sqlState}]: statement and driver detail withheld, "
+            . 'read sql() and driverMessage() to inspect them',
+            $sqlState,
+            $previous,
+        );
         $exception->sql = $sql;
-        $exception->driverMessage = $driverMessage;
 
         return $exception;
+    }
+
+    /**
+     * Wrap a failure raised by the driver at one stage of a transaction (begin,
+     * commit, savepoint, release savepoint). The driver text stays off the
+     * message; driverMessage() returns it.
+     */
+    public static function transactionExecutionFailed(string $stage, #[\SensitiveParameter] PDOException $previous): self
+    {
+        $sqlState = self::extractSqlState($previous);
+
+        return self::fromDriverError(
+            "Transaction failed at {$stage} [SQLSTATE {$sqlState}]: driver detail withheld, "
+            . 'read driverMessage() to inspect it',
+            $sqlState,
+            $previous,
+        );
+    }
+
+    /**
+     * A statement failed inside a transaction level and its exception was caught,
+     * so the level was rolled back instead of committed or released. 25P02 is
+     * the SQLSTATE PostgreSQL itself reports for the aborted transaction.
+     */
+    public static function transactionAborted(string $stage): self
+    {
+        $exception = new self(
+            "Transaction failed at {$stage} [SQLSTATE 25P02]: a statement inside it failed and its exception "
+            . 'was caught, so its writes were rolled back; let the exception propagate, or catch it around '
+            . 'a nested transaction()',
+        );
+        $exception->sqlState = '25P02';
+
+        return $exception;
+    }
+
+    /**
+     * The five-character SQLSTATE the driver reported, for branching on the failure
+     * kind (for example 23505 for a unique violation on PostgreSQL) without parsing
+     * the message. Null unless the instance came from queryExecutionFailed(),
+     * transactionExecutionFailed() or transactionAborted(). Note that PDO reports a connection lost
+     * mid-session as HY000, not 08006.
+     */
+    public function sqlState(): ?string
+    {
+        return $this->sqlState;
     }
 
     /**
@@ -126,21 +140,25 @@ final class DatabaseException extends ZephyrusRuntimeException
 
     /**
      * The driver's own error text, when this instance came from
-     * queryExecutionFailed(). It can contain real column values even on native
-     * prepares (see the class docblock); scrub it before writing it to any sink.
+     * queryExecutionFailed() or transactionExecutionFailed(). It can contain real
+     * column values (see the class docblock); scrub it before writing it to any sink.
      */
     public function driverMessage(): ?string
     {
         return $this->driverMessage;
     }
 
-    public static function fromPdoException(PDOException $e, string $context = ''): self
+    /**
+     * The PDOException is deliberately not chained: a handler that walks the
+     * chain (Tracy, a JSON error renderer) would print the driver text.
+     */
+    private static function fromDriverError(string $message, string $sqlState, #[\SensitiveParameter] PDOException $previous): self
     {
-        $message = $context !== ''
-            ? "{$context}: {$e->getMessage()}"
-            : $e->getMessage();
+        $exception = new self($message);
+        $exception->driverMessage = $previous->getMessage();
+        $exception->sqlState = $sqlState;
 
-        return new self($message, (int) $e->getCode(), $e);
+        return $exception;
     }
 
     /**
@@ -148,15 +166,15 @@ final class DatabaseException extends ZephyrusRuntimeException
      * itself, in the exception code. Neither is guaranteed present (a connection
      * that died mid-statement reports HY000 or nothing at all).
      */
-    private static function extractSqlState(PDOException $e): string
+    private static function extractSqlState(#[\SensitiveParameter] PDOException $e): string
     {
         $fromErrorInfo = $e->errorInfo[0] ?? null;
-        if (is_string($fromErrorInfo) && $fromErrorInfo !== '') {
+        if (is_string($fromErrorInfo) && preg_match(self::SQLSTATE_PATTERN, $fromErrorInfo) === 1) {
             return $fromErrorInfo;
         }
 
         $code = (string) $e->getCode();
 
-        return $code !== '' && $code !== '0' ? $code : 'HY000';
+        return preg_match(self::SQLSTATE_PATTERN, $code) === 1 ? $code : 'HY000';
     }
 }

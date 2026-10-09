@@ -105,6 +105,22 @@ final class Database
     private ?string $connectionDsn = null;
 
     /**
+     * Number of transaction() calls currently running in a savepoint, which
+     * gives each nesting level its own savepoint name.
+     */
+    private int $savepointDepth = 0;
+
+    /**
+     * Transaction levels (0 for the outermost, then each savepoint depth) in
+     * which a query() failed. PostgreSQL aborts the transaction on such a failure
+     * and answers a later COMMIT with a silent ROLLBACK, so a level whose failure
+     * was caught is checked against the server before it is committed or released.
+     *
+     * @var array<int, true>
+     */
+    private array $failedLevels = [];
+
+    /**
      * Hard ceiling on the process-wide store, so a long-running process that
      * generates unbounded distinct SQL (dynamic IN lists, generated filters)
      * cannot grow it forever. Reaching it resets the store wholesale rather
@@ -373,26 +389,35 @@ final class Database
     /**
      * Execute a prepared statement with positional or named placeholders.
      *
+     * Values bind by type: bool as 0/1, int and null natively, Binary and streams as
+     * binary, float, DateTimeInterface, BackedEnum and Stringable as text; anything else is refused.
+     *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on prepare or execution failure. Its message
      *         carries the SQLSTATE only; the statement and the driver text are
      *         reachable through DatabaseException::sql() and driverMessage().
+     * @throws \InvalidArgumentException when a key is not a valid placeholder or a value has no SQL form.
      */
-    public function query(string $sql, array $params = []): PDOStatement
+    public function query(string $sql, #[\SensitiveParameter] array $params = []): PDOStatement
     {
+        $bindings = self::bindings($params);
+
         try {
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
+
+            foreach ($bindings as [$placeholder, $value, $type]) {
+                $stmt->bindValue($placeholder, $value, $type);
+            }
+
+            $stmt->execute();
 
             return $stmt;
         } catch (PDOException $e) {
-            // queryExecutionFailed(), not queryFailed(): the driver text can carry
-            // real column values even on native prepares (PostgreSQL emits
-            // `DETAIL: Key (email)=(...)` on a constraint violation and
-            // `CONTEXT: unnamed portal parameter $1 = '...'` on a type error), so it
-            // stays off the message unless DatabaseException::enableVerboseMessages()
-            // is on. Both the statement and the driver text remain on the exception,
-            // via sql() and driverMessage().
+            if ($this->inTransaction()) {
+                $this->failedLevels[$this->savepointDepth] = true;
+            }
+
+            // The driver text can carry column values, so the factory keeps it off the message.
             throw DatabaseException::queryExecutionFailed($sql, $e);
         }
     }
@@ -403,7 +428,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    public function select(string $sql, array $params = []): array
+    public function select(string $sql, #[\SensitiveParameter] array $params = []): array
     {
         $stmt = $this->query($sql, $params);
         $rows = $stmt->fetchAll();
@@ -423,7 +448,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function selectOne(string $sql, array $params = []): ?\stdClass
+    public function selectOne(string $sql, #[\SensitiveParameter] array $params = []): ?\stdClass
     {
         $stmt = $this->query($sql, $params);
         $row = $stmt->fetch();
@@ -447,11 +472,13 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function selectValue(string $sql, array $params = [], mixed $default = null): mixed
+    public function selectValue(string $sql, #[\SensitiveParameter] array $params = [], mixed $default = null): mixed
     {
-        $value = $this->query($sql, $params)->fetchColumn();
+        // fetchColumn() answers false both for "no row" and for a false column,
+        // so the row itself is what decides between the default and the value.
+        $row = $this->query($sql, $params)->fetch(PDO::FETCH_NUM);
 
-        return $value === false ? $default : $value;
+        return $row === false ? $default : $row[0];
     }
 
     /**
@@ -459,7 +486,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function selectInt(string $sql, array $params = [], int $default = 0): int
+    public function selectInt(string $sql, #[\SensitiveParameter] array $params = [], int $default = 0): int
     {
         return (int) $this->selectValue($sql, $params, $default);
     }
@@ -469,7 +496,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function selectString(string $sql, array $params = [], ?string $default = null): ?string
+    public function selectString(string $sql, #[\SensitiveParameter] array $params = [], ?string $default = null): ?string
     {
         $value = $this->selectValue($sql, $params, $default);
 
@@ -481,7 +508,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function selectBool(string $sql, array $params = [], bool $default = false): bool
+    public function selectBool(string $sql, #[\SensitiveParameter] array $params = [], bool $default = false): bool
     {
         return (bool) $this->selectValue($sql, $params, $default);
     }
@@ -491,7 +518,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function selectFloat(string $sql, array $params = [], float $default = 0.0): float
+    public function selectFloat(string $sql, #[\SensitiveParameter] array $params = [], float $default = 0.0): float
     {
         return (float) $this->selectValue($sql, $params, $default);
     }
@@ -501,7 +528,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function count(string $sql, array $params = []): int
+    public function count(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->selectInt($sql, $params, 0);
     }
@@ -512,7 +539,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    public function selectPage(string $sql, int $page, int $perPage, array $params = []): array
+    public function selectPage(string $sql, int $page, int $perPage, #[\SensitiveParameter] array $params = []): array
     {
         return $this->selectPageWith($sql, new PaginationRequest($page, $perPage), $params);
     }
@@ -523,7 +550,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    public function selectPageWith(string $sql, PaginationRequest $pagination, array $params = []): array
+    public function selectPageWith(string $sql, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): array
     {
         return $this->select(
             $sql . sprintf(' LIMIT %d OFFSET %d', $pagination->limit(), $pagination->offset()),
@@ -537,7 +564,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    public function selectSorted(string $sql, SortRequest $sort, array $params = []): array
+    public function selectSorted(string $sql, SortRequest $sort, #[\SensitiveParameter] array $params = []): array
     {
         return $this->select($sql . $sort->toSql(), $params);
     }
@@ -549,7 +576,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    public function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, array $params = []): array
+    public function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, #[\SensitiveParameter] array $params = []): array
     {
         $where = $filter->toWhereClause($columnMap);
 
@@ -571,7 +598,7 @@ final class Database
         FilterRequest $filter,
         array $columnMap,
         SortRequest $sort,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): array {
         $where = $filter->toWhereClause($columnMap);
 
@@ -587,7 +614,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    public function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, array $params = []): array
+    public function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): array
     {
         return $this->selectPageWith($sql . $sort->toSql(), $pagination, $params);
     }
@@ -598,7 +625,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
-    public function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
+    public function paginate(string $dataSql, string $countSql, int $page, int $perPage, #[\SensitiveParameter] array $params = []): array
     {
         return $this->paginateWith($dataSql, $countSql, new PaginationRequest($page, $perPage), $params);
     }
@@ -609,7 +636,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
-    public function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
+    public function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): array
     {
         $total = $this->count($countSql, $params);
         $items = $this->selectPageWith($dataSql, $pagination, $params);
@@ -637,7 +664,7 @@ final class Database
         string $countSql,
         SortRequest $sort,
         PaginationRequest $pagination,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): array {
         $total = $this->count($countSql, $params);
         $items = $this->selectPageSorted($dataSql, $sort, $pagination, $params);
@@ -660,7 +687,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
      */
-    public function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
+    public function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, #[\SensitiveParameter] array $params = []): PaginatedResult
     {
         return $this->paginateResultWith($dataSql, $countSql, new PaginationRequest($page, $perPage), $params);
     }
@@ -671,7 +698,7 @@ final class Database
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
      */
-    public function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): PaginatedResult
+    public function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): PaginatedResult
     {
         return PaginatedResult::fromArray(
             $this->paginateWith($dataSql, $countSql, $pagination, $params),
@@ -691,7 +718,7 @@ final class Database
         int $page,
         int $perPage,
         callable $mapper,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->paginateResult($dataSql, $countSql, $page, $perPage, $params)
             ->mapItems($mapper);
@@ -709,7 +736,7 @@ final class Database
         string $countSql,
         PaginationRequest $pagination,
         callable $mapper,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->paginateResultWith($dataSql, $countSql, $pagination, $params)
             ->mapItems($mapper);
@@ -728,7 +755,7 @@ final class Database
         array $query,
         int $defaultPerPage = 25,
         int $maxPerPage = 100,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         $pagination = PaginationRequest::fromQuery($query, $defaultPerPage, $maxPerPage);
 
@@ -746,7 +773,7 @@ final class Database
         string $countSql,
         SortRequest $sort,
         PaginationRequest $pagination,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return PaginatedResult::fromArray(
             $this->paginateSortedWith($dataSql, $countSql, $sort, $pagination, $params),
@@ -767,7 +794,7 @@ final class Database
         array $columnMap,
         SortRequest $sort,
         PaginationRequest $pagination,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         $where = $filter->toWhereClause($columnMap);
         $bindings = array_merge($params, $where['params']);
@@ -786,7 +813,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function execute(string $sql, array $params = []): int
+    public function execute(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->query($sql, $params)->rowCount();
     }
@@ -796,7 +823,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function insert(string $sql, array $params = []): int
+    public function insert(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->execute($sql, $params);
     }
@@ -806,7 +833,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function insertGetId(string $sql, array $params = []): string|false
+    public function insertGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {
         $this->insert($sql, $params);
 
@@ -818,7 +845,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function update(string $sql, array $params = []): int
+    public function update(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->execute($sql, $params);
     }
@@ -828,7 +855,7 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function delete(string $sql, array $params = []): int
+    public function delete(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->execute($sql, $params);
     }
@@ -838,68 +865,65 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      */
-    public function exists(string $sql, array $params = []): bool
+    public function exists(string $sql, #[\SensitiveParameter] array $params = []): bool
     {
         return $this->selectBool($sql, $params, false);
     }
 
     /**
-     * Run $work inside a database transaction.
+     * Run $work inside a database transaction and return its result.
      *
-     * Commits if $work returns without throwing, rolls back otherwise.
-     * The return value of $work is forwarded to the caller.
+     * Commits if $work returns, rolls back and rethrows if it throws. A call
+     * made while a transaction is already open runs in a savepoint instead, so
+     * its failure undoes only its own writes and the enclosing transaction can
+     * carry on. A rollback that fails in turn never replaces the error that
+     * caused it. When $work catches a failed query() and the server has aborted
+     * the transaction (PostgreSQL), the commit or release is refused rather than
+     * reported as done: let the exception propagate, or catch it around a nested
+     * transaction().
      *
-     * Nested calls re-use the existing transaction (no savepoints).
-     *
-     * @throws DatabaseException when the DB itself fails to begin/commit/rollback.
-     * @throws \Throwable re-throws any exception thrown inside $work after rolling back.
+     * @throws DatabaseException when the database fails to begin, commit, or set or release a savepoint,
+     *         or with SQLSTATE 25P02 when $work caught a failure that aborted the transaction. Its
+     *         message carries the stage and the SQLSTATE only; the driver text is on driverMessage().
+     * @template T
+     * @param callable(Database): T $work
+     * @return T
+     * @throws \Throwable whatever $work throws, once its writes are rolled back.
      */
     public function transaction(callable $work): mixed
     {
-        $ownTransaction = !$this->pdo->inTransaction();
-
-        if ($ownTransaction) {
-            try {
-                $this->pdo->beginTransaction();
-            } catch (PDOException $e) {
-                throw DatabaseException::transactionFailed("begin: {$e->getMessage()}");
-            }
+        if ($this->inTransaction()) {
+            return $this->savepoint($work);
         }
+
+        try {
+            $this->pdo->beginTransaction();
+        } catch (PDOException $e) {
+            throw DatabaseException::transactionExecutionFailed('begin', $e);
+        }
+
+        $this->failedLevels = [];
 
         try {
             $result = $work($this);
         } catch (\Throwable $e) {
-            if ($ownTransaction && $this->pdo->inTransaction()) {
-                try {
-                    $this->pdo->rollBack();
-                } catch (PDOException $rollbackEx) {
-                    throw DatabaseException::transactionFailed(
-                        "rollback after error: {$rollbackEx->getMessage()}"
-                    );
-                }
-            }
+            $this->rollBackOpenTransaction();
 
             throw $e;
         }
 
-        if ($ownTransaction) {
-            try {
-                $this->pdo->commit();
-            } catch (PDOException $commitEx) {
-                if ($this->pdo->inTransaction()) {
-                    try {
-                        $this->pdo->rollBack();
-                    } catch (PDOException $rollbackEx) {
-                        throw DatabaseException::transactionFailed(sprintf(
-                            'commit: %s; rollback after commit failure: %s',
-                            $commitEx->getMessage(),
-                            $rollbackEx->getMessage(),
-                        ));
-                    }
-                }
+        if ($this->failedSince(0) && $this->transactionIsAborted()) {
+            $this->rollBackOpenTransaction();
 
-                throw DatabaseException::transactionFailed("commit: {$commitEx->getMessage()}");
-            }
+            throw DatabaseException::transactionAborted('commit');
+        }
+
+        try {
+            $this->pdo->commit();
+        } catch (PDOException $e) {
+            $this->rollBackOpenTransaction();
+
+            throw DatabaseException::transactionExecutionFailed('commit', $e);
         }
 
         return $result;
@@ -915,6 +939,11 @@ final class Database
 
     /**
      * Report whether the underlying connection currently has an active transaction.
+     *
+     * A transaction() callable may commit or roll back on its own, so an earlier
+     * answer is never reusable.
+     *
+     * @phpstan-impure
      */
     public function inTransaction(): bool
     {
@@ -928,6 +957,206 @@ final class Database
     public function pdo(): PDO
     {
         return $this->pdo;
+    }
+
+    /**
+     * Resolve each parameter to its placeholder, value and PDO type, refusing
+     * what has no SQL form before anything reaches the driver.
+     * PDOStatement::execute() binds everything as a string instead, which
+     * PostgreSQL rejects for false on a boolean and misreads for bytes on a bytea.
+     *
+     * @param array<int|string, mixed> $params list keys for ? placeholders, names (with or without the colon) for named ones
+     * @return list<array{int|string, mixed, int}>
+     */
+    private static function bindings(#[\SensitiveParameter] array $params): array
+    {
+        $bindings = [];
+
+        foreach ($params as $key => $value) {
+            $placeholder = self::placeholder($key);
+            $bindings[] = [$placeholder, ...self::bindable($placeholder, $value)];
+        }
+
+        return $bindings;
+    }
+
+    private static function placeholder(int|string $key): int|string
+    {
+        if ($key === '' || $key === PHP_INT_MAX || (is_int($key) && $key < 0)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Query parameter key %s is not a placeholder: use a list for ? placeholders and names for named ones.',
+                $key === '' ? "''" : $key,
+            ));
+        }
+
+        // PDO numbers ? placeholders from 1, the list from 0.
+        return is_int($key) ? $key + 1 : $key;
+    }
+
+    /**
+     * @return array{mixed, int}
+     */
+    private static function bindable(int|string $placeholder, #[\SensitiveParameter] mixed $value): array
+    {
+        return match (true) {
+            $value === null => [null, PDO::PARAM_NULL],
+            // As 0/1 rather than PARAM_BOOL's 't'/'f', which a text column keeps and reads back as true.
+            is_bool($value) => [(int) $value, PDO::PARAM_INT],
+            is_int($value) => [$value, PDO::PARAM_INT],
+            is_string($value) => [$value, PDO::PARAM_STR],
+            is_float($value) => [self::floatLiteral($value), PDO::PARAM_STR],
+            $value instanceof Binary => [$value->bytes, PDO::PARAM_LOB],
+            $value instanceof \DateTimeInterface => [$value->format('Y-m-d H:i:s.uP'), PDO::PARAM_STR],
+            $value instanceof \BackedEnum => self::bindable($placeholder, $value->value),
+            $value instanceof \Stringable => [(string) $value, PDO::PARAM_STR],
+            is_resource($value) && get_resource_type($value) === 'stream' => [$value, PDO::PARAM_LOB],
+            default => throw new \InvalidArgumentException(sprintf(
+                'Query parameter %s cannot be bound: %s has no SQL form. Bind a scalar, null, a '
+                . 'DateTimeInterface, a BackedEnum, a Stringable, a Binary or a stream.',
+                is_int($placeholder) ? '#' . $placeholder : ':' . ltrim($placeholder, ':'),
+                get_debug_type($value),
+            )),
+        };
+    }
+
+    /**
+     * The shortest text that reads back as the same double, whatever the
+     * precision and locale settings, spelled the way PostgreSQL reads it.
+     */
+    private static function floatLiteral(float $value): string
+    {
+        if (is_nan($value)) {
+            return 'NaN';
+        }
+
+        if (is_infinite($value)) {
+            return $value > 0 ? 'Infinity' : '-Infinity';
+        }
+
+        if ($value === 0.0) {
+            return fdiv(1.0, $value) < 0 ? '-0' : '0';
+        }
+
+        // Below 2^53 an integral double is exact, and an integer column rejects "45.0".
+        if ($value === floor($value) && abs($value) < 9007199254740992.0) {
+            return sprintf('%.0F', $value);
+        }
+
+        for ($precision = 15; $precision < 17; $precision++) {
+            $literal = sprintf("%.{$precision}h", $value);
+
+            if ((float) $literal === $value) {
+                return $literal;
+            }
+        }
+
+        return sprintf('%.17h', $value);
+    }
+
+    /**
+     * Run $work inside a savepoint of the transaction already open.
+     *
+     * @template T
+     * @param callable(Database): T $work
+     * @return T
+     */
+    private function savepoint(callable $work): mixed
+    {
+        $name = 'zephyrus_tx_' . ($this->savepointDepth + 1);
+
+        try {
+            $this->pdo->exec("SAVEPOINT {$name}");
+        } catch (PDOException $e) {
+            throw DatabaseException::transactionExecutionFailed('savepoint', $e);
+        }
+
+        $depth = ++$this->savepointDepth;
+
+        try {
+            $result = $work($this);
+        } catch (\Throwable $e) {
+            $this->rollBackToSavepoint($name, $depth);
+
+            throw $e;
+        } finally {
+            $this->savepointDepth--;
+        }
+
+        if ($this->failedSince($depth) && $this->transactionIsAborted()) {
+            $this->rollBackToSavepoint($name, $depth);
+
+            throw DatabaseException::transactionAborted('release savepoint');
+        }
+
+        try {
+            $this->pdo->exec("RELEASE SAVEPOINT {$name}");
+        } catch (PDOException $e) {
+            $this->rollBackToSavepoint($name, $depth);
+
+            throw DatabaseException::transactionExecutionFailed('release savepoint', $e);
+        }
+
+        return $result;
+    }
+
+    private function rollBackOpenTransaction(): void
+    {
+        $this->failedLevels = [];
+
+        if (!$this->inTransaction()) {
+            return;
+        }
+
+        try {
+            $this->pdo->rollBack();
+        } catch (PDOException) {
+            // A failed rollback must not mask the exception that caused it.
+        }
+    }
+
+    private function rollBackToSavepoint(string $name, int $depth): void
+    {
+        // One try on purpose: a release without the rollback would keep the writes.
+        try {
+            $this->pdo->exec("ROLLBACK TO SAVEPOINT {$name}");
+            $this->pdo->exec("RELEASE SAVEPOINT {$name}");
+        } catch (PDOException) {
+            // A failed rollback must not mask the exception that caused it.
+            return;
+        }
+
+        $this->failedLevels = array_filter(
+            $this->failedLevels,
+            static fn (int $level): bool => $level < $depth,
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+
+    /**
+     * Whether the server refuses statements because the transaction is aborted.
+     * The caller may have repaired a failure with its own savepoint, and SQLite
+     * never aborts, so a recorded failure alone does not decide it.
+     */
+    private function transactionIsAborted(): bool
+    {
+        try {
+            $this->pdo->query('SELECT 1');
+        } catch (PDOException $e) {
+            return ($e->errorInfo[0] ?? null) === '25P02';
+        }
+
+        return false;
+    }
+
+    private function failedSince(int $depth): bool
+    {
+        foreach ($this->failedLevels as $level => $_) {
+            if ($level >= $depth) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1002,10 +1231,7 @@ final class Database
                 $map[$name] = $this->typeConversions[$nativeType];
             } elseif (str_starts_with($nativeType, '_')) {
                 // PostgreSQL array types (e.g. _INT4, _TEXT) → PHP arrays.
-                $map[$name] = static function (string $value): array {
-                    $inner = str_replace(['{', '}'], '', $value);
-                    return $inner === '' ? [] : explode(',', $inner);
-                };
+                $map[$name] = PostgresArrayParser::parse(...);
             }
         }
 

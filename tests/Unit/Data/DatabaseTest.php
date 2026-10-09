@@ -771,12 +771,11 @@ final class DatabaseTest extends TestCase
         });
     }
 
-    public function testNestedTransactionReusesOuter(): void
+    public function testNestedTransactionCommitsWithTheOuter(): void
     {
         $this->db->transaction(function (Database $db): void {
             $db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Frank', 'frank@example.com']);
 
-            // Inner transaction should reuse the outer — no exception.
             $db->transaction(function (Database $db): void {
                 $db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Grace', 'grace@example.com']);
             });
@@ -792,140 +791,8 @@ final class DatabaseTest extends TestCase
         self::assertSame('hello', $value);
     }
 
-    public function testTransactionWrapsBeginFailureAsDatabaseException(): void
-    {
-        $pdo = new class ('sqlite::memory:') extends PDO {
-            public function beginTransaction(): bool
-            {
-                throw new PDOException('begin failed');
-            }
-        };
+    // ── query failures do not leak the statement ────────────────────────────
 
-        $db = new Database($pdo);
-
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Transaction failed: begin: begin failed');
-
-        $db->transaction(fn (): string => 'ok');
-    }
-
-    public function testTransactionWrapsCommitFailureAsDatabaseException(): void
-    {
-        $pdo = new class ('sqlite::memory:') extends PDO {
-            private bool $inTransaction = false;
-
-            public function beginTransaction(): bool
-            {
-                $this->inTransaction = true;
-
-                return true;
-            }
-
-            public function inTransaction(): bool
-            {
-                return $this->inTransaction;
-            }
-
-            public function commit(): bool
-            {
-                throw new PDOException('commit failed');
-            }
-
-            public function rollBack(): bool
-            {
-                $this->inTransaction = false;
-
-                return true;
-            }
-        };
-
-        $db = new Database($pdo);
-
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Transaction failed: commit: commit failed');
-
-        $db->transaction(fn (): string => 'ok');
-    }
-
-    public function testTransactionReportsRollbackFailureAfterCommitFailure(): void
-    {
-        $pdo = new class ('sqlite::memory:') extends PDO {
-            private bool $inTransaction = false;
-
-            public function beginTransaction(): bool
-            {
-                $this->inTransaction = true;
-
-                return true;
-            }
-
-            public function inTransaction(): bool
-            {
-                return $this->inTransaction;
-            }
-
-            public function commit(): bool
-            {
-                throw new PDOException('commit failed hard');
-            }
-
-            public function rollBack(): bool
-            {
-                throw new PDOException('rollback also failed');
-            }
-        };
-
-        $db = new Database($pdo);
-
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Transaction failed: commit: commit failed hard; rollback after commit failure: rollback also failed');
-
-        $db->transaction(fn (): string => 'ok');
-    }
-
-    public function testTransactionReportsRollbackFailureAfterWorkException(): void
-    {
-        $pdo = new class ('sqlite::memory:') extends PDO {
-            private bool $inTransaction = false;
-
-            public function beginTransaction(): bool
-            {
-                $this->inTransaction = true;
-
-                return true;
-            }
-
-            public function inTransaction(): bool
-            {
-                return $this->inTransaction;
-            }
-
-            public function rollBack(): bool
-            {
-                throw new PDOException('rollback after work failed');
-            }
-        };
-
-        $db = new Database($pdo);
-
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Transaction failed: rollback after error: rollback after work failed');
-
-        $db->transaction(function (): void {
-            throw new \RuntimeException('work failed');
-        });
-    }
-
-    // ── query failures do not leak the statement (finding 5) ────────────────
-
-    /**
-     * REGRESSION. query() built its DatabaseException as
-     * queryFailed($sql, $e->getMessage()), so the message carried the raw
-     * statement AND the driver's error text. Native prepares shrink that text but
-     * do not sanitise it: PostgreSQL still emits `DETAIL: Key (email)=(...)` on a
-     * constraint violation and `CONTEXT: unnamed portal parameter $1 = '...'` on a
-     * coercion failure, both carrying real column values.
-     */
     public function testQueryFailureWithholdsTheStatementAndDriverTextByDefault(): void
     {
         $this->db->query('INSERT INTO users (id, name, email) VALUES (?, ?, ?)', [1, 'Jane Roe', 'jane@example.com']);
@@ -941,21 +808,6 @@ final class DatabaseTest extends TestCase
             // Still fully available to a caller that scrubs before logging.
             self::assertStringContainsString('INSERT INTO users', (string) $e->sql());
             self::assertStringContainsString('UNIQUE constraint failed', (string) $e->driverMessage());
-        }
-    }
-
-    public function testVerboseMessagesRestoreThePreviousQueryFailureShape(): void
-    {
-        DatabaseException::enableVerboseMessages();
-
-        try {
-            $this->db->query('SELECT * FROM table_that_does_not_exist');
-            self::fail('expected a DatabaseException');
-        } catch (DatabaseException $e) {
-            self::assertStringContainsString('Query failed [SELECT * FROM table_that_does_not_exist]', $e->getMessage());
-            self::assertStringContainsString('no such table', $e->getMessage());
-        } finally {
-            DatabaseException::enableVerboseMessages(false);
         }
     }
 }

@@ -56,7 +56,7 @@ abstract class Broker
      * @return \stdClass[]
      * @throws DatabaseException on query failure.
      */
-    protected function select(string $sql, array $params = []): array
+    protected function select(string $sql, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->select($sql, $params);
     }
@@ -67,7 +67,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
      */
-    protected function selectOne(string $sql, array $params = []): ?\stdClass
+    protected function selectOne(string $sql, #[\SensitiveParameter] array $params = []): ?\stdClass
     {
         return $this->db->selectOne($sql, $params);
     }
@@ -80,7 +80,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
      */
-    protected function selectValue(string $sql, array $params = [], mixed $default = null): mixed
+    protected function selectValue(string $sql, #[\SensitiveParameter] array $params = [], mixed $default = null): mixed
     {
         return $this->db->selectValue($sql, $params, $default);
     }
@@ -90,7 +90,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function selectInt(string $sql, array $params = [], int $default = 0): int
+    protected function selectInt(string $sql, #[\SensitiveParameter] array $params = [], int $default = 0): int
     {
         return $this->db->selectInt($sql, $params, $default);
     }
@@ -100,7 +100,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function selectString(string $sql, array $params = [], ?string $default = null): ?string
+    protected function selectString(string $sql, #[\SensitiveParameter] array $params = [], ?string $default = null): ?string
     {
         return $this->db->selectString($sql, $params, $default);
     }
@@ -110,7 +110,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function selectBool(string $sql, array $params = [], bool $default = false): bool
+    protected function selectBool(string $sql, #[\SensitiveParameter] array $params = [], bool $default = false): bool
     {
         return $this->db->selectBool($sql, $params, $default);
     }
@@ -120,7 +120,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function selectFloat(string $sql, array $params = [], float $default = 0.0): float
+    protected function selectFloat(string $sql, #[\SensitiveParameter] array $params = [], float $default = 0.0): float
     {
         return $this->db->selectFloat($sql, $params, $default);
     }
@@ -132,7 +132,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
      */
-    protected function selectCount(string $sql, array $params = []): int
+    protected function selectCount(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->db->count($sql, $params);
     }
@@ -143,7 +143,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    protected function selectPage(string $sql, int $page, int $perPage, array $params = []): array
+    protected function selectPage(string $sql, int $page, int $perPage, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->selectPage($sql, $page, $perPage, $params);
     }
@@ -154,7 +154,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    protected function selectPageWith(string $sql, PaginationRequest $pagination, array $params = []): array
+    protected function selectPageWith(string $sql, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->selectPageWith($sql, $pagination, $params);
     }
@@ -165,7 +165,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    protected function selectSorted(string $sql, SortRequest $sort, array $params = []): array
+    protected function selectSorted(string $sql, SortRequest $sort, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->selectSorted($sql, $sort, $params);
     }
@@ -177,7 +177,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    protected function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, array $params = []): array
+    protected function selectFiltered(string $sql, FilterRequest $filter, array $columnMap, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->selectFiltered($sql, $filter, $columnMap, $params);
     }
@@ -194,7 +194,7 @@ abstract class Broker
         FilterRequest $filter,
         array $columnMap,
         SortRequest $sort,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): array {
         return $this->db->selectFilteredSorted($sql, $filter, $columnMap, $sort, $params);
     }
@@ -205,7 +205,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
      */
-    protected function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, array $params = []): array
+    protected function selectPageSorted(string $sql, SortRequest $sort, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->selectPageSorted($sql, $sort, $pagination, $params);
     }
@@ -216,7 +216,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
-    protected function paginate(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): array
+    protected function paginate(string $dataSql, string $countSql, int $page, int $perPage, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->paginate($dataSql, $countSql, $page, $perPage, $params);
     }
@@ -227,7 +227,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
      */
-    protected function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): array
+    protected function paginateWith(string $dataSql, string $countSql, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): array
     {
         return $this->db->paginateWith($dataSql, $countSql, $pagination, $params);
     }
@@ -243,7 +243,7 @@ abstract class Broker
         string $countSql,
         SortRequest $sort,
         PaginationRequest $pagination,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): array {
         return $this->db->paginateSortedWith($dataSql, $countSql, $sort, $pagination, $params);
     }
@@ -254,7 +254,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
      */
-    protected function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, array $params = []): PaginatedResult
+    protected function paginateResult(string $dataSql, string $countSql, int $page, int $perPage, #[\SensitiveParameter] array $params = []): PaginatedResult
     {
         return $this->db->paginateResult($dataSql, $countSql, $page, $perPage, $params);
     }
@@ -265,7 +265,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
      */
-    protected function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, array $params = []): PaginatedResult
+    protected function paginateResultWith(string $dataSql, string $countSql, PaginationRequest $pagination, #[\SensitiveParameter] array $params = []): PaginatedResult
     {
         return $this->db->paginateResultWith($dataSql, $countSql, $pagination, $params);
     }
@@ -283,7 +283,7 @@ abstract class Broker
         int $page,
         int $perPage,
         callable $mapper,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->db->paginateResultMapped($dataSql, $countSql, $page, $perPage, $mapper, $params);
     }
@@ -300,7 +300,7 @@ abstract class Broker
         string $countSql,
         PaginationRequest $pagination,
         callable $mapper,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->db->paginateResultMappedWith($dataSql, $countSql, $pagination, $mapper, $params);
     }
@@ -318,7 +318,7 @@ abstract class Broker
         array $query,
         int $defaultPerPage = 25,
         int $maxPerPage = 100,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->db->paginateResultFromQuery(
             $dataSql,
@@ -341,7 +341,7 @@ abstract class Broker
         string $countSql,
         SortRequest $sort,
         PaginationRequest $pagination,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->db->paginateSortedResultWith($dataSql, $countSql, $sort, $pagination, $params);
     }
@@ -360,7 +360,7 @@ abstract class Broker
         array $columnMap,
         SortRequest $sort,
         PaginationRequest $pagination,
-        array $params = [],
+        #[\SensitiveParameter] array $params = [],
     ): PaginatedResult {
         return $this->db->paginateFilteredSortedResultWith(
             $dataSql,
@@ -380,7 +380,7 @@ abstract class Broker
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
      */
-    protected function execute(string $sql, array $params = []): int
+    protected function execute(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->db->execute($sql, $params);
     }
@@ -390,7 +390,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function insertRow(string $sql, array $params = []): int
+    protected function insertRow(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->db->insert($sql, $params);
     }
@@ -400,7 +400,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function insertRowGetId(string $sql, array $params = []): string|false
+    protected function insertRowGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {
         return $this->db->insertGetId($sql, $params);
     }
@@ -410,7 +410,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function updateRows(string $sql, array $params = []): int
+    protected function updateRows(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->db->update($sql, $params);
     }
@@ -420,7 +420,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function deleteRows(string $sql, array $params = []): int
+    protected function deleteRows(string $sql, #[\SensitiveParameter] array $params = []): int
     {
         return $this->db->delete($sql, $params);
     }
@@ -430,7 +430,7 @@ abstract class Broker
      *
      * @param array<int|string, mixed> $params
      */
-    protected function exists(string $sql, array $params = []): bool
+    protected function exists(string $sql, #[\SensitiveParameter] array $params = []): bool
     {
         return $this->db->exists($sql, $params);
     }
@@ -448,6 +448,9 @@ abstract class Broker
      * Delegate to Database::transaction() so broker subclasses can open
      * transactions without holding a reference to the Database directly.
      *
+     * @template T
+     * @param callable(Database): T $work
+     * @return T
      * @throws DatabaseException on transaction boundary failure.
      * @throws \Throwable re-throws any exception thrown inside $work.
      */

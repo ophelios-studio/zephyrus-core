@@ -90,20 +90,6 @@ parameters:
             identifier: foreach.nonIterable
             path: src/Zephyrus/Data/Entity.php
             count: 1
-        # PHPStan memoizes PDO::inTransaction() from the top of transaction()
-        # and then calls the later re-checks dead. They are not: the callable
-        # handed to transaction() can commit or roll back on its own, so the
-        # state genuinely differs by the time the error and commit-failure
-        # paths run. Deleting either guard reintroduces a rollback on a
-        # connection that is no longer in a transaction.
-        -
-            identifier: booleanAnd.rightAlwaysFalse
-            path: src/Zephyrus/Data/Database.php
-            count: 1
-        -
-            identifier: if.alwaysFalse
-            path: src/Zephyrus/Data/Database.php
-            count: 1
         # A trait published for consumer controllers, used zero times inside
         # src/ itself. It is exercised by tests/, which this config does not
         # analyse.

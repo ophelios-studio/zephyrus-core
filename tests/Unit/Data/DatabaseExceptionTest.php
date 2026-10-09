@@ -38,30 +38,7 @@ final class DatabaseExceptionTest extends TestCase
         self::assertStringContainsString('server gone', $e->getMessage());
     }
 
-    public function testFromPdoExceptionWithoutContext(): void
-    {
-        $pdo = new PDOException('Table "users" not found');
-        $e = DatabaseException::fromPdoException($pdo);
-        self::assertStringContainsString('Table "users" not found', $e->getMessage());
-        self::assertSame($pdo, $e->getPrevious());
-    }
-
-    public function testFromPdoExceptionWithContext(): void
-    {
-        $pdo = new PDOException('duplicate key');
-        $e = DatabaseException::fromPdoException($pdo, 'UserBroker::insert');
-        self::assertStringContainsString('UserBroker::insert', $e->getMessage());
-        self::assertStringContainsString('duplicate key', $e->getMessage());
-        self::assertSame($pdo, $e->getPrevious());
-    }
-
-    // ── query-execution factory: safe by default (finding 5) ────────────────
-
-    protected function tearDown(): void
-    {
-        // Process-wide switch: never let one test's verbosity leak into the next.
-        DatabaseException::enableVerboseMessages(false);
-    }
+    // ── driver-error factories ──────────────────────────────────────────────
 
     private function pdoException(): PDOException
     {
@@ -75,13 +52,7 @@ final class DatabaseExceptionTest extends TestCase
     }
 
     /**
-     * A driver error text carries real column values: under the client-side
-     * emulation this framework no longer offers it echoed the whole interpolated
-     * statement, and on native prepares it still emits `DETAIL: Key (col)=(value)`
-     * and `CONTEXT: unnamed portal parameter $1 = 'value'`. That text used to be
-     * the exception message verbatim, alongside the raw SQL, and travelled
-     * straight into logs, alert emails and debug error pages. The fixture below
-     * keeps the historical worst case because it is the strictest input.
+     * The fixture's driver text carries both column values and the statement.
      */
     public function testQueryExecutionFailedWithholdsTheStatementAndDriverTextByDefault(): void
     {
@@ -108,15 +79,16 @@ final class DatabaseExceptionTest extends TestCase
         self::assertStringContainsString('Jane Roe', (string) $e->driverMessage());
     }
 
-    public function testEnableVerboseMessagesRestoresTheFullMessage(): void
+    /**
+     * Log search and alert rules key on the `[SQLSTATE nnnnn]` token.
+     */
+    public function testQueryExecutionFailedMessageCarriesTheSqlStateTokenAndNoDriverText(): void
     {
-        DatabaseException::enableVerboseMessages();
-        self::assertTrue(DatabaseException::verboseMessagesEnabled());
+        $e = DatabaseException::queryExecutionFailed('SELECT * FROM customer', $this->pdoException());
 
-        $pdo = $this->pdoException();
-        $e = DatabaseException::queryExecutionFailed('SELECT * FROM customer', $pdo);
-
-        self::assertSame("Query failed [SELECT * FROM customer]: {$pdo->getMessage()}", $e->getMessage());
+        self::assertStringContainsString('[SQLSTATE 22P02]', $e->getMessage());
+        self::assertStringNotContainsString('invalid input syntax', $e->getMessage());
+        self::assertStringNotContainsString('SELECT * FROM customer', $e->getMessage());
     }
 
     public function testQueryExecutionFailedFallsBackWhenTheDriverReportsNoSqlState(): void
@@ -127,16 +99,80 @@ final class DatabaseExceptionTest extends TestCase
         self::assertStringContainsString('Query failed', $e->getMessage());
     }
 
-    /**
-     * The hand-called factories are unchanged: their arguments are chosen by the
-     * caller, not lifted off a driver, so they carry no value the caller did not
-     * put there. sql() and driverMessage() are null for them.
-     */
+    public function testSqlStateIsExposedAsAValueAndStaysInTheMessage(): void
+    {
+        $e = DatabaseException::queryExecutionFailed('INSERT INTO customer (id) VALUES (?)', $this->uniqueViolation());
+
+        self::assertSame('23505', $e->sqlState());
+        self::assertStringContainsString('[SQLSTATE 23505]', $e->getMessage());
+    }
+
+    public function testSqlStateFallsBackToHy000WhenTheDriverReportsNoCode(): void
+    {
+        $e = DatabaseException::queryExecutionFailed('SELECT 1', new PDOException('server has gone away'));
+
+        self::assertSame('HY000', $e->sqlState());
+    }
+
+    public function testSqlStateIgnoresAnIntegerCodeThatIsNotAnSqlState(): void
+    {
+        $e = DatabaseException::queryExecutionFailed('SELECT 1', new PDOException('boom', 7));
+
+        self::assertSame('HY000', $e->sqlState());
+    }
+
+    public function testSqlStateIsNullForFactoriesWithoutADriverError(): void
+    {
+        self::assertNull(DatabaseException::queryFailed('SELECT 1', 'nope')->sqlState());
+        self::assertNull(DatabaseException::connectionFailed('mysql:host=x', 'nope')->sqlState());
+        self::assertNull(DatabaseException::transactionFailed('commit: nope')->sqlState());
+    }
+
+    private function uniqueViolation(): PDOException
+    {
+        $e = new PDOException(
+            'SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint "customer_email_key"'
+            . "\nDETAIL:  Key (email)=(jane@example.com) already exists.",
+        );
+        $e->errorInfo = ['23505', 7, 'ERROR:  duplicate key value violates unique constraint "customer_email_key"'];
+
+        return $e;
+    }
+
     public function testHandCalledFactoriesCarryNoDriverDetail(): void
     {
         $e = DatabaseException::queryFailed('pagination', 'Page must be >= 1');
 
         self::assertNull($e->sql());
         self::assertNull($e->driverMessage());
+    }
+
+    public function testTransactionExecutionFailedKeepsTheDriverTextOffTheMessage(): void
+    {
+        $e = DatabaseException::transactionExecutionFailed('commit', $this->uniqueViolation());
+
+        self::assertStringContainsString('[SQLSTATE 23505]', $e->getMessage());
+        self::assertStringContainsString('commit', $e->getMessage());
+        self::assertStringNotContainsString('jane@example.com', $e->getMessage());
+        self::assertStringNotContainsString('duplicate key', $e->getMessage());
+    }
+
+    public function testTransactionExecutionFailedKeepsTheDetailReachable(): void
+    {
+        $e = DatabaseException::transactionExecutionFailed('release savepoint', $this->uniqueViolation());
+
+        self::assertSame('23505', $e->sqlState());
+        self::assertStringContainsString('Key (email)=(jane@example.com)', (string) $e->driverMessage());
+        self::assertNull($e->sql());
+        self::assertNull($e->getPrevious());
+    }
+
+    public function testTransactionExecutionFailedFallsBackToHy000WhenTheDriverReportsNoCode(): void
+    {
+        $e = DatabaseException::transactionExecutionFailed('begin', new PDOException('server has gone away'));
+
+        self::assertSame('HY000', $e->sqlState());
+        self::assertStringContainsString('[SQLSTATE HY000]', $e->getMessage());
+        self::assertStringNotContainsString('server has gone away', $e->getMessage());
     }
 }
