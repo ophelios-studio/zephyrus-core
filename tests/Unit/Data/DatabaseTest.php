@@ -825,6 +825,7 @@ final class DatabaseTest extends TestCase
             self::fail('expected the statement without a RETURNING column to be refused');
         } catch (DatabaseException $e) {
             self::assertStringContainsString('was executed', $e->getMessage());
+            self::assertStringContainsString('let this exception propagate so the row is rolled back', $e->getMessage());
         }
 
         self::assertSame(1, (int) $pdo->query('SELECT COUNT(*) FROM items')->fetchColumn());
@@ -841,6 +842,7 @@ final class DatabaseTest extends TestCase
             self::fail('expected a RETURNING clause with two columns to be refused');
         } catch (DatabaseException $e) {
             self::assertStringContainsString('exactly one column', $e->getMessage());
+            self::assertStringContainsString('let this exception propagate so the row is rolled back', $e->getMessage());
             self::assertStringNotContainsString('Mia', $e->getMessage());
         }
     }

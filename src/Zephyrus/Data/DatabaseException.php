@@ -49,6 +49,8 @@ final class DatabaseException extends ZephyrusRuntimeException
 
     private const SQLSTATE_PATTERN = '/\A[0-9A-Z]{5}\z/';
 
+    private const ROLLBACK_HINT = 'Inside a transaction, let this exception propagate so the row is rolled back.';
+
     public static function connectionFailed(string $dsn, string $reason, ?\Throwable $previous = null): self
     {
         return new self("Database connection failed for DSN [{$dsn}]: {$reason}", previous: $previous);
@@ -73,7 +75,8 @@ final class DatabaseException extends ZephyrusRuntimeException
     public static function returningYieldedNoColumn(): self
     {
         return new self(
-            'The statement was executed, but it returned no column: RETURNING occurs only in a literal, comment or identifier.',
+            'The statement was executed, but it returned no column: RETURNING occurs only in a literal, comment or identifier. '
+            . self::ROLLBACK_HINT,
         );
     }
 
@@ -82,7 +85,9 @@ final class DatabaseException extends ZephyrusRuntimeException
      */
     public static function returningNotSingleColumn(int $columns): self
     {
-        return new self("RETURNING must name exactly one column, found {$columns}. The statement was executed.");
+        return new self(
+            "RETURNING must name exactly one column, found {$columns}. The statement was executed. " . self::ROLLBACK_HINT,
+        );
     }
 
     /**

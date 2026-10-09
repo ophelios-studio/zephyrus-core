@@ -442,27 +442,6 @@ final class DatabaseTransactionTest extends TestCase
         self::assertNull($e->getPrevious());
     }
 
-    public function testARefusedStatementThatRanMarksItsLevelSoTheCommitProbesTheConnection(): void
-    {
-        $pdo = new AbortingPdo();
-        $db = $this->database($pdo);
-
-        try {
-            $db->transaction(function (Database $db) use ($pdo): void {
-                try {
-                    $db->insertGetId("INSERT INTO entry (label) VALUES ('RETURNING id')", []);
-                } catch (DatabaseException) {
-                }
-                $pdo->abort();
-            });
-            self::fail('expected the commit to be refused');
-        } catch (DatabaseException $e) {
-            self::assertSame('25P02', $e->sqlState());
-        }
-
-        self::assertSame([], $this->labels($db));
-    }
-
     public function testACaughtStatementFailureStopsTheCommitOfAnAbortedTransaction(): void
     {
         $pdo = new AbortingPdo();

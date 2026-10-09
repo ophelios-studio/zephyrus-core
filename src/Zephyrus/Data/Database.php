@@ -842,7 +842,8 @@ final class Database
      *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on PostgreSQL and SQLite when the SQL has no RETURNING clause, before it runs, or
-     *         when RETURNING yields no column or more than one, after it ran.
+     *         when RETURNING yields no column or more than one, after it ran. Inside a transaction, let that
+     *         exception propagate so the row is rolled back.
      */
     public function insertGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {
@@ -854,8 +855,6 @@ final class Database
         $stmt = $this->query($sql, $params);
         if ($stmt->columnCount() === 0) {
             if ($requiresReturning) {
-                $this->markFailedLevel();
-
                 throw DatabaseException::returningYieldedNoColumn();
             }
 
@@ -863,8 +862,6 @@ final class Database
         }
 
         if ($stmt->columnCount() !== 1) {
-            $this->markFailedLevel();
-
             throw DatabaseException::returningNotSingleColumn($stmt->columnCount());
         }
 
