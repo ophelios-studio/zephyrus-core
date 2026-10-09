@@ -209,13 +209,14 @@ final readonly class Request
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
         $raw = $rawBody ?? (string) file_get_contents('php://input');
-        $parsedBody = self::parseBody($method, $headers, $post, $raw);
+        $malformed  = false;
+        $parsedBody = self::parseBody($method, $headers, $post, $raw, $malformed);
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
 
         return new self(
             method:     $method,
             uri:        $uri,
-            body:       new RequestBody($parsedBody, $raw),
+            body:       new RequestBody($parsedBody, $raw, $malformed),
             query:      $get,
             headers:    new HeaderBag($headers),
             cookies:    new CookieJar($cookie),
@@ -700,6 +701,7 @@ final readonly class Request
         array $headers,
         array $post,
         string $rawBody,
+        bool &$malformed,
     ): array {
         if (in_array($method, ['GET', 'HEAD'], true)) {
             return [];
@@ -708,17 +710,25 @@ final readonly class Request
         $contentType = $headers['content-type'] ?? '';
 
         if (self::isJsonContentType($contentType)) {
-            if ($rawBody === '') {
+            if (trim($rawBody, " \t\n\r") === '') {
                 return [];
             }
 
             try {
                 $decoded = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
             } catch (\JsonException) {
+                $malformed = true;
+
                 return [];
             }
 
-            return is_array($decoded) ? $decoded : [];
+            if (!is_array($decoded)) {
+                $malformed = true;
+
+                return [];
+            }
+
+            return $decoded;
         }
 
         if (

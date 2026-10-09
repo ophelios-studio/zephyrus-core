@@ -1131,6 +1131,73 @@ final class RequestTest extends TestCase
     // fromGlobals — body parsing
     // -------------------------------------------------------------------------
 
+    #[DataProvider('unparsableJsonBodies')]
+    public function testFromGlobalsFlagsJsonBodyThatIsNotAnObject(string $raw): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/items',
+                'CONTENT_TYPE'   => 'application/json',
+            ],
+            rawBody: $raw,
+        );
+
+        self::assertSame([], $request->body()->all());
+        self::assertTrue($request->body()->isMalformed());
+    }
+
+    public static function unparsableJsonBodies(): iterable
+    {
+        yield 'truncated object' => ['{"a":'];
+        yield 'json scalar' => ['42'];
+        yield 'json null' => ['null'];
+        yield 'nul byte' => ["{\"a\":\u{0}}"];
+        yield 'nul byte only' => ["\u{0}"];
+    }
+
+    #[DataProvider('wellFormedBodies')]
+    public function testFromGlobalsDoesNotFlagAbsentOrValidBody(string $contentType, string $raw): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/items',
+                'CONTENT_TYPE'   => $contentType,
+            ],
+            post: ['field' => 'value'],
+            rawBody: $raw,
+        );
+
+        self::assertFalse($request->body()->isMalformed());
+    }
+
+    public function testWithAttributeKeepsMalformedFlag(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/items',
+                'CONTENT_TYPE'   => 'application/json',
+            ],
+            rawBody: '{"a":',
+        );
+
+        self::assertTrue($request->withAttribute('k', 'v')->body()->isMalformed());
+    }
+
+    public static function wellFormedBodies(): iterable
+    {
+        yield 'empty json body' => ['application/json', ''];
+        yield 'whitespace-only json body' => ['application/json', " \n\t\r "];
+        yield 'valid json object' => ['application/json', '{"a":1}'];
+        yield 'valid empty json object' => ['application/json', '{}'];
+        yield 'form body' => ['application/x-www-form-urlencoded', 'field=value'];
+    }
+
     public function testFromGlobalsJsonBodyParsedFromRawBody(): void
     {
         $request = Request::fromGlobals(

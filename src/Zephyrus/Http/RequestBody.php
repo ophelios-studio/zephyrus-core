@@ -16,10 +16,12 @@ final readonly class RequestBody
     /**
      * @param array<string, mixed> $data Parsed body parameters (form or JSON).
      * @param string $raw Raw body content (from php://input).
+     * @param bool $malformed True when a JSON body could not be decoded into an array.
      */
     public function __construct(
         private array $data = [],
         private string $raw = '',
+        private bool $malformed = false,
     ) {
     }
 
@@ -44,6 +46,14 @@ final readonly class RequestBody
     public function isEmpty(): bool
     {
         return $this->data === [];
+    }
+
+    /**
+     * Check this before validating: a malformed JSON body reads as empty.
+     */
+    public function isMalformed(): bool
+    {
+        return $this->malformed;
     }
 
     /**

@@ -87,4 +87,16 @@ final class RequestBodyTest extends TestCase
 
         self::assertSame('', $body->raw());
     }
+
+    #[Test]
+    public function isMalformedDefaultsToFalse(): void
+    {
+        self::assertFalse((new RequestBody(['a' => 1], '{"a":1}'))->isMalformed());
+    }
+
+    #[Test]
+    public function isMalformedReflectsTheConstructorFlag(): void
+    {
+        self::assertTrue((new RequestBody([], '{"a":', true))->isMalformed());
+    }
 }
