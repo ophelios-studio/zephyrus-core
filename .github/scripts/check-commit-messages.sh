@@ -73,6 +73,13 @@ check_subject() {
   return 0
 }
 
+# Dependabot generates the body, so only its subject is checked. Exempt only PRs
+# opened by dependabot[bot] from this repository: the head repo decides, not the actor.
+is_dependabot_pull_request() {
+  [ "${EVENT_NAME:-}" = pull_request ] && [ "${PR_AUTHOR:-}" = 'dependabot[bot]' ] \
+    && [ -n "${REPOSITORY:-}" ] && [ "${PR_HEAD_REPO:-}" = "$REPOSITORY" ]
+}
+
 checked=0
 failed=0
 commits=$(git rev-list --reverse "$range")
@@ -85,6 +92,9 @@ while IFS= read -r commit; do
   short=$(git rev-parse --short "$commit")
   msg=$(git show -s --format=%B "$commit")
   subject=$(printf '%s\n' "$msg" | grep -m 1 '[^[:space:]]' || true)
+  if is_dependabot_pull_request; then
+    msg=$subject
+  fi
   nonempty=$(printf '%s\n' "$msg" | grep -c '[^[:space:]]' || true)
   committer=$(git show -s --format=%ce "$commit")
   read -r -a parents <<< "$(git show -s --format=%P "$commit")" || true
@@ -142,7 +152,7 @@ if [ "$failed" -gt 0 ]; then
   echo "Expected form: type(scope): description"
   echo "Allowed types: ${ALLOWED_TYPES// /, }"
   echo "Each commit is one line, with no body and no co-author trailer."
-  case "${GITHUB_EVENT_NAME:-}" in
+  case "${EVENT_NAME:-}" in
     pull_request)
       echo "To fix: git rebase -i $base (reword or squash), then git push --force-with-lease."
       ;;
