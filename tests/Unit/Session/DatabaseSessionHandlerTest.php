@@ -884,6 +884,7 @@ final class DatabaseSessionHandlerTest extends TestCase
                 'BEGIN',
                 'SAVEPOINT', 'pg_try_advisory_lock', 'RELEASE SAVEPOINT',
                 'SAVEPOINT', 'lock_timeout', 'pg_advisory_lock', 'ROLLBACK TO SAVEPOINT', 'RELEASE SAVEPOINT',
+                'SAVEPOINT', 'RELEASE SAVEPOINT', // the SELECT of the payload
             ],
             $pdo->advisoryCalls,
         );
@@ -925,7 +926,14 @@ final class DatabaseSessionHandlerTest extends TestCase
         $handler->read('43e880c2447ca10d3092d51d258c050c');
         $pdo->commit();
 
-        self::assertSame(['BEGIN', 'SAVEPOINT', 'pg_try_advisory_lock', 'RELEASE SAVEPOINT'], $pdo->advisoryCalls);
+        self::assertSame(
+            [
+                'BEGIN',
+                'SAVEPOINT', 'pg_try_advisory_lock', 'RELEASE SAVEPOINT',
+                'SAVEPOINT', 'RELEASE SAVEPOINT', // the SELECT of the payload
+            ],
+            $pdo->advisoryCalls,
+        );
     }
 
     public function testCloseInsideACallerTransactionReleasesTheLock(): void
@@ -1251,13 +1259,7 @@ final class AdvisoryLockRecordingPdo extends \PDO
             return parent::prepare('SELECT ?', $options);
         }
 
-        foreach (['ROLLBACK TO SAVEPOINT', 'RELEASE SAVEPOINT', 'SAVEPOINT'] as $savepointStatement) {
-            if (str_starts_with($query, $savepointStatement)) {
-                $this->advisoryCalls[] = $savepointStatement;
-
-                return parent::prepare($query, $options);
-            }
-        }
+        $this->recordSavepoint($query);
 
         if (str_contains($query, 'pg_advisory_unlock')) {
             $this->advisoryCalls[] = 'pg_advisory_unlock';
@@ -1273,5 +1275,23 @@ final class AdvisoryLockRecordingPdo extends \PDO
         }
 
         return parent::prepare($query, $options);
+    }
+
+    public function exec(string $statement): int|false
+    {
+        $this->recordSavepoint($statement);
+
+        return parent::exec($statement);
+    }
+
+    private function recordSavepoint(string $statement): void
+    {
+        foreach (['ROLLBACK TO SAVEPOINT', 'RELEASE SAVEPOINT', 'SAVEPOINT'] as $savepointStatement) {
+            if (str_starts_with($statement, $savepointStatement)) {
+                $this->advisoryCalls[] = $savepointStatement;
+
+                return;
+            }
+        }
     }
 }

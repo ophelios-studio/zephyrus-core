@@ -167,7 +167,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /** Marks a payload stored as base64 because the data column cannot hold it verbatim. */
     private const ENCODED_PAYLOAD_PREFIX = 'base64:';
 
-    /** Isolates a lock statement issued inside the caller's transaction. */
+    /** Isolates the bounded lock wait issued inside the caller's transaction. */
     private const LOCK_SAVEPOINT = 'zephyrus_session_lock';
 
     /** read() found a live row: this request RESUMED an existing session. */
@@ -735,36 +735,11 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      */
     private function bestEffort(callable $statement): mixed
     {
-        $isolated = $this->database->inTransaction();
-
         try {
-            if ($isolated) {
-                $this->database->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
-            }
+            return $this->database->inTransaction() ? $this->database->transaction($statement) : $statement();
         } catch (Throwable) {
-            // The caller's transaction is already aborted.
             return null;
         }
-
-        try {
-            $result = $statement();
-        } catch (Throwable) {
-            $result = null;
-        }
-
-        if ($isolated) {
-            try {
-                if ($result === null) {
-                    $this->database->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
-                }
-
-                $this->database->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
-            } catch (Throwable) {
-                // Only a lost connection gets here.
-            }
-        }
-
-        return $result;
     }
 
     /**
