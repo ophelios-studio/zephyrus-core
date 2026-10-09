@@ -84,28 +84,65 @@ $router = $router->discoverControllers('App\\Controllers', __DIR__ . '/../app/Co
 
 ### Middleware
 
-Middleware implements `MiddlewareInterface`. For authentication, `AuthGuardMiddleware` answers 401 when its guard refuses the request. `HeaderTokenGuard` checks the bearer token with a constant-time comparison:
+Middleware implements `MiddlewareInterface`: `process()` receives the request and the next handler, and returns the response.
+
+```php
+use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
+
+final class RequestIdMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        return $next($request)->withHeader('X-Request-Id', bin2hex(random_bytes(8)));
+    }
+}
+```
+
+Register it globally with `withMiddleware()`, as the bootstrap does, or under a name with `registerMiddleware()`. For authentication, `AuthGuardMiddleware` answers 401 when its guard refuses the request. `HeaderTokenGuard` checks the bearer token with a constant-time comparison. Load the token from the environment, never from source code:
 
 ```php
 use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\HeaderTokenGuard;
 
+$apiToken = getenv('API_TOKEN') ?: throw new \RuntimeException('API_TOKEN is not set');
 $apiAuth = new AuthGuardMiddleware(new HeaderTokenGuard($apiToken));
 ```
 
-Register it under a name with `registerMiddleware()`, then reference that name in route attributes:
+Register it under a name on the bootstrap's builder, then reference that name in route attributes. Mutating API calls authenticate with the bearer token instead of the CSRF token, so exclude the API prefix from the CSRF check. This chain replaces the one in the Bootstrap section. Add the `use` line for `CsrfConfig`; the other imports are those of the Bootstrap block:
 
 ```php
+use Zephyrus\Security\CsrfConfig;
+
 $kernel = KernelBuilder::create()
     ->withRouter($router)
     ->registerMiddleware('auth', $apiAuth)
+    ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+    ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
+    ->withMiddleware(new CsrfMiddleware($csrf, new CsrfConfig(excludedPathPatterns: ['#^/api/#'])))
     ->build();
 ```
 
+Global middlewares run in registration order, the first registered being the outermost. Registration order also decides what a short-circuit response carries: `SecureHeadersMiddleware` comes first so that a CSRF 403 still has its security headers.
+
+Every route under an excluded prefix must carry the auth middleware, since the exclusion removes CSRF protection from all of them. Never exclude a prefix whose routes trust the session cookie.
+
 ```php
+use Zephyrus\Controller\Controller;
+use Zephyrus\Http\Response;
+use Zephyrus\Routing\Attribute\Middleware;
+use Zephyrus\Routing\Attribute\Post;
+
 #[Middleware('auth')]
-#[Get('/account')]
-public function account(): Response { ... }
+class ItemApiController extends Controller
+{
+    #[Post('/api/items')]
+    public function store(): Response
+    {
+        return Response::json(['created' => true], 201);
+    }
+}
 ```
 
 ### Request
@@ -169,17 +206,24 @@ $router = (new Router())
     ->discoverControllers('App\\Controllers', __DIR__ . '/../app/Controllers');
 
 $session = new SessionManager();
+$csrf = new SessionCsrfTokenManager($session);
 
 $kernel = KernelBuilder::create()
     ->withRouter($router)
-    ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
-    ->withMiddleware(new CsrfMiddleware(new SessionCsrfTokenManager($session)))
     ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+    ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
+    ->withMiddleware(new CsrfMiddleware($csrf))
     ->build();
 
 $request  = Request::fromGlobals();
 $response = $kernel->handle($request);
 $response->send();
+```
+
+`CsrfMiddleware` rejects any request other than GET, HEAD, OPTIONS or TRACE that lacks a valid token, sent as a `_csrf_token` body field or an `X-CSRF-Token` header. Render the field in your forms. Pass `$csrf` to your views and echo the token escaped:
+
+```php
+<input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf->getToken(), ENT_QUOTES, 'UTF-8') ?>">
 ```
 
 ---
