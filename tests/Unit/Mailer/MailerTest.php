@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Mailer;
 
 use PHPMailer\PHPMailer\Exception as PHPMailerException;
 use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Mailer\Mailer;
@@ -292,6 +293,131 @@ final class MailerTest extends TestCase
         );
 
         self::assertSame(MailerFailure::SendFailed, $mapped->failure);
+    }
+
+    public function testRefusedRecipientAfterAnAcceptedOneIsRecipientsRefusedThroughSend(): void
+    {
+        $mailer = $this->mailerWithScriptedTransport(refusedRecipients: ['bad@example.test']);
+        $mailer->to('good@example.test')->to('bad@example.test');
+
+        $this->assertTransportFailure($mailer, MailerFailure::RecipientsRefused, 'bad@example.test');
+    }
+
+    public function testEveryRecipientRefusedIsRecipientsRefusedThroughSend(): void
+    {
+        $mailer = $this->mailerWithScriptedTransport(refusedRecipients: ['bad1@example.test', 'bad2@example.test']);
+        $mailer->to('bad1@example.test')->cc('bad2@example.test');
+
+        $this->assertTransportFailure($mailer, MailerFailure::RecipientsRefused, 'bad2@example.test');
+    }
+
+    public function testRefusedDataIsSendFailedThroughSend(): void
+    {
+        $mailer = $this->mailerWithScriptedTransport(refusedRecipients: [], refuseData: true);
+        $mailer->to('good@example.test');
+
+        $this->assertTransportFailure($mailer, MailerFailure::SendFailed, 'data not accepted');
+    }
+
+    public function testAttachmentUnreadableAtSendTimeIsSendFailedThroughSend(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'zephyrus-mail-');
+        file_put_contents($path, 'attachment content');
+
+        $mailer = $this->mailerWithScriptedTransport(refusedRecipients: []);
+        $mailer->to('good@example.test')->attach($path, 'document.pdf');
+        unlink($path);
+
+        try {
+            $mailer->subject('s')->text('t')->send();
+            self::fail('The send succeeded without its attachment.');
+        } catch (MailerException $e) {
+            self::assertSame(MailerFailure::SendFailed, $e->failure);
+        }
+    }
+
+    private function assertTransportFailure(Mailer $mailer, MailerFailure $failure, string $transportText): void
+    {
+        try {
+            $mailer->subject('s')->text('t')->send();
+            self::fail('The transport accepted a message it should have refused.');
+        } catch (MailerException $e) {
+            self::assertSame($failure, $e->failure);
+            self::assertStringNotContainsString('@example.test', $e->getMessage());
+            self::assertStringContainsString($transportText, (string) $e->transportMessage());
+        }
+    }
+
+    /**
+     * @param list<string> $refusedRecipients
+     */
+    private function mailerWithScriptedTransport(array $refusedRecipients, bool $refuseData = false): Mailer
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->getPhpMailer()->setSMTPInstance(new class ($refusedRecipients, $refuseData) extends SMTP {
+            protected $error = ['error' => '', 'detail' => '', 'smtp_code' => '', 'smtp_code_ex' => ''];
+
+            /**
+             * @param list<string> $refusedRecipients
+             */
+            public function __construct(private readonly array $refusedRecipients, private readonly bool $refuseData)
+            {
+            }
+
+            public function connected(): bool
+            {
+                return true;
+            }
+
+            public function mail($from): bool
+            {
+                return true;
+            }
+
+            public function recipient($address, $dsn = ''): bool
+            {
+                if (in_array($address, $this->refusedRecipients, true)) {
+                    $this->error['detail'] = '550 no such user';
+
+                    return false;
+                }
+
+                return true;
+            }
+
+            public function data($msg_data): bool
+            {
+                if ($this->refuseData) {
+                    return false;
+                }
+
+                return true;
+            }
+
+            public function quit($close_on_error = true): bool
+            {
+                return true;
+            }
+
+            public function close(): void
+            {
+            }
+
+            /**
+             * @return array{error: string, detail: string, smtp_code: string, smtp_code_ex: string}
+             */
+            public function getError(): array
+            {
+                return $this->error;
+            }
+
+            public function getLastTransactionID(): string
+            {
+                return '';
+            }
+        });
+
+        return $mailer;
     }
 
     private function mapTransportFailure(Mailer $mailer, PHPMailerException $error): MailerException
