@@ -1,10 +1,10 @@
 # Zephyrus
 
-[![CI](https://github.com/zephyrus-framework/core/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/zephyrus-framework/core/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/zephyrus-framework/core/graph/badge.svg)](https://codecov.io/gh/zephyrus-framework/core)
+[![CI](https://github.com/ophelios-studio/zephyrus-core/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ophelios-studio/zephyrus-core/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ophelios-studio/zephyrus-core/graph/badge.svg)](https://codecov.io/gh/ophelios-studio/zephyrus-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A cohesive PHP 8.4+ framework core. Attribute-based routing, immutable HTTP objects, typed configuration, and a full security middleware stack — with ~98% test coverage throughout.
+A cohesive PHP 8.4+ framework core. Attribute-based routing, immutable HTTP objects, typed configuration, and a full security middleware stack.
 
 ---
 
@@ -201,7 +201,7 @@ Runtime dependencies: `symfony/yaml`, `vlucas/phpdotenv`, `latte/latte`, `tracy/
 ## Development
 
 ```bash
-git clone https://github.com/zephyrus-framework/core zephyrus-core
+git clone https://github.com/ophelios-studio/zephyrus-core zephyrus-core
 cd zephyrus-core
 composer install
 ```
@@ -220,7 +220,13 @@ Run with coverage (requires Xdebug):
 XDEBUG_MODE=coverage php vendor/bin/phpunit --coverage-text
 ```
 
-The project targets ~98% coverage. Every change should come with tests.
+CI gates coverage on Codecov: each patch needs 90% coverage, and the project may not drop more than 0.5%. Every change should come with tests.
+
+Commits are one semantic line (`type(scope): description`), with no body and no co-author trailer. Check yours before pushing:
+
+```bash
+.github/scripts/check-commit-messages.sh origin/dev..HEAD
+```
 
 ---
 
