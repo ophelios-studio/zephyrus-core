@@ -64,7 +64,7 @@ final class Mailer
     /**
      * Add a "To" recipient.
      */
-    public function to(string $address, string $name = ''): self
+    public function to(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
         try {
             $this->mail->addAddress($address, $name);
@@ -78,7 +78,7 @@ final class Mailer
     /**
      * Add a "CC" recipient.
      */
-    public function cc(string $address, string $name = ''): self
+    public function cc(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
         try {
             $this->mail->addCC($address, $name);
@@ -92,7 +92,7 @@ final class Mailer
     /**
      * Add a "BCC" recipient.
      */
-    public function bcc(string $address, string $name = ''): self
+    public function bcc(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
         try {
             $this->mail->addBCC($address, $name);
@@ -106,7 +106,7 @@ final class Mailer
     /**
      * Set a "Reply-To" address.
      */
-    public function replyTo(string $address, string $name = ''): self
+    public function replyTo(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
         try {
             $this->mail->addReplyTo($address, $name);

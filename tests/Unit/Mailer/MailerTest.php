@@ -181,6 +181,35 @@ final class MailerTest extends TestCase
         $mailer->template('emails/welcome');
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function recipientMethodProvider(): iterable
+    {
+        yield 'to' => ['to'];
+        yield 'cc' => ['cc'];
+        yield 'bcc' => ['bcc'];
+        yield 'replyTo' => ['replyTo'];
+    }
+
+    #[DataProvider('recipientMethodProvider')]
+    public function testAnInvalidRecipientIsAbsentFromTheStackTrace(string $method): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            $mailer = new Mailer($this->config);
+            $mailer->{$method}('jean.tremblay@@example.test', 'Jean Tremblay');
+            self::fail('An invalid address was accepted.');
+        } catch (MailerException $e) {
+            $trace = $e->getTraceAsString();
+            self::assertStringNotContainsString('jean.tremblay', $trace);
+            self::assertStringNotContainsString('Jean Tremblay', $trace);
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+    }
+
     public function testInvalidRecipientMessageNamesMethodNotAddress(): void
     {
         $mailer = new Mailer($this->config);
