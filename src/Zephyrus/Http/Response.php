@@ -58,14 +58,18 @@ final readonly class Response
         504 => 'Gateway Timeout',
     ];
 
+    /** @var array<string, string> Header names are stored lowercased. */
+    public array $headers;
+
     /**
      * @param array<string, string> $headers
      */
     public function __construct(
         public string $body = '',
         public int $status = 200,
-        public array $headers = [],
+        array $headers = [],
     ) {
+        $this->headers = array_change_key_case($headers);
     }
 
     public static function text(string $body, int $status = 200): self
@@ -207,7 +211,7 @@ final readonly class Response
 
     /**
      * Whether a header of this name is present, whatever its value. The name is
-     * compared case-insensitively because the constructor does not normalise it.
+     * compared case-insensitively.
      */
     public function hasHeader(string $name): bool
     {
@@ -215,8 +219,7 @@ final readonly class Response
     }
 
     /**
-     * The stored value of a header, or null when it is absent. Case-insensitive,
-     * for the same reason as hasHeader().
+     * The stored value of a header, or null when it is absent. Case-insensitive.
      */
     public function getHeader(string $name): ?string
     {

@@ -620,6 +620,32 @@ final class ResponseTest extends TestCase
         yield 'zero' => ['0', true];
     }
 
+    public function testConstructorNormalisesHeaderNamesToLowercase(): void
+    {
+        $response = new Response(headers: ['Content-Type' => 'text/plain', 'X-Test' => '']);
+
+        self::assertSame(['content-type' => 'text/plain', 'x-test' => ''], $response->headers);
+    }
+
+    public function testConstructorHeaderIsReplacedNotDuplicatedByAMutator(): void
+    {
+        $response = (new Response(headers: ['X-Test' => '   ']))->withHeader('x-test', 'value');
+
+        self::assertSame(['x-test' => 'value'], $response->headers);
+        self::assertSame(['x-test: value'], array_values(array_filter(
+            $response->toHeaderLines(),
+            static fn (string $line): bool => stripos($line, 'x-test:') === 0,
+        )));
+    }
+
+    public function testWithoutHeaderRemovesAHeaderSetThroughTheConstructorWithMixedCase(): void
+    {
+        $response = (new Response(headers: ['X-Test' => 'value']))->withoutHeader('X-TEST');
+
+        self::assertFalse($response->hasHeader('x-test'));
+        self::assertSame([], $response->headers);
+    }
+
     #[DataProvider('headerValuesForNonBlankCheck')]
     public function testHasNonBlankHeaderIgnoresBlankValuesWhateverTheNameCase(?string $value, bool $expected): void
     {
