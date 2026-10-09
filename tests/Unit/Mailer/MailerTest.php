@@ -582,6 +582,10 @@ final class MailerTest extends TestCase
         yield 'NUL byte' => ["a\0b"];
         yield 'forward slash' => ['a/b'];
         yield 'backslash' => ['a\\b'];
+        yield 'dot' => ['.'];
+        yield 'dot dot' => ['..'];
+        yield 'blank' => ['   '];
+        yield 'tab only' => ["\t"];
     }
 
     /**

@@ -188,9 +188,9 @@ final class Mailer
      *                                 relative path still resolves against the working
      *                                 directory, which is rarely what a caller means.
      * @param string      $name        Display name (default: original filename). May not
-     *                                 contain a NUL byte, a line break or a path separator:
-     *                                 it lands in a MIME header and is what the recipient's
-     *                                 client writes to disk.
+     *                                 contain a NUL byte, a line break or a path separator,
+     *                                 nor be blank, "0", "." or "..": it lands in a MIME header
+     *                                 and is what the recipient's client writes to disk.
      * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
      *                                 the historical behaviour of trusting the caller.
      */
@@ -208,7 +208,9 @@ final class Mailer
             throw MailerException::attachmentRejected('path', $path, 'is a stream wrapper, not a local file');
         }
 
-        $this->assertDisplayName($name);
+        if ($name !== '') {
+            $this->assertDisplayName($name);
+        }
 
         if (!is_file($path)) {
             throw MailerException::attachmentNotFound($path);
@@ -232,7 +234,7 @@ final class Mailer
      *
      * @param string      $content  The file contents.
      * @param string      $name     Display name the recipient's client writes to disk: non-empty,
-     *                              not "0", without NUL, CR, LF or a path separator.
+     *                              not blank, "0", "." or "..", without NUL, CR, LF or a path separator.
      * @param string|null $mimeType Media type as type/subtype, optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
@@ -241,10 +243,6 @@ final class Mailer
     {
         if ($name === '') {
             throw MailerException::attachmentRejected('display name', $name, 'must not be empty');
-        }
-
-        if ($name === '0') {
-            throw MailerException::attachmentRejected('display name', $name, 'is treated as empty by the mail library');
         }
 
         $this->assertDisplayName($name);
@@ -296,7 +294,7 @@ final class Mailer
     }
 
     /**
-     * Refuse a display name that could split a MIME header or name a path.
+     * Refuse a display name that could split a MIME header, name a path, or be dropped by the mail library.
      */
     private function assertDisplayName(string $name): void
     {
@@ -305,6 +303,14 @@ final class Mailer
                 'display name',
                 $name,
                 'contains a NUL byte, a line break or a path separator; pass a bare file name',
+            );
+        }
+
+        if ($name === '0' || trim($name) === '' || $name === '.' || $name === '..') {
+            throw MailerException::attachmentRejected(
+                'display name',
+                $name,
+                'is not a usable file name (blank, "0", "." or "..")',
             );
         }
     }

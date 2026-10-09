@@ -168,6 +168,37 @@ final class MailerAttachmentGuardTest extends TestCase
      * client writes to disk, so a separator in it is a vector against the
      * RECIPIENT rather than against us.
      */
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unusableDisplayNameProvider(): iterable
+    {
+        yield 'zero' => ['0'];
+        yield 'dot' => ['.'];
+        yield 'dot dot' => ['..'];
+        yield 'blank' => [' '];
+        yield 'tab only' => ["\t"];
+    }
+
+    #[DataProvider('unusableDisplayNameProvider')]
+    public function testAnUnusableDisplayNameIsRefusedByAttach(string $name): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('is not a usable file name');
+
+        $mailer->attach($this->inside, $name);
+    }
+
+    public function testAnEmptyDisplayNameMeansTheFileName(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attach($this->inside);
+
+        self::assertSame('invoice.pdf', $mailer->getPhpMailer()->getAttachments()[0][2]);
+    }
+
     public function testAPathSeparatorInTheDisplayNameIsRefused(): void
     {
         $mailer = new Mailer($this->config);
