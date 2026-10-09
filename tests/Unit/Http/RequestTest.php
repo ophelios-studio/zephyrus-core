@@ -7,6 +7,8 @@ namespace Zephyrus\Tests\Unit\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
+use Zephyrus\Routing\Route;
+use Zephyrus\Routing\RouteMatch;
 use Zephyrus\Upload\FileUpload;
 
 final class RequestTest extends TestCase
@@ -1810,5 +1812,33 @@ final class RequestTest extends TestCase
 
         self::assertSame([], $request->query);
         self::assertNull($request->query('periode'));
+    }
+
+    public function testRouteIsNullBeforeRouting(): void
+    {
+        self::assertNull(Request::fromArray(method: 'GET', uri: '/p')->route());
+    }
+
+    public function testWithMatchedRouteRecordsTheRouteAndItsParameters(): void
+    {
+        $route = new Route('GET', '/users/{id}', 'Handler@show', name: 'users.show');
+        $request = Request::fromArray(method: 'GET', uri: '/users/7')
+            ->withMatchedRoute(new RouteMatch($route, ['id' => '7']));
+
+        self::assertSame($route, $request->route());
+        self::assertSame('7', $request->attribute('id'));
+        self::assertSame(['id' => '7'], $request->routeParameters);
+    }
+
+    public function testRouteSurvivesEveryWithMethod(): void
+    {
+        $route = new Route('GET', '/users/{id}', 'Handler@show');
+        $request = Request::fromArray(method: 'GET', uri: '/users/7')
+            ->withMatchedRoute(new RouteMatch($route, ['id' => '7']));
+
+        self::assertSame($route, $request->withAttribute('k', 'v')->route());
+        self::assertSame($route, $request->withAttributes(['k' => 'v'])->route());
+        self::assertSame($route, $request->withRouteParameters(['k' => 'v'])->route());
+        self::assertSame($route, $request->withAttribute('k', 'v')->withAttributes(['j' => 'w'])->route());
     }
 }

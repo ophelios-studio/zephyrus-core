@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Http;
 
+use Zephyrus\Routing\Route;
+use Zephyrus\Routing\RouteMatch;
 use Zephyrus\Upload\FileUpload;
 use Zephyrus\Upload\UploadException;
 
@@ -140,6 +142,7 @@ final readonly class Request
      * @param array<string, string> $routeParameters Names this request took from
      *   its URL. See the property docblock; the values are also present in
      *   $attributes, this records WHERE THEY CAME FROM.
+     * @param Route|null $matchedRoute The route this request was dispatched to, see route().
      */
     public function __construct(
         public string $method,
@@ -153,6 +156,7 @@ final readonly class Request
         public ?string $clientIp = null,
         string $rawBody = '',
         public array $routeParameters = [],
+        private ?Route $matchedRoute = null,
     ) {
         $this->uri = self::canonicalizeUri($uri);
         $this->query = $query ?? self::parseQueryString($this->uri->queryString());
@@ -278,7 +282,8 @@ final readonly class Request
 
     /**
      * The canonical request path: the raw, still percent-encoded target, with a
-     * leading run of slashes collapsed.
+     * leading run of slashes collapsed. For which route a request reached, use
+     * route(), since a trailing slash stays in this path.
      *
      * ALWAYS PREFER THIS over uri()->path() for any decision about a request:
      * guards, allowlists, exclusion patterns, rate-limit keys, audit records.
@@ -473,6 +478,7 @@ final readonly class Request
             files:           $this->files,
             clientIp:        $this->clientIp,
             routeParameters: $this->routeParameters,
+            matchedRoute:    $this->matchedRoute,
         );
     }
 
@@ -492,21 +498,35 @@ final readonly class Request
             files:           $this->files,
             clientIp:        $this->clientIp,
             routeParameters: $this->routeParameters,
+            matchedRoute:    $this->matchedRoute,
         );
     }
 
     /**
-     * Publish the matched route's placeholders onto the request.
-     *
-     * They land in $attributes exactly as withAttributes() would put them
-     * there, which is the contract handlers and middlewares are written
-     * against, AND in $routeParameters, which records that the URL is where
-     * they came from. HttpKernel calls this instead of withAttributes() so that
-     * provenance exists for every request the framework routes.
+     * Publish placeholders onto the request. They land in $attributes as
+     * withAttributes() would put them, and in $routeParameters, which records
+     * that the URL is where they came from. See withMatchedRoute().
      *
      * @param array<string, string> $parameters
      */
     public function withRouteParameters(array $parameters): self
+    {
+        return $this->withPublishedParameters($parameters, $this->matchedRoute);
+    }
+
+    /**
+     * Record the matched route, and publish its parameters as
+     * withRouteParameters() does. HttpKernel uses this for every routed request.
+     */
+    public function withMatchedRoute(RouteMatch $match): self
+    {
+        return $this->withPublishedParameters($match->parameters, $match->route);
+    }
+
+    /**
+     * @param array<string, string> $parameters
+     */
+    private function withPublishedParameters(array $parameters, ?Route $route): self
     {
         return new self(
             method:          $this->method,
@@ -519,7 +539,17 @@ final readonly class Request
             files:           $this->files,
             clientIp:        $this->clientIp,
             routeParameters: array_merge($this->routeParameters, $parameters),
+            matchedRoute:    $route,
         );
+    }
+
+    /**
+     * The route this request was dispatched to, or null before routing. Use it
+     * to identify the handler's route; path() keeps spelling the URL as sent.
+     */
+    public function route(): ?Route
+    {
+        return $this->matchedRoute;
     }
 
     // ------------------------------------------------------------------
