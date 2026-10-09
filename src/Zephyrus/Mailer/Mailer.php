@@ -252,11 +252,7 @@ final class Mailer
             throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype');
         }
 
-        try {
-            $this->mail->addStringAttachment($content, $name, PHPMailer::ENCODING_BASE64, $mimeType ?? '');
-        } catch (PHPMailerException) {
-            throw MailerException::attachmentRejected('display name', $name, 'could not be attached');
-        }
+        $this->mail->addStringAttachment($content, $name, PHPMailer::ENCODING_BASE64, $mimeType ?? '');
 
         return $this;
     }
