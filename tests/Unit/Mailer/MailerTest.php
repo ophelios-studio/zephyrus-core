@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Mailer;
 
 use PHPMailer\PHPMailer\PHPMailer;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Mailer\Mailer;
 use Zephyrus\Mailer\MailerConfig;
@@ -278,5 +279,77 @@ final class MailerTest extends TestCase
     {
         $mailer = new Mailer($this->config);
         self::assertFalse($mailer->getPhpMailer()->SMTPAuth);
+    }
+
+    public function testAttachContentAttachesInMemoryFileWithNameAndType(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attachContent('%PDF-1.4 generated', 'report.pdf', 'application/pdf');
+
+        $attachments = $mailer->getPhpMailer()->getAttachments();
+        self::assertCount(1, $attachments);
+        self::assertSame('%PDF-1.4 generated', $attachments[0][0]);
+        self::assertSame('report.pdf', $attachments[0][1]);
+        self::assertSame('application/pdf', $attachments[0][4]);
+        self::assertTrue($attachments[0][5]);
+    }
+
+    public function testAttachContentInfersTypeFromNameWhenNoTypeIsGiven(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attachContent('%PDF-1.4 generated', 'report.pdf');
+
+        self::assertSame('application/pdf', $mailer->getPhpMailer()->getAttachments()[0][4]);
+    }
+
+    #[DataProvider('invalidAttachmentNameProvider')]
+    public function testAttachContentRejectsUnsafeName(string $name): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('Attachment rejected');
+
+        $mailer->attachContent('content', $name);
+    }
+
+    #[DataProvider('invalidMimeTypeProvider')]
+    public function testAttachContentRejectsMalformedMimeType(string $mimeType): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('Attachment rejected');
+
+        $mailer->attachContent('content', 'report.pdf', $mimeType);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidAttachmentNameProvider(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'parent traversal' => ['../x'];
+        yield 'CRLF header injection' => ["a\r\nb"];
+        yield 'bare LF' => ["a\nb"];
+        yield 'bare CR' => ["a\rb"];
+        yield 'NUL byte' => ["a\0b"];
+        yield 'forward slash' => ['a/b'];
+        yield 'backslash' => ['a\\b'];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidMimeTypeProvider(): iterable
+    {
+        yield 'no subtype' => ['text'];
+        yield 'empty subtype' => ['text/'];
+        yield 'empty type' => ['/pdf'];
+        yield 'parameters' => ['text/plain; charset=utf-8'];
+        yield 'extra segment' => ['application/pdf/extra'];
+        yield 'leading space' => [' application/pdf'];
+        yield 'CRLF header injection' => ["text/plain\r\nX-Injected: 1"];
     }
 }

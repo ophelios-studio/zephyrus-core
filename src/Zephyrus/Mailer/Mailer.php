@@ -51,6 +51,8 @@ final class Mailer
     private ?string $htmlBody = null;
     private ?string $textBody = null;
 
+    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*\z~i';
+
     public function __construct(MailerConfig $config, ?RenderEngine $renderEngine = null)
     {
         $this->renderEngine = $renderEngine;
@@ -219,6 +221,38 @@ final class Mailer
             $this->mail->addAttachment($path, $name);
         } catch (PHPMailerException) {
             throw MailerException::attachmentRejected($path, 'could not be attached');
+        }
+
+        return $this;
+    }
+
+    /**
+     * Attach bytes held in memory, such as a generated PDF.
+     *
+     * @param string      $content  The file contents.
+     * @param string      $name     Display name the recipient's client writes to disk: non-empty,
+     *                              without NUL, CR, LF or a path separator.
+     * @param string|null $mimeType Media type as type/subtype. Null lets PHPMailer infer it from $name.
+     *
+     * @throws MailerException if the name or the media type is malformed.
+     */
+    public function attachContent(string $content, string $name, ?string $mimeType = null): self
+    {
+        if ($name === '' || preg_match('~[\x00\r\n/\\\\]~', $name) === 1) {
+            throw MailerException::attachmentRejected(
+                addcslashes($name, "\0..\37\\/"),
+                'is not a valid display name',
+            );
+        }
+
+        if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {
+            throw MailerException::attachmentRejected($mimeType, 'is not a type/subtype media type');
+        }
+
+        try {
+            $this->mail->addStringAttachment($content, $name, PHPMailer::ENCODING_BASE64, $mimeType ?? '');
+        } catch (PHPMailerException) {
+            throw MailerException::attachmentRejected($name, 'could not be attached');
         }
 
         return $this;
