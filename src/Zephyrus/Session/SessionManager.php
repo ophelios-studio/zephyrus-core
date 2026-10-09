@@ -235,7 +235,12 @@ final class SessionManager
     /**
      * Regenerate the session ID (e.g. after login to prevent fixation attacks).
      *
+     * Throws when no session is active or PHP refuses the rotation: a caller
+     * that asked for a new id must not be told it got one.
+     *
      * @param bool $deleteOld Delete the old session data file when true (default).
+     *
+     * @throws SessionException
      */
     public function regenerate(bool $deleteOld = true): void
     {
@@ -249,15 +254,24 @@ final class SessionManager
             return;
         }
 
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            session_regenerate_id($deleteOld);
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            throw SessionException::noActiveSession('regenerate the session id');
+        }
+
+        if (!self::quietly(static fn (): bool => session_regenerate_id($deleteOld))) {
+            throw SessionException::regenerationRefused();
         }
     }
 
     /**
      * Destroy the session and clear all stored data.
      *
-     * When an override storage is active, the array is cleared in-place.
+     * When an override storage is active, the array is cleared in-place. With
+     * no session active this is a no-op, since there is nothing to destroy.
+     * A refusal by PHP or the save handler throws, so a logout never reports
+     * success while the stored session survives.
+     *
+     * @throws SessionException
      */
     public function destroy(): void
     {
@@ -269,7 +283,10 @@ final class SessionManager
 
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION = [];
-            session_destroy();
+
+            if (!self::quietly(static fn (): bool => session_destroy())) {
+                throw SessionException::destructionRefused();
+            }
         }
     }
 
@@ -396,10 +413,8 @@ final class SessionManager
 
     /**
      * Runs a session_*() call with PHP's warning swallowed, so its boolean
-     * answer is the signal and the SessionException is the only one raised.
-     *
-     * PHP's warning text names absolute server paths, which must not reach an
-     * exception message, so it is discarded rather than re-raised.
+     * answer is the only signal. The warning is discarded, not re-raised: its
+     * text carries absolute server paths.
      *
      * @param callable(): bool $call
      */

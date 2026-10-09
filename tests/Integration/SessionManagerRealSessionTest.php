@@ -355,25 +355,113 @@ final class SessionManagerRealSessionTest extends TestCase
     public function testRegenerateRotatesSessionIdWhenActive(): void
     {
         session_start();
+        $before = session_id();
 
         $session = new SessionManager();
         $session->regenerate();
 
-        // Session must still be active after regeneration.
+        // Session must still be active after regeneration, under a new id.
         self::assertSame(PHP_SESSION_ACTIVE, session_status());
-        self::assertNotEmpty(session_id());
+        self::assertNotSame('', session_id());
+        self::assertNotSame($before, session_id());
     }
 
+    /**
+     * Rotating nothing is not a success: a caller that regenerates after login
+     * believes the fixation defence ran, so a missing session must be loud.
+     */
     #[RunInSeparateProcess]
-    public function testRegenerateIsNoOpWhenNoSessionActive(): void
+    public function testRegenerateThrowsWhenNoSessionIsActive(): void
     {
         $session = new SessionManager();
 
-        // Must not throw when no session is running.
-        $session->regenerate();
+        $this->expectException(SessionException::class);
 
-        self::assertSame(PHP_SESSION_NONE, session_status());
+        $session->regenerate();
     }
+
+    /**
+     * PHP refuses to delete the old session when the save handler's destroy()
+     * returns false. The old code discarded that answer, so the caller
+     * believed the old id was gone while the handler still held it.
+     */
+    #[RunInSeparateProcess]
+    public function testRegenerateThrowsWhenTheSaveHandlerRefusesToDestroyTheOldSession(): void
+    {
+        $session = new SessionManager();
+        $session->setHandler(new DestroyRefusingHandler());
+        $session->start(SessionConfig::fromArray([]));
+
+        $this->expectException(SessionException::class);
+
+        $session->regenerate(true);
+    }
+
+    /**
+     * PHP will not rotate an id once output has reached the browser, because
+     * the new id could never be sent in a cookie. The old code reported success
+     * anyway, so a login could finish with the pre-login id still live.
+     */
+    #[RunInSeparateProcess]
+    public function testRegenerateThrowsWhenOutputHasAlreadyBeenSent(): void
+    {
+        $session = new SessionManager();
+        $session->start(SessionConfig::fromArray([]));
+        $before = session_id();
+
+        // PHPUnit holds its own output buffer, so every level must be flushed
+        // before PHP counts the headers as sent. The levels are reopened after,
+        // because closing the runner's buffer is flagged as a risky test.
+        $levels = ob_get_level();
+        ob_start();
+        echo 'output';
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        while (ob_get_level() < $levels) {
+            ob_start();
+        }
+
+        $thrown = null;
+        try {
+            $session->regenerate();
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertSame($before, session_id(), 'the id must not change when PHP refused');
+    }
+
+    // ── destroy refusal ───────────────────────────────────────────────────────
+
+    /**
+     * A logout that reports success while the stored session survives leaves
+     * the attacker's copy of the cookie working. PHP answers false when the
+     * handler cannot destroy the data, and that answer must reach the caller.
+     */
+    #[RunInSeparateProcess]
+    public function testDestroyThrowsWhenTheSaveHandlerRefusesToDestroy(): void
+    {
+        $session = new SessionManager();
+        $session->setHandler(new DestroyRefusingHandler());
+        $session->start(SessionConfig::fromArray([]));
+
+        $this->expectException(SessionException::class);
+
+        $session->destroy();
+    }
+}
+
+/** A handler whose destroy() always fails, as a database handler can when its delete query fails. */
+final class DestroyRefusingHandler implements \SessionHandlerInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return true; }
+    public function destroy(string $id): bool { return false; }
+    public function gc(int $maxLifetime): int|false { return 0; }
 }
 
 /** A plain handler: PHP skips its strict-mode check for this shape. */
