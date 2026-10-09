@@ -166,6 +166,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /** read() found a live row: this request RESUMED an existing session. */
     private const STATE_RESUMED = 'resumed';
 
+    /** read() found no live row: this request is CREATING the session. */
+    private const STATE_CREATED = 'created';
+
     /** destroy() ran: the row is deliberately gone and must stay gone. */
     private const STATE_DESTROYED = 'destroyed';
 
@@ -176,9 +179,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * What THIS request knows about each session id it has handled.
      *
      * The values are self::STATE_* and the map is per-request, because the
-     * handler instance is. An id absent from it was never read or read no row.
+     * handler instance is. An id absent from it was never read.
      *
-     * @var array<string, string>
+     * @var array<string, self::STATE_*>
      */
     private array $idStates = [];
 
@@ -318,6 +321,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * An UPDATE that matches nothing returns false: the row was removed while
      * the request was in flight (a logout elsewhere, an eviction, garbage
      * collection) and nothing was refreshed. PHP reports it as a warning.
+     *
+     * An id this handler never read is refused, as in write().
      */
     public function updateTimestamp(string $id, string $data): bool
     {
@@ -364,7 +369,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         if ($row === null) {
             // Not held for a new session. Requests admitted before a logout may still race to recreate this id.
-            unset($this->idStates[$id]);
+            $this->idStates[$id] = self::STATE_CREATED;
             $this->releaseLock();
 
             return '';
@@ -404,9 +409,12 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * PHP was handed would sign the user out under the same cookie.
      *
      * A session this request CREATED (read() found nothing) is written with an
-     * INSERT ... ON CONFLICT DO UPDATE, and so is an id this handler has never
-     * seen: one atomic statement, so two concurrent requests creating the same
-     * id cannot collide on the primary key.
+     * INSERT ... ON CONFLICT DO UPDATE: one atomic statement, so two concurrent
+     * requests creating the same id cannot collide on the primary key.
+     *
+     * An id this handler never read is not written: write() raises a warning
+     * and returns false. PHP always reads first, so only a wrapper that skipped
+     * read() gets here, with a payload built without the stored one.
      *
      * Requires the id column to be a PRIMARY KEY or carry a UNIQUE constraint,
      * which it needs anyway to be a session table.
@@ -468,8 +476,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * that ends both. A statement that throws inside a caller's transaction
      * aborts it, and the release then fails until that transaction ends.
      *
-     * @param callable(bool): int $statement Told whether read() resumed the
-     *   session; returns the rows it touched.
+     * @param callable(bool): int $statement Told whether read() resumed a
+     *   stored session (false when it found none); returns the rows it touched.
      */
     private function writeRow(string $id, callable $statement): bool
     {
@@ -481,14 +489,26 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         try {
             return match ($state) {
+                null => self::refuseUnreadId(),
                 // Writing would rebuild the row destroy() removed.
                 self::STATE_DESTROYED => true,
                 self::STATE_READ_FAILED => false,
-                default => $statement($state === self::STATE_RESUMED) > 0,
+                self::STATE_RESUMED, self::STATE_CREATED => $statement($state === self::STATE_RESUMED) > 0,
             };
         } finally {
             $this->releaseLock();
         }
+    }
+
+    private static function refuseUnreadId(): false
+    {
+        trigger_error(
+            'DatabaseSessionHandler refused to write a session it never read, so the changes are lost. '
+            . 'A handler wrapping it must delegate read() before write() or updateTimestamp().',
+            E_USER_WARNING,
+        );
+
+        return false;
     }
 
     /**

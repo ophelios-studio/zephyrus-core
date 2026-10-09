@@ -282,8 +282,10 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
     {
         $payload = 'key|s:4:"' . "\xff\xfe\x80\x01" . '";';
         $id = bin2hex(random_bytes(16));
+        $writer = $this->handler();
 
-        self::assertTrue($this->handler()->write($id, $payload));
+        self::assertSame('', $writer->read($id));
+        self::assertTrue($writer->write($id, $payload));
 
         self::assertSame($payload, $this->handler()->read($id));
     }
@@ -291,8 +293,10 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
     public function testATextPayloadIsStoredVerbatimSoItCanStillBeSearched(): void
     {
         $id = bin2hex(random_bytes(16));
+        $writer = $this->handler();
 
-        $this->handler()->write($id, 'user_id|s:16:"user@example.com";');
+        $writer->read($id);
+        $writer->write($id, 'user_id|s:16:"user@example.com";');
 
         self::assertSame(1, $this->database->count(
             "SELECT COUNT(*) FROM {$this->schema}.session WHERE data LIKE ?",

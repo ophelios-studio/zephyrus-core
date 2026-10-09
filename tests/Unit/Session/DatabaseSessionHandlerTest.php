@@ -48,6 +48,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testWriteThenReadReturnsData(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'foo=bar');
 
         self::assertSame('foo=bar', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
@@ -55,7 +56,9 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testWriteUpdatesExistingRow(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'first');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'second');
 
         self::assertSame('second', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
@@ -85,6 +88,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     #[DataProvider('payloads')]
     public function testAnyPayloadRoundTripsUnchanged(string $payload): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', $payload);
 
         $handler = new DatabaseSessionHandler($this->database, 'session');
@@ -94,6 +98,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     #[DataProvider('payloads')]
     public function testAnyPayloadRoundTripsThroughAResumedSession(string $payload): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', $payload));
@@ -114,6 +119,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     #[DataProvider('payloadsATextColumnCannotHoldVerbatim')]
     public function testAPayloadATextColumnCannotHoldVerbatimIsStoredAsBase64(string $payload): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', $payload);
 
         $stored = $this->storedPayload('43e880c2447ca10d3092d51d258c050c');
@@ -122,6 +128,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testATextPayloadIsStillStoredVerbatim(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|s:5:"Zoë";');
 
         self::assertSame('user_id|s:5:"Zoë";', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
@@ -153,6 +160,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testDestroyRemovesSession(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'data');
         $this->handler->destroy('43e880c2447ca10d3092d51d258c050c');
 
@@ -174,6 +182,7 @@ final class DatabaseSessionHandlerTest extends TestCase
             'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
             ['0f1e2d3c4b5a69788796a5b4c3d2e1f0', time() - 7200, time() - 3600, 'old_data'],
         );
+        $this->handler->read('aabbccddeeff00112233445566778899');
         $this->handler->write('aabbccddeeff00112233445566778899', 'fresh_data');
 
         // GC with a 1-hour lifetime should remove '0f1e2d3c4b5a69788796a5b4c3d2e1f0' but keep 'aabbccddeeff00112233445566778899'.
@@ -186,7 +195,9 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testWriteReturnsTrueOnInsertAndUpdate(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'data'));
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'updated'));
     }
 
@@ -225,6 +236,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testValidateIdAcceptsAnIdThatExistsSoRealSessionsResume(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
 
         self::assertTrue($this->handler->validateId('43e880c2447ca10d3092d51d258c050c'));
@@ -275,6 +287,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     {
         $handler = new DatabaseSessionHandler($this->database, 'session', 'session_id', '/^tenant-[a-z0-9]{8}$/');
 
+        $handler->read('tenant-abcd1234');
         self::assertTrue($handler->write('tenant-abcd1234', 'payload'));
         self::assertSame('payload', $handler->read('tenant-abcd1234'));
         self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', 'payload'));
@@ -284,10 +297,12 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testUpdateTimestampRefreshesAccessWithoutAlteringThePayload(): void
     {
+        $access = time() - 100;
         $this->database->execute(
             'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
-            ['43e880c2447ca10d3092d51d258c050c', 1000, 2000, 'original payload'],
+            ['43e880c2447ca10d3092d51d258c050c', $access, $access + 200, 'original payload'],
         );
+        self::assertSame('original payload', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
 
         // PHP calls updateTimestamp instead of write() when the session did not
         // change, which is most requests, and passes the CURRENT data. The
@@ -300,8 +315,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         );
 
         self::assertSame('original payload', $row->data, 'the payload must not be rewritten');
-        self::assertGreaterThan(1000, (int) $row->access, 'access must be refreshed');
-        self::assertGreaterThan(2000, (int) $row->expire);
+        self::assertGreaterThan($access, (int) $row->access, 'access must be refreshed');
+        self::assertGreaterThan($access + 200, (int) $row->expire);
     }
 
     /**
@@ -317,6 +332,7 @@ final class DatabaseSessionHandlerTest extends TestCase
      */
     public function testUpdateTimestampNeverRecreatesARowThatIsNoLongerThere(): void
     {
+        self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
         self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'live payload'));
 
         self::assertSame(
@@ -360,6 +376,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         $database = new Database($pdo);
         $handler = new DatabaseSessionHandler($database, 'session');
 
+        self::assertSame('', $handler->read('b7c1f0a94e2d8135c6a0f4e79b23d581'));
+
         // Must not throw: the competing row appears mid-write.
         self::assertTrue($handler->write('b7c1f0a94e2d8135c6a0f4e79b23d581', 'mine'));
         self::assertTrue($pdo->raced, 'the race window must actually have been exercised');
@@ -383,6 +401,7 @@ final class DatabaseSessionHandlerTest extends TestCase
      */
     public function testWriteDoesNotResurrectASessionDeletedWhileTheRequestWasInFlight(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
 
         // The in-flight request loads the session...
@@ -404,6 +423,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testUpdateTimestampDoesNotResurrectASessionDeletedWhileTheRequestWasInFlight(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
 
@@ -421,6 +441,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testWriteRefusesToRebuildARowTheSameRequestJustDestroyed(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->destroy('43e880c2447ca10d3092d51d258c050c');
@@ -443,10 +464,64 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session', []));
     }
 
+    /**
+     * PHP reads before it writes, so only a wrapper that skipped read() (its
+     * database was briefly unreachable, say) writes an id this handler never
+     * read, with a payload built without the stored one.
+     */
+    public function testWriteRefusesAnIdThisHandlerNeverReadSoTheStoredSessionSurvives(): void
+    {
+        $this->insertLiveSession($this->database);
+
+        $warnings = $this->collectWarnings(function (): void {
+            self::assertFalse($this->handler->write('43e880c2447ca10d3092d51d258c050c', ''));
+        });
+
+        self::assertSame('user_id|i:1;', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
+        self::assertNeverReadWarning($warnings);
+    }
+
+    public function testWriteForAnIdThisHandlerNeverReadCreatesNothing(): void
+    {
+        $warnings = $this->collectWarnings(function (): void {
+            self::assertFalse($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
+        });
+
+        self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
+        self::assertNeverReadWarning($warnings);
+    }
+
+    public function testUpdateTimestampRefusesAnIdThisHandlerNeverRead(): void
+    {
+        $this->database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', 1000, time() + 1440, 'user_id|i:1;'],
+        );
+
+        $warnings = $this->collectWarnings(function (): void {
+            self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
+        });
+
+        self::assertSame(1000, $this->database->selectInt('SELECT access FROM session'));
+        self::assertNeverReadWarning($warnings);
+    }
+
+    /**
+     * @param list<array{int, string}> $warnings
+     */
+    private static function assertNeverReadWarning(array $warnings): void
+    {
+        self::assertCount(1, $warnings);
+        self::assertSame(E_USER_WARNING, $warnings[0][0]);
+        self::assertStringContainsString('read()', $warnings[0][1]);
+        self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $warnings[0][1]);
+    }
+
     // ── What the write methods report ─────────────────────────────────────────
 
     public function testUpdateTimestampReportsTheRowItRefreshed(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
 
@@ -455,6 +530,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testDestroyReportsSuccessWhetherItDeletedTheRowOrFoundItGone(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
 
         self::assertTrue($this->handler->destroy('43e880c2447ca10d3092d51d258c050c'));
@@ -474,6 +550,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testTheExpiryFollowsSessionGcMaxlifetime(): void
     {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
 
         self::assertSame(
@@ -983,6 +1060,7 @@ final class DatabaseSessionHandlerTest extends TestCase
         $pdo->exec(self::SCHEMA);
 
         $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
 
         $pdo->prepared = 0;
         $handler->write('43e880c2447ca10d3092d51d258c050c', 'first');
