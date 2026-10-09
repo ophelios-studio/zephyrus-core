@@ -256,6 +256,68 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertSame('', $this->storedPayload($id));
     }
 
+    // ── Payload storage ───────────────────────────────────────────────────────
+
+    public function testASessionHoldingAnObjectWithPrivateAndProtectedPropertiesRoundTrips(): void
+    {
+        $cart = new PostgresSessionPayloadObject('Zoë', 3);
+        $payload = 'user_id|i:1;cart|' . serialize($cart);
+        $id = bin2hex(random_bytes(16));
+
+        $writer = $this->handler();
+        self::assertSame('', $writer->read($id));
+        self::assertTrue($writer->write($id, $payload));
+
+        $reader = $this->handler();
+        $read = $reader->read($id);
+        self::assertSame($payload, $read);
+        self::assertTrue($reader->write($id, $read));
+        $reader->close();
+
+        self::assertSame($payload, $this->handler()->read($id));
+        self::assertEquals($cart, unserialize(substr($payload, strlen('user_id|i:1;cart|'))));
+    }
+
+    public function testAPayloadThatIsNotUtf8RoundTrips(): void
+    {
+        $payload = 'key|s:4:"' . "\xff\xfe\x80\x01" . '";';
+        $id = bin2hex(random_bytes(16));
+
+        self::assertTrue($this->handler()->write($id, $payload));
+
+        self::assertSame($payload, $this->handler()->read($id));
+    }
+
+    public function testATextPayloadIsStoredVerbatimSoItCanStillBeSearched(): void
+    {
+        $id = bin2hex(random_bytes(16));
+
+        $this->handler()->write($id, 'user_id|s:16:"user@example.com";');
+
+        self::assertSame(1, $this->database->count(
+            "SELECT COUNT(*) FROM {$this->schema}.session WHERE data LIKE ?",
+            ['%user@example.com%'],
+        ));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function rowsWrittenBeforePayloadsWereEncoded(): iterable
+    {
+        yield 'php serializer' => ['user_id|i:1;'];
+        yield 'empty' => [''];
+        yield 'key named like the prefix' => ['base64:|i:1;'];
+    }
+
+    #[DataProvider('rowsWrittenBeforePayloadsWereEncoded')]
+    public function testARowWrittenBeforePayloadsWereEncodedReadsBackAsStored(string $stored): void
+    {
+        $id = $this->seedSession($stored);
+
+        self::assertSame($stored, $this->handler()->read($id));
+    }
+
     // ── Waiting for a contended session ───────────────────────────────────────
 
     public function testAContendedReadWaitsForTheHolderOnOneBlockingStatement(): void
@@ -434,5 +496,15 @@ final class StatementCountingPdo extends PDO
         $this->statements++;
 
         return parent::prepare($query, $options);
+    }
+}
+
+/** Serialized with NUL bytes around its private and protected property names. */
+final class PostgresSessionPayloadObject
+{
+    public function __construct(
+        private readonly string $owner,
+        protected int $quantity,
+    ) {
     }
 }

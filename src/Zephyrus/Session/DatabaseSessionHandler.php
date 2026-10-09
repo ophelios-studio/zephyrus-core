@@ -62,6 +62,13 @@ use Zephyrus\Data\Database;
  * those columns a default, populate them from your own code, or drop them.
  * Do not build a feature on one expecting this handler to fill it.
  *
+ * ## How `data` is stored
+ *
+ * A payload that is valid UTF-8 without a NUL byte is stored verbatim. Any
+ * other (an object with a private or protected property, raw bytes) is stored
+ * as "base64:" followed by its base64 encoding, which a TEXT column keeps
+ * intact. A query that searches `data` itself matches only verbatim rows.
+ *
  * ## Registration
  *
  * Register through SessionManager, which owns the session ini settings:
@@ -146,6 +153,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * write, so a lowered timeout must not wait for it.
      */
     private const LIVE_ROW = 'expire > ? AND access > ?';
+
+    /** Marks a payload stored as base64 because the data column cannot hold it verbatim. */
+    private const ENCODED_PAYLOAD_PREFIX = 'base64:';
 
     /** Isolates a lock statement issued inside the caller's transaction. */
     private const LOCK_SAVEPOINT = 'zephyrus_session_lock';
@@ -316,7 +326,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * rather than deleted here: gc() owns removal, and a read path that writes
      * turns every page load into a write transaction.
      */
-    public function read(string $id): string|false
+    public function read(string $id): string
     {
         if (!$this->isValidId($id)) {
             return '';
@@ -347,7 +357,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $this->idStates[$id] = self::STATE_RESUMED;
 
-        return $row->data;
+        return self::decodePayload((string) $row->data);
     }
 
     /**
@@ -389,6 +399,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     public function write(string $id, string $data): bool
     {
         return $this->writeRow($id, function (bool $resumed) use ($id, $data): int {
+            $stored = self::encodePayload($data);
             $access = time();
             $expire = $access + $this->maxLifetime();
 
@@ -397,7 +408,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
                     "UPDATE {$this->table}
                         SET access = ?, expire = ?, data = ?
                       WHERE {$this->idColumn} = ?",
-                    [$access, $expire, $data, $id],
+                    [$access, $expire, $stored, $id],
                 );
             }
 
@@ -406,9 +417,35 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
                  VALUES (?, ?, ?, ?)
                  ON CONFLICT ({$this->idColumn}) DO UPDATE
                  SET access = EXCLUDED.access, expire = EXCLUDED.expire, data = EXCLUDED.data",
-                [$id, $access, $expire, $data],
+                [$id, $access, $expire, $stored],
             );
         });
+    }
+
+    /**
+     * The payload as stored: verbatim when a TEXT column keeps it intact, base64
+     * behind the prefix otherwise or when it already starts with the prefix.
+     */
+    private static function encodePayload(string $data): string
+    {
+        $verbatim = !str_contains($data, "\0")
+            && mb_check_encoding($data, 'UTF-8')
+            && !str_starts_with($data, self::ENCODED_PAYLOAD_PREFIX);
+
+        return $verbatim ? $data : self::ENCODED_PAYLOAD_PREFIX . base64_encode($data);
+    }
+
+    private static function decodePayload(string $stored): string
+    {
+        if (!str_starts_with($stored, self::ENCODED_PAYLOAD_PREFIX)) {
+            return $stored;
+        }
+
+        $encoded = substr($stored, strlen(self::ENCODED_PAYLOAD_PREFIX));
+        $payload = base64_decode($encoded, true);
+
+        // A row written raw by an earlier version can start with the prefix too: decode canonical base64 only.
+        return $payload !== false && base64_encode($payload) === $encoded ? $payload : $stored;
     }
 
     /**

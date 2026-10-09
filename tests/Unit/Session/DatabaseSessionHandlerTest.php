@@ -65,6 +65,92 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(1, $count);
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function payloads(): iterable
+    {
+        yield 'object with private and protected properties' => ['cart|' . serialize(new SessionPayloadObject('Zoë', 3))];
+        yield 'nul only' => ["\0"];
+        yield 'leading nul' => ["\0user_id|i:1;"];
+        yield 'not utf-8' => ["token|s:3:\"\xff\xfe\x80\";"];
+        yield 'shaped like an encoded payload' => ['base64:dXNlcl9pZHxpOjE7'];
+        yield 'encoded prefix only' => ['base64:'];
+        yield 'empty' => [''];
+        yield 'zero' => ['0'];
+        yield 'unicode' => ['name|s:5:"Zoë";'];
+        yield 'a megabyte with a nul at the end' => [str_repeat('a', 1 << 20) . "\0"];
+    }
+
+    #[DataProvider('payloads')]
+    public function testAnyPayloadRoundTripsUnchanged(string $payload): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', $payload);
+
+        $handler = new DatabaseSessionHandler($this->database, 'session');
+        self::assertSame($payload, $handler->read('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    #[DataProvider('payloads')]
+    public function testAnyPayloadRoundTripsThroughAResumedSession(string $payload): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', $payload));
+
+        self::assertSame($payload, $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function payloadsATextColumnCannotHoldVerbatim(): iterable
+    {
+        yield 'object with private and protected properties' => ['cart|' . serialize(new SessionPayloadObject('Zoë', 3))];
+        yield 'not utf-8' => ["token|s:3:\"\xff\xfe\x80\";"];
+        yield 'shaped like an encoded payload' => ['base64:dXNlcl9pZHxpOjE7'];
+    }
+
+    #[DataProvider('payloadsATextColumnCannotHoldVerbatim')]
+    public function testAPayloadATextColumnCannotHoldVerbatimIsStoredAsBase64(string $payload): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', $payload);
+
+        $stored = $this->storedPayload('43e880c2447ca10d3092d51d258c050c');
+        self::assertSame('base64:' . base64_encode($payload), $stored);
+    }
+
+    public function testATextPayloadIsStillStoredVerbatim(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|s:5:"Zoë";');
+
+        self::assertSame('user_id|s:5:"Zoë";', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function rowsWrittenBeforePayloadsWereEncoded(): iterable
+    {
+        yield 'php serializer' => ['user_id|i:1;'];
+        yield 'php_serialize serializer' => ['a:1:{s:7:"user_id";i:1;}'];
+        yield 'empty' => [''];
+        yield 'key named like the prefix' => ['base64:|i:1;'];
+        yield 'prefix followed by non-canonical base64' => ['base64:YWI'];
+        yield 'prefix followed by base64 with whitespace' => ['base64:YW Jj'];
+    }
+
+    #[DataProvider('rowsWrittenBeforePayloadsWereEncoded')]
+    public function testARowWrittenBeforePayloadsWereEncodedReadsBackAsStored(string $stored): void
+    {
+        $this->database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', time(), time() + 1440, $stored],
+        );
+
+        self::assertSame($stored, $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
+    }
+
     public function testDestroyRemovesSession(): void
     {
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'data');
@@ -847,6 +933,24 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(1, $pdo->prepared, 'update path must be one statement');
 
         self::assertSame('second', $handler->read('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    private function storedPayload(string $id): string
+    {
+        $stored = $this->database->selectString('SELECT data FROM session WHERE session_id = ?', [$id]);
+        self::assertIsString($stored);
+
+        return $stored;
+    }
+}
+
+/** Serialized with NUL bytes around its private and protected property names. */
+final class SessionPayloadObject
+{
+    public function __construct(
+        private readonly string $owner,
+        protected int $quantity,
+    ) {
     }
 }
 
