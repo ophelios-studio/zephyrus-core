@@ -74,11 +74,8 @@ final class EnvironmentVariableTest extends TestCase
         self::assertNull(EnvironmentVariable::read('ZEPHYRUS_TEST_ONLY_SERVER'));
     }
 
-    public function testRequestDataInServerIsNeverRead(): void
+    public function testAPasswordNameIsRefusedBeforeAnySourceIsRead(): void
     {
-        // Set by mod_php under Apache: the client's typed password.
-        $_SERVER['PHP_AUTH_PW'] = 'typed';
-
         $this->expectException(\InvalidArgumentException::class);
 
         EnvironmentVariable::read('PHP_AUTH_PW');

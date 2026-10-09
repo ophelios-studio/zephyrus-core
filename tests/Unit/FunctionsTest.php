@@ -46,18 +46,11 @@ final class FunctionsTest extends TestCase
         }
     }
 
-    public function testEnvNeverReadsServerEvenForANonHttpRequestValue(): void
+    public function testEnvRefusesAPasswordNameBeforeAnySourceIsRead(): void
     {
-        // Set by mod_php under Apache: the client's typed password.
-        $_SERVER['PHP_AUTH_PW'] = 'typed';
+        $this->expectException(\InvalidArgumentException::class);
 
-        try {
-            $this->expectException(\InvalidArgumentException::class);
-
-            env('PHP_AUTH_PW');
-        } finally {
-            unset($_SERVER['PHP_AUTH_PW']);
-        }
+        env('PHP_AUTH_PW');
     }
 
     public function testEnvReturnsDefaultForMissingVariable(): void

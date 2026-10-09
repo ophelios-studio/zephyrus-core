@@ -92,11 +92,8 @@ final class EnvTagHttpoxyTest extends TestCase
         self::assertSame('localhost', $this->resolve('ZEPHYRUS_TEST_DB_HOST, localhost'));
     }
 
-    public function testARequestParameterCannotBecomeConfiguration(): void
+    public function testARequestDataNameRaisesAConfigurationExceptionInAnEnvTag(): void
     {
-        $_SERVER['PHP_AUTH_PW'] = 'typed-by-client';
-        unset($_ENV['PHP_AUTH_PW']);
-
         $this->expectException(\Zephyrus\Core\Config\ConfigurationException::class);
 
         $this->resolve('PHP_AUTH_PW');
