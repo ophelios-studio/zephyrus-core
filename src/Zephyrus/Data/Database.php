@@ -841,9 +841,9 @@ final class Database
      * no row comes back (e.g. ON CONFLICT DO NOTHING). Other drivers without RETURNING fall back to lastInsertId().
      *
      * @param array<int|string, mixed> $params
-     * @throws DatabaseException on PostgreSQL and SQLite when the SQL has no RETURNING clause, before it runs, or
-     *         when RETURNING yields no column or more than one, after it ran. Inside a transaction, let that
-     *         exception propagate so the row is rolled back.
+     * @throws DatabaseException on PostgreSQL and SQLite when the SQL has no RETURNING clause (before it runs) or
+     *         RETURNING yields no column (after it ran); on any driver when RETURNING yields more than one column
+     *         (after it ran). Inside a transaction, let that exception propagate so the row is rolled back.
      */
     public function insertGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {
@@ -961,7 +961,8 @@ final class Database
 
     /**
      * Return the last generated id of the session. Refused on PostgreSQL, where it can name another table's
-     * sequence: use insertGetId() with INSERT ... RETURNING id.
+     * sequence: use insertGetId() with INSERT ... RETURNING id. On SQLite the value is stale after an insert that
+     * wrote no row (e.g. ON CONFLICT DO NOTHING), so prefer insertGetId() there too.
      *
      * @throws DatabaseException on PostgreSQL, or when the driver cannot report the id.
      */

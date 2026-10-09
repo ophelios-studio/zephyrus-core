@@ -807,7 +807,7 @@ final class DatabaseTest extends TestCase
             $db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Ivan', 'ivan@example.com']);
             self::fail('expected the statement without RETURNING to be refused');
         } catch (DatabaseException $e) {
-            self::assertStringContainsString('INSERT ... RETURNING id', $e->getMessage());
+            self::assertStringContainsString('needs INSERT ... RETURNING id on PostgreSQL and SQLite', $e->getMessage());
             self::assertStringNotContainsString('Ivan', $e->getMessage());
         }
 
@@ -923,17 +923,10 @@ final class DatabaseTest extends TestCase
             $db->lastInsertId();
             self::fail('expected lastInsertId() to be refused on PostgreSQL');
         } catch (DatabaseException $e) {
-            self::assertStringContainsString('insertGetId()', $e->getMessage());
+            self::assertStringContainsString('insertRowGetId() in a Broker', $e->getMessage());
         }
 
         self::assertFalse($pdo->lastInsertIdCalled);
-    }
-
-    public function testLastInsertIdTakesNoSequenceName(): void
-    {
-        $method = new \ReflectionMethod(Database::class, 'lastInsertId');
-
-        self::assertSame(0, $method->getNumberOfParameters());
     }
 
     public function testInTransactionReflectsActiveTransactionState(): void

@@ -398,8 +398,7 @@ abstract class Broker
      * Execute an INSERT ... RETURNING id and return the generated identifier, or false when no row came back.
      *
      * @param array<int|string, mixed> $params
-     * @throws DatabaseException on PostgreSQL and SQLite when the SQL has no RETURNING clause, or when RETURNING
-     *         does not yield exactly one column.
+     * @throws DatabaseException see Database::insertGetId() for the driver-dependent refusals.
      */
     protected function insertRowGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {

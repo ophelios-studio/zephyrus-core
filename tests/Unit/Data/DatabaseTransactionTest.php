@@ -762,7 +762,7 @@ final class AbortingPdo extends PDO
     }
 
     /**
-     * The next lastInsertId() fails and aborts the transaction, as a driver that aborts on error does.
+     * The next lastInsertId() fails, and the spy simulates a driver that aborts the transaction on error.
      */
     public function breakLastInsertId(): void
     {

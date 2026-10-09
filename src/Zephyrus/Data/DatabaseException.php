@@ -66,7 +66,9 @@ final class DatabaseException extends ZephyrusRuntimeException
      */
     public static function lastInsertIdRefused(): self
     {
-        return new self('lastInsertId() is refused on PostgreSQL: use insertGetId() with INSERT ... RETURNING id.');
+        return new self(
+            'lastInsertId() is refused on PostgreSQL: use insertGetId() (insertRowGetId() in a Broker) with INSERT ... RETURNING id.',
+        );
     }
 
     /**
@@ -95,7 +97,9 @@ final class DatabaseException extends ZephyrusRuntimeException
      */
     public static function returningRequired(): self
     {
-        return new self('The generated id must be read with INSERT ... RETURNING id on this driver.');
+        return new self(
+            'insertGetId() needs INSERT ... RETURNING id on PostgreSQL and SQLite: add RETURNING id to the statement.',
+        );
     }
 
     /**
