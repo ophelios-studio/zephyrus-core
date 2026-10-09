@@ -30,6 +30,16 @@ final class EnvironmentVariableTest extends TestCase
         'PHP_AUTH_USER',
         'DOCUMENT_ROOT',
         'query_string',
+        'REMOTE_PORT',
+        'SERVER_ADDR',
+        'SCRIPT_URI',
+        'SCRIPT_URL',
+        'CONTEXT_PREFIX',
+        'CONTEXT_DOCUMENT_ROOT',
+        'ORIG_SCRIPT_FILENAME',
+        'orig_path_info',
+        'SSL_CLIENT_S_DN',
+        'ssl_server_name',
     ];
 
     protected function tearDown(): void
@@ -145,9 +155,44 @@ final class EnvironmentVariableTest extends TestCase
      */
     public static function cgiMetaVariableNames(): iterable
     {
-        foreach (['QUERY_STRING', 'CONTENT_TYPE', 'REQUEST_URI', 'SERVER_NAME', 'HTTPS', 'PHP_AUTH_USER', 'DOCUMENT_ROOT'] as $name) {
+        foreach ([
+            'QUERY_STRING', 'CONTENT_TYPE', 'REQUEST_URI', 'SERVER_NAME', 'HTTPS', 'PHP_AUTH_USER',
+            'DOCUMENT_ROOT', 'REMOTE_PORT', 'SERVER_ADDR', 'SCRIPT_URI', 'SCRIPT_URL',
+            'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT',
+        ] as $name) {
             yield $name => [$name];
         }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function refusedPrefixedNames(): iterable
+    {
+        foreach (['ORIG_SCRIPT_FILENAME', 'orig_path_info', 'SSL_CLIENT_S_DN', 'ssl_server_name'] as $name) {
+            yield $name => [$name];
+        }
+    }
+
+    #[DataProvider('refusedPrefixedNames')]
+    public function testANameWithARefusedPrefixIsRefusedWhenTheEnvSuperglobalHoldsIt(string $name): void
+    {
+        $_ENV[$name] = 'client';
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage($name);
+
+        EnvironmentVariable::read($name);
+    }
+
+    #[DataProvider('refusedPrefixedNames')]
+    public function testANameWithARefusedPrefixIsRefusedWhenTheProcessEnvironmentHoldsIt(string $name): void
+    {
+        putenv($name . '=client');
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        EnvironmentVariable::read($name);
     }
 
     #[DataProvider('cgiMetaVariableNames')]
