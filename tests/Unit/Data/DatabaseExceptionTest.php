@@ -31,13 +31,6 @@ final class DatabaseExceptionTest extends TestCase
         self::assertStringContainsString('table not found', $e->getMessage());
     }
 
-    public function testTransactionFailedMessage(): void
-    {
-        $e = DatabaseException::transactionFailed('begin: server gone');
-        self::assertStringContainsString('Transaction failed', $e->getMessage());
-        self::assertStringContainsString('server gone', $e->getMessage());
-    }
-
     // ── driver-error factories ──────────────────────────────────────────────
 
     private function pdoException(): PDOException
@@ -125,7 +118,6 @@ final class DatabaseExceptionTest extends TestCase
     {
         self::assertNull(DatabaseException::queryFailed('SELECT 1', 'nope')->sqlState());
         self::assertNull(DatabaseException::connectionFailed('mysql:host=x', 'nope')->sqlState());
-        self::assertNull(DatabaseException::transactionFailed('commit: nope')->sqlState());
     }
 
     private function uniqueViolation(): PDOException

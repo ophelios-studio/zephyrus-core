@@ -33,8 +33,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * process-wide flag would put row values back into every sink that prints an
  * exception, production included. Diagnosis reads driverMessage() on purpose.
  *
- * queryFailed(), connectionFailed() and transactionFailed() print what their
- * caller passes; Database::fromConfig() passes the driver's connect error, which
+ * queryFailed() and connectionFailed() print what their caller passes; Database::fromConfig() passes the driver's connect error, which
  * names the server and user but holds no row data.
  */
 final class DatabaseException extends ZephyrusRuntimeException
@@ -57,11 +56,6 @@ final class DatabaseException extends ZephyrusRuntimeException
     public static function queryFailed(string $sql, string $reason, ?\Throwable $previous = null): self
     {
         return new self("Query failed [{$sql}]: {$reason}", previous: $previous);
-    }
-
-    public static function transactionFailed(string $reason, ?\Throwable $previous = null): self
-    {
-        return new self("Transaction failed: {$reason}", previous: $previous);
     }
 
     /**
