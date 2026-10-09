@@ -9,7 +9,7 @@ namespace Zephyrus\Core\Config;
  */
 final class EnvironmentVariable
 {
-    private const REFUSED_PREFIXES = ['HTTP_', 'REDIRECT_', 'ORIG_', 'SSL_'];
+    private const REFUSED_PREFIXES = ['HTTP_', 'REDIRECT_', 'ORIG_', 'SSL_', 'H2_'];
 
     /** @var list<string> */
     private const REFUSED_NAMES = [
@@ -19,7 +19,7 @@ final class EnvironmentVariable
         'SERVER_PORT', 'SERVER_ADDR', 'SERVER_PROTOCOL', 'SERVER_SOFTWARE', 'REQUEST_URI',
         'DOCUMENT_URI', 'DOCUMENT_ROOT', 'SCRIPT_FILENAME', 'SCRIPT_URI', 'SCRIPT_URL',
         'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT', 'REQUEST_SCHEME', 'HTTPS', 'PHP_AUTH_USER',
-        'PHP_AUTH_PW', 'PHP_AUTH_DIGEST',
+        'PHP_AUTH_PW', 'PHP_AUTH_DIGEST', 'SERVER_SIGNATURE', 'HTTP2', 'H2PUSH',
     ];
 
     /**

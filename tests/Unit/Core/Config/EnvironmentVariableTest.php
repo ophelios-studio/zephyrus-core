@@ -40,6 +40,11 @@ final class EnvironmentVariableTest extends TestCase
         'orig_path_info',
         'SSL_CLIENT_S_DN',
         'ssl_server_name',
+        'SERVER_SIGNATURE',
+        'HTTP2',
+        'H2PUSH',
+        'H2_PUSH_POLICY',
+        'h2_stream_tag',
     ];
 
     protected function tearDown(): void
@@ -155,7 +160,7 @@ final class EnvironmentVariableTest extends TestCase
         foreach ([
             'QUERY_STRING', 'CONTENT_TYPE', 'REQUEST_URI', 'SERVER_NAME', 'HTTPS', 'PHP_AUTH_USER',
             'DOCUMENT_ROOT', 'REMOTE_PORT', 'SERVER_ADDR', 'SCRIPT_URI', 'SCRIPT_URL',
-            'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT',
+            'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT', 'SERVER_SIGNATURE', 'HTTP2', 'H2PUSH',
         ] as $name) {
             yield $name => [$name];
         }
@@ -166,7 +171,7 @@ final class EnvironmentVariableTest extends TestCase
      */
     public static function refusedPrefixedNames(): iterable
     {
-        foreach (['ORIG_SCRIPT_FILENAME', 'orig_path_info', 'SSL_CLIENT_S_DN', 'ssl_server_name'] as $name) {
+        foreach (['ORIG_SCRIPT_FILENAME', 'orig_path_info', 'SSL_CLIENT_S_DN', 'ssl_server_name', 'H2_PUSH_POLICY', 'h2_stream_tag'] as $name) {
             yield $name => [$name];
         }
     }
