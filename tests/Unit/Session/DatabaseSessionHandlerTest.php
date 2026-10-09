@@ -943,6 +943,20 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
     }
 
+    /** Signing out another session (sign out everywhere, say) leaves this request's session locked. */
+    public function testDestroyingAnotherSessionKeepsTheLockOnThisOne(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+
+        self::assertTrue($handler->destroy('aabbccddeeff00112233445566778899'));
+        self::assertSame(['pg_try_advisory_lock'], $pdo->advisoryCalls);
+
+        $handler->destroy('43e880c2447ca10d3092d51d258c050c');
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
     /**
      * pg_advisory_unlock() answers false when this connection does not hold the
      * lock, which is what transaction pooling produces: the lock stays held on

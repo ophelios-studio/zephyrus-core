@@ -535,7 +535,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             );
             $this->idStates[$id] = self::STATE_DESTROYED;
         } finally {
-            $this->releaseLock();
+            if ($id === $this->lockedId) {
+                $this->releaseLock();
+            }
         }
 
         return true;
