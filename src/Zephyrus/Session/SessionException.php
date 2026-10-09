@@ -44,7 +44,7 @@ final class SessionException extends ZephyrusException
         return self::withReason(
             'PHP refused to regenerate the session id. The usual causes are output already sent to the browser, '
             . 'a save handler that could not destroy the previous session, or a save handler that could not write '
-            . 'the session (its row may have been deleted by a concurrent logout).',
+            . 'the session (its stored session may have been destroyed by a concurrent logout).',
             $phpWarning,
         );
     }

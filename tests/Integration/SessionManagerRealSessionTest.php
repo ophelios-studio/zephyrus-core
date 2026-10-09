@@ -505,6 +505,7 @@ final class SessionManagerRealSessionTest extends TestCase
 
         self::assertInstanceOf(SessionException::class, $thrown);
         self::assertStringContainsString('write', $thrown->getMessage());
+        self::assertStringContainsString('stored session may have been destroyed', $thrown->getMessage());
         self::assertStringContainsString('destroy', $thrown->getMessage());
         self::assertStringContainsString('output', $thrown->getMessage());
     }
