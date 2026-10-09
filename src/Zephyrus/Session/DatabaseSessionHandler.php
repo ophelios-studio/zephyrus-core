@@ -43,7 +43,9 @@ use Zephyrus\Data\Database;
  * ran. It previously was not: both asked only whether the row existed, `expire`
  * was written and read by nothing, and expiry rested entirely on PHP's GC
  * lottery, which Debian and Ubuntu disable outright (session.gc_probability=0).
- * A 30-day-old row was resumed with its payload intact.
+ * A 30-day-old row was resumed with its payload intact. Both also refuse a row
+ * idle longer than the current session.gc_maxlifetime, so lowering it applies
+ * at once.
  *
  * DEPLOYMENT NOTE, because this is a cliff and not a ramp: the first request
  * after this change goes live invalidates EVERY row already past `expire`, in
@@ -77,9 +79,13 @@ use Zephyrus\Data\Database;
  *
  * A consumer that wraps this handler rather than extending it (to resolve the
  * Database lazily, say) has to forward open() and close() as well as the data
- * callbacks. close() is where the row lock taken by read() is released on the
- * paths that never write, and a wrapper answering `true` without delegating
+ * callbacks. close() is where the advisory lock taken by read() is released on
+ * the paths that never write, and a wrapper answering `true` without delegating
  * holds that lock until the connection closes.
+ *
+ * Locking needs session pooling: behind a transaction-pooling proxy (PgBouncer
+ * pool_mode=transaction) the unlock can reach another backend than the lock,
+ * so construct the handler there with lockSessions: false.
  */
 final class DatabaseSessionHandler implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
 {
@@ -124,24 +130,25 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
     /**
      * How long read() waits for a contended session before continuing WITHOUT
-     * the lock, in seconds.
+     * the lock, in seconds, applied as lock_timeout to a blocking
+     * pg_advisory_lock().
      *
-     * Bounded on purpose. A blocking pg_advisory_lock() would be the stricter
-     * guarantee, but a lock that is never released (a request that dies between
-     * read() and close() on a connection the pool keeps alive) would then hang
-     * every later request for that session forever. Giving up returns the
-     * session to the unlocked behaviour it had before, which is a lost update at
-     * worst; hanging is an outage. Measured against a deliberately leaked lock
-     * on PostgreSQL 16: the next request waited 5.01s, then read the session
-     * normally.
+     * Bounded on purpose: a lock that is never released (a request that dies
+     * between read() and close() on a connection the pool keeps alive) would
+     * otherwise hang every later request for that session. Giving up costs a
+     * lost update at worst; hanging is an outage.
      */
     private const LOCK_WAIT_SECONDS = 5;
 
-    /** Delay between two attempts at a contended session lock, in microseconds. */
-    private const LOCK_POLL_INTERVAL = 20000;
+    /**
+     * A row is live before its stored expiry AND while idle for less than the
+     * CURRENT lifetime: the expiry was stamped under the lifetime of the last
+     * write, so a lowered timeout must not wait for it.
+     */
+    private const LIVE_ROW = 'expire > ? AND access > ?';
 
-    /** read() found no usable row: this request is creating the session. */
-    private const STATE_NEW = 'new';
+    /** Isolates a lock statement issued inside the caller's transaction. */
+    private const LOCK_SAVEPOINT = 'zephyrus_session_lock';
 
     /** read() found a live row: this request RESUMED an existing session. */
     private const STATE_RESUMED = 'resumed';
@@ -149,13 +156,14 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /** destroy() ran: the row is deliberately gone and must stay gone. */
     private const STATE_DESTROYED = 'destroyed';
 
+    /** read() failed: the stored payload is unknown, so nothing may replace it. */
+    private const STATE_READ_FAILED = 'read_failed';
+
     /**
      * What THIS request knows about each session id it has handled.
      *
      * The values are self::STATE_* and the map is per-request, because the
-     * handler instance is. It exists so that write() can tell "the row I read
-     * has since been deleted" from "I am creating this session", which is the
-     * whole of the resurrection fix below.
+     * handler instance is. An id absent from it was never read or read no row.
      *
      * @var array<string, string>
      */
@@ -173,7 +181,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *   PHP could have produced.
      * @param bool $lockSessions Serialize concurrent requests that share a
      *   session id (PostgreSQL only). Turn it off only if whole-request
-     *   serialization is unacceptable and losing a concurrent write is not.
+     *   serialization is unacceptable and losing a concurrent write is not,
+     *   and behind a transaction-pooling proxy, where the unlock can reach
+     *   another backend than the lock.
      */
     public function __construct(
         private readonly Database $database,
@@ -251,7 +261,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * an unknown id is defence in depth layered on that, and it is also what
      * stops an unauthenticated caller from seeding rows of its own choosing.
      *
-     * The expiry predicate makes an expired row answer the same as a missing
+     * The liveness predicate makes an expired row answer the same as a missing
      * one, so a stale id is discarded rather than resumed.
      */
     public function validateId(string $id): bool
@@ -261,8 +271,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         return $this->database->selectOne(
-            "SELECT {$this->idColumn} FROM {$this->table} WHERE {$this->idColumn} = ? AND expire > ?",
-            [$id, time()],
+            "SELECT {$this->idColumn} FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
+            [$id, ...$this->liveParameters()],
         ) !== null;
     }
 
@@ -276,53 +286,31 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *
      * ## A bare UPDATE, with no insert branch
      *
-     * It used to be an INSERT ... ON CONFLICT DO UPDATE, which re-created a row
-     * that had been DELETED while the request was in flight. That undid logout,
-     * sign-out-everywhere and the session eviction a password reset performs:
-     * a request already open when the delete landed wrote the whole
-     * authenticated payload straight back under the same id. Reproduced against
-     * the previous code on both SQLite and PostgreSQL 16: read the row, delete
-     * it from another connection, call this method, and the row is back.
+     * An upsert would re-create a row DELETED while the request was in flight,
+     * undoing a logout, a sign-out-everywhere or a password-reset eviction. PHP
+     * calls write(), not this method, for a session with no stored row yet.
      *
-     * An UPDATE that matches nothing is the correct outcome here, so this
-     * returns true either way: the session is gone because something removed
-     * it on purpose, and reporting a write failure would make PHP warn on every
-     * in-flight request during an ordinary logout.
-     *
-     * Nothing is lost by dropping the insert branch. PHP calls write(), not
-     * this method, for a session that has no stored row yet: measured on 8.5,
-     * a brand-new session with an empty payload produces `write('')`, and this
-     * method is reached only for a session that was read back from storage.
+     * An UPDATE that matches nothing returns false: the row was removed while
+     * the request was in flight (a logout elsewhere, an eviction, garbage
+     * collection) and nothing was refreshed. PHP reports it as a warning.
      */
     public function updateTimestamp(string $id, string $data): bool
     {
-        if (!$this->isValidId($id)) {
-            return false;
-        }
+        return $this->writeRow($id, function () use ($id): int {
+            $access = time();
 
-        if (($this->idStates[$id] ?? null) === self::STATE_DESTROYED) {
-            $this->releaseLock();
-
-            return true;
-        }
-
-        $access = time();
-
-        $this->database->execute(
-            "UPDATE {$this->table}
-                SET access = ?, expire = ?
-              WHERE {$this->idColumn} = ?",
-            [$access, $access + $this->maxLifetime(), $id],
-        );
-
-        $this->releaseLock();
-
-        return true;
+            return $this->database->execute(
+                "UPDATE {$this->table}
+                    SET access = ?, expire = ?
+                  WHERE {$this->idColumn} = ?",
+                [$access, $access + $this->maxLifetime(), $id],
+            );
+        });
     }
 
     /**
-     * Load the session payload, taking the row lock that makes a concurrent
-     * write safe.
+     * Load the session payload, taking the advisory lock that makes a
+     * concurrent write safe.
      *
      * An expired row reads as absent. The row is deliberately left in place
      * rather than deleted here: gc() owns removal, and a read path that writes
@@ -336,14 +324,30 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $this->acquireLock($id);
 
-        $row = $this->database->selectOne(
-            "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ? AND expire > ?",
-            [$id, time()],
-        );
+        try {
+            $row = $this->database->selectOne(
+                "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
+                [$id, ...$this->liveParameters()],
+            );
+        } catch (Throwable $failure) {
+            // PHP does not call close() when read() throws out of session_start().
+            $this->idStates[$id] = self::STATE_READ_FAILED;
+            $this->releaseLock();
 
-        $this->idStates[$id] = $row !== null ? self::STATE_RESUMED : self::STATE_NEW;
+            throw $failure;
+        }
 
-        return $row !== null ? $row->data : '';
+        if ($row === null) {
+            // Strict mode generated this id for this request: nothing can contend for it.
+            unset($this->idStates[$id]);
+            $this->releaseLock();
+
+            return '';
+        }
+
+        $this->idStates[$id] = self::STATE_RESUMED;
+
+        return $row->data;
     }
 
     /**
@@ -366,24 +370,56 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * ## Which statement runs depends on what read() saw
      *
      * A session this request RESUMED is written with a bare UPDATE. If the row
-     * has been deleted in the meantime, the UPDATE matches nothing and the
-     * session stays gone, which is the point: the previous unconditional upsert
-     * re-created it, payload and all, so any in-flight request undid a logout,
-     * a sign-out-everywhere, or the session eviction a password reset performs.
+     * has been deleted in the meantime, the UPDATE matches nothing, write()
+     * returns false and the session stays gone: an upsert would re-create it
+     * and undo a logout, a sign-out-everywhere or a password-reset eviction.
+     *
+     * A session whose read() failed is not written at all and write() returns
+     * false: the stored payload is unknown, and replacing it with the empty one
+     * PHP was handed would sign the user out under the same cookie.
      *
      * A session this request CREATED (read() found nothing) is written with an
      * INSERT ... ON CONFLICT DO UPDATE, and so is an id this handler has never
-     * seen. That upsert is deliberate and predates this: write() used to SELECT
-     * for an existing row and then INSERT or UPDATE, a check-then-act race in
-     * which two concurrent requests carrying the same NEW session id both saw
-     * no row, both INSERTed, and the loser died on a duplicate-key violation.
-     * The symptom was silent, because handlers are commonly wrapped to swallow
-     * write failures so a session problem cannot break a page render.
+     * seen: one atomic statement, so two concurrent requests creating the same
+     * id cannot collide on the primary key.
      *
      * Requires the id column to be a PRIMARY KEY or carry a UNIQUE constraint,
      * which it needs anyway to be a session table.
      */
     public function write(string $id, string $data): bool
+    {
+        return $this->writeRow($id, function (bool $resumed) use ($id, $data): int {
+            $access = time();
+            $expire = $access + $this->maxLifetime();
+
+            if ($resumed) {
+                return $this->database->execute(
+                    "UPDATE {$this->table}
+                        SET access = ?, expire = ?, data = ?
+                      WHERE {$this->idColumn} = ?",
+                    [$access, $expire, $data, $id],
+                );
+            }
+
+            return $this->database->execute(
+                "INSERT INTO {$this->table} ({$this->idColumn}, access, expire, data)
+                 VALUES (?, ?, ?, ?)
+                 ON CONFLICT ({$this->idColumn}) DO UPDATE
+                 SET access = EXCLUDED.access, expire = EXCLUDED.expire, data = EXCLUDED.data",
+                [$id, $access, $expire, $data],
+            );
+        });
+    }
+
+    /**
+     * The checks write() and updateTimestamp() share, then the lock release
+     * that ends both. A statement that throws inside a caller's transaction
+     * aborts it, and the release then fails until that transaction ends.
+     *
+     * @param callable(bool): int $statement Told whether read() resumed the
+     *   session; returns the rows it touched.
+     */
+    private function writeRow(string $id, callable $statement): bool
     {
         if (!$this->isValidId($id)) {
             return false;
@@ -391,39 +427,23 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $state = $this->idStates[$id] ?? null;
 
-        if ($state === self::STATE_DESTROYED) {
-            // destroy() ran in this same request. Writing here would rebuild
-            // exactly the row the caller asked to remove.
+        try {
+            return match ($state) {
+                // Writing would rebuild the row destroy() removed.
+                self::STATE_DESTROYED => true,
+                self::STATE_READ_FAILED => false,
+                default => $statement($state === self::STATE_RESUMED) > 0,
+            };
+        } finally {
             $this->releaseLock();
-
-            return true;
         }
-
-        $access = time();
-        $expire = $access + $this->maxLifetime();
-
-        if ($state === self::STATE_RESUMED) {
-            $this->database->execute(
-                "UPDATE {$this->table}
-                    SET access = ?, expire = ?, data = ?
-                  WHERE {$this->idColumn} = ?",
-                [$access, $expire, $data, $id],
-            );
-        } else {
-            $this->database->execute(
-                "INSERT INTO {$this->table} ({$this->idColumn}, access, expire, data)
-                 VALUES (?, ?, ?, ?)
-                 ON CONFLICT ({$this->idColumn}) DO UPDATE
-                 SET access = EXCLUDED.access, expire = EXCLUDED.expire, data = EXCLUDED.data",
-                [$id, $access, $expire, $data],
-            );
-        }
-
-        $this->releaseLock();
-
-        return true;
     }
 
+    /**
+     * Returns true once no row is stored under the id, whether this call
+     * deleted it or it was already gone: session_regenerate_id(true) fails when
+     * this returns false. A statement that fails throws.
+     */
     public function destroy(string $id): bool
     {
         if (!$this->isValidId($id)) {
@@ -433,13 +453,15 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             return true;
         }
 
-        $this->database->execute(
-            "DELETE FROM {$this->table} WHERE {$this->idColumn} = ?",
-            [$id],
-        );
-
-        $this->idStates[$id] = self::STATE_DESTROYED;
-        $this->releaseLock();
+        try {
+            $this->database->execute(
+                "DELETE FROM {$this->table} WHERE {$this->idColumn} = ?",
+                [$id],
+            );
+            $this->idStates[$id] = self::STATE_DESTROYED;
+        } finally {
+            $this->releaseLock();
+        }
 
         return true;
     }
@@ -454,6 +476,14 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         );
     }
 
+    /** @return array{int, int} The parameters of LIVE_ROW. */
+    private function liveParameters(): array
+    {
+        $now = time();
+
+        return [$now, $now - $this->maxLifetime()];
+    }
+
     private function maxLifetime(): int
     {
         return (int) ini_get('session.gc_maxlifetime');
@@ -466,12 +496,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *
      * write() hands the database the WHOLE payload, because that is what PHP
      * gives a save handler, so the later of two concurrent writers restores its
-     * own stale snapshot over everything the earlier one committed. Reproduced
-     * on PostgreSQL 16 with two concurrent processes on separate connections:
-     * request A read the session, spent 2s minting a CSRF token, and request B
-     * read the same session in between and wrote a locale; A's write then
-     * landed last and B's locale was gone from the row. With this lock, B's
-     * read() blocked for 1.71s until A released, and both changes survived.
+     * own stale snapshot over everything the earlier one committed.
      *
      * It is not a theoretical race for this framework: CsrfMiddleware mints the
      * token lazily on the RESPONSE, so a page load racing any parallel XHR
@@ -486,15 +511,18 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * Database::transaction() call would fail to begin a nested one, and its
      * COMMIT would release the session lock early. A PostgreSQL advisory lock is
      * held by the CONNECTION rather than by a transaction, so it survives the
-     * application's own transactions and interferes with none of them.
+     * application's own transactions.
+     *
+     * Inside the caller's transaction each lock statement runs under its own
+     * savepoint (see bestEffort()), so its failure cannot abort that
+     * transaction.
      *
      * Taken in read() rather than open(), because open() is not told the
      * session id. Released by write(), updateTimestamp(), destroy() and
      * close(), so the paths a wrapper commonly forwards all release it.
      *
-     * Best-effort by design: see LOCK_WAIT_SECONDS, and note that a driver
-     * other than pgsql (the SQLite this project tests on, for one) takes no
-     * lock at all and behaves exactly as before.
+     * Best-effort by design (see LOCK_WAIT_SECONDS). A driver other than pgsql
+     * takes no lock at all.
      */
     private function acquireLock(string $id): void
     {
@@ -504,28 +532,61 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $this->releaseLock();
 
-        $deadline = microtime(true) + self::LOCK_WAIT_SECONDS;
+        $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($id)];
 
-        do {
-            try {
-                $granted = $this->database->selectBool(
-                    'SELECT pg_try_advisory_lock(?, ?)',
-                    [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($id)],
-                );
-            } catch (Throwable) {
-                // Locking is an optimization over correctness-under-contention,
-                // never a gate: a failure here must not break the request.
-                return;
+        $granted = $this->bestEffort(
+            fn (): bool => $this->database->selectBool('SELECT pg_try_advisory_lock(?, ?)', $key),
+        );
+
+        if ($granted === true || ($granted === false && $this->waitForLock($key))) {
+            $this->lockedId = $id;
+        }
+    }
+
+    /**
+     * Block until the lock is granted or LOCK_WAIT_SECONDS pass.
+     *
+     * The bound is a SET LOCAL in the same transaction (or savepoint) as the
+     * wait, so a transaction-pooling proxy cannot split them across backends.
+     * That scope is always rolled back: the bound cannot outlive the wait,
+     * and a session-level advisory lock survives the rollback.
+     *
+     * @param array{int, int} $key
+     */
+    private function waitForLock(array $key): bool
+    {
+        $nested = $this->database->inTransaction();
+
+        try {
+            if ($nested) {
+                $this->database->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
+            } else {
+                $this->database->pdo()->beginTransaction();
             }
+        } catch (Throwable) {
+            return false;
+        }
 
-            if ($granted) {
-                $this->lockedId = $id;
+        try {
+            $this->database->query("SELECT set_config('lock_timeout', ?, true)", [self::LOCK_WAIT_SECONDS . 's']);
+            $this->database->query('SELECT pg_advisory_lock(?, ?)', $key);
+            $granted = true;
+        } catch (Throwable) {
+            $granted = false;
+        }
 
-                return;
+        try {
+            if ($nested) {
+                $this->database->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $this->database->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
+            } else {
+                $this->database->pdo()->rollBack();
             }
+        } catch (Throwable) {
+            // Only a lost connection gets here.
+        }
 
-            usleep(self::LOCK_POLL_INTERVAL);
-        } while (microtime(true) < $deadline);
+        return $granted;
     }
 
     private function releaseLock(): void
@@ -534,17 +595,55 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             return;
         }
 
-        $id = $this->lockedId;
-        $this->lockedId = null;
+        $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($this->lockedId)];
+
+        // Kept on failure so close() can retry; inside an aborted caller transaction that retry fails too.
+        if ($this->bestEffort(fn (): bool => $this->database->selectBool('SELECT pg_advisory_unlock(?, ?)', $key)) !== null) {
+            $this->lockedId = null;
+        }
+    }
+
+    /**
+     * Run a lock statement without letting its failure escape: locking is
+     * never a gate. Inside the caller's transaction it runs under its own
+     * savepoint, rolled back on failure, so the caller's work survives.
+     *
+     * @template T
+     * @param callable(): T $statement
+     * @return T|null Null when the statement failed.
+     */
+    private function bestEffort(callable $statement): mixed
+    {
+        $isolated = $this->database->inTransaction();
 
         try {
-            $this->database->selectBool(
-                'SELECT pg_advisory_unlock(?, ?)',
-                [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($id)],
-            );
+            if ($isolated) {
+                $this->database->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
+            }
         } catch (Throwable) {
-            // The connection is already gone, which releases the lock anyway.
+            // The caller's transaction is already aborted.
+            return null;
         }
+
+        try {
+            $result = $statement();
+        } catch (Throwable) {
+            $result = null;
+        }
+
+        if ($isolated) {
+            try {
+                if ($result === null) {
+                    $this->database->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                }
+
+                $this->database->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
+            } catch (Throwable) {
+                // Only a lost connection gets here.
+            }
+        }
+
+        return $result;
     }
 
     /**

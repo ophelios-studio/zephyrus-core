@@ -6,8 +6,10 @@ namespace Zephyrus\Tests\Unit\Session;
 
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Database;
+use Zephyrus\Data\DatabaseException;
 use Zephyrus\Session\DatabaseSessionHandler;
 
 /**
@@ -16,13 +18,15 @@ use Zephyrus\Session\DatabaseSessionHandler;
  */
 final class DatabaseSessionHandlerTest extends TestCase
 {
+    private const SCHEMA = 'CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")';
+
     private Database $database;
     private DatabaseSessionHandler $handler;
 
     protected function setUp(): void
     {
         $pdo = new PDO('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $pdo->exec(self::SCHEMA);
         $this->database = new Database($pdo);
         $this->handler = new DatabaseSessionHandler($this->database, 'session');
     }
@@ -227,7 +231,7 @@ final class DatabaseSessionHandlerTest extends TestCase
      */
     public function testUpdateTimestampNeverRecreatesARowThatIsNoLongerThere(): void
     {
-        self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'live payload'));
+        self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'live payload'));
 
         self::assertSame(
             0,
@@ -264,7 +268,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     public function testWriteSurvivesAConcurrentInsertOfTheSameNewSessionId(): void
     {
         $pdo = new RacingPdo('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $pdo->exec(self::SCHEMA);
         $pdo->competitorSql = "INSERT INTO session (session_id, access, expire, data) VALUES ('b7c1f0a94e2d8135c6a0f4e79b23d581', 1, 2, 'competitor')";
 
         $database = new Database($pdo);
@@ -302,7 +306,7 @@ final class DatabaseSessionHandlerTest extends TestCase
         $this->database->execute('DELETE FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']);
 
         // The in-flight request now saves what it has.
-        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;role|s:5:"admin";'));
+        self::assertFalse($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;role|s:5:"admin";'));
 
         self::assertSame(
             0,
@@ -321,7 +325,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         // PHP calls this, not write(), when the payload did not change, which
         // is most requests and therefore the likelier half of the race.
-        self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
+        self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
 
         self::assertSame(
             0,
@@ -353,6 +357,157 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session', []));
     }
 
+    // ── What the write methods report ─────────────────────────────────────────
+
+    public function testUpdateTimestampReportsTheRowItRefreshed(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+
+        self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
+    }
+
+    public function testDestroyReportsSuccessWhetherItDeletedTheRowOrFoundItGone(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+
+        self::assertTrue($this->handler->destroy('43e880c2447ca10d3092d51d258c050c'));
+        self::assertTrue($this->handler->destroy('43e880c2447ca10d3092d51d258c050c'));
+        self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
+    }
+
+    public function testADestroyWhoseStatementFailsDoesNotReportSuccess(): void
+    {
+        $handler = new DatabaseSessionHandler(new Database(new PDO('sqlite::memory:')), 'missing_table');
+
+        $this->expectException(DatabaseException::class);
+        $handler->destroy('43e880c2447ca10d3092d51d258c050c');
+    }
+
+    // ── Expiry window ─────────────────────────────────────────────────────────
+
+    public function testTheExpiryFollowsSessionGcMaxlifetime(): void
+    {
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+
+        self::assertSame(
+            (int) ini_get('session.gc_maxlifetime'),
+            $this->database->selectInt('SELECT expire - access FROM session'),
+        );
+    }
+
+    // ── A failed read ─────────────────────────────────────────────────────────
+
+    /**
+     * A wrapper that catches the read failure hands PHP an empty session, and
+     * PHP then writes that anonymous payload back under the same cookie.
+     */
+    public function testAFailedReadStopsWriteFromOverwritingTheStoredSession(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $pdo->failSessionReads = true;
+        $database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', time(), time() + 1440, 'user_id|i:1;'],
+        );
+
+        $this->readExpectingFailure($handler, '43e880c2447ca10d3092d51d258c050c');
+
+        self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', ''));
+        $pdo->failSessionReads = false;
+        self::assertSame('user_id|i:1;', $database->selectString('SELECT data FROM session'));
+    }
+
+    public function testAFailedReadStopsUpdateTimestampFromTouchingTheRow(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $pdo->failSessionReads = true;
+        $database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', 1000, time() + 1440, 'user_id|i:1;'],
+        );
+
+        $this->readExpectingFailure($handler, '43e880c2447ca10d3092d51d258c050c');
+
+        self::assertFalse($handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', ''));
+        self::assertSame(1000, $database->selectInt('SELECT access FROM session'));
+    }
+
+    public function testAFailedReadOfAnUnknownIdStillCreatesNothing(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $pdo->failSessionReads = true;
+
+        $this->readExpectingFailure($handler, '43e880c2447ca10d3092d51d258c050c');
+
+        self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', ''));
+        self::assertSame(0, $database->count('SELECT COUNT(*) FROM session', []));
+    }
+
+    public function testASuccessfulReadAfterAFailedOneLetsTheWriteThrough(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $pdo->failSessionReads = true;
+        $database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', time(), time() + 1440, 'user_id|i:1;'],
+        );
+
+        $this->readExpectingFailure($handler, '43e880c2447ca10d3092d51d258c050c');
+        $pdo->failSessionReads = false;
+        self::assertSame('user_id|i:1;', $handler->read('43e880c2447ca10d3092d51d258c050c'));
+
+        self::assertTrue($handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:2;'));
+        self::assertSame('user_id|i:2;', $database->selectString('SELECT data FROM session'));
+    }
+
+    /** PHP does not call close() when read() throws out of session_start(). */
+    public function testAFailedReadReleasesTheLockItTook(): void
+    {
+        [$pdo, $handler] = $this->recordingHandler();
+        $pdo->failSessionReads = true;
+
+        $this->readExpectingFailure($handler, '43e880c2447ca10d3092d51d258c050c');
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+
+        self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', ''));
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    /**
+     * A handler on a connection that reports the pgsql driver and records the
+     * lock statements it receives.
+     *
+     * @return array{0: AdvisoryLockRecordingPdo, 1: DatabaseSessionHandler, 2: Database}
+     */
+    private function recordingHandler(): array
+    {
+        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
+        $pdo->exec(self::SCHEMA);
+        $database = new Database($pdo);
+
+        return [$pdo, new DatabaseSessionHandler($database, 'session'), $database];
+    }
+
+    private function insertLiveSession(Database $database): void
+    {
+        $database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', time(), time() + 1440, 'user_id|i:1;'],
+        );
+    }
+
+    private function readExpectingFailure(DatabaseSessionHandler $handler, string $id): void
+    {
+        try {
+            $handler->read($id);
+        } catch (DatabaseException) {
+            return;
+        }
+
+        self::fail('read() was expected to fail');
+    }
+
     // ── Expiry is enforced, not merely recorded ───────────────────────────────
 
     /**
@@ -379,6 +534,23 @@ final class DatabaseSessionHandlerTest extends TestCase
             $this->database->count('SELECT COUNT(*) FROM session', []),
             'read() must not delete: gc() owns removal, and a read that writes costs every page load a write',
         );
+    }
+
+    /**
+     * The stored expiry was stamped under the lifetime in force at the last
+     * write, so a lowered timeout must not wait for it.
+     */
+    #[RunInSeparateProcess]
+    public function testASessionIdleLongerThanTheCurrentLifetimeIsRefusedWhateverItsStoredExpiry(): void
+    {
+        ini_set('session.gc_maxlifetime', '2');
+        $this->database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            ['43e880c2447ca10d3092d51d258c050c', time() - 4, time() - 4 + 3600, 'user_id|i:1;'],
+        );
+
+        self::assertFalse($this->handler->validateId('43e880c2447ca10d3092d51d258c050c'));
+        self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
     }
 
     private function insertExpiredSession(): void
@@ -430,12 +602,13 @@ final class DatabaseSessionHandlerTest extends TestCase
     public function testConstructingTheHandlerTurnsStrictModeOnSoAPlantedIdIsDiscarded(): void
     {
         $planted = str_repeat('a', 32);
+        $schema = self::SCHEMA;
         $autoload = dirname(__DIR__, 3) . '/vendor/autoload.php';
 
         $script = <<<PHP
             require '{$autoload}';
             \$pdo = new PDO('sqlite::memory:');
-            \$pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+            \$pdo->exec('{$schema}');
             ini_set('session.use_cookies', '0');
             session_id('{$planted}');
             session_set_save_handler(
@@ -474,9 +647,8 @@ final class DatabaseSessionHandlerTest extends TestCase
      */
     public function testAPostgresConnectionLocksTheSessionForTheWholeRequest(): void
     {
-        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
-        $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
 
         $handler->read('43e880c2447ca10d3092d51d258c050c');
         self::assertSame(['pg_try_advisory_lock'], $pdo->advisoryCalls, 'read() must take the lock before it reads');
@@ -485,11 +657,58 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
     }
 
+    public function testAContendedReadWaitsOnOneBlockingLockInsteadOfPolling(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+        $pdo->lockContended = true;
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+
+        self::assertSame(
+            ['pg_try_advisory_lock', 'BEGIN', 'lock_timeout', 'pg_advisory_lock', 'ROLLBACK'],
+            $pdo->advisoryCalls,
+            'the bound and the wait must share one transaction, rolled back so the bound cannot leak',
+        );
+    }
+
+    public function testAContendedReadInsideACallerTransactionWaitsUnderARolledBackSavepoint(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+        $pdo->lockContended = true;
+
+        $pdo->beginTransaction();
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->commit();
+
+        self::assertSame(
+            [
+                'BEGIN',
+                'SAVEPOINT', 'pg_try_advisory_lock', 'RELEASE SAVEPOINT',
+                'SAVEPOINT', 'lock_timeout', 'pg_advisory_lock', 'ROLLBACK TO SAVEPOINT', 'RELEASE SAVEPOINT',
+            ],
+            $pdo->advisoryCalls,
+        );
+    }
+
+    /**
+     * Under strict mode an id with no row was just generated for this request,
+     * so nothing else can contend for it, and a wrapper that never forwards
+     * close() would otherwise leak one lock per new session.
+     */
+    public function testAReadThatFindsNoRowReleasesTheLock(): void
+    {
+        [$pdo, $handler] = $this->recordingHandler();
+
+        self::assertSame('', $handler->read('43e880c2447ca10d3092d51d258c050c'));
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
     public function testTheLockIsAlsoReleasedByCloseForARequestThatNeverWrites(): void
     {
-        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
-        $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
 
         $handler->read('43e880c2447ca10d3092d51d258c050c');
         $handler->close();
@@ -497,11 +716,100 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
     }
 
+    /**
+     * Inside the caller's transaction a failed statement aborts everything
+     * after it, so each lock statement gets a savepoint of its own.
+     */
+    public function testALockStatementInsideACallerTransactionRunsUnderItsOwnSavepoint(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+
+        $pdo->beginTransaction();
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->commit();
+
+        self::assertSame(['BEGIN', 'SAVEPOINT', 'pg_try_advisory_lock', 'RELEASE SAVEPOINT'], $pdo->advisoryCalls);
+    }
+
+    public function testCloseInsideACallerTransactionReleasesTheLock(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->beginTransaction();
+        $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+        $handler->close();
+        $pdo->commit();
+
+        self::assertSame(
+            ['pg_try_advisory_lock', 'BEGIN', 'SAVEPOINT', 'pg_advisory_unlock', 'RELEASE SAVEPOINT'],
+            $pdo->advisoryCalls,
+        );
+    }
+
+    public function testAFailedUnlockInsideACallerTransactionIsRolledBackToItsSavepoint(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->failUnlock = true;
+        $pdo->beginTransaction();
+        $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+        $pdo->commit();
+
+        self::assertSame(
+            ['pg_try_advisory_lock', 'BEGIN', 'SAVEPOINT', 'pg_advisory_unlock', 'ROLLBACK TO SAVEPOINT', 'RELEASE SAVEPOINT'],
+            $pdo->advisoryCalls,
+        );
+    }
+
+    public function testAnUnlockThatFailedIsRetriedByClose(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->failUnlock = true;
+        $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+        $pdo->failUnlock = false;
+        $handler->close();
+        $handler->close();
+
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function rowWriterProvider(): array
+    {
+        return ['write' => ['write'], 'updateTimestamp' => ['updateTimestamp'], 'destroy' => ['destroy']];
+    }
+
+    #[DataProvider('rowWriterProvider')]
+    public function testAWriteWhoseStatementFailsStillReleasesTheLock(string $method): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->exec('DROP TABLE session');
+
+        try {
+            $handler->{$method}('43e880c2447ca10d3092d51d258c050c', 'payload');
+            self::fail("{$method}() was expected to fail");
+        } catch (DatabaseException) {
+        }
+
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
     public function testLockingCanBeTurnedOffForADeploymentThatCannotAffordIt(): void
     {
-        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
-        $handler = new DatabaseSessionHandler(new Database($pdo), 'session', 'session_id', DatabaseSessionHandler::DEFAULT_ID_PATTERN, false);
+        [$pdo, , $database] = $this->recordingHandler();
+        $handler = new DatabaseSessionHandler($database, 'session', lockSessions: false);
 
         $handler->read('43e880c2447ca10d3092d51d258c050c');
         $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
@@ -511,10 +819,8 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testASqliteConnectionTakesNoLockAndIsUnaffected(): void
     {
-        $pdo = new AdvisoryLockRecordingPdo('sqlite::memory:');
+        [$pdo, $handler] = $this->recordingHandler();
         $pdo->reportedDriver = 'sqlite';
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
-        $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
 
         $handler->read('43e880c2447ca10d3092d51d258c050c');
         $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
@@ -528,7 +834,7 @@ final class DatabaseSessionHandlerTest extends TestCase
         // The property that removes the race: one atomic upsert, no separate
         // read to act on. A second statement would reopen the window above.
         $pdo = new CountingPdo('sqlite::memory:');
-        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL DEFAULT "")');
+        $pdo->exec(self::SCHEMA);
 
         $handler = new DatabaseSessionHandler(new Database($pdo), 'session');
 
@@ -591,8 +897,28 @@ final class AdvisoryLockRecordingPdo extends \PDO
 {
     public string $reportedDriver = 'pgsql';
 
+    public bool $failSessionReads = false;
+
+    public bool $lockContended = false;
+
+    public bool $failUnlock = false;
+
     /** @var list<string> */
     public array $advisoryCalls = [];
+
+    public function beginTransaction(): bool
+    {
+        $this->advisoryCalls[] = 'BEGIN';
+
+        return parent::beginTransaction();
+    }
+
+    public function rollBack(): bool
+    {
+        $this->advisoryCalls[] = 'ROLLBACK';
+
+        return parent::rollBack();
+    }
 
     public function getAttribute(int $attribute): mixed
     {
@@ -608,14 +934,45 @@ final class AdvisoryLockRecordingPdo extends \PDO
      */
     public function prepare(string $query, array $options = []): \PDOStatement|false
     {
+        if ($this->failSessionReads && str_starts_with(ltrim($query), 'SELECT data FROM')) {
+            throw new \PDOException('server closed the connection unexpectedly');
+        }
+
         if (str_contains($query, 'pg_try_advisory_lock')) {
             $this->advisoryCalls[] = 'pg_try_advisory_lock';
+
+            return parent::prepare(
+                sprintf('SELECT %d WHERE ? IS NOT NULL AND ? IS NOT NULL', $this->lockContended ? 0 : 1),
+                $options,
+            );
+        }
+
+        if (str_contains($query, 'pg_advisory_lock')) {
+            $this->advisoryCalls[] = 'pg_advisory_lock';
 
             return parent::prepare('SELECT 1 WHERE ? IS NOT NULL AND ? IS NOT NULL', $options);
         }
 
+        if (str_contains($query, "set_config('lock_timeout'")) {
+            $this->advisoryCalls[] = 'lock_timeout';
+
+            return parent::prepare('SELECT ?', $options);
+        }
+
+        foreach (['ROLLBACK TO SAVEPOINT', 'RELEASE SAVEPOINT', 'SAVEPOINT'] as $savepointStatement) {
+            if (str_starts_with($query, $savepointStatement)) {
+                $this->advisoryCalls[] = $savepointStatement;
+
+                return parent::prepare($query, $options);
+            }
+        }
+
         if (str_contains($query, 'pg_advisory_unlock')) {
             $this->advisoryCalls[] = 'pg_advisory_unlock';
+
+            if ($this->failUnlock) {
+                throw new \PDOException('permission denied for function pg_advisory_unlock');
+            }
 
             return parent::prepare('SELECT 1 WHERE ? IS NOT NULL AND ? IS NOT NULL', $options);
         }
