@@ -194,7 +194,7 @@ final class Mailer
     public function attach(string $path, string $name = '', ?string $allowedRoot = null): self
     {
         if (str_contains($path, "\0") || str_contains($name, "\0")) {
-            throw MailerException::attachmentRejected($path, 'contains a NUL byte');
+            throw MailerException::attachmentRejected('path', $path, 'contains a NUL byte');
         }
 
         // A wrapper turns "attach a file" into "fetch a URL" or "read a php://
@@ -202,11 +202,11 @@ final class Mailer
         // in every build, and refusing here states the rule instead of relying
         // on that.
         if (preg_match('#^[a-zA-Z][a-zA-Z0-9+.\-]*://#', $path) === 1) {
-            throw MailerException::attachmentRejected($path, 'is a stream wrapper, not a local file');
+            throw MailerException::attachmentRejected('path', $path, 'is a stream wrapper, not a local file');
         }
 
         if (str_contains($name, '/') || str_contains($name, '\\')) {
-            throw MailerException::attachmentRejected($name, 'is a display name and may not contain a path separator');
+            throw MailerException::attachmentRejected('display name', $name, 'contains a path separator; pass a bare file name');
         }
 
         if (!is_file($path)) {
@@ -220,7 +220,7 @@ final class Mailer
         try {
             $this->mail->addAttachment($path, $name);
         } catch (PHPMailerException) {
-            throw MailerException::attachmentRejected($path, 'could not be attached');
+            throw MailerException::attachmentRejected('path', $path, 'could not be attached');
         }
 
         return $this;
@@ -239,20 +239,17 @@ final class Mailer
     public function attachContent(string $content, string $name, ?string $mimeType = null): self
     {
         if ($name === '' || preg_match('~[\x00\r\n/\\\\]~', $name) === 1) {
-            throw MailerException::attachmentRejected(
-                addcslashes($name, "\0..\37\\/"),
-                'is not a valid display name',
-            );
+            throw MailerException::attachmentRejected('display name', $name, 'is not a valid display name');
         }
 
         if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {
-            throw MailerException::attachmentRejected($mimeType, 'is not a type/subtype media type');
+            throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype');
         }
 
         try {
             $this->mail->addStringAttachment($content, $name, PHPMailer::ENCODING_BASE64, $mimeType ?? '');
         } catch (PHPMailerException) {
-            throw MailerException::attachmentRejected($name, 'could not be attached');
+            throw MailerException::attachmentRejected('display name', $name, 'could not be attached');
         }
 
         return $this;
@@ -307,7 +304,7 @@ final class Mailer
     {
         $resolvedRoot = realpath($allowedRoot);
         if ($resolvedRoot === false || !is_dir($resolvedRoot)) {
-            throw MailerException::attachmentRejected($allowedRoot, 'is not an existing directory');
+            throw MailerException::attachmentRejected('directory', $allowedRoot, 'is not an existing directory');
         }
 
         $resolvedFile = realpath($path);
@@ -316,7 +313,7 @@ final class Mailer
         }
 
         if (!str_starts_with($resolvedFile, rtrim($resolvedRoot, '/\\') . DIRECTORY_SEPARATOR)) {
-            throw MailerException::attachmentRejected($path, 'resolves outside the allowed directory');
+            throw MailerException::attachmentRejected('path', $path, 'resolves outside the allowed directory');
         }
     }
 

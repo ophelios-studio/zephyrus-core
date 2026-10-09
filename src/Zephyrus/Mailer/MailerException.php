@@ -76,15 +76,21 @@ final class MailerException extends ZephyrusRuntimeException
     }
 
     /**
-     * The attachment path or display name broke a rule attach() enforces.
+     * The attachment, its display name or its media type was refused.
      *
      * Separate from attachmentNotFound() on purpose: "this file is not there"
      * and "this path is not allowed to be attached" are different answers, and
      * a caller logging them should be able to tell them apart.
+     *
+     * @param string $subject What was refused: path, display name, media type or directory.
+     * @param string $value   The refused value. Control characters and backslashes are escaped in the message.
+     * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
-    public static function attachmentRejected(string $value, string $reason): self
+    public static function attachmentRejected(string $subject, string $value, string $reason): self
     {
-        return new self(sprintf('Attachment rejected: %s %s.', $value, $reason), MailerFailure::AttachmentRejected);
+        $shown = addcslashes($value, "\\\0..\37\177");
+
+        return new self(sprintf('Attachment rejected: %s "%s" %s.', $subject, $shown, $reason), MailerFailure::AttachmentRejected);
     }
 
     public static function configurationMissing(string $detail): self

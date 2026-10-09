@@ -131,7 +131,7 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer = new Mailer($this->config);
 
         $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('may not contain a path separator');
+        $this->expectExceptionMessage('contains a path separator; pass a bare file name');
 
         $mailer->attach($this->inside, '../../.ssh/authorized_keys');
     }

@@ -112,7 +112,23 @@ final class MailerExceptionTest extends TestCase
     {
         self::assertSame(
             MailerFailure::AttachmentRejected,
-            MailerException::attachmentRejected('../x', 'contains a path separator')->failure,
+            MailerException::attachmentRejected('path', '../x', 'contains a path separator')->failure,
+        );
+    }
+
+    public function testAttachmentRejectedNamesTheRuleInItsMessage(): void
+    {
+        self::assertSame(
+            'Attachment rejected: display name "a/b" contains a path separator; pass a bare file name.',
+            MailerException::attachmentRejected('display name', 'a/b', 'contains a path separator; pass a bare file name')->getMessage(),
+        );
+    }
+
+    public function testAttachmentRejectedShowsControlCharactersEscaped(): void
+    {
+        self::assertSame(
+            'Attachment rejected: path "a\\000b\\r\\nc\\\\" contains a NUL byte.',
+            MailerException::attachmentRejected('path', "a\0b\r\nc\\", 'contains a NUL byte')->getMessage(),
         );
     }
 
