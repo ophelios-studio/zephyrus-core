@@ -354,11 +354,14 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $this->acquireLock($id);
 
+        $select = fn (): ?\stdClass => $this->database->selectOne(
+            "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
+            [$id, ...$this->liveParameters()],
+        );
+
         try {
-            $row = $this->database->selectOne(
-                "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
-                [$id, ...$this->liveParameters()],
-            );
+            // Under a savepoint in the caller's transaction, so a failure leaves it able to run the unlock.
+            $row = $this->database->inTransaction() ? $this->database->transaction($select) : $select();
         } catch (Throwable $failure) {
             // PHP does not call close() when read() throws out of session_start().
             $this->idStates[$id] = self::STATE_READ_FAILED;

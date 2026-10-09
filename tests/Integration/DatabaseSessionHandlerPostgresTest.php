@@ -213,6 +213,27 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertFalse($handler->write($id, ''));
     }
 
+    /** PHP does not call close() after a read() that throws, so read() is the only place to release. */
+    public function testAReadThatFailsInsideACallerTransactionLeavesNoLockHeld(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $this->database->pdo()->exec("ALTER TABLE {$this->schema}.session RENAME COLUMN data TO payload");
+        $handler = $this->handler();
+        $backend = $this->database->selectInt('SELECT pg_backend_pid()');
+
+        $this->database->pdo()->beginTransaction();
+        try {
+            $handler->read($id);
+            self::fail('read() was expected to fail');
+        } catch (DatabaseException) {
+        }
+
+        self::assertSame(0, $this->connect()->selectInt(
+            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = ? AND granted",
+            [$backend],
+        ));
+    }
+
     public function testAReadThatFindsNoRowLeavesNoLockHeld(): void
     {
         $handler = $this->handler();
