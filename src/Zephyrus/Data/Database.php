@@ -397,11 +397,15 @@ final class Database
      * @throws DatabaseException on prepare or execution failure. Its message
      *         carries the SQLSTATE only; the statement and the driver text are
      *         reachable through DatabaseException::sql() and driverMessage().
-     * @throws \InvalidArgumentException when positional parameters are not a list, a key is not a valid placeholder,
-     *         a value has no SQL form or text holds a NUL byte.
+     * @throws \InvalidArgumentException when the SQL holds a NUL byte, positional parameters are not a list, a key is not a
+     *         valid placeholder, a value has no SQL form or text holds a NUL byte.
      */
     public function query(string $sql, #[\SensitiveParameter] array $params = []): PDOStatement
     {
+        if (str_contains($sql, "\0")) {
+            throw new \InvalidArgumentException('SQL text cannot hold a NUL byte.');
+        }
+
         $bindings = self::bindings($params);
 
         try {

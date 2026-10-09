@@ -424,6 +424,16 @@ final class DatabaseTest extends TestCase
         self::assertSame('b', $row->second);
     }
 
+    public function testQueryRefusesSqlTextHoldingANulByteBeforePreparing(): void
+    {
+        try {
+            $this->db->query("SELECT 1 \0 AND false");
+            self::fail('expected the SQL text to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame('SQL text cannot hold a NUL byte.', $e->getMessage());
+        }
+    }
+
     public function testQueryWithPositionalParams(): void
     {
         $this->db->query('INSERT INTO users (name, email) VALUES (?, ?)', ['Alice', 'alice@example.com']);
