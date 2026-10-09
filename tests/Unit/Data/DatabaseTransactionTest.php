@@ -363,6 +363,21 @@ final class DatabaseTransactionTest extends TestCase
         self::assertSame(['after', 'outer'], $this->labels($db));
     }
 
+    public function testALastInsertIdFailureIsReportedAsATransactionFailure(): void
+    {
+        $db = $this->database(new LastInsertIdFailingPdo());
+
+        try {
+            $db->insertGetId('INSERT INTO entry (label) VALUES (?)', ['written']);
+            self::fail('expected the last insert id to be refused');
+        } catch (DatabaseException $e) {
+            self::assertSame('55000', $e->sqlState());
+            self::assertStringContainsString('last insert id', $e->getMessage());
+            self::assertStringContainsString('lastval is not yet defined', (string) $e->driverMessage());
+            self::assertNull($e->getPrevious());
+        }
+    }
+
     /**
      * A driver error whose text carries a column value, as PostgreSQL's DETAIL line does.
      */
@@ -658,6 +673,23 @@ final class ProbeFailingPdo extends PDO
         }
 
         return parent::query($query);
+    }
+}
+
+/**
+ * A real SQLite connection whose lastInsertId() fails as it does on PostgreSQL
+ * for a table without a sequence.
+ */
+final class LastInsertIdFailingPdo extends PDO
+{
+    public function __construct()
+    {
+        parent::__construct('sqlite::memory:');
+    }
+
+    public function lastInsertId(?string $name = null): string|false
+    {
+        throw DatabaseTransactionTest::driverError('55000', 'lastval is not yet defined in this session');
     }
 }
 

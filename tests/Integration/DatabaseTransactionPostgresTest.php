@@ -273,6 +273,25 @@ final class DatabaseTransactionPostgresTest extends TestCase
         self::assertSame([], $this->committedLabels());
     }
 
+    public function testAnInsertGetIdWithoutASequenceRefusesTheCommitInsteadOfCommittingNothing(): void
+    {
+        $this->admin->exec("CREATE TABLE {$this->schema}.keyed (id TEXT PRIMARY KEY)");
+
+        try {
+            $this->db->transaction(function (Database $db): void {
+                try {
+                    $db->insertGetId('INSERT INTO keyed (id) VALUES (?)', ['a']);
+                } catch (\Throwable) {
+                }
+            });
+            self::fail('expected the commit to be refused');
+        } catch (DatabaseException $e) {
+            self::assertSame('25P02', $e->sqlState());
+        }
+
+        self::assertSame(0, (int) $this->admin->query("SELECT COUNT(*) FROM {$this->schema}.keyed")->fetchColumn());
+    }
+
     /**
      * @return list<string>
      */
