@@ -14,8 +14,8 @@ enum MailerFailure: string
     case InvalidAddress = 'invalid_address';
 
     /**
-     * The transport did not accept the message: a connection, authentication or
-     * the relay refusing the data. Nothing was delivered.
+     * The transport did not confirm acceptance of the message: a connection,
+     * authentication or the relay refusing the data.
      */
     case SendFailed = 'send_failed';
 
@@ -25,10 +25,10 @@ enum MailerFailure: string
      */
     case RecipientsRefused = 'recipients_refused';
 
-    /** An attachment file does not exist or is outside the allowed directory. */
+    /** An attachment file does not exist. */
     case AttachmentNotFound = 'attachment_not_found';
 
-    /** An attachment, its display name or its media type was refused. */
+    /** An attachment, its display name or its media type was refused, or its path is outside the allowed directory. */
     case AttachmentRejected = 'attachment_rejected';
 
     /** The mailer was used without the configuration it needs. */

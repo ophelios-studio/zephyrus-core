@@ -12,7 +12,7 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 final class MailerException extends ZephyrusRuntimeException
 {
     /**
-     * The transport's reply. Held as a field so that reading it is an explicit act.
+     * The transport's reply.
      */
     private ?string $transportMessage = null;
 
@@ -69,6 +69,7 @@ final class MailerException extends ZephyrusRuntimeException
     {
         return new self('Invalid email address in the from.address configuration.', MailerFailure::InvalidAddress);
     }
+
     /**
      * @param string $method The recipient method that received the address (to, cc, bcc, replyTo).
      */

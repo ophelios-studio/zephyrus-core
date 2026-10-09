@@ -186,6 +186,7 @@ final class MailerTest extends TestCase
         self::assertSame('<h1>Welcome</h1>', $mailer->getPhpMailer()->Body);
         self::assertSame('Welcome', $mailer->getPhpMailer()->AltBody);
     }
+
     public function testTemplateThrowsWithoutRenderEngine(): void
     {
         $mailer = new Mailer($this->config);

@@ -281,7 +281,7 @@ final class Mailer
     }
 
     /**
-     * PHPMailer raises STOP_CONTINUE after DATA went to the accepted recipients,
+     * PHPMailer raises STOP_CONTINUE once the recipients were tried,
      * but also when an attachment cannot be read while the body is built, before
      * any DATA. Only the first one means recipients were refused.
      */

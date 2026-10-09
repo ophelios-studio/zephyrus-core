@@ -111,6 +111,7 @@ final class MailerAttachmentGuardTest extends TestCase
             chmod($this->inside, 0o644);
         }
     }
+
     public function testAStreamWrapperIsNotAFile(): void
     {
         $mailer = new Mailer($this->config);
@@ -142,11 +143,6 @@ final class MailerAttachmentGuardTest extends TestCase
     }
 
     /**
-     * The display name lands in a MIME header and is what the recipient's
-     * client writes to disk, so a separator in it is a vector against the
-     * RECIPIENT rather than against us.
-     */
-    /**
      * @return iterable<string, array{string}>
      */
     public static function displayNameWithControlCharacterProvider(): iterable
@@ -167,6 +163,11 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer->attach($this->inside, $name);
     }
 
+    /**
+     * The display name lands in a MIME header and is what the recipient's
+     * client writes to disk, so a separator in it is a vector against the
+     * RECIPIENT rather than against us.
+     */
     public function testAPathSeparatorInTheDisplayNameIsRefused(): void
     {
         $mailer = new Mailer($this->config);
