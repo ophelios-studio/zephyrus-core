@@ -34,7 +34,8 @@ final class SessionException extends ZephyrusException
     public static function startRefused(?string $phpReason = null): self
     {
         return self::withReason(
-            'PHP refused to start the session. The usual cause is output already sent to the browser.',
+            'PHP refused to start the session. The usual causes are output already sent to the browser, '
+            . 'or a save handler that could not open or read the session.',
             $phpReason,
         );
     }

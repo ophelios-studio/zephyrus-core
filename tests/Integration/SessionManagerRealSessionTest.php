@@ -358,6 +358,24 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertStringContainsString('headers', (string) $thrown->phpReason());
     }
 
+    #[RunInSeparateProcess]
+    public function testStartMessageNamesAHandlerThatCouldNotOpenOrReadTheSession(): void
+    {
+        $session = new SessionManager();
+        $session->setHandler(new ReadRefusingHandler());
+
+        $thrown = null;
+        try {
+            $session->start(SessionConfig::fromArray([]));
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertStringContainsString('open or read', $thrown->getMessage());
+        self::assertStringContainsString('output', $thrown->getMessage());
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     #[RunInSeparateProcess]
@@ -638,6 +656,17 @@ final class WriteRefusingHandler implements \SessionHandlerInterface
     public function close(): bool { return true; }
     public function read(string $id): string|false { return ''; }
     public function write(string $id, string $data): bool { return false; }
+    public function destroy(string $id): bool { return true; }
+    public function gc(int $maxLifetime): int|false { return 0; }
+}
+
+/** A handler whose read() always fails, as a database handler wrapper can when its database is unreachable. */
+final class ReadRefusingHandler implements \SessionHandlerInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return false; }
+    public function write(string $id, string $data): bool { return true; }
     public function destroy(string $id): bool { return true; }
     public function gc(int $maxLifetime): int|false { return 0; }
 }
