@@ -381,6 +381,39 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertSame('42s', $this->database->selectString("SELECT current_setting('lock_timeout')"));
     }
 
+    // ── An unlock on the wrong connection ─────────────────────────────────────
+
+    /**
+     * Dropping the lock behind the handler's back leaves its unlock on a
+     * connection without the lock, as a transaction-pooling proxy does.
+     */
+    public function testAnUnlockOnAConnectionWithoutTheLockWarnsAndStopsLocking(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $handler = $this->handler();
+        $handler->read($id);
+        $this->database->pdo()->exec('SELECT pg_advisory_unlock_all()');
+
+        $warnings = [];
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        });
+        try {
+            self::assertTrue($handler->write($id, 'user_id|i:2;'));
+            $handler->read($id);
+            $locksAfterNextRead = $this->advisoryLocksHeld();
+            $handler->close();
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('lockSessions: false', $warnings[0]);
+        self::assertSame(0, $locksAfterNextRead);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private function connect(): Database

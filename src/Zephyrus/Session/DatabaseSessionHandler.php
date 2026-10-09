@@ -90,9 +90,12 @@ use Zephyrus\Data\Database;
  * the paths that never write, and a wrapper answering `true` without delegating
  * holds that lock until the connection closes.
  *
- * Locking needs session pooling: behind a transaction-pooling proxy (PgBouncer
- * pool_mode=transaction) the unlock can reach another backend than the lock,
- * so construct the handler there with lockSessions: false.
+ * ## Connection pooling
+ *
+ * The advisory lock belongs to the server connection. Behind transaction
+ * pooling (PgBouncer pool_mode=transaction) construct the handler with
+ * lockSessions: false. An unlock that finds no lock on its connection raises
+ * a warning and turns locking off for the rest of the request.
  */
 final class DatabaseSessionHandler implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
 {
@@ -182,6 +185,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /** The id whose advisory lock this handler currently holds, if any. */
     private ?string $lockedId = null;
 
+    /** Whether read() takes the advisory lock; off for the request once an unlock lands on another connection. */
+    private bool $locking;
+
     /** Memoized PDO driver name; '' once a lookup has failed. */
     private ?string $driver = null;
 
@@ -189,19 +195,28 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * @param string $idPattern Overridable for an application that generates
      *   session ids itself in some other shape. The default only accepts ids
      *   PHP could have produced.
-     * @param bool $lockSessions Serialize concurrent requests that share a
-     *   session id (PostgreSQL only). Turn it off only if whole-request
-     *   serialization is unacceptable and losing a concurrent write is not,
-     *   and behind a transaction-pooling proxy, where the unlock can reach
-     *   another backend than the lock.
+     * @param bool $lockSessions Serialize the concurrent requests of one
+     *   session (PostgreSQL only); without it the later of two writers
+     *   overwrites the other's changes. The lock belongs to the server
+     *   connection, so it needs a direct connection or session-mode pooling
+     *   (PgBouncer pool_mode=session). Pass false whenever connections go
+     *   through transaction or statement pooling (PgBouncer
+     *   pool_mode=transaction or statement): there an unlock can reach another
+     *   server connection, the lock stays until that connection closes, and
+     *   the server's shared lock table fills until PostgreSQL refuses every
+     *   client with "out of shared memory". An unlock that finds no lock warns
+     *   and turns locking off for the rest of the request: that detects the
+     *   leak without preventing it, since the next request locks again, so
+     *   false is the only fix there.
      */
     public function __construct(
         private readonly Database $database,
         private readonly string $table = 'public.session',
         private readonly string $idColumn = 'session_id',
         private readonly string $idPattern = self::DEFAULT_ID_PATTERN,
-        private readonly bool $lockSessions = true,
+        bool $lockSessions = true,
     ) {
+        $this->locking = $lockSessions;
         self::forceStrictMode();
     }
 
@@ -348,7 +363,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         if ($row === null) {
-            // Strict mode generated this id for this request: nothing can contend for it.
+            // Not held for a new session. Requests admitted before a logout may still race to recreate this id.
             unset($this->idStates[$id]);
             $this->releaseLock();
 
@@ -563,11 +578,16 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      */
     private function acquireLock(string $id): void
     {
-        if (!$this->lockSessions || $this->lockedId === $id || !$this->supportsAdvisoryLocks()) {
+        if (!$this->locking || $this->lockedId === $id || !$this->supportsAdvisoryLocks()) {
             return;
         }
 
         $this->releaseLock();
+
+        // The release may have found the previous lock gone and turned locking off.
+        if (!$this->locking) {
+            return;
+        }
 
         $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($id)];
 
@@ -633,11 +653,33 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($this->lockedId)];
+        $released = $this->bestEffort(
+            fn (): bool => $this->database->selectBool('SELECT pg_advisory_unlock(?, ?)', $key),
+        );
 
         // Kept on failure so close() can retry; inside an aborted caller transaction that retry fails too.
-        if ($this->bestEffort(fn (): bool => $this->database->selectBool('SELECT pg_advisory_unlock(?, ?)', $key)) !== null) {
-            $this->lockedId = null;
+        if ($released === null) {
+            return;
         }
+
+        $this->lockedId = null;
+
+        if (!$released) {
+            $this->stopLocking();
+        }
+    }
+
+    /** The unlock reached a connection that does not hold the lock, which is still held elsewhere. */
+    private function stopLocking(): void
+    {
+        $this->locking = false;
+        trigger_error(
+            'DatabaseSessionHandler released a session lock on a database connection that does not hold it, so the '
+            . 'lock stays held on another server connection. Transaction pooling (PgBouncer pool_mode=transaction) '
+            . 'causes this: construct the handler with lockSessions: false there. Locking is now off for the rest of '
+            . 'this request.',
+            E_USER_WARNING,
+        );
     }
 
     /**

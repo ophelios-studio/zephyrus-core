@@ -779,9 +779,8 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * Under strict mode an id with no row was just generated for this request,
-     * so nothing else can contend for it, and a wrapper that never forwards
-     * close() would otherwise leak one lock per new session.
+     * A new session holds no lock, so a wrapper that never forwards close()
+     * cannot leak one per new session.
      */
     public function testAReadThatFindsNoRowReleasesTheLock(): void
     {
@@ -865,6 +864,67 @@ final class DatabaseSessionHandlerTest extends TestCase
         $handler->close();
 
         self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    /**
+     * pg_advisory_unlock() answers false when this connection does not hold the
+     * lock, which is what transaction pooling produces: the lock stays held on
+     * another server connection.
+     */
+    public function testAnUnlockThatFindsNoLockWarnsAndStopsLocking(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->unlockFindsNoLock = true;
+
+        $warnings = $this->collectWarnings(static function () use ($handler): void {
+            $handler->write('43e880c2447ca10d3092d51d258c050c', 'payload');
+            $handler->read('43e880c2447ca10d3092d51d258c050c');
+            $handler->close();
+        });
+
+        self::assertCount(1, $warnings);
+        self::assertSame(E_USER_WARNING, $warnings[0][0]);
+        self::assertStringContainsString('lockSessions: false', $warnings[0][1]);
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    public function testReadingAnotherSessionTakesNoLockOnceItsUnlockTurnedLockingOff(): void
+    {
+        [$pdo, $handler, $database] = $this->recordingHandler();
+        $this->insertLiveSession($database);
+        $handler->read('43e880c2447ca10d3092d51d258c050c');
+        $pdo->unlockFindsNoLock = true;
+
+        $warnings = $this->collectWarnings(static function () use ($handler): void {
+            $handler->read('aabbccddeeff00112233445566778899');
+        });
+
+        self::assertCount(1, $warnings);
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    /**
+     * @param callable(): void $operations
+     * @return list<array{int, string}>
+     */
+    private function collectWarnings(callable $operations): array
+    {
+        $warnings = [];
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = [$severity, $message];
+
+            return true;
+        });
+
+        try {
+            $operations();
+        } finally {
+            restore_error_handler();
+        }
+
+        return $warnings;
     }
 
     /**
@@ -1007,6 +1067,8 @@ final class AdvisoryLockRecordingPdo extends \PDO
 
     public bool $failUnlock = false;
 
+    public bool $unlockFindsNoLock = false;
+
     /** @var list<string> */
     public array $advisoryCalls = [];
 
@@ -1078,7 +1140,10 @@ final class AdvisoryLockRecordingPdo extends \PDO
                 throw new \PDOException('permission denied for function pg_advisory_unlock');
             }
 
-            return parent::prepare('SELECT 1 WHERE ? IS NOT NULL AND ? IS NOT NULL', $options);
+            return parent::prepare(
+                sprintf('SELECT %d WHERE ? IS NOT NULL AND ? IS NOT NULL', $this->unlockFindsNoLock ? 0 : 1),
+                $options,
+            );
         }
 
         return parent::prepare($query, $options);
