@@ -363,7 +363,26 @@ final class DatabaseTransactionTest extends TestCase
         self::assertSame(['after', 'outer'], $this->labels($db));
     }
 
-    public function testALastInsertIdFailureIsReportedAsATransactionFailure(): void
+    public function testALastInsertIdFailureInsideATransactionIsNotCommitted(): void
+    {
+        $pdo = new AbortingPdo();
+        $db = $this->database($pdo);
+
+        try {
+            $db->transaction(function (Database $db) use ($pdo): void {
+                $pdo->breakLastInsertId();
+                $this->swallowALastInsertIdFailure($db);
+            });
+            self::fail('expected the commit to be refused');
+        } catch (DatabaseException $e) {
+            self::assertSame('25P02', $e->sqlState());
+            self::assertStringContainsString('commit', $e->getMessage());
+        }
+
+        self::assertSame([], $this->labels($db));
+    }
+
+    public function testALastInsertIdFailureOutsideATransactionIsReportedAsAQueryFailure(): void
     {
         $db = $this->database(new LastInsertIdFailingPdo());
 
@@ -372,7 +391,9 @@ final class DatabaseTransactionTest extends TestCase
             self::fail('expected the last insert id to be refused');
         } catch (DatabaseException $e) {
             self::assertSame('55000', $e->sqlState());
-            self::assertStringContainsString('last insert id', $e->getMessage());
+            self::assertSame('SELECT LASTVAL()', $e->sql());
+            self::assertStringContainsString('[SQLSTATE 55000]', $e->getMessage());
+            self::assertStringNotContainsString('Transaction failed', $e->getMessage());
             self::assertStringContainsString('lastval is not yet defined', (string) $e->driverMessage());
             self::assertNull($e->getPrevious());
         }
@@ -529,6 +550,15 @@ final class DatabaseTransactionTest extends TestCase
         try {
             $db->execute('INSERT INTO entry (label) VALUES (?)', [null]);
             self::fail('expected the NOT NULL constraint to fail');
+        } catch (DatabaseException) {
+        }
+    }
+
+    private function swallowALastInsertIdFailure(Database $db): void
+    {
+        try {
+            $db->insertGetId('INSERT INTO entry (label) VALUES (?)', ['written']);
+            self::fail('expected the last insert id to be refused');
         } catch (DatabaseException) {
         }
     }
@@ -700,6 +730,7 @@ final class LastInsertIdFailingPdo extends PDO
 final class AbortingPdo extends PDO
 {
     private bool $aborted = false;
+    private bool $lastInsertIdFails = false;
 
     public function __construct()
     {
@@ -709,6 +740,25 @@ final class AbortingPdo extends PDO
     public function abort(): void
     {
         $this->aborted = true;
+    }
+
+    /**
+     * The next lastInsertId() fails and aborts the transaction, as a failed lastval() does on PostgreSQL.
+     */
+    public function breakLastInsertId(): void
+    {
+        $this->lastInsertIdFails = true;
+    }
+
+    public function lastInsertId(?string $name = null): string|false
+    {
+        if ($this->lastInsertIdFails) {
+            $this->aborted = true;
+
+            throw DatabaseTransactionTest::driverError('55000', 'lastval is not yet defined in this session');
+        }
+
+        return parent::lastInsertId($name);
     }
 
     /**
