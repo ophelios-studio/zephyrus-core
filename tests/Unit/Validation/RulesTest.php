@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Validation;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Validation\Rules;
 
@@ -877,6 +878,27 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::cidr()->test('2001:db8::/129'));
         self::assertFalse(Rules::cidr()->test('not-an-ip/24'));
         self::assertFalse(Rules::cidr()->test(null));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unsafeCidrBlocks(): iterable
+    {
+        yield 'overflowing ipv4 prefix' => ['10.0.0.0/' . str_repeat('9', 309)];
+        yield 'overflowing ipv6 prefix' => ['2001:db8::/' . str_repeat('9', 309)];
+        yield 'nul byte after prefix' => ["10.0.0.0/8\0"];
+        yield 'nul byte in address' => ["10.0.0.0\0/8"];
+        yield 'four digit prefix' => ['10.0.0.0/0008'];
+        yield 'letter O for zero' => ['10.0.0.0/O8'];
+        yield 'leading zero octet' => ['010.0.0.0/8'];
+        yield 'ipv6 zone identifier' => ['fe80::1%eth0/64'];
+    }
+
+    #[DataProvider('unsafeCidrBlocks')]
+    public function testCidrRejectsBlocksTheRangeMatcherWouldNotAccept(string $block): void
+    {
+        self::assertFalse(Rules::cidr()->test($block));
     }
 
     public function testCidrDefaultMessage(): void

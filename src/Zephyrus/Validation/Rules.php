@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Validation;
 
+use Zephyrus\Http\IpRange;
+
 final class Rules
 {
     public static function required(string $message = 'This field is required.'): Rule
@@ -522,26 +524,7 @@ final class Rules
     {
         return Rule::of(
             static function (mixed $v): bool {
-                if (!is_string($v) || !str_contains($v, '/')) {
-                    return false;
-                }
-
-                [$ip, $prefix] = explode('/', $v, 2);
-                if ($ip === '' || $prefix === '' || !ctype_digit($prefix)) {
-                    return false;
-                }
-
-                $prefixLength = (int) $prefix;
-
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
-                    return $prefixLength >= 0 && $prefixLength <= 32;
-                }
-
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
-                    return $prefixLength >= 0 && $prefixLength <= 128;
-                }
-
-                return false;
+                return is_string($v) && str_contains($v, '/') && IpRange::isValid($v);
             },
             $message,
         );
