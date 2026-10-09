@@ -89,6 +89,9 @@ final class DebugIntegration
         'authorization',
         'proxy-authorization',
         'x-csrf-token',
+        'x-xsrf-token',
+        'x-api-key',
+        'x-auth-token',
         'tracy-debug',
     ];
 

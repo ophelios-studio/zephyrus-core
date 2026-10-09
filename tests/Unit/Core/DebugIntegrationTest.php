@@ -134,7 +134,7 @@ final class DebugIntegrationTest extends TestCase
      */
     public static function sensitiveHeaderProvider(): iterable
     {
-        $names = ['Cookie', 'Set-Cookie', 'Authorization', 'Proxy-Authorization', 'X-CSRF-Token', 'Tracy-Debug'];
+        $names = ['Cookie', 'Set-Cookie', 'Authorization', 'Proxy-Authorization', 'X-CSRF-Token', 'X-XSRF-Token', 'X-API-Key', 'X-Auth-Token', 'Tracy-Debug'];
 
         foreach ($names as $name) {
             yield $name => [$name];
