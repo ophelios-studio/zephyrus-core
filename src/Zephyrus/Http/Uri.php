@@ -12,6 +12,9 @@ namespace Zephyrus\Http;
  */
 final readonly class Uri
 {
+    /** Anchored: a "://" later in an origin-form target belongs to its query, not to a scheme. */
+    private const SCHEME_PATTERN = '#^([a-zA-Z][a-zA-Z0-9+.\-]*)://#';
+
     private string $scheme;
     private string $host;
     private ?int $port;
@@ -98,11 +101,11 @@ final readonly class Uri
         $parts = [];
         $remainder = $url;
 
-        if (preg_match('#^([a-zA-Z][a-zA-Z0-9+.\-]*)://#', $remainder, $matches) === 1) {
+        if (preg_match(self::SCHEME_PATTERN, $remainder, $matches) === 1) {
             $parts['scheme'] = $matches[1];
             $remainder = substr($remainder, strlen($matches[0]));
 
-            $authority = substr($remainder, 0, strcspn($remainder, '/?#'));
+            $authority = self::cutAuthority($remainder);
             $remainder = substr($remainder, strlen($authority));
 
             // Userinfo is a credential, never an address, and parse_url() drops
@@ -151,6 +154,17 @@ final readonly class Uri
     public function host(): string
     {
         return $this->host;
+    }
+
+    /**
+     * The authority as written, userinfo and port included, or the host when
+     * the URL has no scheme. Meant for validation, not for building URLs, since
+     * it keeps the userinfo. The written authority is not lowercased, the
+     * fallback host is.
+     */
+    public function authority(): string
+    {
+        return self::rawAuthority($this->url) ?? $this->host;
     }
 
     public function port(): ?int
@@ -210,6 +224,27 @@ final readonly class Uri
     public function __toString(): string
     {
         return $this->url;
+    }
+
+    /**
+     * The text between "scheme://" and the first "/", "?" or "#", or null when
+     * the URL has no scheme.
+     */
+    private static function rawAuthority(string $url): ?string
+    {
+        if (preg_match(self::SCHEME_PATTERN, $url, $matches) !== 1) {
+            return null;
+        }
+
+        return self::cutAuthority(substr($url, strlen($matches[0])));
+    }
+
+    /**
+     * The authority at the start of the text that follows "scheme://".
+     */
+    private static function cutAuthority(string $afterScheme): string
+    {
+        return substr($afterScheme, 0, strcspn($afterScheme, '/?#'));
     }
 
     private function isDefaultPort(): bool

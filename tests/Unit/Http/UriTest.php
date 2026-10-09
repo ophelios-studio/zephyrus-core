@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Http;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Uri;
@@ -231,5 +232,26 @@ final class UriTest extends TestCase
         self::assertSame('localhost', (new Uri('/just-a-path'))->host());
         self::assertSame('localhost', (new Uri('http://'))->host());
         self::assertSame('http', (new Uri('http://'))->scheme());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function authorities(): iterable
+    {
+        yield 'host and port' => ['https://app.example.com:8443/x?y=1#z', 'app.example.com:8443'];
+        yield 'userinfo kept raw' => ['https://user@app.example.com/x', 'user@app.example.com'];
+        yield 'last at sign' => ['https://a@b@app.example.com', 'a@b@app.example.com'];
+        yield 'case preserved' => ['HTTPS://App.Example.COM', 'App.Example.COM'];
+        yield 'unreadable port kept' => ['https://app.example.com:evil/dashboard', 'app.example.com:evil'];
+        yield 'query with a scheme is not an authority' => ['/x?next=https://evil.example', 'localhost'];
+        yield 'empty authority' => ['https://', ''];
+        yield 'no scheme falls back to the host' => ['/just-a-path', 'localhost'];
+    }
+
+    #[DataProvider('authorities')]
+    public function testAuthorityIsTheRawAuthorityOrFallsBackToTheHost(string $url, string $expected): void
+    {
+        self::assertSame($expected, (new Uri($url))->authority());
     }
 }

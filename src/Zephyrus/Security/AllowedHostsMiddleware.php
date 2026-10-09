@@ -20,7 +20,7 @@ use function substr_count;
 /**
  * Enforces an allowlist of accepted hosts to mitigate host header abuse.
  *
- * The host judged is the one the request URL spells, see requestAuthority().
+ * The host judged is the one the request URL spells, see Uri::authority().
  * Each configured host may be:
  * - exact: "example.com", "2001:db8::1" or "[2001:db8::1]" for an IPv6 literal
  * - wildcard subdomain: "*.example.com"
@@ -130,7 +130,7 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
             return $next($request);
         }
 
-        if (!$this->allows(self::requestAuthority($request))) {
+        if (!$this->allows($request->uri()->authority())) {
             return Response::json(['error' => 'Invalid Host header.'], 400);
         }
 
@@ -153,20 +153,8 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return $normalized !== null && $this->isAllowed($normalized);
     }
 
-    /** The authority as the URL spells it: Uri rewrites a bad port or tab, so uri()->host() is not the sent value. */
-    private static function requestAuthority(Request $request): string
-    {
-        $url = $request->uri()->full();
-        if (preg_match(self::SCHEME_PATTERN, $url, $scheme) !== 1) {
-            return $request->uri()->host();
-        }
-
-        return self::authorityOf(substr($url, strlen($scheme[0])));
-    }
-
     /**
-     * Cuts a host, or the text after a scheme, at the first "/", "?" or "#", the
-     * point where the authority ends for a browser and for the URL parser alike.
+     * Cuts a bare host at the first "/", "?" or "#", where an authority ends.
      */
     private static function authorityOf(string $text): string
     {
