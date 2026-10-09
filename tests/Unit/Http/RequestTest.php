@@ -892,6 +892,106 @@ final class RequestTest extends TestCase
     // fromGlobals — URI construction
     // -------------------------------------------------------------------------
 
+    #[DataProvider('forwardedPortsThatAreNotPortNumbers')]
+    public function testFromGlobalsIgnoresForwardedPortThatIsNotAPortNumber(string $port): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'        => 'GET',
+                'HTTP_HOST'             => 'app.internal',
+                'REQUEST_URI'           => '/public',
+                'REMOTE_ADDR'           => '10.0.0.1',
+                'SERVER_PORT'           => '80',
+                'HTTP_X_FORWARDED_PORT' => $port,
+            ],
+            trustedProxies: ['*'],
+        );
+
+        self::assertSame('http://app.internal/public', $request->uri()->full());
+        self::assertSame('/public', $request->path());
+    }
+
+    public static function forwardedPortsThatAreNotPortNumbers(): iterable
+    {
+        yield 'path injection' => ['80/admin?'];
+        yield 'authority injection' => ['80@evil.com'];
+        yield 'dot segments' => ['1/../admin'];
+        yield 'above the port range' => ['65536'];
+        yield 'signed' => ['+80'];
+        yield 'trailing newline' => ["80\n"];
+    }
+
+    public function testFromGlobalsIgnoresForwardedElementPortThatIsNotAPortNumber(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/public',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'SERVER_PORT'    => '80',
+                'HTTP_FORWARDED' => 'port="80/evil"',
+            ],
+            trustedProxies: ['*'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://app.internal/public', $request->uri()->full());
+        self::assertSame('/public', $request->path());
+    }
+
+    public function testFromGlobalsAcceptsForwardedPortAtTheUpperBound(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'        => 'GET',
+                'HTTP_HOST'             => 'app.internal',
+                'REQUEST_URI'           => '/public',
+                'REMOTE_ADDR'           => '10.0.0.1',
+                'SERVER_PORT'           => '80',
+                'HTTP_X_FORWARDED_PORT' => '65535',
+            ],
+            trustedProxies: ['*'],
+        );
+
+        self::assertSame('http://app.internal:65535/public', $request->uri()->full());
+    }
+
+    public function testFromGlobalsRecognisesAbsoluteRequestUriSchemeInAnyCase(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'proxy.internal',
+                'REQUEST_URI'    => 'HTTPS://real.example.com/api',
+            ],
+        );
+
+        self::assertSame('HTTPS://real.example.com/api', $request->uri()->full());
+        self::assertSame('/api', $request->path());
+    }
+
+    #[DataProvider('originFormTargetsWithoutLeadingSlash')]
+    public function testFromGlobalsKeepsTheHostWhenRequestTargetLacksLeadingSlash(string $target): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => $target,
+            ],
+        );
+
+        self::assertSame('app.internal', $request->uri()->host());
+    }
+
+    public static function originFormTargetsWithoutLeadingSlash(): iterable
+    {
+        yield 'authority injection' => ['@evil.com/admin'];
+        yield 'bare host' => ['evil.com/admin'];
+        yield 'empty target' => [''];
+    }
+
     public function testFromGlobalsBuildsHttpUri(): void
     {
         $request = Request::fromGlobals(

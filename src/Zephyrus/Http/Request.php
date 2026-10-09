@@ -697,8 +697,12 @@ final readonly class Request
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
-        if (str_starts_with($requestUri, 'http://') || str_starts_with($requestUri, 'https://')) {
+        if (preg_match('#^https?://#i', $requestUri) === 1) {
             return $requestUri;
+        }
+
+        if ($requestUri !== '*' && !str_starts_with($requestUri, '/')) {
+            $requestUri = '/' . $requestUri;
         }
 
         $forwarded = in_array('forwarded', $trustedHeaders, true)
@@ -707,31 +711,68 @@ final readonly class Request
 
         $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
 
-        $scheme = $forwarded['proto']
+        $scheme = self::httpScheme($forwarded['proto'] ?? null)
             ?? (in_array('x-forwarded-proto', $trustedHeaders, true)
-                ? self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null)
+                ? self::httpScheme(self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null))
                 : null)
             ?? ($https ? 'https' : 'http');
 
-        $host = $forwarded['host']
+        $host = self::authorityHost($forwarded['host']
             ?? (in_array('x-forwarded-host', $trustedHeaders, true)
                 ? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
                 : null)
-            ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost');
+            ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost'));
 
         if (!str_contains($host, ':')) {
-            $port = $forwarded['port']
+            $port = self::portNumber($forwarded['port'] ?? null)
                 ?? (in_array('x-forwarded-port', $trustedHeaders, true)
-                    ? self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null)
+                    ? self::portNumber(self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null))
                     : null)
-                ?? (isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
+                ?? self::portNumber(isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
 
-            if ($port !== null && $port !== '' && !self::isDefaultPortForScheme($scheme, $port)) {
+            if ($port !== null && !self::isDefaultPortForScheme($scheme, $port)) {
                 $host .= ':' . $port;
             }
         }
 
-        return strtolower($scheme) . '://' . $host . $requestUri;
+        return $scheme . '://' . $host . $requestUri;
+    }
+
+    /**
+     * Returns the host unchanged when it is a host name or bracketed IP literal with
+     * an optional numeric port. Any other value is percent-encoded whole.
+     */
+    private static function authorityHost(string $host): string
+    {
+        if (preg_match('/^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9._~-]+)(:[0-9]+)?$/D', $host) === 1) {
+            return $host;
+        }
+
+        return rawurlencode($host);
+    }
+
+    /**
+     * The port when it is one to five digits and at most 65535, otherwise null.
+     */
+    private static function portNumber(?string $port): ?string
+    {
+        if ($port === null || preg_match('/^\d{1,5}$/D', $port) !== 1 || (int) $port > 65535) {
+            return null;
+        }
+
+        return $port;
+    }
+
+    /**
+     * The scheme when it is http or https, otherwise null.
+     *
+     * @return 'http'|'https'|null
+     */
+    private static function httpScheme(?string $scheme): ?string
+    {
+        $scheme = strtolower((string) $scheme);
+
+        return in_array($scheme, ['http', 'https'], true) ? $scheme : null;
     }
 
     /**
