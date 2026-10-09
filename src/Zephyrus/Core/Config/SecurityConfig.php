@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
 
 /**
@@ -53,7 +54,7 @@ use Zephyrus\Http\Request;
  *   - maxBodySize must be 0 or greater.
  *   - Each allowedHost entry must be a non-empty string.
  *   - Each csrfExceptions entry must be a non-empty string.
- *   - Each trustedProxies entry must be a non-empty string (IP or CIDR).
+ *   - Each trustedProxies entry must be '*', a valid IP address or a valid CIDR range.
  *   - Each trustedHeaders entry must name a header Request can actually read;
  *     an unknown name is REJECTED rather than ignored, because silently dropping
  *     a typo would leave an operator believing they trust a header they do not.
@@ -208,13 +209,13 @@ final readonly class SecurityConfig
         }
 
         foreach ($trustedProxies as $i => $proxy) {
-            if (!is_string($proxy) || trim($proxy) === '') {
-                throw ConfigurationException::invalidValue(
-                    'security',
-                    "trustedProxies[$i]",
-                    $proxy,
-                    'each entry must be a non-empty string (IP address or CIDR)',
-                );
+            if (!is_string($proxy) || ($proxy !== '*' && !IpRange::isValid($proxy))) {
+                $reason = 'each entry must be "*", an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32';
+                if (is_string($proxy) && str_contains($proxy, ',')) {
+                    $reason .= '; one entry per list item, a comma-separated value is not accepted';
+                }
+
+                throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", $proxy, $reason);
             }
         }
 

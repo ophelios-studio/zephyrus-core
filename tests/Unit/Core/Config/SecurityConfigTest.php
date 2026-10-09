@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
@@ -210,6 +211,56 @@ final class SecurityConfigTest extends TestCase
         $this->expectExceptionMessage('trustedProxies');
 
         SecurityConfig::fromArray(['trustedProxies' => ['127.0.0.1', '']]);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function malformedTrustedProxyEntries(): iterable
+    {
+        yield 'prefix above ipv4 width' => ['10.0.0.0/33'];
+        yield 'prefix above ipv6 width' => ['::/129'];
+        yield 'negative prefix' => ['10.0.0.0/-1'];
+        yield 'alphabetic prefix' => ['10.0.0.0/abc'];
+        yield 'empty prefix' => ['10.0.0.0/'];
+        yield 'letter O for zero' => ['10.0.0.0/O8'];
+        yield 'two slashes' => ['10.0.0.0/8/9'];
+        yield 'trailing space' => ['10.0.0.0/8 '];
+        yield 'nul byte after prefix' => ["10.0.0.0/8\0"];
+        yield 'nul byte in address' => ["10.0.0.1\0"];
+        yield 'overflowing ipv4 prefix' => ['10.0.0.0/' . str_repeat('9', 309)];
+        yield 'overflowing ipv6 prefix' => ['2001:db8::/' . str_repeat('9', 309)];
+        yield 'octet out of range' => ['999.1.1.1'];
+        yield 'hostname' => ['example.com'];
+        yield 'leading space' => [' 10.0.0.1'];
+        yield 'bracketed ipv6' => ['[::1]'];
+        yield 'comma separated pair' => ['10.0.0.0/8,172.16.0.0/12'];
+    }
+
+    #[DataProvider('malformedTrustedProxyEntries')]
+    public function testThrowsForMalformedTrustedProxyEntry(string $entry): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'trustedProxies[0]' has invalid value '$entry'");
+
+        SecurityConfig::fromArray(['trustedProxies' => [$entry]]);
+    }
+
+    public function testCommaSeparatedTrustedProxiesAskForOneEntryPerListItem(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('one entry per list item');
+
+        SecurityConfig::fromArray(['trustedProxies' => ['10.0.0.0/8,172.16.0.0/12']]);
+    }
+
+    public function testAcceptsWildcardAddressAndValidCidrTrustedProxies(): void
+    {
+        $entries = ['*', '10.0.0.1', '10.0.0.0/8', '::1', '2001:db8::/32', '0.0.0.0/0', '::/0', '10.0.0.0/32', '::/128'];
+
+        $config = SecurityConfig::fromArray(['trustedProxies' => $entries]);
+
+        self::assertSame($entries, $config->trustedProxies);
     }
 
     public function testTrustedProxiesAreReindexed(): void
