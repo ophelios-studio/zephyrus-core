@@ -1166,7 +1166,7 @@ final class Database
     }
 
     /**
-     * Whether the server refuses statements because the transaction is aborted.
+     * Whether the probe fails, so the transaction can no longer run statements.
      * The caller may have repaired a failure with its own savepoint, and SQLite
      * never aborts, so a recorded failure alone does not decide it.
      */
@@ -1174,8 +1174,8 @@ final class Database
     {
         try {
             $this->pdo->query('SELECT 1');
-        } catch (PDOException $e) {
-            return ($e->errorInfo[0] ?? null) === '25P02';
+        } catch (PDOException) {
+            return true;
         }
 
         return false;

@@ -307,6 +307,31 @@ final class DatabaseTransactionTest extends TestCase
         self::assertContains('ROLLBACK TO SAVEPOINT zephyrus_tx_1', $pdo->savepointStatements());
     }
 
+    public function testAFailedProbeAfterACaughtFailureRefusesTheReleaseOfTheNestedWork(): void
+    {
+        $pdo = new ProbeFailingPdo();
+        $db = $this->database($pdo);
+
+        $db->transaction(function (Database $db) use ($pdo): void {
+            $db->execute('INSERT INTO entry (label) VALUES (?)', ['outer']);
+
+            try {
+                $db->transaction(function (Database $db) use ($pdo): void {
+                    $db->execute('INSERT INTO entry (label) VALUES (?)', ['nested']);
+                    $this->swallowAFailedStatement($db);
+                    $pdo->breakProbe();
+                });
+                self::fail('expected the release to be refused');
+            } catch (DatabaseException $e) {
+                self::assertStringContainsString('caught', $e->getMessage());
+            }
+
+            $db->execute('INSERT INTO entry (label) VALUES (?)', ['after']);
+        });
+
+        self::assertSame(['after', 'outer'], $this->labels($db));
+    }
+
     /**
      * A driver error whose text carries a column value, as PostgreSQL's DETAIL line does.
      */
@@ -574,6 +599,34 @@ final class ScriptedTransactionPdo extends PDO
         if (isset($this->failures[$method])) {
             throw $this->failures[$method];
         }
+    }
+}
+
+/**
+ * A real SQLite connection whose transaction-state probe fails with an error other
+ * than 25P02, as a dropped connection would.
+ */
+final class ProbeFailingPdo extends PDO
+{
+    private bool $probeFails = false;
+
+    public function __construct()
+    {
+        parent::__construct('sqlite::memory:');
+    }
+
+    public function breakProbe(): void
+    {
+        $this->probeFails = true;
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
+    {
+        if ($this->probeFails) {
+            throw DatabaseTransactionTest::driverError('08006', 'connection lost');
+        }
+
+        return parent::query($query);
     }
 }
 
