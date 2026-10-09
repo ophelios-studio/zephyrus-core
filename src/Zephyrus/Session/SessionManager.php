@@ -242,7 +242,8 @@ final class SessionManager
         trigger_error(
             'The session idle timeout is only a garbage-collection age with the files save handler: nothing '
             . 'checks how long a session sat idle when it is read, so it is resumed. Register '
-            . 'DatabaseSessionHandler through setHandler() to enforce it.',
+            . 'DatabaseSessionHandler through setHandler() to enforce it, or remove idleTimeout and set '
+            . 'session.gc_maxlifetime if a garbage-collection age is all you need.',
             E_USER_WARNING,
         );
     }

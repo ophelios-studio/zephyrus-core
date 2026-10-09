@@ -57,6 +57,8 @@ final class SessionIdleTimeoutTest extends TestCase
         self::assertCount(1, $warnings);
         self::assertStringContainsString('idle', $warnings[0]);
         self::assertStringContainsString('files', $warnings[0]);
+        self::assertStringContainsString('DatabaseSessionHandler', $warnings[0]);
+        self::assertStringContainsString('remove idleTimeout and set session.gc_maxlifetime', $warnings[0]);
     }
 
     #[RunInSeparateProcess]
