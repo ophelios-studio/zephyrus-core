@@ -15,7 +15,7 @@ final class FileTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->tempDir = sys_get_temp_dir() . '/zephyrus-file-test-' . uniqid();
+        $this->tempDir = sys_get_temp_dir() . '/zephyrus-file-test-' . bin2hex(random_bytes(8));
         mkdir($this->tempDir, 0755, true);
     }
 

@@ -123,7 +123,7 @@ final class PhpEngineTest extends TestCase
 
     public function testRefusesToRenderATemplateOutsideTheDirectory(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-php-traversal-' . uniqid();
+        $root = sys_get_temp_dir() . '/zephyrus-php-traversal-' . bin2hex(random_bytes(8));
         mkdir($root . '/views', 0755, true);
         mkdir($root . '/uploads', 0755, true);
         file_put_contents($root . '/uploads/evil.php', '<?php echo "RCE:" . PHP_OS; ?>');
@@ -143,7 +143,7 @@ final class PhpEngineTest extends TestCase
 
     public function testExistsIsNotAFileExistenceOracle(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-php-oracle-' . uniqid();
+        $root = sys_get_temp_dir() . '/zephyrus-php-oracle-' . bin2hex(random_bytes(8));
         mkdir($root . '/views', 0755, true);
         file_put_contents($root . '/present.php', 'x');
 
@@ -161,7 +161,7 @@ final class PhpEngineTest extends TestCase
 
     public function testRefusesATemplateSymlinkedOutOfTheDirectory(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-php-symlink-' . uniqid();
+        $root = sys_get_temp_dir() . '/zephyrus-php-symlink-' . bin2hex(random_bytes(8));
         mkdir($root . '/views', 0755, true);
         file_put_contents($root . '/outside.php', '<?php echo "leaked"; ?>');
         symlink($root . '/outside.php', $root . '/views/leak.php');

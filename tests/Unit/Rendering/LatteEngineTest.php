@@ -124,7 +124,7 @@ final class LatteEngineTest extends TestCase
 
     public function testCreatesCacheDirectoryWhenMissing(): void
     {
-        $tempCache = sys_get_temp_dir() . '/zephyrus-test-latte-' . uniqid();
+        $tempCache = sys_get_temp_dir() . '/zephyrus-test-latte-' . bin2hex(random_bytes(8));
         self::assertDirectoryDoesNotExist($tempCache);
 
         try {
@@ -154,7 +154,7 @@ final class LatteEngineTest extends TestCase
 
     public function testRefusesToRenderATemplateOutsideTheDirectory(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-latte-traversal-' . uniqid();
+        $root = sys_get_temp_dir() . '/zephyrus-latte-traversal-' . bin2hex(random_bytes(8));
         mkdir($root . '/views', 0755, true);
         mkdir($root . '/uploads', 0755, true);
         file_put_contents($root . '/uploads/evil.latte', 'LATTE-LFI ok');
@@ -174,7 +174,7 @@ final class LatteEngineTest extends TestCase
 
     public function testExistsIsNotAFileExistenceOracle(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-latte-oracle-' . uniqid();
+        $root = sys_get_temp_dir() . '/zephyrus-latte-oracle-' . bin2hex(random_bytes(8));
         mkdir($root . '/views', 0755, true);
         file_put_contents($root . '/present.latte', 'x');
 
@@ -203,7 +203,7 @@ final class LatteEngineTest extends TestCase
 
     public function testCacheModeNeverWritesNoCompiledTemplate(): void
     {
-        $tempCache = sys_get_temp_dir() . '/zephyrus-latte-nocache-' . uniqid();
+        $tempCache = sys_get_temp_dir() . '/zephyrus-latte-nocache-' . bin2hex(random_bytes(8));
 
         try {
             $engine = new LatteEngine($this->viewsDir, $tempCache, cacheMode: 'never');

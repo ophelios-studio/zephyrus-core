@@ -214,7 +214,7 @@ final class RouteMatchingHardeningTest extends TestCase
 
     public function testAPoisonedRouteCacheFailsAsARouteCacheError(): void
     {
-        $file = sys_get_temp_dir() . '/zephyrus-poisoned-cache-' . uniqid('', true) . '.json';
+        $file = sys_get_temp_dir() . '/zephyrus-poisoned-cache-' . bin2hex(random_bytes(8)) . '.json';
         file_put_contents($file, json_encode([
             'routes' => [
                 ['method' => 'GET', 'path' => '/x/{client_ip}', 'handler' => 'C@show'],
@@ -239,7 +239,7 @@ final class RouteMatchingHardeningTest extends TestCase
         // arbitrary dispatch. Under "umask 0" the directory used to land 0777
         // and the file 0666.
         $previousUmask = umask(0);
-        $directory = sys_get_temp_dir() . '/zephyrus-cache-perm-' . uniqid('', true);
+        $directory = sys_get_temp_dir() . '/zephyrus-cache-perm-' . bin2hex(random_bytes(8));
         $file = $directory . '/routes.json';
 
         try {
@@ -259,7 +259,7 @@ final class RouteMatchingHardeningTest extends TestCase
 
     public function testNoTemporaryFileSurvivesASuccessfulSave(): void
     {
-        $directory = sys_get_temp_dir() . '/zephyrus-cache-tmp-' . uniqid('', true);
+        $directory = sys_get_temp_dir() . '/zephyrus-cache-tmp-' . bin2hex(random_bytes(8));
         $file = $directory . '/routes.json';
 
         try {

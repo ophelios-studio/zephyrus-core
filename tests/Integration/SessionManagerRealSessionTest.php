@@ -89,7 +89,7 @@ final class SessionManagerRealSessionTest extends TestCase
         // PHP defaults use_strict_mode to 0, which adopts and persists whatever
         // ID the client sends. That lets an unauthenticated caller seed session
         // IDs at will, and it is what makes session fixation possible.
-        $planted = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        $planted = bin2hex(random_bytes(16));
         session_id($planted);
 
         $session = new SessionManager();

@@ -18,7 +18,7 @@ final class RouteCacheTest extends TestCase
     {
         parent::setUp();
 
-        $this->cacheFile = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true) . '.json';
+        $this->cacheFile = sys_get_temp_dir() . '/zephyrus2-route-cache-' . bin2hex(random_bytes(8)) . '.json';
     }
 
     protected function tearDown(): void
@@ -800,7 +800,7 @@ final class RouteCacheTest extends TestCase
 
     public function testSaveCreatesMissingCacheDirectory(): void
     {
-        $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);
+        $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . bin2hex(random_bytes(8));
         $cacheFile = $cacheDirectory . '/routes/cache.json';
 
         $routes = new RouteCollection();
@@ -1268,7 +1268,7 @@ final class RouteCacheTest extends TestCase
 
     public function testSaveThrowsWhenCacheFileCannotBeWritten(): void
     {
-        $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . uniqid('', true);
+        $cacheDirectory = sys_get_temp_dir() . '/zephyrus2-route-cache-' . bin2hex(random_bytes(8));
         mkdir($cacheDirectory, 0777, true);
 
         $routes = new RouteCollection();

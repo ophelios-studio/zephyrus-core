@@ -34,7 +34,7 @@ final class MailerAttachmentGuardTest extends TestCase
             'from' => ['address' => 'noreply@example.test', 'name' => 'Test'],
         ]);
 
-        $base = sys_get_temp_dir() . '/zephyrus-attach-' . uniqid('', true);
+        $base = sys_get_temp_dir() . '/zephyrus-attach-' . bin2hex(random_bytes(8));
         $this->root = $base . '/allowed';
         mkdir($this->root, 0o755, true);
 

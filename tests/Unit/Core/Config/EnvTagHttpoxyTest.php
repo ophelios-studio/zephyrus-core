@@ -27,7 +27,7 @@ final class EnvTagHttpoxyTest extends TestCase
 
         $this->serverBackup = $_SERVER;
         $this->envBackup = $_ENV;
-        $this->path = sys_get_temp_dir() . '/zephyrus-env-tag-' . uniqid('', true) . '.yml';
+        $this->path = sys_get_temp_dir() . '/zephyrus-env-tag-' . bin2hex(random_bytes(8)) . '.yml';
     }
 
     protected function tearDown(): void

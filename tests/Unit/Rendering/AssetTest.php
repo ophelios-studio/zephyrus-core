@@ -13,7 +13,7 @@ final class AssetTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->publicDir = sys_get_temp_dir() . '/zephyrus-asset-test-' . uniqid();
+        $this->publicDir = sys_get_temp_dir() . '/zephyrus-asset-test-' . bin2hex(random_bytes(8));
         mkdir($this->publicDir . '/css', 0755, true);
         mkdir($this->publicDir . '/img', 0755, true);
         file_put_contents($this->publicDir . '/css/app.css', 'body { color: red; }');
@@ -143,7 +143,7 @@ final class AssetTest extends TestCase
 
     public function testExistsRefusesToTraverseOutOfThePublicDirectory(): void
     {
-        $outside = $this->publicDir . '/../zephyrus-asset-outside-' . uniqid();
+        $outside = $this->publicDir . '/../zephyrus-asset-outside-' . bin2hex(random_bytes(8));
         file_put_contents($outside, 'secret');
 
         try {

@@ -310,7 +310,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testWithJsonLocaleLayersMergesDirectoryCatalogsLastWins(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-json-layers-' . uniqid('', true);
+        $root = sys_get_temp_dir() . '/zephyrus-json-layers-' . bin2hex(random_bytes(8));
         $basePath = $root . '/base';
         $overridePath = $root . '/override';
         mkdir($basePath, 0775, true);
@@ -436,7 +436,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testWithConfigurationFileParsesAndAppliesLocalization(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-app-config-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($path, "<?php\n\nreturn " . var_export([
             'localization' => [
@@ -462,7 +462,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testFromConfigurationFileFactoryParsesAndAppliesLocalization(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-app-config-static-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-static-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($path, "<?php\n\nreturn " . var_export([
             'localization' => [
@@ -486,7 +486,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testBuildFromConfigurationFileFactoryParsesAndBuildsApplication(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-app-config-build-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-build-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($path, "<?php\n\nreturn " . var_export([
             'localization' => [
@@ -510,8 +510,8 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testWithConfigurationFilesMergesAndAppliesLocalization(): void
     {
-        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-base-' . uniqid('', true) . '.php';
-        $envPath = sys_get_temp_dir() . '/zephyrus-app-config-env-' . uniqid('', true) . '.php';
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-base-' . bin2hex(random_bytes(8)) . '.php';
+        $envPath = sys_get_temp_dir() . '/zephyrus-app-config-env-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
@@ -545,8 +545,8 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testBuildFromConfigurationFilesFactoryBuildsMergedConfiguration(): void
     {
-        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-base2-' . uniqid('', true) . '.php';
-        $envPath = sys_get_temp_dir() . '/zephyrus-app-config-env2-' . uniqid('', true) . '.php';
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-base2-' . bin2hex(random_bytes(8)) . '.php';
+        $envPath = sys_get_temp_dir() . '/zephyrus-app-config-env2-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
@@ -578,7 +578,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testWithOptionalConfigurationFilesIgnoresMissingOverrides(): void
     {
-        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-opt-base-' . uniqid('', true) . '.php';
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-opt-base-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
             'localization' => [
@@ -588,7 +588,7 @@ final class ApplicationBuilderTest extends TestCase
             ],
         ], true) . ";\n");
 
-        $missingPath = sys_get_temp_dir() . '/zephyrus-app-config-opt-missing-' . uniqid('', true) . '.php';
+        $missingPath = sys_get_temp_dir() . '/zephyrus-app-config-opt-missing-' . bin2hex(random_bytes(8)) . '.php';
 
         try {
             $app = ApplicationBuilder::create()
@@ -606,7 +606,7 @@ final class ApplicationBuilderTest extends TestCase
 
     public function testBuildFromOptionalConfigurationFilesIgnoresMissingOverrides(): void
     {
-        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-opt2-base-' . uniqid('', true) . '.php';
+        $basePath = sys_get_temp_dir() . '/zephyrus-app-config-opt2-base-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         file_put_contents($basePath, "<?php\n\nreturn " . var_export([
             'localization' => [
@@ -616,7 +616,7 @@ final class ApplicationBuilderTest extends TestCase
             ],
         ], true) . ";\n");
 
-        $missingPath = sys_get_temp_dir() . '/zephyrus-app-config-opt2-missing-' . uniqid('', true) . '.php';
+        $missingPath = sys_get_temp_dir() . '/zephyrus-app-config-opt2-missing-' . bin2hex(random_bytes(8)) . '.php';
 
         try {
             $app = ApplicationBuilder::buildFromOptionalConfigurationFiles([$basePath, $missingPath]);
@@ -634,12 +634,12 @@ final class ApplicationBuilderTest extends TestCase
     {
         $this->expectException(ConfigurationException::class);
 
-        ApplicationBuilder::create()->withConfigurationFile('/tmp/does-not-exist-' . uniqid('', true) . '.php');
+        ApplicationBuilder::create()->withConfigurationFile('/tmp/does-not-exist-' . bin2hex(random_bytes(8)) . '.php');
     }
 
     public function testWithConfigurationFileThrowsWhenFileDoesNotReturnArray(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-app-config-invalid-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-app-config-invalid-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($path, "<?php return 'invalid';");
 
         try {

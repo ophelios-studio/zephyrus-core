@@ -28,7 +28,7 @@ final class UploaderTest extends TestCase
 
     private function makeTempDir(): string
     {
-        $path = sys_get_temp_dir() . '/zep-uploader-' . uniqid('', true);
+        $path = sys_get_temp_dir() . '/zep-uploader-' . bin2hex(random_bytes(8));
         mkdir($path, 0775, true);
 
         return $path;

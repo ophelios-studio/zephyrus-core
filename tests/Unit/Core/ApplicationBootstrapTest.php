@@ -22,7 +22,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigFilesBuildsLocalizedApplicationFromRequiredFile(): void
     {
-        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . uniqid('', true) . '.php';
+        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($required, "<?php\n\nreturn " . var_export([
@@ -47,8 +47,8 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigFilesAppliesOptionalOverridesWhenPresent(): void
     {
-        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . uniqid('', true) . '.php';
-        $optional = sys_get_temp_dir() . '/zephyrus-bootstrap-optional-' . uniqid('', true) . '.php';
+        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . bin2hex(random_bytes(8)) . '.php';
+        $optional = sys_get_temp_dir() . '/zephyrus-bootstrap-optional-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($required, "<?php\n\nreturn " . var_export([
@@ -80,7 +80,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigFilesIgnoresMissingOptionalFiles(): void
     {
-        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . uniqid('', true) . '.php';
+        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-required-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($required, "<?php\n\nreturn " . var_export([
@@ -91,7 +91,7 @@ final class ApplicationBootstrapTest extends TestCase
             ],
         ], true) . ";\n");
 
-        $missingOptional = sys_get_temp_dir() . '/zephyrus-bootstrap-missing-' . uniqid('', true) . '.php';
+        $missingOptional = sys_get_temp_dir() . '/zephyrus-bootstrap-missing-' . bin2hex(random_bytes(8)) . '.php';
 
         try {
             $app = ApplicationBootstrap::fromConfigFiles([$required], [$missingOptional]);
@@ -125,7 +125,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigurationFileBuildsApplication(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-bootstrap-file-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-bootstrap-file-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($path, "<?php\n\nreturn " . var_export([
@@ -150,7 +150,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigDirectoryLoadsBaseAndLocalOverride(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-dir-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-dir-' . bin2hex(random_bytes(8));
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         mkdir($dir, 0775, true);
 
@@ -184,7 +184,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigDirectoryLoadsEnvironmentSpecificOverride(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envdir-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envdir-' . bin2hex(random_bytes(8));
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         mkdir($dir, 0775, true);
 
@@ -222,7 +222,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigDirectoryUsesExplicitEnvironmentOverride(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-explicit-env-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-explicit-env-' . bin2hex(random_bytes(8));
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         mkdir($dir, 0775, true);
 
@@ -256,7 +256,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromConfigDirectoryCanDisableEnvironmentOverride(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-disable-env-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-disable-env-' . bin2hex(random_bytes(8));
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         mkdir($dir, 0775, true);
 
@@ -294,7 +294,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromEnvironmentBuildsUsingConfiguredEnvironmentVariables(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envvars-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envvars-' . bin2hex(random_bytes(8));
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         mkdir($dir, 0775, true);
 
@@ -342,7 +342,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromEnvironmentAppliesExtraOptionalLayers(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envextra-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envextra-' . bin2hex(random_bytes(8));
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
         mkdir($dir, 0775, true);
 
@@ -437,8 +437,8 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromResolvedPathsBuildsApplicationFromProvidedGroups(): void
     {
-        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-required-' . uniqid('', true) . '.php';
-        $optional = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-optional-' . uniqid('', true) . '.php';
+        $required = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-required-' . bin2hex(random_bytes(8)) . '.php';
+        $optional = sys_get_temp_dir() . '/zephyrus-bootstrap-resolved-optional-' . bin2hex(random_bytes(8)) . '.php';
         $fixturePath = __DIR__ . '/../../Fixtures/locales';
 
         file_put_contents($required, "<?php\n\nreturn " . var_export([
@@ -512,7 +512,7 @@ final class ApplicationBootstrapTest extends TestCase
 
     public function testFromEnvironmentRejectsInvalidExtraOptionalNames(): void
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envinvalid-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envinvalid-' . bin2hex(random_bytes(8));
         mkdir($dir, 0775, true);
         file_put_contents($dir . '/app.php', "<?php return [];\n");
 

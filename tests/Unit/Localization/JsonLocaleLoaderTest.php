@@ -33,7 +33,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadSupportsUnderscoreLocaleFileFallback(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir);
         file_put_contents($tempDir . '/fr_CA.json', '{"messages":{"welcome":"Bienvenue {name}"}}');
 
@@ -50,7 +50,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadSupportsLowercaseRegionLocaleFileFallback(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir);
         file_put_contents($tempDir . '/fr_ca.json', '{"messages":{"welcome":"Salut {name}"}}');
 
@@ -67,7 +67,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadThrowsWhenJsonIsInvalid(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir);
         file_put_contents($tempDir . '/en.json', '{invalid');
 
@@ -85,7 +85,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testSingleFilePreservesNullValues(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir);
         file_put_contents($tempDir . '/en.json', '{"messages":{"empty":null,"text":"hello"}}');
 
@@ -103,7 +103,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testSingleFileReturnsNestedStructure(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir);
         file_put_contents($tempDir . '/en.json', '{"obj":{"a":"val-a"},"plain":"hello"}');
 
@@ -127,7 +127,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadDirectoryMergesMultipleJsonFiles(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en', 0755, true);
         file_put_contents($tempDir . '/en/strings.json', '{"messages":{"welcome":"Hello"}}');
         file_put_contents($tempDir . '/en/errors.json', '{"errors":{"required":"Required"}}');
@@ -148,7 +148,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadDirectoryRecursivelyFindsSubdirectoryFiles(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en/admin', 0755, true);
         file_put_contents($tempDir . '/en/strings.json', '{"messages":{"hello":"Hello"}}');
         file_put_contents($tempDir . '/en/admin/users.json', '{"admin":{"users":{"title":"Users"}}}');
@@ -170,7 +170,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadDirectoryMergesOverlappingKeys(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en', 0755, true);
         file_put_contents($tempDir . '/en/a_base.json', '{"messages":{"hello":"Base Hello","bye":"Goodbye"}}');
         file_put_contents($tempDir . '/en/z_override.json', '{"messages":{"hello":"Override Hello"}}');
@@ -191,7 +191,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testDirectoryModePreferredOverSingleFile(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en', 0755, true);
         file_put_contents($tempDir . '/en/strings.json', '{"source":"directory"}');
         file_put_contents($tempDir . '/en.json', '{"source":"single-file"}');
@@ -211,7 +211,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadDirectorySupportsUnderscoreLocale(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/fr_CA', 0755, true);
         file_put_contents($tempDir . '/fr_CA/strings.json', '{"greeting":"Bonjour"}');
 
@@ -229,7 +229,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadEmptyDirectoryReturnsEmptyCatalog(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en', 0755, true);
 
         $loader = new JsonLocaleLoader($tempDir);
@@ -244,7 +244,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadDirectoryThrowsOnInvalidJson(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en', 0755, true);
         file_put_contents($tempDir . '/en/bad.json', '{invalid');
 
@@ -263,7 +263,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadThrowsWhenJsonRootIsNotAnObject(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir);
         file_put_contents($tempDir . '/en.json', '"just a string"');
 
@@ -280,7 +280,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadDirectoryIgnoresNonJsonFiles(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . uniqid('', true);
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
         mkdir($tempDir . '/en', 0755, true);
         file_put_contents($tempDir . '/en/strings.json', '{"hello":"world"}');
         file_put_contents($tempDir . '/en/readme.txt', 'not a json file');
@@ -304,7 +304,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadRefusesALocaleThatTraversesOutOfTheBasePath(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-locale-traversal-' . uniqid('', true);
+        $root = sys_get_temp_dir() . '/zephyrus-locale-traversal-' . bin2hex(random_bytes(8));
         mkdir($root . '/locale', 0755, true);
         mkdir($root . '/secrets', 0755, true);
         file_put_contents($root . '/secrets/en.json', '{"db_password":"S3CR3T-PROD-PASSWORD"}');
@@ -327,7 +327,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadRefusesALocaleThatIsNotALanguageTag(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-locale-shape-' . uniqid('', true);
+        $root = sys_get_temp_dir() . '/zephyrus-locale-shape-' . bin2hex(random_bytes(8));
         mkdir($root, 0755, true);
         // A directory whose name is a traversal chain would otherwise be walked.
         file_put_contents($root . '/x.json', '{"a":"b"}');
@@ -359,7 +359,7 @@ final class JsonLocaleLoaderTest extends TestCase
 
     public function testLoadRefusesACatalogDirectoryThatSymlinksOutOfTheBasePath(): void
     {
-        $root = sys_get_temp_dir() . '/zephyrus-locale-symlink-' . uniqid('', true);
+        $root = sys_get_temp_dir() . '/zephyrus-locale-symlink-' . bin2hex(random_bytes(8));
         mkdir($root . '/locale', 0755, true);
         mkdir($root . '/outside', 0755, true);
         file_put_contents($root . '/outside/strings.json', '{"leaked":"yes"}');
@@ -384,7 +384,7 @@ final class JsonLocaleLoaderTest extends TestCase
             self::markTestSkipped('Root ignores directory permissions.');
         }
 
-        $root = sys_get_temp_dir() . '/zephyrus-locale-unreadable-' . uniqid('', true);
+        $root = sys_get_temp_dir() . '/zephyrus-locale-unreadable-' . bin2hex(random_bytes(8));
         mkdir($root . '/en', 0755, true);
         file_put_contents($root . '/en/strings.json', '{"a":"b"}');
         chmod($root . '/en', 0000);

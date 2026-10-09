@@ -121,7 +121,7 @@ final class ApplicationBootstrapEnvironmentSourceTest extends TestCase
 
     private function newDir(): string
     {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-source-' . uniqid('', true);
+        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-source-' . bin2hex(random_bytes(8));
         mkdir($dir, 0775, true);
         $this->dirs[] = $dir;
 

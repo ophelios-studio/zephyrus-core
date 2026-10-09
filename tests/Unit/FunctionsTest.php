@@ -330,7 +330,7 @@ final class FunctionsTest extends TestCase
 
     public function testAssetReturnsCacheBustedUrl(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus_asset_test_' . uniqid();
+        $tempDir = sys_get_temp_dir() . '/zephyrus_asset_test_' . bin2hex(random_bytes(8));
         mkdir($tempDir, 0755, true);
         file_put_contents($tempDir . '/style.css', 'body { color: red; }');
 
@@ -353,7 +353,7 @@ final class FunctionsTest extends TestCase
 
     public function testEmbedReturnsFileContents(): void
     {
-        $tempDir = sys_get_temp_dir() . '/zephyrus_embed_test_' . uniqid();
+        $tempDir = sys_get_temp_dir() . '/zephyrus_embed_test_' . bin2hex(random_bytes(8));
         mkdir($tempDir, 0755, true);
         file_put_contents($tempDir . '/icon.svg', '<svg></svg>');
 

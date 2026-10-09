@@ -50,7 +50,7 @@ final class RenderConfigTest extends TestCase
     public function testCreateEngineReturnsLatteEngine(): void
     {
         $viewsDir = __DIR__ . '/fixtures/views';
-        $cacheDir = sys_get_temp_dir() . '/zephyrus-test-render-config-' . uniqid();
+        $cacheDir = sys_get_temp_dir() . '/zephyrus-test-render-config-' . bin2hex(random_bytes(8));
 
         $config = RenderConfig::fromArray([
             'engine' => 'latte',

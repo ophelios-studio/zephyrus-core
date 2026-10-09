@@ -137,7 +137,7 @@ final class CachedLocaleLoaderTest extends TestCase
         }
 
         $inner = $this->countingLoader(['en' => ['hello' => 'Hello']]);
-        $loader = new CachedLocaleLoader($inner, debug: false, prefix: 'test_apcu_' . uniqid('', true));
+        $loader = new CachedLocaleLoader($inner, debug: false, prefix: 'test_apcu_' . bin2hex(random_bytes(8)));
 
         $first = $loader->load('en');
         $second = $loader->load('en');
@@ -157,7 +157,7 @@ final class CachedLocaleLoaderTest extends TestCase
         }
 
         $inner = $this->countingLoader(['en' => ['hello' => 'Hello']]);
-        $prefix = 'test_apcu_flush_' . uniqid('', true);
+        $prefix = 'test_apcu_flush_' . bin2hex(random_bytes(8));
         $loader = new CachedLocaleLoader($inner, debug: false, prefix: $prefix);
 
         $loader->load('en'); // populates cache

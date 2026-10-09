@@ -240,7 +240,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFileLoadsAndHydratesConfiguration(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-config-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-config-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($path, "<?php\nreturn " . var_export([
             'localization' => ['locale' => 'fr'],
             'security' => ['forceHttps' => true],
@@ -259,12 +259,12 @@ final class ConfigurationTest extends TestCase
     {
         $this->expectException(ConfigurationException::class);
 
-        Configuration::fromFile('/tmp/zephyrus-missing-' . uniqid('', true) . '.php');
+        Configuration::fromFile('/tmp/zephyrus-missing-' . bin2hex(random_bytes(8)) . '.php');
     }
 
     public function testFromFileThrowsWhenPayloadIsNotArray(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-config-invalid-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-config-invalid-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($path, "<?php return 'bad';");
 
         try {
@@ -277,8 +277,8 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFilesMergesLaterFilesOverEarlierFiles(): void
     {
-        $basePath = sys_get_temp_dir() . '/zephyrus-config-base-' . uniqid('', true) . '.php';
-        $envPath = sys_get_temp_dir() . '/zephyrus-config-env-' . uniqid('', true) . '.php';
+        $basePath = sys_get_temp_dir() . '/zephyrus-config-base-' . bin2hex(random_bytes(8)) . '.php';
+        $envPath = sys_get_temp_dir() . '/zephyrus-config-env-' . bin2hex(random_bytes(8)) . '.php';
 
         file_put_contents($basePath, "<?php\nreturn " . var_export([
             'application' => ['environment' => 'production', 'debug' => false],
@@ -351,12 +351,12 @@ final class ConfigurationTest extends TestCase
 
     public function testFromOptionalFilesSkipsMissingOverrides(): void
     {
-        $basePath = sys_get_temp_dir() . '/zephyrus-config-optional-base-' . uniqid('', true) . '.php';
+        $basePath = sys_get_temp_dir() . '/zephyrus-config-optional-base-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($basePath, "<?php\nreturn " . var_export([
             'localization' => ['locale' => 'fr'],
         ], true) . ";\n");
 
-        $missingPath = sys_get_temp_dir() . '/zephyrus-config-optional-missing-' . uniqid('', true) . '.php';
+        $missingPath = sys_get_temp_dir() . '/zephyrus-config-optional-missing-' . bin2hex(random_bytes(8)) . '.php';
 
         try {
             $config = Configuration::fromOptionalFiles([$basePath, $missingPath]);
@@ -368,7 +368,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromOptionalFilesStillThrowsOnExistingInvalidFile(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-config-optional-invalid-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-config-optional-invalid-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($path, "<?php return 'bad';");
 
         try {
@@ -396,7 +396,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFilesDeDuplicatesDuplicatePaths(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-config-dedupe-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-config-dedupe-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($path, "<?php\nreturn " . var_export([
             'localization' => ['locale' => 'fr'],
         ], true) . ";\n");
@@ -411,7 +411,7 @@ final class ConfigurationTest extends TestCase
 
     public function testFromFileWrapsThrownExceptionWithContext(): void
     {
-        $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . uniqid('', true) . '.php';
+        $path = sys_get_temp_dir() . '/zephyrus-config-throws-' . bin2hex(random_bytes(8)) . '.php';
         file_put_contents($path, "<?php throw new RuntimeException('boom');");
 
         try {
