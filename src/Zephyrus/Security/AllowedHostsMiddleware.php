@@ -35,6 +35,9 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
     /** The only port a host may carry: one to five digits, nothing else. */
     private const PORT_PATTERN = '/^\d{1,5}$/D';
 
+    /** An entry carrying a port, which the matcher would drop: "host:port" or "[v6]:port". */
+    private const ENTRY_PORT_PATTERN = '/^(\[[^\]]*\]|[^:\[\]]+):\d{1,5}$/D';
+
     /**
      * One label: letters, digits, hyphens and underscores (Docker service names
      * use the last), no leading or trailing hyphen. None of them can split an
@@ -44,7 +47,7 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
 
     private const MAX_NAME_LENGTH = 253;
 
-    /** Anchored: a "://" later in an origin-form target belongs to its query, not to a scheme. */
+    /** A scheme before "://", which an entry must not carry. */
     private const SCHEME_PATTERN = '#^[a-zA-Z][a-zA-Z0-9+.\-]*://#';
 
     /** @var list<string> */
@@ -60,12 +63,13 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
     {
         $normalized = [];
         foreach ($allowedHosts as $entry) {
+            $reason = self::invalidEntryReason($entry);
             $host = self::normalizeEntry($entry);
-            if ($host === null) {
+            if ($reason !== null || $host === null) {
                 throw new InvalidArgumentException(sprintf(
                     'Allowed host "%s": %s.',
                     $entry,
-                    self::invalidEntryReason($entry) ?? 'not a usable host',
+                    $reason ?? 'not a usable host',
                 ));
             }
 
@@ -92,6 +96,20 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
 
         if (preg_match(self::SCHEME_PATTERN, $entry) === 1) {
             return 'drop the scheme, list the host only, such as example.com';
+        }
+
+        if (str_contains($entry, ',')) {
+            return 'one entry per list item, a comma-separated value is not accepted';
+        }
+
+        if (trim($entry) !== $entry) {
+            return 'remove the spaces around the host name';
+        }
+
+        if (preg_match(self::ENTRY_PORT_PATTERN, $entry, $portMatch) === 1
+            && self::invalidEntryReason($portMatch[1]) === null
+        ) {
+            return sprintf('ports are not matched: list "%s" only', $portMatch[1]);
         }
 
         if (preg_match('/[^\x00-\x7F]/', $entry) === 1) {

@@ -286,6 +286,60 @@ final class AllowedHostsMiddlewareTest extends TestCase
         new AllowedHostsMiddleware(['*']);
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function entriesWithADedicatedReason(): iterable
+    {
+        yield 'comma-separated list' => ['a.example.com,b.example.com', 'one entry per list item'];
+        yield 'leading space' => [' example.com', 'remove the spaces'];
+        yield 'trailing space' => ['example.com ', 'remove the spaces'];
+        yield 'host with port' => ['example.com:8080', 'ports are not matched: list "example.com" only'];
+        yield 'wildcard with port' => ['*.example.com:443', 'ports are not matched: list "*.example.com" only'];
+        yield 'bracketed IPv6 with port' => ['[2001:db8::1]:8080', 'ports are not matched: list "[2001:db8::1]" only'];
+    }
+
+    #[DataProvider('entriesWithADedicatedReason')]
+    public function testInvalidEntryReasonNamesTheFixForCommaPaddingAndPorts(string $entry, string $reason): void
+    {
+        self::assertStringContainsString($reason, (string) AllowedHostsMiddleware::invalidEntryReason($entry));
+    }
+
+    #[DataProvider('entriesWithADedicatedReason')]
+    public function testConstructorRefusesEntriesWithADedicatedReason(string $entry, string $reason): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage($reason);
+
+        new AllowedHostsMiddleware([$entry]);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function portEntriesWithAnInvalidHost(): iterable
+    {
+        yield 'empty host' => [':8080'];
+        yield 'host with a trailing space' => ['example.com :80'];
+        yield 'host with an inner space' => ['a b:80'];
+        yield 'empty bracketed host' => ['[]:80'];
+    }
+
+    #[DataProvider('portEntriesWithAnInvalidHost')]
+    public function testPortEntryWithAnInvalidHostDoesNotNameThatHostInItsReason(string $entry): void
+    {
+        self::assertSame(
+            'must be a host name, an IP literal, or a wildcard over a host name such as *.example.com',
+            AllowedHostsMiddleware::invalidEntryReason($entry),
+        );
+    }
+
+    public function testBareIpv6LiteralIsNotMistakenForAHostWithPort(): void
+    {
+        self::assertNull(AllowedHostsMiddleware::invalidEntryReason('2001:db8::1'));
+        self::assertNull(AllowedHostsMiddleware::invalidEntryReason('[2001:db8::1]'));
+    }
+
     public function testAllowsRefusesAnEmptyHostWhileTheAllowlistIsSet(): void
     {
         $mw = new AllowedHostsMiddleware(['app.example.ca']);

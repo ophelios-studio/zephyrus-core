@@ -463,6 +463,22 @@ final class SecurityConfigTest extends TestCase
         yield 'non-numeric port' => ['example.com:evil', 'must be a host name'];
     }
 
+    public function testCommaSeparatedAllowedHostsAskForOneEntryPerListItem(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('one entry per list item');
+
+        SecurityConfig::fromArray(['allowedHosts' => ['a.example.com,b.example.com']]);
+    }
+
+    public function testAllowedHostWithAPortAsksForTheHostOnly(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('ports are not matched: list "example.com" only');
+
+        SecurityConfig::fromArray(['allowedHosts' => ['example.com:8080']]);
+    }
+
     #[DataProvider('malformedAllowedHostEntries')]
     public function testMalformedAllowedHostEntryFailsAtBootWithTheFix(string $entry, string $fix): void
     {
@@ -476,9 +492,9 @@ final class SecurityConfigTest extends TestCase
     public function testWildcardAndIpLiteralAllowedHostEntriesAreAccepted(): void
     {
         $config = SecurityConfig::fromArray([
-            'allowedHosts' => ['*.example.com', '[2001:db8::1]', 'my_app.example.com:8443'],
+            'allowedHosts' => ['*.example.com', '[2001:db8::1]', 'my_app.example.com'],
         ]);
 
-        self::assertSame(['*.example.com', '[2001:db8::1]', 'my_app.example.com:8443'], $config->allowedHosts);
+        self::assertSame(['*.example.com', '[2001:db8::1]', 'my_app.example.com'], $config->allowedHosts);
     }
 }
