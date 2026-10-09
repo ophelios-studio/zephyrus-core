@@ -323,7 +323,38 @@ final class DatabaseTransactionTest extends TestCase
                 });
                 self::fail('expected the release to be refused');
             } catch (DatabaseException $e) {
-                self::assertStringContainsString('caught', $e->getMessage());
+                self::assertSame('08006', $e->sqlState());
+                self::assertStringContainsString('release savepoint', $e->getMessage());
+                self::assertStringNotContainsString('caught', $e->getMessage());
+            }
+
+            $db->execute('INSERT INTO entry (label) VALUES (?)', ['after']);
+        });
+
+        self::assertSame(['after', 'outer'], $this->labels($db));
+    }
+
+    public function testAProbeFailureThatIsNot25P02KeepsItsSqlStateAndCause(): void
+    {
+        $pdo = new ProbeFailingPdo();
+        $db = $this->database($pdo);
+
+        $db->transaction(function (Database $db) use ($pdo): void {
+            $db->execute('INSERT INTO entry (label) VALUES (?)', ['outer']);
+
+            try {
+                $db->transaction(function (Database $db) use ($pdo): void {
+                    $db->execute('INSERT INTO entry (label) VALUES (?)', ['nested']);
+                    $this->swallowAFailedStatement($db);
+                    $pdo->breakProbe('57P01');
+                });
+                self::fail('expected the release to be refused');
+            } catch (DatabaseException $e) {
+                self::assertSame('57P01', $e->sqlState());
+                self::assertStringContainsString('[SQLSTATE 57P01]', $e->getMessage());
+                self::assertStringContainsString('release savepoint', $e->getMessage());
+                self::assertStringNotContainsString('caught', $e->getMessage());
+                self::assertStringContainsString('connection lost', (string) $e->driverMessage());
             }
 
             $db->execute('INSERT INTO entry (label) VALUES (?)', ['after']);
@@ -603,27 +634,27 @@ final class ScriptedTransactionPdo extends PDO
 }
 
 /**
- * A real SQLite connection whose transaction-state probe fails with an error other
- * than 25P02, as a dropped connection would.
+ * A real SQLite connection whose transaction-state probe fails with the given
+ * SQLSTATE, as a dropped connection or a server restart would.
  */
 final class ProbeFailingPdo extends PDO
 {
-    private bool $probeFails = false;
+    private ?string $probeSqlState = null;
 
     public function __construct()
     {
         parent::__construct('sqlite::memory:');
     }
 
-    public function breakProbe(): void
+    public function breakProbe(string $sqlState = '08006'): void
     {
-        $this->probeFails = true;
+        $this->probeSqlState = $sqlState;
     }
 
     public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
     {
-        if ($this->probeFails) {
-            throw DatabaseTransactionTest::driverError('08006', 'connection lost');
+        if ($this->probeSqlState !== null) {
+            throw DatabaseTransactionTest::driverError($this->probeSqlState, 'connection lost');
         }
 
         return parent::query($query);

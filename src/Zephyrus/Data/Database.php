@@ -918,10 +918,10 @@ final class Database
             throw $e;
         }
 
-        if ($this->failedSince(0) && $this->transactionIsAborted()) {
+        if ($this->failedSince(0) && ($probeFailure = $this->probeFailure('commit')) !== null) {
             $this->rollBackOpenTransaction();
 
-            throw DatabaseException::transactionAborted('commit');
+            throw $probeFailure;
         }
 
         try {
@@ -1129,10 +1129,10 @@ final class Database
             $this->savepointDepth--;
         }
 
-        if ($this->failedSince($depth) && $this->transactionIsAborted()) {
+        if ($this->failedSince($depth) && ($probeFailure = $this->probeFailure('release savepoint')) !== null) {
             $this->rollBackToSavepoint($name, $depth);
 
-            throw DatabaseException::transactionAborted('release savepoint');
+            throw $probeFailure;
         }
 
         try {
@@ -1180,19 +1180,19 @@ final class Database
     }
 
     /**
-     * Whether the probe fails, so the transaction can no longer run statements.
-     * The caller may have repaired a failure with its own savepoint, and SQLite
-     * never aborts, so a recorded failure alone does not decide it.
+     * Return why the transaction can no longer run statements, or null when the
+     * probe succeeds. The caller may have repaired a failure with its own savepoint,
+     * and SQLite never aborts, so a recorded failure alone does not decide it.
      */
-    private function transactionIsAborted(): bool
+    private function probeFailure(string $stage): ?DatabaseException
     {
         try {
             $this->pdo->query('SELECT 1');
-        } catch (PDOException) {
-            return true;
+        } catch (PDOException $e) {
+            return DatabaseException::transactionProbeFailed($stage, $e);
         }
 
-        return false;
+        return null;
     }
 
     private function failedSince(int $depth): bool

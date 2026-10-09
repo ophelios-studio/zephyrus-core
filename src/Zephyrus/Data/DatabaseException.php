@@ -95,6 +95,18 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
+     * The transaction probe failed after a statement inside it was caught. A 25P02
+     * probe means the transaction is aborted, so its level was rolled back. Any other
+     * failure keeps its own SQLSTATE and cause through transactionExecutionFailed().
+     */
+    public static function transactionProbeFailed(string $stage, #[\SensitiveParameter] PDOException $previous): self
+    {
+        return self::extractSqlState($previous) === '25P02'
+            ? self::transactionAborted($stage)
+            : self::transactionExecutionFailed($stage, $previous);
+    }
+
+    /**
      * A statement failed inside a transaction level and its exception was caught,
      * so the level was rolled back instead of committed or released. 25P02 is
      * the SQLSTATE PostgreSQL itself reports for the aborted transaction.
