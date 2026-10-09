@@ -412,6 +412,7 @@ final class MailerTest extends TestCase
     public static function invalidAttachmentNameProvider(): iterable
     {
         yield 'empty' => [''];
+        yield 'zero' => ['0'];
         yield 'parent traversal' => ['../x'];
         yield 'CRLF header injection' => ["a\r\nb"];
         yield 'bare LF' => ["a\nb"];

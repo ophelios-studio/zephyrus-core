@@ -53,6 +53,8 @@ final class Mailer
 
     private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*\z~i';
 
+    private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
+
     public function __construct(MailerConfig $config, ?RenderEngine $renderEngine = null)
     {
         $this->renderEngine = $renderEngine;
@@ -193,7 +195,7 @@ final class Mailer
      */
     public function attach(string $path, string $name = '', ?string $allowedRoot = null): self
     {
-        if (str_contains($path, "\0") || str_contains($name, "\0")) {
+        if (str_contains($path, "\0")) {
             throw MailerException::attachmentRejected('path', $path, 'contains a NUL byte');
         }
 
@@ -205,9 +207,7 @@ final class Mailer
             throw MailerException::attachmentRejected('path', $path, 'is a stream wrapper, not a local file');
         }
 
-        if (str_contains($name, '/') || str_contains($name, '\\')) {
-            throw MailerException::attachmentRejected('display name', $name, 'contains a path separator; pass a bare file name');
-        }
+        $this->assertDisplayName($name);
 
         if (!is_file($path)) {
             throw MailerException::attachmentNotFound($path);
@@ -238,9 +238,15 @@ final class Mailer
      */
     public function attachContent(string $content, string $name, ?string $mimeType = null): self
     {
-        if ($name === '' || preg_match('~[\x00\r\n/\\\\]~', $name) === 1) {
-            throw MailerException::attachmentRejected('display name', $name, 'is not a valid display name');
+        if ($name === '') {
+            throw MailerException::attachmentRejected('display name', $name, 'must not be empty');
         }
+
+        if ($name === '0') {
+            throw MailerException::attachmentRejected('display name', $name, 'is treated as empty by the mail library');
+        }
+
+        $this->assertDisplayName($name);
 
         if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {
             throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype');
@@ -290,6 +296,20 @@ final class Mailer
         return $recipientsRefused
             ? MailerException::recipientsRefused($e->getMessage())
             : MailerException::sendFailed($e->getMessage());
+    }
+
+    /**
+     * Refuse a display name that could split a MIME header or name a path.
+     */
+    private function assertDisplayName(string $name): void
+    {
+        if (preg_match(self::DISPLAY_NAME_PATTERN, $name) === 1) {
+            throw MailerException::attachmentRejected(
+                'display name',
+                $name,
+                'contains a NUL byte, a line break or a path separator; pass a bare file name',
+            );
+        }
     }
 
     /**

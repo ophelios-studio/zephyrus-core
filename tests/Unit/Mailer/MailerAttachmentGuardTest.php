@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Mailer;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Mailer\Mailer;
 use Zephyrus\Mailer\MailerConfig;
@@ -126,12 +127,33 @@ final class MailerAttachmentGuardTest extends TestCase
      * client writes to disk, so a separator in it is a vector against the
      * RECIPIENT rather than against us.
      */
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function displayNameWithControlCharacterProvider(): iterable
+    {
+        yield 'carriage return' => ["a\rb"];
+        yield 'line feed' => ["a\nb"];
+        yield 'NUL byte' => ["a\0b"];
+    }
+
+    #[DataProvider('displayNameWithControlCharacterProvider')]
+    public function testADisplayNameWithAControlCharacterIsRefusedByAttach(string $name): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('contains a NUL byte, a line break or a path separator');
+
+        $mailer->attach($this->inside, $name);
+    }
+
     public function testAPathSeparatorInTheDisplayNameIsRefused(): void
     {
         $mailer = new Mailer($this->config);
 
         $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('contains a path separator; pass a bare file name');
+        $this->expectExceptionMessage('a path separator; pass a bare file name');
 
         $mailer->attach($this->inside, '../../.ssh/authorized_keys');
     }
