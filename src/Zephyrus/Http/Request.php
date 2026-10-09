@@ -1018,46 +1018,12 @@ final readonly class Request
                 return true;
             }
 
-            if (str_contains($trusted, '/')) {
-                if (self::ipInCidr($remoteAddr, $trusted)) {
-                    return true;
-                }
-            } elseif ($remoteAddr === $trusted) {
+            if (IpRange::contains($trusted, $remoteAddr)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    private static function ipInCidr(string $ip, string $cidr): bool
-    {
-        [$subnet, $bits] = explode('/', $cidr, 2);
-        $bitsInt = (int) $bits;
-
-        $ipBin = @inet_pton($ip);
-        $subnetBin = @inet_pton($subnet);
-
-        if ($ipBin === false || $subnetBin === false) {
-            return false;
-        }
-
-        if (strlen($ipBin) !== strlen($subnetBin)) {
-            return false;
-        }
-
-        $totalBits = strlen($ipBin) * 8;
-        if ($bitsInt < 0 || $bitsInt > $totalBits) {
-            return false;
-        }
-
-        $mask = str_repeat("\xff", (int) ($bitsInt / 8));
-        if ($bitsInt % 8 !== 0) {
-            $mask .= chr(0xff << (8 - ($bitsInt % 8)));
-        }
-        $mask = str_pad($mask, strlen($ipBin), "\x00");
-
-        return ($ipBin & $mask) === ($subnetBin & $mask);
     }
 
     private static function firstForwardedValue(mixed $value): ?string

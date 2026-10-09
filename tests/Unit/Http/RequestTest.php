@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Http;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Upload\FileUpload;
@@ -511,6 +512,75 @@ final class RequestTest extends TestCase
         );
 
         self::assertSame('203.0.113.7', $request->clientIp());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function malformedCidrPrefixes(): iterable
+    {
+        yield 'alphabetic prefix' => ['10.0.0.0/abc', '10.0.0.1'];
+        yield 'empty prefix' => ['10.0.0.0/', '10.0.0.1'];
+        yield 'letter O for zero' => ['10.0.0.0/O8', '10.0.0.1'];
+        yield 'trailing letter' => ['10.0.0.0/8x', '10.0.0.1'];
+        yield 'space before prefix' => ['10.0.0.0/ 8', '10.0.0.1'];
+        yield 'plus sign' => ['10.0.0.0/+8', '10.0.0.1'];
+        yield 'exponent notation' => ['10.0.0.0/1e1', '10.0.0.1'];
+        yield 'nul byte after prefix' => ["10.0.0.0/8\0", '10.0.0.1'];
+        yield 'overflowing ipv4 prefix' => ['10.0.0.0/' . str_repeat('9', 309), '10.0.0.1'];
+        yield 'overflowing ipv6 prefix' => ['2001:db8::/' . str_repeat('9', 309), '2001:db8::1'];
+        yield 'letter O for zero ipv6' => ['2001:db8::/O8', '2001:db8::1'];
+    }
+
+    #[DataProvider('malformedCidrPrefixes')]
+    public function testFromGlobalsIgnoresForwardedForWhenCidrPrefixIsMalformed(string $cidr, string $peer): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => $peer,
+                'HTTP_X_FORWARDED_FOR' => '1.2.3.4',
+            ],
+            trustedProxies: [$cidr],
+        );
+
+        self::assertSame($peer, $request->clientIp());
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function cidrBoundaries(): iterable
+    {
+        yield 'ipv4 /12 last address inside' => ['172.16.0.0/12', '172.31.255.254', '203.0.113.7'];
+        yield 'ipv4 /12 first address outside' => ['172.16.0.0/12', '172.32.0.1', '172.32.0.1'];
+        yield 'ipv4 /20 first address inside' => ['10.0.16.0/20', '10.0.16.1', '203.0.113.7'];
+        yield 'ipv4 /20 last address inside' => ['10.0.16.0/20', '10.0.31.254', '203.0.113.7'];
+        yield 'ipv4 /20 address below range' => ['10.0.16.0/20', '10.0.15.255', '10.0.15.255'];
+        yield 'ipv4 /20 first address outside' => ['10.0.16.0/20', '10.0.32.1', '10.0.32.1'];
+        yield 'ipv6 /12 last address inside' => ['2000::/12', '200f:ffff::1', '203.0.113.7'];
+        yield 'ipv6 /12 first address outside' => ['2000::/12', '2010::1', '2010::1'];
+        yield 'ipv6 /20 last address inside' => ['2001::/20', '2001:fff:ffff::1', '203.0.113.7'];
+        yield 'ipv6 /20 first address outside' => ['2001::/20', '2001:1000::1', '2001:1000::1'];
+    }
+
+    #[DataProvider('cidrBoundaries')]
+    public function testFromGlobalsCidrPrefixNotMultipleOfEightKeepsItsBoundary(string $cidr, string $peer, string $expected): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'example.com',
+                'REQUEST_URI'          => '/',
+                'REMOTE_ADDR'          => $peer,
+                'HTTP_X_FORWARDED_FOR' => '203.0.113.7',
+            ],
+            trustedProxies: [$cidr],
+        );
+
+        self::assertSame($expected, $request->clientIp());
     }
 
     public function testFromGlobalsToleratesWhitespaceEmptyEntriesAndTrailingComma(): void
