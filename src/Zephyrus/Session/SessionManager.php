@@ -298,10 +298,10 @@ final class SessionManager
     /**
      * Destroy the session and clear all stored data.
      *
-     * When an override storage is active, the array is cleared in-place. With
-     * no session active this is a no-op, since there is nothing to destroy.
-     * A refusal by PHP or the save handler throws, so a logout never reports
-     * success while the stored session survives.
+     * When an override storage is active, the array is cleared in-place.
+     * No-op when there is no session at all. Throws when the session is closed
+     * but still has an id, or when PHP or the save handler refuses, so a logout
+     * never reports success while the stored session survives.
      *
      * @throws SessionException
      */
@@ -319,6 +319,12 @@ final class SessionManager
             if (!self::quietly(static fn (): bool => session_destroy())) {
                 throw SessionException::destructionRefused();
             }
+
+            return;
+        }
+
+        if (session_id() !== '') {
+            throw SessionException::notActiveForDestruction();
         }
     }
 

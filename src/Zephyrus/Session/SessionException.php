@@ -38,4 +38,12 @@ final class SessionException extends ZephyrusException
     {
         return new self(sprintf('Cannot %s: no session is active. Call start() first.', $operation));
     }
+
+    public static function notActiveForDestruction(): self
+    {
+        return new self(
+            'Cannot destroy the session: it is closed but still has an id, so its stored data may survive. '
+            . 'Reopen it with start() before calling destroy().',
+        );
+    }
 }

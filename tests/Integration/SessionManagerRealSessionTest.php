@@ -349,6 +349,41 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame(PHP_SESSION_NONE, session_status());
     }
 
+    #[RunInSeparateProcess]
+    public function testDestroyIsIdempotentOnceTheSessionIsDestroyed(): void
+    {
+        session_start();
+
+        $session = new SessionManager();
+        $session->destroy();
+        $session->destroy();
+
+        self::assertSame(PHP_SESSION_NONE, session_status());
+    }
+
+    /**
+     * A closed session keeps its id while its row stays in the store. Reporting
+     * a logout as done then would leave the stored session live.
+     */
+    #[RunInSeparateProcess]
+    public function testDestroyThrowsWhenTheSessionIsClosedButStillHasAnId(): void
+    {
+        $handler = new RecordingDestroyHandler();
+        $session = new SessionManager();
+        $session->setHandler($handler);
+        $session->start(SessionConfig::fromArray([]));
+        $session->set('user', 7);
+        session_write_close();
+
+        $this->expectException(SessionException::class);
+
+        try {
+            $session->destroy();
+        } finally {
+            self::assertSame(0, $handler->destroyCalls, 'the stored session must not be touched');
+        }
+    }
+
     // ── regenerate ────────────────────────────────────────────────────────────
 
     #[RunInSeparateProcess]
@@ -486,4 +521,24 @@ final class StrictModeAwareHandler implements \SessionHandlerInterface, \Session
     public function gc(int $maxLifetime): int|false { return 0; }
     public function validateId(string $id): bool { return false; }
     public function updateTimestamp(string $id, string $data): bool { return true; }
+}
+
+/** Records destroy() calls and succeeds, to prove a session was never destroyed. */
+final class RecordingDestroyHandler implements \SessionHandlerInterface
+{
+    public int $destroyCalls = 0;
+
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return true; }
+
+    public function destroy(string $id): bool
+    {
+        ++$this->destroyCalls;
+
+        return true;
+    }
+
+    public function gc(int $maxLifetime): int|false { return 0; }
 }
