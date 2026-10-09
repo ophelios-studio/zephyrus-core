@@ -397,7 +397,8 @@ final class Database
      * @throws DatabaseException on prepare or execution failure. Its message
      *         carries the SQLSTATE only; the statement and the driver text are
      *         reachable through DatabaseException::sql() and driverMessage().
-     * @throws \InvalidArgumentException when a key is not a valid placeholder, a value has no SQL form or text holds a NUL byte.
+     * @throws \InvalidArgumentException when positional parameters are not a list, a key is not a valid placeholder,
+     *         a value has no SQL form or text holds a NUL byte.
      */
     public function query(string $sql, #[\SensitiveParameter] array $params = []): PDOStatement
     {
@@ -971,6 +972,12 @@ final class Database
      */
     private static function bindings(#[\SensitiveParameter] array $params): array
     {
+        if (!array_is_list($params) && array_all($params, static fn (mixed $_, int|string $key): bool => is_int($key))) {
+            throw new \InvalidArgumentException(
+                'Positional query parameters must be a list: use array_values() or named parameters.',
+            );
+        }
+
         $bindings = [];
 
         foreach ($params as $key => $value) {

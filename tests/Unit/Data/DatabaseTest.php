@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Data;
 use PDO;
 use PDOException;
 use PDOStatement;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
@@ -390,6 +391,37 @@ final class DatabaseTest extends TestCase
     {
         $stmt = $this->db->query('SELECT 1 AS val');
         self::assertInstanceOf(PDOStatement::class, $stmt);
+    }
+
+    /**
+     * @return iterable<string, array{array<int|string, mixed>}>
+     */
+    public static function nonListPositionalParameters(): iterable
+    {
+        yield 'keys start at 1' => [[1 => 'Alice']];
+        yield 'a hole after the first key' => [[0 => 'Alice', 2 => 'Bob']];
+    }
+
+    #[DataProvider('nonListPositionalParameters')]
+    public function testQueryRefusesPositionalParametersThatAreNotAList(array $params): void
+    {
+        try {
+            $this->db->query('SELECT ?, ?', $params);
+            self::fail('expected the parameters to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                'Positional query parameters must be a list: use array_values() or named parameters.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testArrayValuesLetsOutOfOrderPositionalParametersBindInTheirListOrder(): void
+    {
+        $row = $this->db->selectOne('SELECT ? AS first, ? AS second', array_values([1 => 'a', 0 => 'b']));
+
+        self::assertSame('a', $row->first);
+        self::assertSame('b', $row->second);
     }
 
     public function testQueryWithPositionalParams(): void

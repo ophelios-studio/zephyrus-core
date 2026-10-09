@@ -133,9 +133,10 @@ final class DatabaseParameterBindingTest extends TestCase
         );
     }
 
-    public function testAPositionalListThatDoesNotStartAtZeroStillFailsAsAQueryError(): void
+    public function testAPositionalArrayThatDoesNotStartAtZeroIsRefusedBeforeTheQuery(): void
     {
-        $this->expectException(DatabaseException::class);
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Positional query parameters must be a list');
 
         $this->db->selectValue('SELECT ?', [1 => 'x']);
     }
