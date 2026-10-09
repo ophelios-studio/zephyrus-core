@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Localization;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Formatting\Formatter;
@@ -381,6 +382,21 @@ final class TranslatorTest extends TestCase
         App::reset();
     }
 
+    public function testCustomFormatterReceivesNumericStringUnchanged(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('tagged', function (string $value): string {
+            return 'n=' . $value;
+        });
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('n=42', $translator->trans('{n|tagged}', ['n' => '42']));
+
+        App::reset();
+    }
+
     public function testFormatterPipeWorksWithDecimalType(): void
     {
         $formatter = new Formatter('en_US');
@@ -390,6 +406,93 @@ final class TranslatorTest extends TestCase
         $result = $translator->trans('Total: {amount|decimal}', ['amount' => '1234.5']);
 
         self::assertSame('Total: 1,234.50', $result);
+
+        App::reset();
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function nonBuiltInFormatterMethodProvider(): iterable
+    {
+        yield 'constructor' => ['__construct'];
+        yield 'getter' => ['getLocale'];
+        yield 'default date pattern' => ['getDefaultDatePattern'];
+        yield 'default currency' => ['getDefaultCurrency'];
+    }
+
+    #[DataProvider('nonBuiltInFormatterMethodProvider')]
+    public function testPipeCannotReachNonFormatterMethods(string $pipe): void
+    {
+        $formatter = new Formatter('en_US', defaultCurrency: 'USD');
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+        $result = $translator->trans('{v|' . $pipe . '}', ['v' => 'de_DE']);
+
+        self::assertSame('de_DE', $result);
+        self::assertSame('en_US', $formatter->getLocale());
+
+        App::reset();
+    }
+
+    public function testPipeMatchesBuiltInFormatterNameCaseInsensitively(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('forty-two', $translator->trans('{n|spellout}', ['n' => '42']));
+
+        App::reset();
+    }
+
+    public function testPipeRunsCustomBuiltInOverrideForAnyCaseOfItsName(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('date', static fn (string $value): string => 'custom date ' . $value);
+        $formatter->register('money', static fn (mixed $value): string => 'custom money ' . $value);
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('custom date 2026-10-09', $translator->trans('{d|Date}', ['d' => '2026-10-09']));
+        self::assertSame('custom money 5', $translator->trans('{n|MONEY}', ['n' => '5']));
+
+        App::reset();
+    }
+
+    public function testPipeKeepsNumericStringForStringTypedCustomOverrideOfBuiltIn(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('money', static fn (string $value): string => "C[$value]");
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('C[5]', $translator->trans('{n|MONEY}', ['n' => '5']));
+
+        App::reset();
+    }
+
+    public function testPipeFormatsIntegerNumericStringWithOrdinal(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('3rd', $translator->trans('{n|ordinal}', ['n' => '3']));
+
+        App::reset();
+    }
+
+    public function testPipeFormatsIntegerNumericStringWithFilesize(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('1.0 MB', $translator->trans('{n|filesize}', ['n' => '1048576']));
 
         App::reset();
     }

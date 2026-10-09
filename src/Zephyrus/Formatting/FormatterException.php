@@ -24,8 +24,15 @@ final class FormatterException extends ZephyrusRuntimeException
         return new self(sprintf('Invalid locale: %s', $locale));
     }
 
-    public static function unknownFormatter(string $name): self
+    /**
+     * @param list<string> $builtIns
+     */
+    public static function unknownFormatter(string $name, array $builtIns): self
     {
-        return new self(sprintf('Unknown custom formatter: %s', $name));
+        return new self(sprintf(
+            'Unknown formatter: %s. Use one of: %s, or register a custom formatter.',
+            $name,
+            implode(', ', $builtIns),
+        ));
     }
 }

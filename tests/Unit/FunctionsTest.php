@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Formatting\Formatter;
+use Zephyrus\Formatting\FormatterException;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
@@ -321,6 +322,15 @@ final class FunctionsTest extends TestCase
         App::setFormatter(new Formatter('en_US'));
         $result = format('percent', 0.85);
         self::assertSame('85%', $result);
+    }
+
+    public function testFormatUnknownTypeThrowsFormatterExceptionListingBuiltIns(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $this->expectException(FormatterException::class);
+        $this->expectExceptionMessage('money, decimal, percent');
+        format('nonexistent');
     }
 
     // ─── asset() ──────────────────────────────────────────────────────

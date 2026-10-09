@@ -486,8 +486,61 @@ final class FormatterTest extends TestCase
     public function testFormatThrowsForUnknownFormatter(): void
     {
         $this->expectException(FormatterException::class);
-        $this->expectExceptionMessage('Unknown custom formatter');
+        $this->expectExceptionMessage('Unknown formatter: nonexistent');
         $this->formatter->format('nonexistent', 'value');
+    }
+
+    public function testFormatRejectsPublicMethodsThatAreNotFormatters(): void
+    {
+        $this->expectException(FormatterException::class);
+        $this->expectExceptionMessage('money, decimal');
+        $this->formatter->format('__construct', 'de_DE');
+    }
+
+    public function testFormatRejectsGetterReachedByName(): void
+    {
+        $this->expectException(FormatterException::class);
+        $this->formatter->format('getLocale');
+    }
+
+    public function testFormatRejectsEmptyName(): void
+    {
+        $this->expectException(FormatterException::class);
+        $this->formatter->format('');
+    }
+
+    public function testFormatRunsBuiltInFormatterByName(): void
+    {
+        self::assertSame('$19.99', $this->formatter->format('money', 19.99, 'USD'));
+    }
+
+    public function testFormatMatchesBuiltInFormatterNameCaseInsensitively(): void
+    {
+        self::assertSame('$19.99', $this->formatter->format('MONEY', 19.99, 'USD'));
+        self::assertSame('forty-two', $this->formatter->format('spellout', 42));
+    }
+
+    public function testBuiltInFormatterListIsPublic(): void
+    {
+        self::assertContains('money', Formatter::BUILT_IN_FORMATTERS);
+    }
+
+    public function testCustomBuiltInOverrideRunsForAnyCaseOfItsName(): void
+    {
+        $this->formatter->register('date', static fn (): string => 'custom date');
+        $this->formatter->register('money', static fn (): string => 'custom money');
+
+        self::assertSame('custom date', $this->formatter->format('Date', '2026-10-09'));
+        self::assertSame('custom money', $this->formatter->format('MONEY', 5));
+        self::assertSame('custom money', $this->formatter->format('money', 5));
+    }
+
+    public function testFormatKeepsCustomFormatterNameCaseSensitive(): void
+    {
+        $this->formatter->register('phone', static fn (): string => 'custom');
+
+        $this->expectException(FormatterException::class);
+        $this->formatter->format('PHONE');
     }
 
     public function testHasCustomFormatterReturnsFalseWhenNotRegistered(): void
@@ -499,6 +552,27 @@ final class FormatterTest extends TestCase
     {
         $this->formatter->register('phone', fn (string $n) => $n);
         self::assertTrue($this->formatter->hasCustomFormatter('phone'));
+    }
+
+    public function testHasCustomFormatterMatchesBuiltInOverrideIgnoringCase(): void
+    {
+        $this->formatter->register('money', static fn (): string => 'custom money');
+
+        self::assertTrue($this->formatter->hasCustomFormatter('money'));
+        self::assertTrue($this->formatter->hasCustomFormatter('MONEY'));
+        self::assertTrue($this->formatter->hasCustomFormatter('Money'));
+    }
+
+    public function testHasCustomFormatterIgnoresCaseOfBuiltInWithoutOverride(): void
+    {
+        self::assertFalse($this->formatter->hasCustomFormatter('MONEY'));
+    }
+
+    public function testHasCustomFormatterKeepsCustomNameCaseSensitive(): void
+    {
+        $this->formatter->register('phone', static fn (): string => 'custom');
+
+        self::assertFalse($this->formatter->hasCustomFormatter('Phone'));
     }
 
     public function testGetCustomFormatterNamesReturnsEmptyByDefault(): void

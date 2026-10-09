@@ -40,6 +40,12 @@ final class Formatter
     /** @var array<string, callable> */
     private array $customFormatters = [];
 
+    /** @var list<string> */
+    public const BUILT_IN_FORMATTERS = [
+        'money', 'decimal', 'percent', 'ordinal', 'spellOut', 'date', 'time', 'datetime',
+        'timeago', 'duration', 'filesize', 'list', 'truncate',
+    ];
+
     /**
      * @param string      $locale                 ICU locale identifier (e.g. 'en', 'en_US', 'fr_CA').
      * @param string|null $defaultCurrency         ISO 4217 currency code used by money() when no
@@ -396,11 +402,11 @@ final class Formatter
     }
 
     /**
-     * Check whether a custom formatter with the given name has been registered.
+     * Check whether format() runs a custom formatter for this name, using the same name matching as format().
      */
     public function hasCustomFormatter(string $name): bool
     {
-        return isset($this->customFormatters[$name]);
+        return $this->resolveCustomFormatter($name) !== null;
     }
 
     /**
@@ -414,20 +420,49 @@ final class Formatter
     }
 
     /**
-     * Apply a named custom formatter.
+     * Apply a formatter by name. Built-in names (and their overrides) match ignoring case; other custom names are exact.
      *
-     * @throws FormatterException if the formatter is not registered.
+     * @param mixed ...$args Arguments passed to the formatter.
+     * @throws FormatterException if neither a custom nor a built-in formatter has this name.
      */
     public function format(string $name, mixed ...$args): string
     {
-        if (!isset($this->customFormatters[$name])) {
-            throw FormatterException::unknownFormatter($name);
+        $custom = $this->resolveCustomFormatter($name);
+        if ($custom !== null) {
+            return (string) $custom(...$args);
         }
 
-        return (string) ($this->customFormatters[$name])(...$args);
+        foreach (self::BUILT_IN_FORMATTERS as $builtIn) {
+            if (strcasecmp($builtIn, $name) === 0) {
+                return $this->$builtIn(...$args);
+            }
+        }
+
+        throw FormatterException::unknownFormatter($name, self::BUILT_IN_FORMATTERS);
     }
 
     // ─── Internal Helpers ─────────────────────────────────────────────
+
+    /**
+     * Find the custom formatter answering to a name: the exact registration, else the
+     * override of the built-in name the given name matches ignoring case.
+     *
+     * @return callable|null null when format() falls through to a built-in or fails.
+     */
+    private function resolveCustomFormatter(string $name): ?callable
+    {
+        if (isset($this->customFormatters[$name])) {
+            return $this->customFormatters[$name];
+        }
+
+        foreach (self::BUILT_IN_FORMATTERS as $builtIn) {
+            if (strcasecmp($builtIn, $name) === 0) {
+                return $this->customFormatters[$builtIn] ?? null;
+            }
+        }
+
+        return null;
+    }
 
     /**
      * Format a datetime value using IntlDateFormatter.

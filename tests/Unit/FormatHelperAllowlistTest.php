@@ -4,22 +4,13 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit;
 
-use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Formatting\Formatter;
+use Zephyrus\Formatting\FormatterException;
 
 /**
- * format() dispatched dynamically to ANY public method on the process-wide
- * Formatter singleton: `$formatter->$type(...$args)`. The first argument
- * therefore chose the method, and the constructor was reachable, so
- *
- *   format('__construct', 'de_DE')
- *
- * re-initialised the shared Formatter for the rest of the request: every
- * subsequent locale, currency and date pattern in the application changed. The
- * accessors were reachable too, which made the helper a readback channel for
- * whatever the singleton was holding.
+ * The format() helper must not dispatch to arbitrary Formatter methods.
  */
 final class FormatHelperAllowlistTest extends TestCase
 {
@@ -35,7 +26,7 @@ final class FormatHelperAllowlistTest extends TestCase
 
     public function testTheConstructorCannotBeCalledThroughTheHelper(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(FormatterException::class);
 
         format('__construct', 'de_DE');
     }
@@ -44,7 +35,7 @@ final class FormatHelperAllowlistTest extends TestCase
     {
         try {
             format('__construct', 'de_DE');
-        } catch (InvalidArgumentException) {
+        } catch (FormatterException) {
             // Expected; the point is what did NOT happen.
         }
 
@@ -56,14 +47,14 @@ final class FormatHelperAllowlistTest extends TestCase
 
     public function testAnAccessorIsNotAFormatter(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(FormatterException::class);
 
         format('getDefaultCurrency');
     }
 
     public function testRegisterIsNotReachableEither(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(FormatterException::class);
 
         format('register', 'evil', static fn(): string => 'owned');
     }
@@ -72,8 +63,8 @@ final class FormatHelperAllowlistTest extends TestCase
     {
         try {
             format('definitelyNotAFormatter');
-            self::fail('Expected an InvalidArgumentException.');
-        } catch (InvalidArgumentException $exception) {
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
             self::assertStringContainsString('definitelyNotAFormatter', $exception->getMessage());
             self::assertStringContainsString('money', $exception->getMessage());
         }

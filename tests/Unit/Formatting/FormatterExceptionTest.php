@@ -38,7 +38,8 @@ final class FormatterExceptionTest extends TestCase
 
     public function testUnknownFormatter(): void
     {
-        $exception = FormatterException::unknownFormatter('phone');
+        $exception = FormatterException::unknownFormatter('phone', ['money', 'date']);
         self::assertStringContainsString('phone', $exception->getMessage());
+        self::assertStringContainsString('Use one of: money, date, or register a custom formatter.', $exception->getMessage());
     }
 }

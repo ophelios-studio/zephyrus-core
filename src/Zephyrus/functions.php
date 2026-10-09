@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 use Zephyrus\Core\App;
 use Zephyrus\Core\Config\EnvironmentVariable;
+use Zephyrus\Formatting\FormatterException;
 
 if (!function_exists('env')) {
     /**
@@ -213,45 +214,14 @@ if (!function_exists('e')) {
     }
 }
 
-if (!defined('ZEPHYRUS_FORMAT_METHODS')) {
-    /**
-     * The Formatter methods format() is allowed to reach.
-     *
-     * $formatter->$type(...) was an unrestricted dynamic method call on a
-     * process-wide singleton, so $type decided which method ran. Anything
-     * public was reachable, including the constructor:
-     * `format('__construct', 'de_DE')` re-initialised the shared Formatter for
-     * the rest of the request, changing every subsequent locale, currency and
-     * date pattern in the application. Accessors were reachable too, which made
-     * the helper a readback channel for whatever the singleton holds.
-     *
-     * Custom formatters are NOT affected: they are resolved before this list,
-     * through Formatter::hasCustomFormatter(), so a name registered with
-     * Formatter::register() still works exactly as before.
-     */
-    define('ZEPHYRUS_FORMAT_METHODS', [
-        'money',
-        'decimal',
-        'percent',
-        'ordinal',
-        'spellOut',
-        'date',
-        'time',
-        'datetime',
-        'timeago',
-        'duration',
-        'filesize',
-        'list',
-        'truncate',
-    ]);
-}
-
 if (!function_exists('format')) {
     /**
      * Format a value using the Formatter service.
      *
-     * The first argument is the format type (a custom formatter name, or one of
-     * ZEPHYRUS_FORMAT_METHODS), followed by the arguments to pass to it.
+     * The first argument is the formatter name, followed by the arguments to
+     * pass to it. Built-in names are listed in Formatter::BUILT_IN_FORMATTERS
+     * (money, date, filesize...); any other unregistered name throws
+     * FormatterException.
      *
      * Examples:
      *   format('money', 19.99)           => "$19.99"
@@ -259,9 +229,9 @@ if (!function_exists('format')) {
      *   format('filesize', 1048576)      => "1.0 MB"
      *
      * @param string $type    The formatter name.
-     * @param mixed  ...$args Arguments to pass to the formatter method.
-     * @throws InvalidArgumentException when $type is neither a registered custom
-     *         formatter nor one of the built-in formatting methods.
+     * @param mixed  ...$args Arguments to pass to the formatter.
+     * @throws FormatterException when $type is neither a registered custom
+     *         formatter nor a built-in formatter.
      */
     function format(string $type, mixed ...$args): string
     {
@@ -269,17 +239,8 @@ if (!function_exists('format')) {
         if ($formatter === null) {
             return (string) ($args[0] ?? '');
         }
-        if ($formatter->hasCustomFormatter($type)) {
-            return $formatter->format($type, ...$args);
-        }
-        if (!in_array($type, ZEPHYRUS_FORMAT_METHODS, true)) {
-            throw new InvalidArgumentException(sprintf(
-                'Unknown format type "%s". Use one of: %s, or register a custom formatter.',
-                $type,
-                implode(', ', ZEPHYRUS_FORMAT_METHODS),
-            ));
-        }
-        return $formatter->$type(...$args);
+
+        return $formatter->format($type, ...$args);
     }
 }
 

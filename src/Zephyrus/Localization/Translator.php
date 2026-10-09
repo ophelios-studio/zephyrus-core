@@ -265,8 +265,8 @@ final class Translator
      * Supports both built-in Formatter methods (money, date, decimal, …) and
      * custom formatters registered via Formatter::register().
      *
-     * If no Formatter is available or the method/custom formatter does not
-     * exist, the value passes through unchanged.
+     * If no Formatter is available or no formatter has this name, the value
+     * passes through unchanged.
      */
     private function applyFormatterPipe(string $pipeName, string $value): string
     {
@@ -275,21 +275,25 @@ final class Translator
             return $value;
         }
 
-        // Try built-in Formatter methods first (money, date, decimal, …).
-        if (method_exists($formatter, $pipeName)) {
-            try {
-                $castValue = is_numeric($value) ? (float) $value : $value;
-                return $formatter->$pipeName($castValue);
-            } catch (\Throwable) {
-                return $value;
-            }
-        }
+        $argument = $formatter->hasCustomFormatter($pipeName) ? $value : $this->castPipeValue($value);
 
-        // Try custom registered formatters.
         try {
-            return $formatter->format($pipeName, $value);
+            return $formatter->format($pipeName, $argument);
         } catch (\Throwable) {
             return $value;
         }
+    }
+
+    /**
+     * Give the formatter an int or float for numeric strings, so built-ins typed
+     * with int (ordinal, duration, filesize) accept them under strict types.
+     */
+    private function castPipeValue(string $value): int|float|string
+    {
+        if (!is_numeric($value)) {
+            return $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_INT) !== false ? (int) $value : (float) $value;
     }
 }
