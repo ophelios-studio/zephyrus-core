@@ -10,17 +10,7 @@ A cohesive PHP 8.4+ framework core. Attribute-based routing, immutable HTTP obje
 
 ## Getting Started
 
-The fastest way to start a new project is the official application template:
-
-```bash
-composer create-project zephyrus-framework/framework my-app
-cd my-app
-composer dev
-```
-
-This gives you a working application structure with controllers, views, config, and a dev server ready to go.
-
-To use the core library directly in an existing project:
+Install the core library:
 
 ```bash
 composer require zephyrus-framework/core
@@ -70,7 +60,7 @@ Route parameters are injected by name with automatic type coercion. A type misma
 
 #### Route Prefixing
 
-Use `#[Root]` to apply a URL prefix to an entire controller. It supports inheritance — child controller prefixes are appended to parent prefixes:
+Use `#[Root]` to apply a URL prefix to an entire controller. It supports inheritance: child controller prefixes are appended to parent prefixes:
 
 ```php
 #[Root('/admin')]
@@ -89,31 +79,28 @@ class AdminUserController extends AdminController
 Instead of registering controllers one by one, scan a directory:
 
 ```php
-$router->discoverControllers('App\\Controllers', 'app/Controllers/');
+$router = $router->discoverControllers('App\\Controllers', __DIR__ . '/../app/Controllers');
 ```
 
 ### Middleware
 
-Implement `MiddlewareInterface` and register globally or on specific routes:
+Middleware implements `MiddlewareInterface`. For authentication, `AuthGuardMiddleware` answers 401 when its guard refuses the request. `HeaderTokenGuard` checks the bearer token with a constant-time comparison:
 
 ```php
-use Zephyrus\Http\MiddlewareInterface;
-use Zephyrus\Http\Request;
-use Zephyrus\Http\Response;
+use Zephyrus\Security\AuthGuardMiddleware;
+use Zephyrus\Security\HeaderTokenGuard;
 
-class AuthMiddleware implements MiddlewareInterface
-{
-    public function process(Request $request, callable $next): Response
-    {
-        if ($request->headers()->bearerToken() === null) {
-            return Response::json(['error' => 'Unauthorized'], 401);
-        }
-        return $next($request);
-    }
-}
+$apiAuth = new AuthGuardMiddleware(new HeaderTokenGuard($apiToken));
 ```
 
-Register globally on the kernel, or as a named middleware for use in route attributes:
+Register it under a name with `registerMiddleware()`, then reference that name in route attributes:
+
+```php
+$kernel = KernelBuilder::create()
+    ->withRouter($router)
+    ->registerMiddleware('auth', $apiAuth)
+    ->build();
+```
 
 ```php
 #[Middleware('auth')]
@@ -127,9 +114,9 @@ The `Request` object is immutable and composed of typed sub-objects:
 
 ```php
 $request->uri()      // scheme, host, path, query string
-$request->body()     // POST/JSON body — get(key), all(), has(key)
-$request->headers()  // HeaderBag — get(name), bearerToken(), isJson()
-$request->cookies()  // CookieJar — get(name), all()
+$request->body()     // POST/JSON body (RequestBody: get(key), all(), has(key))
+$request->headers()  // HeaderBag: get(name), bearerToken(), isJson()
+$request->cookies()  // CookieJar: get(name), all()
 $request->query      // query string parameters (array)
 $request->files      // uploaded files
 ```
@@ -155,8 +142,7 @@ use Zephyrus\Validation\Rules;
 
 $form = new FormValidator([
     'email' => [Rules::required(), Rules::email()],
-    'name'  => [Rules::required(), Rules::name()],
-    'bio'   => [Rules::maxLength(500)],  // optional — skipped when empty
+    'bio'   => [Rules::maxLength(500)],  // optional, skipped when empty
 ]);
 
 // In a controller (throws ValidationException → auto 422):
@@ -168,17 +154,27 @@ $this->validate($form, $request->body()->all());
 Wire everything together once at startup:
 
 ```php
+use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Routing\Router;
+use Zephyrus\Security\CsrfMiddleware;
+use Zephyrus\Security\SecureHeadersConfig;
+use Zephyrus\Security\SecureHeadersMiddleware;
+use Zephyrus\Session\SessionCsrfTokenManager;
+use Zephyrus\Session\SessionManager;
+use Zephyrus\Session\SessionMiddleware;
 
 $router = (new Router())
-    ->discoverControllers('App\\Controllers', 'app/Controllers/');
+    ->discoverControllers('App\\Controllers', __DIR__ . '/../app/Controllers');
+
+$session = new SessionManager();
 
 $kernel = KernelBuilder::create()
     ->withRouter($router)
-    ->withMiddleware(new CsrfMiddleware())
-    ->withMiddleware(new SecureHeadersMiddleware())
+    ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
+    ->withMiddleware(new CsrfMiddleware(new SessionCsrfTokenManager($session)))
+    ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
     ->build();
 
 $request  = Request::fromGlobals();
@@ -193,7 +189,7 @@ $response->send();
 | Requirement | Version |
 |---|---|
 | PHP | `^8.4` |
-| Extensions | `mbstring`, `pdo`, `intl`, `sodium` |
+| Extensions | `mbstring`, `pdo`, `intl`, `sodium`, `fileinfo` |
 
 Runtime dependencies: `symfony/yaml`, `vlucas/phpdotenv`, `latte/latte`, `tracy/tracy`, `phpmailer/phpmailer`.
 
@@ -211,8 +207,6 @@ Run the test suite:
 
 ```bash
 composer test
-# or without coverage instrumentation:
-php vendor/bin/phpunit --no-coverage
 ```
 
 Run with coverage (requires Xdebug):
@@ -233,10 +227,10 @@ Commits are one semantic line (`type(scope): description`), with no body and no 
 
 ## Documentation
 
-Full documentation — including guides for sessions, security, validation, database access, localization, file uploads, events, mailer, and more — is available on the docs site (coming soon).
+Full documentation (guides for sessions, security, validation, database access, localization, file uploads, events, mailer, and more) is coming soon.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
