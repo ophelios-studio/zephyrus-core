@@ -6,6 +6,8 @@ namespace Zephyrus\Data;
 
 /**
  * Decodes the text form of a PostgreSQL array, as pdo_pgsql returns an array column.
+ *
+ * @internal
  */
 final class PostgresArrayParser
 {
