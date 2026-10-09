@@ -304,6 +304,42 @@ final class SessionConfigTest extends TestCase
         SessionConfig::fromArray(['idle_timeout' => '99999999999999999999']);
     }
 
+    /** @return array<string, array{mixed}> */
+    public static function idleTimeoutOverflowingTheExpiryColumnProvider(): array
+    {
+        return [
+            'one past the limit' => [2_147_483_648 - time()],
+            'integer max'        => [2_147_483_647],
+            'string'             => ['2147483647'],
+            'php max'            => [PHP_INT_MAX],
+        ];
+    }
+
+    /** The documented schema stores the expiry, now plus the timeout, in a 32-bit INTEGER column. */
+    #[DataProvider('idleTimeoutOverflowingTheExpiryColumnProvider')]
+    public function testRefusesAnIdleTimeoutWhoseExpiryOverflowsTheIntegerColumn(mixed $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('INTEGER');
+
+        SessionConfig::fromArray(['idle_timeout' => $value]);
+    }
+
+    public function testAcceptsAnIdleTimeoutJustShortOfTheExpiryColumnLimit(): void
+    {
+        $seconds = 2_147_483_647 - time() - 60;
+
+        self::assertSame($seconds, SessionConfig::fromArray(['idle_timeout' => $seconds])->idleTimeout);
+    }
+
+    public function testDirectConstructionAlsoRefusesAnIdleTimeoutThatOverflowsTheExpiryColumn(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/invalid value '\\d+': must be at most \\d+ seconds [^:]*INTEGER[^:]*\\.\\z/");
+
+        new SessionConfig('APP', 0, true, false, 'Lax', '/', idleTimeout: PHP_INT_MAX);
+    }
+
     public function testDirectConstructionAlsoRefusesANonPositiveIdleTimeout(): void
     {
         $this->expectException(ConfigurationException::class);

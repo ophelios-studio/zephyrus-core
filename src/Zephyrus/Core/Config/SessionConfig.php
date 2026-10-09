@@ -50,7 +50,9 @@ namespace Zephyrus\Core\Config;
  * Validation rules:
  *   - name must be a non-empty string.
  *   - lifetime must be >= 0.
- *   - idleTimeout must be a positive whole number of seconds when set.
+ *   - idleTimeout must be a positive whole number of seconds when set, and
+ *     small enough that now plus it fits the INTEGER expire column of the
+ *     DatabaseSessionHandler schema (2147483647).
  *   - sameSite must be one of: Strict, Lax, None.
  */
 final readonly class SessionConfig
@@ -59,6 +61,9 @@ final readonly class SessionConfig
     private const VALID_SAME_SITE = ['Strict', 'Lax', 'None'];
 
     private const IDLE_TIMEOUT_RULE = 'must be a positive whole number of seconds';
+
+    /** The largest value the INTEGER expire column of the documented session table holds. */
+    private const EXPIRE_COLUMN_MAX = 2_147_483_647;
 
     /**
      * @param bool $secure     Force the Secure attribute on regardless of the request.
@@ -94,6 +99,19 @@ final readonly class SessionConfig
 
         if ($this->idleTimeout !== null && $this->idleTimeout <= 0) {
             throw ConfigurationException::invalidValue('session', 'idleTimeout', $this->idleTimeout, self::IDLE_TIMEOUT_RULE);
+        }
+
+        $longestIdleTimeout = self::EXPIRE_COLUMN_MAX - time();
+        if ($this->idleTimeout !== null && $this->idleTimeout > $longestIdleTimeout) {
+            throw ConfigurationException::invalidValue(
+                'session',
+                'idleTimeout',
+                $this->idleTimeout,
+                sprintf(
+                    'must be at most %d seconds so that now plus the timeout fits the INTEGER expire column',
+                    $longestIdleTimeout,
+                ),
+            );
         }
 
         if (!in_array($this->sameSite, self::VALID_SAME_SITE, strict: true)) {
