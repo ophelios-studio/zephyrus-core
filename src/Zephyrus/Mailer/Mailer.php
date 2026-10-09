@@ -188,8 +188,9 @@ final class Mailer
      *                                 relative path still resolves against the working
      *                                 directory, which is rarely what a caller means.
      * @param string      $name        Display name (default: original filename). May not
-     *                                 contain a path separator: it lands in a MIME header
-     *                                 and is what the recipient's client writes to disk.
+     *                                 contain a NUL byte, a line break or a path separator:
+     *                                 it lands in a MIME header and is what the recipient's
+     *                                 client writes to disk.
      * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
      *                                 the historical behaviour of trusting the caller.
      */
@@ -231,7 +232,7 @@ final class Mailer
      *
      * @param string      $content  The file contents.
      * @param string      $name     Display name the recipient's client writes to disk: non-empty,
-     *                              without NUL, CR, LF or a path separator.
+     *                              not "0", without NUL, CR, LF or a path separator.
      * @param string|null $mimeType Media type as type/subtype, optionally followed by parameters such as "; method=REQUEST". Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
