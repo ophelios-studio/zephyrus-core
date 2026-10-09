@@ -355,6 +355,9 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertInstanceOf(SessionException::class, $thrown);
         self::assertSame([], $warnings);
         self::assertSame(PHP_SESSION_NONE, session_status());
+        self::assertStringContainsString('output has already been sent', $thrown->getMessage());
+        self::assertStringContainsString('cookie', $thrown->getMessage());
+        self::assertStringNotContainsString(__FILE__, $thrown->getMessage());
         self::assertStringContainsString('headers', (string) $thrown->phpReason());
         self::assertInstanceOf(\ErrorException::class, $thrown->getPrevious());
     }

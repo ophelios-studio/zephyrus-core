@@ -39,6 +39,15 @@ final class SessionException extends ZephyrusException
         );
     }
 
+    public static function outputAlreadySent(?\ErrorException $phpWarning = null): self
+    {
+        return self::withReason(
+            'The session cannot start: output has already been sent, so the session cookie cannot be set. '
+            . 'Start the session before any output.',
+            $phpWarning,
+        );
+    }
+
     public static function regenerationRefused(?\ErrorException $phpWarning = null): self
     {
         return self::withReason(

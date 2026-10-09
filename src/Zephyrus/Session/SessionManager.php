@@ -162,7 +162,7 @@ final class SessionManager
      * refuses a session idle longer on read; PHP's files handler only uses it as
      * the garbage-collection age, so start() warns about that in debug.
      *
-     * @throws SessionException when PHP refuses to start the session.
+     * @throws SessionException when output has already been sent or PHP refuses to start the session.
      */
     public function start(SessionConfig $config, ?bool $requestIsSecure = null): void
     {
@@ -179,7 +179,7 @@ final class SessionManager
         }
 
         if (headers_sent($file, $line)) {
-            throw SessionException::startRefused(new \ErrorException(
+            throw SessionException::outputAlreadySent(new \ErrorException(
                 sprintf('Session cannot be started after headers have already been sent (sent from %s on line %d)', $file, $line),
                 0,
                 E_WARNING,

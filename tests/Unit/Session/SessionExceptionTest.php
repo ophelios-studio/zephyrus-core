@@ -20,6 +20,7 @@ final class SessionExceptionTest extends TestCase
             'start'        => [SessionException::startRefused(...)],
             'regeneration' => [SessionException::regenerationRefused(...)],
             'destruction'  => [SessionException::destructionRefused(...)],
+            'output sent'  => [SessionException::outputAlreadySent(...)],
         ];
     }
 
