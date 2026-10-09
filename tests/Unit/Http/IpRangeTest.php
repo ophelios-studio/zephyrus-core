@@ -1,0 +1,127 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Zephyrus\Tests\Unit\Http;
+
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use Zephyrus\Http\IpRange;
+
+final class IpRangeTest extends TestCase
+{
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function validRanges(): iterable
+    {
+        yield 'ipv4 cidr' => ['10.0.0.0/8'];
+        yield 'ipv4 zero prefix' => ['0.0.0.0/0'];
+        yield 'ipv4 full prefix' => ['10.0.0.0/32'];
+        yield 'ipv4 bare address' => ['10.0.0.1'];
+        yield 'ipv4 three digit prefix' => ['10.0.0.0/008'];
+        yield 'ipv6 cidr' => ['2001:db8::/32'];
+        yield 'ipv6 zero prefix' => ['::/0'];
+        yield 'ipv6 full prefix' => ['::1/128'];
+        yield 'ipv6 bare address' => ['::1'];
+        yield 'ipv6 uppercase bare address' => ['2001:DB8::1'];
+        yield 'ipv6 expanded bare address' => ['0:0:0:0:0:0:0:1'];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidRanges(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'only a slash' => ['/8'];
+        yield 'empty prefix' => ['10.0.0.0/'];
+        yield 'alphabetic prefix' => ['10.0.0.0/abc'];
+        yield 'letter O for zero' => ['10.0.0.0/O8'];
+        yield 'negative prefix' => ['10.0.0.0/-1'];
+        yield 'signed prefix' => ['10.0.0.0/+8'];
+        yield 'space in prefix' => ['10.0.0.0/ 8'];
+        yield 'trailing space' => ['10.0.0.0/8 '];
+        yield 'four digit prefix' => ['10.0.0.0/0008'];
+        yield 'two slashes' => ['10.0.0.0/8/9'];
+        yield 'ipv4 prefix too large' => ['10.0.0.0/33'];
+        yield 'ipv6 prefix too large' => ['2001:db8::/129'];
+        yield 'overflowing prefix' => ['10.0.0.0/' . str_repeat('9', 309)];
+        yield 'overflowing prefix with zero' => ['0.0.0.0/' . str_repeat('0', 400) . '1'];
+        yield 'nul in prefix' => ["10.0.0.0/8\0"];
+        yield 'nul in address' => ["10.0.0.0\0/8"];
+        yield 'nul only' => ["\0"];
+        yield 'leading zero octet' => ['010.0.0.1'];
+        yield 'leading zero octet in cidr' => ['010.0.0.0/8'];
+        yield 'ipv6 zone identifier' => ['fe80::1%eth0'];
+        yield 'ipv6 zone identifier in cidr' => ['fe80::1%eth0/64'];
+        yield 'bracketed ipv6' => ['[::1]'];
+        yield 'hostname' => ['example.com'];
+        yield 'octet out of range' => ['999.1.1.1'];
+        yield 'leading space' => [' 10.0.0.1'];
+    }
+
+    #[DataProvider('validRanges')]
+    public function testIsValidAcceptsWellFormedRanges(string $range): void
+    {
+        self::assertTrue(IpRange::isValid($range));
+    }
+
+    #[DataProvider('invalidRanges')]
+    public function testIsValidRejectsMalformedRanges(string $range): void
+    {
+        self::assertFalse(IpRange::isValid($range));
+    }
+
+    /**
+     * @return iterable<string, array{string, string, bool}>
+     */
+    public static function membership(): iterable
+    {
+        yield 'ipv4 inside /8' => ['10.0.0.0/8', '10.0.0.1', true];
+        yield 'ipv4 outside /8' => ['10.0.0.0/8', '11.0.0.1', false];
+        yield 'ipv4 zero prefix matches everything' => ['0.0.0.0/0', '203.0.113.9', true];
+        yield 'ipv4 full prefix matches itself' => ['10.0.0.0/32', '10.0.0.0', true];
+        yield 'ipv4 full prefix rejects neighbour' => ['10.0.0.0/32', '10.0.0.1', false];
+        yield '/12 last address inside' => ['172.16.0.0/12', '172.31.255.254', true];
+        yield '/12 first address outside' => ['172.16.0.0/12', '172.32.0.1', false];
+        yield '/12 first address inside' => ['172.16.0.0/12', '172.16.0.1', true];
+        yield '/20 last address inside' => ['10.0.16.0/20', '10.0.31.254', true];
+        yield '/20 first address outside' => ['10.0.16.0/20', '10.0.32.1', false];
+        yield '/20 address below range' => ['10.0.16.0/20', '10.0.15.255', false];
+        yield 'ipv6 /12 last address inside' => ['2000::/12', '200f:ffff::1', true];
+        yield 'ipv6 /12 first address outside' => ['2000::/12', '2010::1', false];
+        yield 'ipv6 /20 last address inside' => ['2001::/20', '2001:fff:ffff::1', true];
+        yield 'ipv6 /20 first address outside' => ['2001::/20', '2001:1000::1', false];
+        yield 'ipv6 zero prefix matches everything' => ['::/0', '2001:db8::1', true];
+        yield 'ipv6 full prefix matches itself' => ['::1/128', '::1', true];
+        yield 'ipv6 full prefix rejects neighbour' => ['::1/128', '::2', false];
+        yield 'bare ipv6 matches uppercase spelling' => ['2001:DB8::1', '2001:db8::1', true];
+        yield 'bare ipv6 matches expanded spelling' => ['0:0:0:0:0:0:0:1', '::1', true];
+        yield 'bare ipv6 rejects other address' => ['::1', '::2', false];
+        yield 'bare ipv4 is an exact match' => ['10.0.0.1', '10.0.0.1', true];
+        yield 'bare ipv4 rejects neighbour' => ['10.0.0.1', '10.0.0.2', false];
+        yield 'ipv4 range rejects ipv6 peer' => ['10.0.0.0/8', '::1', false];
+        yield 'ipv6 range rejects ipv4 peer' => ['::/0', '10.0.0.1', false];
+        yield 'ipv4 mapped ipv6 is not ipv4' => ['10.0.0.1', '::ffff:10.0.0.1', false];
+        yield 'nul in range' => ["10.0.0.0/8\0", '10.0.0.1', false];
+        yield 'nul in address' => ["10.0.0.1\0", '10.0.0.1', false];
+        yield 'nul in peer' => ['10.0.0.0/8', "10.0.0.1\0", false];
+        yield 'empty peer' => ['10.0.0.0/8', '', false];
+        yield 'malformed peer' => ['10.0.0.0/8', 'not-an-ip', false];
+        yield 'leading zero peer' => ['10.0.0.0/8', '010.0.0.1', false];
+        yield 'ipv6 zone peer' => ['fe80::/10', 'fe80::1%eth0', false];
+        yield 'malformed prefix fails closed' => ['10.0.0.0/abc', '10.0.0.1', false];
+        yield 'empty prefix fails closed' => ['10.0.0.0/', '10.0.0.1', false];
+        yield 'letter O prefix fails closed' => ['10.0.0.0/O8', '10.0.0.1', false];
+        yield 'overflowing prefix fails closed' => ['10.0.0.0/' . str_repeat('9', 309), '203.0.113.9', false];
+        yield 'overflowing ipv6 prefix fails closed' => ['2001:db8::/' . str_repeat('9', 309), '2001:db8::1', false];
+        yield 'empty range fails closed' => ['', '10.0.0.1', false];
+    }
+
+    #[DataProvider('membership')]
+    public function testContainsMatchesAddressAgainstRange(string $range, string $ip, bool $expected): void
+    {
+        self::assertSame($expected, IpRange::contains($range, $ip));
+    }
+}
