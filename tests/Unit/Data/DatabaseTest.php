@@ -814,6 +814,22 @@ final class DatabaseTest extends TestCase
         self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn());
     }
 
+    public function testInsertGetIdReportsARunStatementWhoseReturningNamesNoColumn(): void
+    {
+        $pdo = new DriverNamePdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL)');
+        $db = new Database($pdo);
+
+        try {
+            $db->insertGetId("INSERT INTO items (label) VALUES ('RETURNING id')", []);
+            self::fail('expected the statement without a RETURNING column to be refused');
+        } catch (DatabaseException $e) {
+            self::assertStringContainsString('was executed', $e->getMessage());
+        }
+
+        self::assertSame(1, (int) $pdo->query('SELECT COUNT(*) FROM items')->fetchColumn());
+    }
+
     public function testInsertGetIdRefusesReturningWithMoreThanOneColumn(): void
     {
         $pdo = new DriverNamePdo('sqlite::memory:');

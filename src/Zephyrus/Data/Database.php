@@ -854,7 +854,9 @@ final class Database
         $stmt = $this->query($sql, $params);
         if ($stmt->columnCount() === 0) {
             if ($requiresReturning) {
-                throw DatabaseException::returningRequired();
+                $this->markFailedLevel();
+
+                throw DatabaseException::returningYieldedNoColumn();
             }
 
             return $this->lastInsertId();

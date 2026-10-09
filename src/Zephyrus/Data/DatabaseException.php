@@ -70,6 +70,16 @@ final class DatabaseException extends ZephyrusRuntimeException
     /**
      * The message holds no SQL text.
      */
+    public static function returningYieldedNoColumn(): self
+    {
+        return new self(
+            'The statement was executed, but it returned no column: RETURNING occurs only in a literal, comment or identifier.',
+        );
+    }
+
+    /**
+     * The message holds no SQL text.
+     */
     public static function returningNotSingleColumn(int $columns): self
     {
         return new self("RETURNING must name exactly one column, found {$columns}. The statement was executed.");
