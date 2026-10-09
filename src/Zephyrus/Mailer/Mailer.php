@@ -48,6 +48,8 @@ final class Mailer
 
     private PHPMailer $mail;
     private ?RenderEngine $renderEngine;
+    private ?string $htmlBody = null;
+    private ?string $textBody = null;
 
     public function __construct(MailerConfig $config, ?RenderEngine $renderEngine = null)
     {
@@ -127,8 +129,8 @@ final class Mailer
      */
     public function html(string $body): self
     {
-        $this->mail->isHTML(true);
-        $this->mail->Body = $body;
+        $this->htmlBody = $body;
+        $this->compose();
         return $this;
     }
 
@@ -137,13 +139,8 @@ final class Mailer
      */
     public function text(string $body): self
     {
-        if ($this->mail->ContentType === PHPMailer::CONTENT_TYPE_TEXT_HTML) {
-            $this->mail->AltBody = $body;
-        } else {
-            $this->mail->isHTML(false);
-            $this->mail->Body = $body;
-        }
-
+        $this->textBody = $body;
+        $this->compose();
         return $this;
     }
 
@@ -163,9 +160,7 @@ final class Mailer
             );
         }
 
-        $this->mail->isHTML(true);
-        $this->mail->Body = $this->renderEngine->render($page, $args);
-        return $this;
+        return $this->html($this->renderEngine->render($page, $args));
     }
 
     /**
@@ -274,6 +269,23 @@ final class Mailer
         if (!str_starts_with($resolvedFile, rtrim($resolvedRoot, '/\\') . DIRECTORY_SEPARATOR)) {
             throw MailerException::attachmentRejected($path, 'resolves outside the allowed directory');
         }
+    }
+
+    /**
+     * Derive the PHPMailer body from the HTML and text parts, whatever order they were set in.
+     */
+    private function compose(): void
+    {
+        if ($this->htmlBody !== null) {
+            $this->mail->isHTML(true);
+            $this->mail->Body = $this->htmlBody;
+            $this->mail->AltBody = $this->textBody ?? '';
+            return;
+        }
+
+        $this->mail->isHTML(false);
+        $this->mail->Body = $this->textBody ?? '';
+        $this->mail->AltBody = '';
     }
 
     private function configureSmtp(MailerConfig $config): void

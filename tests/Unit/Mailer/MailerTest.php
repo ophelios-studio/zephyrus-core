@@ -114,6 +114,50 @@ final class MailerTest extends TestCase
         self::assertSame('Fallback text', $phpMailer->AltBody);
     }
 
+    public function testTextThenHtmlKeepsTextAsAltBody(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->text('Plain text')->html('<h1>HTML</h1>');
+
+        $phpMailer = $mailer->getPhpMailer();
+        self::assertSame('<h1>HTML</h1>', $phpMailer->Body);
+        self::assertSame('Plain text', $phpMailer->AltBody);
+        self::assertSame(PHPMailer::CONTENT_TYPE_TEXT_HTML, $phpMailer->ContentType);
+    }
+
+    public function testHtmlThenTextAndTextThenHtmlComposeTheSameMessage(): void
+    {
+        $htmlFirst = new Mailer($this->config);
+        $htmlFirst->html('<h1>HTML</h1>')->text('Plain text');
+
+        $textFirst = new Mailer($this->config);
+        $textFirst->text('Plain text')->html('<h1>HTML</h1>');
+
+        self::assertSame($htmlFirst->getPhpMailer()->Body, $textFirst->getPhpMailer()->Body);
+        self::assertSame($htmlFirst->getPhpMailer()->AltBody, $textFirst->getPhpMailer()->AltBody);
+        self::assertSame($htmlFirst->getPhpMailer()->ContentType, $textFirst->getPhpMailer()->ContentType);
+    }
+
+    public function testHtmlAloneHasNoAltBody(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->html('<h1>HTML</h1>');
+
+        $phpMailer = $mailer->getPhpMailer();
+        self::assertSame(PHPMailer::CONTENT_TYPE_TEXT_HTML, $phpMailer->ContentType);
+        self::assertSame('', $phpMailer->AltBody);
+    }
+
+    public function testTextAloneIsPlainTextWithNoAltBody(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->text('Plain text');
+
+        $phpMailer = $mailer->getPhpMailer();
+        self::assertSame(PHPMailer::CONTENT_TYPE_PLAINTEXT, $phpMailer->ContentType);
+        self::assertSame('', $phpMailer->AltBody);
+    }
+
     public function testTemplateRendersAndSetsHtmlBody(): void
     {
         $renderEngine = $this->createMock(RenderEngine::class);
