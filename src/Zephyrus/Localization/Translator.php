@@ -12,6 +12,9 @@ final class Translator
     /** @var array<string, array<string, mixed>> */
     private array $catalogCache = [];
 
+    /** @var array<string, ?\MessageFormatter> null when the exact-one rule applies */
+    private array $pluralSelectors = [];
+
     public function __construct(
         private readonly LocaleLoaderInterface $loader,
         private readonly string $defaultLocale = 'en'
@@ -23,15 +26,17 @@ final class Translator
      */
     public function trans(string $key, array $parameters = [], ?string $locale = null): string
     {
-        foreach ($this->resolveLocaleChain($locale ?? $this->defaultLocale) as $candidateLocale) {
+        $chain = $this->resolveLocaleChain($locale ?? $this->defaultLocale);
+
+        foreach ($chain as $candidateLocale) {
             $catalog = $this->catalog($candidateLocale);
             $value = $this->resolveKey($key, $catalog);
             if ($value !== null) {
-                return $this->interpolate($value, $parameters);
+                return $this->interpolate($value, $parameters, $candidateLocale);
             }
         }
 
-        return $this->interpolate($key, $parameters);
+        return $this->interpolate($key, $parameters, $chain[0]);
     }
 
     /**
@@ -135,13 +140,13 @@ final class Translator
     /**
      * @param array<string, scalar|null> $parameters
      */
-    private function interpolate(string $value, array $parameters): string
+    private function interpolate(string $value, array $parameters, string $locale): string
     {
         if ($parameters === []) {
             return $value;
         }
 
-        return preg_replace_callback('/\{([a-zA-Z0-9_]+)(\|[^}]+)?\}/', function (array $matches) use ($parameters): string {
+        return preg_replace_callback('/\{([a-zA-Z0-9_]+)(\|[^}]+)?\}/', function (array $matches) use ($parameters, $locale): string {
             $name = $matches[1];
             $pipeExpression = $matches[2] ?? '';
 
@@ -152,14 +157,14 @@ final class Translator
             $resolved = (string) $parameters[$name];
 
             if ($pipeExpression !== '') {
-                $resolved = $this->applyPipes($resolved, ltrim($pipeExpression, '|'));
+                $resolved = $this->applyPipes($resolved, ltrim($pipeExpression, '|'), $locale);
             }
 
             return $resolved;
         }, $value) ?? $value;
     }
 
-    private function applyPipes(string $value, string $pipeExpression): string
+    private function applyPipes(string $value, string $pipeExpression, string $locale): string
     {
         $current = $value;
 
@@ -180,7 +185,7 @@ final class Translator
                 'rtrim'    => rtrim($current),
                 'number'   => $this->formatNumber($current, $pipeArgument),
                 'truncate' => $this->applyTruncate($current, $pipeArgument),
-                'plural'   => $this->applyPlural($current, $pipeArgument),
+                'plural'   => $this->applyPlural($current, $pipeArgument, $locale),
                 'default'  => ($current === '' ? ($pipeArgument ?? '') : $current),
                 default    => $this->applyFormatterPipe($pipeName, $current),
             };
@@ -236,15 +241,16 @@ final class Translator
     }
 
     /**
-     * Return the singular or plural form based on the numeric value.
+     * Return the singular or plural form, using the plural rules of the locale.
      *
      * Argument format: singular:plural
-     *   plural:item:items   → "item" when |value| == 1, else "items"
+     *   plural:item:items   → "item" for one (1 in English, 0 and 1 in French), else "items"
      *   plural:child:children
      *
      * When no plural form is given, an "s" is appended to the singular.
+     * A non-numeric value always takes the singular.
      */
-    private function applyPlural(string $value, ?string $argument): string
+    private function applyPlural(string $value, ?string $argument, string $locale): string
     {
         if ($argument === null) {
             return $value;
@@ -254,9 +260,42 @@ final class Translator
         $singular = $parts[0];
         $plural   = $parts[1] ?? $singular . 's';
 
-        $numeric = is_numeric($value) ? abs((float) $value) : 1.0;
+        if (!is_numeric($value)) {
+            return $singular;
+        }
 
-        return (abs($numeric - 1.0) < PHP_FLOAT_EPSILON) ? $singular : $plural;
+        return $this->takesSingular(abs((float) $value), $locale) ? $singular : $plural;
+    }
+
+    /**
+     * Whether the number takes the singular form: only 1 in most locales, below 2 in French.
+     */
+    private function takesSingular(float $number, string $locale): bool
+    {
+        if (!array_key_exists($locale, $this->pluralSelectors)) {
+            $this->pluralSelectors[$locale] = $this->createPluralSelector($locale);
+        }
+
+        $selector = $this->pluralSelectors[$locale];
+        if ($selector === null) {
+            return abs($number - 1.0) < PHP_FLOAT_EPSILON;
+        }
+
+        return $selector->format([$number]) === 'one';
+    }
+
+    /**
+     * Return a selector only for a locale ICU accepts and that classifies 1 as "one".
+     */
+    private function createPluralSelector(string $locale): ?\MessageFormatter
+    {
+        try {
+            $selector = new \MessageFormatter($locale, '{0, plural, one{one} other{other}}');
+        } catch (\IntlException) {
+            return null;
+        }
+
+        return $selector->format([1.0]) === 'one' ? $selector : null;
     }
 
     /**

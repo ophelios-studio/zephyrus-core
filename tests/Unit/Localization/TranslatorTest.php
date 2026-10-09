@@ -169,6 +169,24 @@ final class TranslatorTest extends TestCase
     // plural pipe
     // -----------------------------------------------------------------
 
+    public function testPluralPipeUsesSingularOnlyForOneInUnknownLocale(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('a', $translator->trans('{n|plural:a:b}', ['n' => 1], 'xx'));
+        self::assertSame('b', $translator->trans('{n|plural:a:b}', ['n' => 0], 'xx'));
+        self::assertSame('b', $translator->trans('{n|plural:a:b}', ['n' => 2], 'xx'));
+    }
+
+    public function testPluralPipeFallsBackToExactOneRuleForLocaleIcuRejects(): void
+    {
+        $translator = $this->buildTranslator();
+        $locale = str_repeat('x', 300);
+
+        self::assertSame('a', $translator->trans('{n|plural:a:b}', ['n' => 1], $locale));
+        self::assertSame('b', $translator->trans('{n|plural:a:b}', ['n' => 2], $locale));
+    }
+
     public function testPluralPipeSingular(): void
     {
         $translator = $this->buildTranslator();
@@ -188,6 +206,45 @@ final class TranslatorTest extends TestCase
         $translator = $this->buildTranslator();
 
         self::assertSame('0 items', $translator->trans('messages.pipe_plural', ['count' => 0]));
+    }
+
+    public function testPluralPipeUsesFrenchSingularForZeroAndOne(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('0 champ', $translator->trans('messages.pipe_plural', ['count' => 0], 'fr'));
+        self::assertSame('1 champ', $translator->trans('messages.pipe_plural', ['count' => 1], 'fr'));
+        self::assertSame('1.5 champ', $translator->trans('messages.pipe_plural', ['count' => 1.5], 'fr'));
+    }
+
+    public function testPluralPipeUsesFrenchPluralFromTwo(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('2 champs', $translator->trans('messages.pipe_plural', ['count' => 2], 'fr'));
+    }
+
+    public function testPluralPipeFollowsLanguageOfRegionalLocale(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('0 champ', $translator->trans('messages.pipe_plural', ['count' => 0], 'fr_CA'));
+    }
+
+    public function testPluralPipeFollowsEnglishRuleForKeyResolvedFromFallbackCatalog(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('0 ducks', $translator->trans('messages.pipe_plural_auto', ['count' => 0], 'fr'));
+        self::assertSame('1 duck', $translator->trans('messages.pipe_plural_auto', ['count' => 1], 'fr'));
+    }
+
+    public function testPluralPipeUsesEnglishRuleForZero(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('0 items', $translator->trans('messages.pipe_plural', ['count' => 0], 'en'));
+        self::assertSame('2 items', $translator->trans('messages.pipe_plural', ['count' => 2], 'en'));
     }
 
     public function testPluralPipeAutoSuffix(): void

@@ -1,5 +1,6 @@
 {
   "messages": {
-    "plain": "Bonjour"
+    "plain": "Bonjour",
+    "pipe_plural": "{count} {count|plural:champ:champs}"
   }
 }
