@@ -21,8 +21,24 @@ final class MailerExceptionTest extends TestCase
     {
         $exception = MailerException::sendFailed('550 jane@example.com mailbox unavailable');
 
-        self::assertSame('The mail transport refused the message.', $exception->getMessage());
-        self::assertSame('550 jane@example.com mailbox unavailable', $exception->transportMessage);
+        self::assertSame(
+            'The mail transport did not accept the message; the reason is withheld, '
+            . 'read transportMessage() (it may name recipients).',
+            $exception->getMessage(),
+        );
+        self::assertSame('550 jane@example.com mailbox unavailable', $exception->transportMessage());
+    }
+
+    public function testTransportTextIsNotAPublicProperty(): void
+    {
+        self::assertFalse((new \ReflectionProperty(MailerException::class, 'transportMessage'))->isPublic());
+    }
+
+    public function testTransportTextIsAbsentFromJsonEncoding(): void
+    {
+        $exception = MailerException::sendFailed('550 jane@example.com mailbox unavailable');
+
+        self::assertStringNotContainsString('jane@example.com', (string) json_encode($exception));
     }
 
     public function testSendFailedTakesNoPreviousThrowable(): void

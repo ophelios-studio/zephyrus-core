@@ -11,27 +11,46 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  */
 final class MailerException extends ZephyrusRuntimeException
 {
+    /**
+     * The transport's reply. Held as a field so that reading it is an explicit act.
+     */
+    private ?string $transportMessage = null;
+
     public function __construct(
         string $message,
         public readonly MailerFailure $failure,
         ?\Throwable $previous = null,
-        #[\SensitiveParameter] public readonly ?string $transportMessage = null,
     ) {
         parent::__construct($message, previous: $previous);
     }
 
     /**
-     * Failure to send. The transport's reply goes to transportMessage, not the message, because it can name recipients.
+     * The transport did not accept the message. Its reply goes to transportMessage(), not the message, because it can name recipients.
      *
      * @param string $transportMessage The transport's own reply.
      */
     public static function sendFailed(#[\SensitiveParameter] string $transportMessage): self
     {
-        return new self('The mail transport refused the message.', MailerFailure::SendFailed, null, $transportMessage);
+        $exception = new self(
+            'The mail transport did not accept the message; the reason is withheld, '
+            . 'read transportMessage() (it may name recipients).',
+            MailerFailure::SendFailed,
+        );
+        $exception->transportMessage = $transportMessage;
+
+        return $exception;
     }
 
     /**
-     * @param string $method The recipient method that received the address (to, cc, bcc, replyTo, from).
+     * The transport's own reply, which can name recipients: scrub it before writing it to any sink.
+     */
+    public function transportMessage(): ?string
+    {
+        return $this->transportMessage;
+    }
+
+    /**
+     * @param string $method The recipient method that received the address (to, cc, bcc, replyTo).
      */
     public static function invalidAddress(string $method): self
     {

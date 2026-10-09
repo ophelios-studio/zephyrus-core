@@ -261,7 +261,7 @@ final class Mailer
     /**
      * Send the email.
      *
-     * @throws MailerException if sending fails.
+     * @throws MailerException if sending fails; its transportMessage() may name recipients.
      */
     public function send(): void
     {
