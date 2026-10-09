@@ -64,10 +64,12 @@ use Zephyrus\Data\Database;
  *
  * ## How `data` is stored
  *
- * A payload that is valid UTF-8 without a NUL byte is stored verbatim. Any
- * other (an object with a private or protected property, raw bytes) is stored
- * as "base64:" followed by its base64 encoding, which a TEXT column keeps
- * intact. A query that searches `data` itself matches only verbatim rows.
+ * A payload that is valid UTF-8, holds no NUL byte and does not start with
+ * "base64:" is stored verbatim. Any other is stored as "base64:" followed by
+ * its base64 encoding, which a TEXT column keeps intact. One object with a
+ * private or protected property, or one value that is not UTF-8, encodes the
+ * whole row, so a `data LIKE` search misses it: keep anything you need to
+ * query in a dedicated column.
  *
  * ## Registration
  *
@@ -89,6 +91,11 @@ use Zephyrus\Data\Database;
  * callbacks. close() is where the advisory lock taken by read() is released on
  * the paths that never write, and a wrapper answering `true` without delegating
  * holds that lock until the connection closes.
+ *
+ * ## Close and regenerate outside a Database transaction
+ *
+ * A session write that throws inside a transaction on the same connection
+ * aborts it, and the lock is then kept until the connection closes.
  *
  * ## Connection pooling
  *
