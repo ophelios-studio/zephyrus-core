@@ -334,6 +334,26 @@ final class DatabaseTransactionTest extends TestCase
         self::assertSame(['after', 'outer'], $this->labels($db));
     }
 
+    public function testAFailedProbeAfterACaughtFailureRefusesTheCommitOfTheOuterWork(): void
+    {
+        $pdo = new ProbeFailingPdo();
+        $db = $this->database($pdo);
+
+        try {
+            $db->transaction(function (Database $db) use ($pdo): void {
+                $db->execute('INSERT INTO entry (label) VALUES (?)', ['outer']);
+                $this->swallowAFailedStatement($db);
+                $pdo->breakProbe();
+            });
+            self::fail('expected the commit to be refused');
+        } catch (DatabaseException $e) {
+            self::assertSame('08006', $e->sqlState());
+            self::assertStringContainsString('at commit', $e->getMessage());
+        }
+
+        self::assertSame([], $this->labels($db));
+    }
+
     public function testAProbeFailureThatIsNot25P02KeepsItsSqlStateAndCause(): void
     {
         $pdo = new ProbeFailingPdo();
