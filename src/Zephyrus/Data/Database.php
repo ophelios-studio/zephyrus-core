@@ -397,7 +397,7 @@ final class Database
      * @throws DatabaseException on prepare or execution failure. Its message
      *         carries the SQLSTATE only; the statement and the driver text are
      *         reachable through DatabaseException::sql() and driverMessage().
-     * @throws \InvalidArgumentException when the SQL holds a NUL byte, positional parameters are not a list, a key is not a
+     * @throws \InvalidArgumentException when the SQL holds a NUL byte, positional keys are not 0 to n-1, a key is not a
      *         valid placeholder, a value has no SQL form or text holds a NUL byte.
      */
     public function query(string $sql, #[\SensitiveParameter] array $params = []): PDOStatement
@@ -976,11 +976,7 @@ final class Database
      */
     private static function bindings(#[\SensitiveParameter] array $params): array
     {
-        if (!array_is_list($params) && array_all($params, static fn (mixed $_, int|string $key): bool => is_int($key))) {
-            throw new \InvalidArgumentException(
-                'Positional query parameters must be a list: use array_values() or named parameters.',
-            );
-        }
+        self::assertPositionalKeysAreZeroToN($params);
 
         $bindings = [];
 
@@ -990,6 +986,24 @@ final class Database
         }
 
         return $bindings;
+    }
+
+    /**
+     * @param array<int|string, mixed> $params
+     */
+    private static function assertPositionalKeysAreZeroToN(#[\SensitiveParameter] array $params): void
+    {
+        $keys = array_keys($params);
+        if ($keys === [] || !array_all($keys, static fn (int|string $key): bool => is_int($key))) {
+            return;
+        }
+
+        sort($keys);
+        if ($keys !== range(0, count($keys) - 1)) {
+            throw new \InvalidArgumentException(
+                'Positional query parameters must use the keys 0 to n-1: renumber them or use named parameters.',
+            );
+        }
     }
 
     private static function placeholder(int|string $key): int|string

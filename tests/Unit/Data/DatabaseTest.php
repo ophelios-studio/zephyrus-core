@@ -410,15 +410,23 @@ final class DatabaseTest extends TestCase
             self::fail('expected the parameters to be refused');
         } catch (\InvalidArgumentException $e) {
             self::assertSame(
-                'Positional query parameters must be a list: use array_values() or named parameters.',
+                'Positional query parameters must use the keys 0 to n-1: renumber them or use named parameters.',
                 $e->getMessage(),
             );
         }
     }
 
-    public function testArrayValuesLetsOutOfOrderPositionalParametersBindInTheirListOrder(): void
+    public function testPositionalKeysOutOfOrderBindByKey(): void
     {
-        $row = $this->db->selectOne('SELECT ? AS first, ? AS second', array_values([1 => 'a', 0 => 'b']));
+        $row = $this->db->selectOne('SELECT ? AS first, ? AS second', [1 => 'b', 0 => 'a']);
+
+        self::assertSame('a', $row->first);
+        self::assertSame('b', $row->second);
+    }
+
+    public function testPlainPositionalListBindsInOrder(): void
+    {
+        $row = $this->db->selectOne('SELECT ? AS first, ? AS second', ['a', 'b']);
 
         self::assertSame('a', $row->first);
         self::assertSame('b', $row->second);
