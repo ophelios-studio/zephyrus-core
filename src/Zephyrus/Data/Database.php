@@ -390,7 +390,8 @@ final class Database
      * Execute a prepared statement with positional or named placeholders.
      *
      * Values bind by type: bool as 0/1, int and null natively, Binary and streams as
-     * binary, float, DateTimeInterface, BackedEnum and Stringable as text; anything else is refused.
+     * binary, float, DateTimeInterface, Stringable as text, and a BackedEnum as its backing
+     * value; anything else is refused.
      *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on prepare or execution failure. Its message
