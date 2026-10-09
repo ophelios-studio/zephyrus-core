@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Mailer\Mailer;
 use Zephyrus\Mailer\MailerConfig;
 use Zephyrus\Mailer\MailerException;
+use Zephyrus\Mailer\MailerFailure;
 
 /**
  * attach() had no guard at all and a docblock that implied one: it said
@@ -92,6 +93,24 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer->attach($this->inside, 'invoice.pdf', allowedRoot: $this->root . '/nope');
     }
 
+    public function testAnUnreadableFileIsRefusedAsAttachmentRejected(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root reads files whatever their mode.');
+        }
+
+        chmod($this->inside, 0o000);
+
+        try {
+            $mailer = new Mailer($this->config);
+            $mailer->attach($this->inside, 'invoice.pdf', allowedRoot: $this->root);
+            self::fail('An unreadable file was attached.');
+        } catch (MailerException $e) {
+            self::assertSame(MailerFailure::AttachmentRejected, $e->failure);
+        } finally {
+            chmod($this->inside, 0o644);
+        }
+    }
     public function testAStreamWrapperIsNotAFile(): void
     {
         $mailer = new Mailer($this->config);
