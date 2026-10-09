@@ -370,6 +370,7 @@ final class DatabaseTransactionTest extends TestCase
             } catch (DatabaseException $e) {
                 self::assertSame('25P02', $e->sqlState());
                 self::assertStringContainsString('release savepoint', $e->getMessage());
+                self::assertStringContainsString('caught', $e->getMessage());
             }
 
             $db->execute('INSERT INTO entry (label) VALUES (?)', ['after']);
