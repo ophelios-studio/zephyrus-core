@@ -398,12 +398,14 @@ final class Database
      *         carries the SQLSTATE only; the statement and the driver text are
      *         reachable through DatabaseException::sql() and driverMessage().
      * @throws \InvalidArgumentException when the SQL holds a NUL byte, positional keys are not 0 to n-1, a key is not a
-     *         valid placeholder, a value has no SQL form or text holds a NUL byte.
+     *         valid placeholder, a value has no SQL form or a text value holds a NUL byte.
      */
     public function query(string $sql, #[\SensitiveParameter] array $params = []): PDOStatement
     {
         if (str_contains($sql, "\0")) {
-            throw new \InvalidArgumentException('SQL text cannot hold a NUL byte.');
+            throw new \InvalidArgumentException(
+                'SQL text cannot hold a NUL byte: bind the value as a parameter instead of concatenating it into the statement.',
+            );
         }
 
         $bindings = self::bindings($params);
@@ -1070,7 +1072,8 @@ final class Database
     {
         if (str_contains($value, "\0")) {
             throw new \InvalidArgumentException(sprintf(
-                'Query parameter %s cannot be bound: text cannot hold a NUL byte. Validate request input before querying; bind real binary data as a %s.',
+                'Query parameter %s cannot be bound: text cannot hold a NUL byte. '
+                . 'Validate request input before querying; bind real binary data as a %s.',
                 self::placeholderName($placeholder),
                 Binary::class,
             ));

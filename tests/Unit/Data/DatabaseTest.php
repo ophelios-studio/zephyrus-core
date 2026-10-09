@@ -439,7 +439,10 @@ final class DatabaseTest extends TestCase
             $this->db->query("SELECT 1 \0 AND false");
             self::fail('expected the SQL text to be refused');
         } catch (\InvalidArgumentException $e) {
-            self::assertSame('SQL text cannot hold a NUL byte.', $e->getMessage());
+            self::assertSame(
+                'SQL text cannot hold a NUL byte: bind the value as a parameter instead of concatenating it into the statement.',
+                $e->getMessage(),
+            );
         }
     }
 
