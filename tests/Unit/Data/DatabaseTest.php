@@ -536,7 +536,7 @@ final class DatabaseTest extends TestCase
 
     public function testInsertUpdateDeleteHelpersWorkAsConvenienceAliases(): void
     {
-        $id = $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Eva', 'eva@example.com']);
+        $id = $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?) RETURNING id', ['Eva', 'eva@example.com']);
         self::assertNotFalse($id);
 
         $updated = $this->db->update('UPDATE users SET name = ? WHERE id = ?', ['Evelyn', (int) $id]);
@@ -785,11 +785,6 @@ final class DatabaseTest extends TestCase
 
     // ── insertGetId() ────────────────────────────────────────────────────────
 
-    public function testInsertGetIdReturnsTheReturningIdOnSqlite(): void
-    {
-        self::assertSame('1', $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?) RETURNING id', ['Frank', 'frank@example.com']));
-    }
-
     public function testInsertGetIdReturnsFalseWhenReturningYieldsNoRow(): void
     {
         $this->db->query('INSERT INTO users (id, name, email) VALUES (?, ?, ?)', [1, 'Gina', 'gina@example.com']);
@@ -802,9 +797,30 @@ final class DatabaseTest extends TestCase
         self::assertFalse($id);
     }
 
-    public function testInsertGetIdWithoutReturningKeepsLastInsertIdOnSqlite(): void
+    public function testInsertGetIdRefusesSqliteStatementWithoutReturningBeforeRunningIt(): void
     {
-        self::assertSame('1', $this->db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Ivan', 'ivan@example.com']));
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL)');
+        $db = new Database($pdo);
+
+        try {
+            $db->insertGetId('INSERT INTO users (name, email) VALUES (?, ?)', ['Ivan', 'ivan@example.com']);
+            self::fail('expected the statement without RETURNING to be refused');
+        } catch (DatabaseException $e) {
+            self::assertStringContainsString('INSERT ... RETURNING id', $e->getMessage());
+            self::assertStringNotContainsString('Ivan', $e->getMessage());
+        }
+
+        self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn());
+    }
+
+    public function testInsertGetIdFallsBackToLastInsertIdOnDriversWithoutReturning(): void
+    {
+        $pdo = new OtherDriverPdo('sqlite::memory:');
+        $pdo->exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
+        $db = new Database($pdo);
+
+        self::assertSame('42', $db->insertGetId('INSERT INTO users (name) VALUES (?)', ['Ivan']));
     }
 
     public function testInsertGetIdRefusesPostgresStatementWithoutReturningBeforeRunningIt(): void
@@ -1017,6 +1033,22 @@ final class AttributeSpyPdo extends PDO
         }
 
         return parent::setAttribute($attribute, $value);
+    }
+}
+
+/**
+ * A SQLite connection that reports the MySQL driver name, so the fallback to lastInsertId() can be reached.
+ */
+final class OtherDriverPdo extends PDO
+{
+    public function lastInsertId(?string $name = null): string|false
+    {
+        return '42';
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return $attribute === PDO::ATTR_DRIVER_NAME ? 'mysql' : parent::getAttribute($attribute);
     }
 }
 

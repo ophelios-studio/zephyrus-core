@@ -68,15 +68,11 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * PostgreSQL generated ids are only read reliably through INSERT ... RETURNING: LASTVAL() can
-     * name another table's sequence. The message holds no SQL text.
+     * The message holds no SQL text.
      */
     public static function returningRequired(): self
     {
-        return new self(
-            'On PostgreSQL the generated id must be read with INSERT ... RETURNING id, '
-            . "because LASTVAL() can return another table's sequence value.",
-        );
+        return new self('The generated id must be read with INSERT ... RETURNING id on this driver.');
     }
 
     /**

@@ -841,19 +841,19 @@ final class Database
      * (e.g. ON CONFLICT DO NOTHING). Other drivers without RETURNING fall back to lastInsertId().
      *
      * @param array<int|string, mixed> $params
-     * @throws DatabaseException on PostgreSQL when the SQL has no RETURNING clause, before it runs, or when
-     *         the word only occurs in a literal and the statement returned no column, after it ran.
+     * @throws DatabaseException on PostgreSQL and SQLite when the SQL has no RETURNING clause, before it runs, or
+     *         when the statement returns no column, after it ran.
      */
     public function insertGetId(string $sql, #[\SensitiveParameter] array $params = []): string|false
     {
-        $postgres = $this->isPostgres();
-        if ($postgres && preg_match(self::RETURNING_PATTERN, $sql) !== 1) {
+        $requiresReturning = $this->requiresReturning();
+        if ($requiresReturning && preg_match(self::RETURNING_PATTERN, $sql) !== 1) {
             throw DatabaseException::returningRequired();
         }
 
         $stmt = $this->query($sql, $params);
         if ($stmt->columnCount() === 0) {
-            if ($postgres) {
+            if ($requiresReturning) {
                 throw DatabaseException::returningRequired();
             }
 
@@ -978,6 +978,11 @@ final class Database
     private function isPostgres(): bool
     {
         return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
+    }
+
+    private function requiresReturning(): bool
+    {
+        return in_array($this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME), ['pgsql', 'sqlite'], true);
     }
 
     private function markFailedLevel(): void

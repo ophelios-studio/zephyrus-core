@@ -199,7 +199,7 @@ final class UserBroker extends Broker
     public function insert(string $name, string $email): int
     {
         return (int) $this->insertRowGetId(
-            'INSERT INTO users (name, email) VALUES (?, ?)',
+            'INSERT INTO users (name, email) VALUES (?, ?) RETURNING id',
             [$name, $email],
         );
     }
