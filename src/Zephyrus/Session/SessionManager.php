@@ -106,8 +106,8 @@ final class SessionManager
             return;
         }
 
-        if (!self::quietly(static fn (): bool => session_set_save_handler($handler, true))) {
-            throw SessionException::saveHandlerRefused();
+        if (!self::quietly(static fn (): bool => session_set_save_handler($handler, true), $phpReason)) {
+            throw SessionException::saveHandlerRefused($phpReason);
         }
 
         $this->handler = $handler;
@@ -290,8 +290,8 @@ final class SessionManager
             throw SessionException::noActiveSession('regenerate the session id');
         }
 
-        if (!self::quietly(static fn (): bool => session_regenerate_id($deleteOld))) {
-            throw SessionException::regenerationRefused();
+        if (!self::quietly(static fn (): bool => session_regenerate_id($deleteOld), $phpReason)) {
+            throw SessionException::regenerationRefused($phpReason);
         }
     }
 
@@ -316,8 +316,8 @@ final class SessionManager
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION = [];
 
-            if (!self::quietly(static fn (): bool => session_destroy())) {
-                throw SessionException::destructionRefused();
+            if (!self::quietly(static fn (): bool => session_destroy(), $phpReason)) {
+                throw SessionException::destructionRefused($phpReason);
             }
 
             return;
@@ -451,14 +451,19 @@ final class SessionManager
 
     /**
      * Runs a session_*() call with PHP's warning swallowed, so its boolean
-     * answer is the only signal. The warning is discarded, not re-raised: its
-     * text carries absolute server paths.
+     * answer is the only signal. The warning is not re-raised, since its text
+     * carries absolute server paths; it is handed back through $phpReason.
      *
      * @param callable(): bool $call
      */
-    private static function quietly(callable $call): bool
+    private static function quietly(callable $call, ?string &$phpReason = null): bool
     {
-        set_error_handler(static fn (): bool => true);
+        $phpReason = null;
+        set_error_handler(static function (int $severity, string $message) use (&$phpReason): bool {
+            $phpReason = $message;
+
+            return true;
+        });
 
         try {
             return $call();

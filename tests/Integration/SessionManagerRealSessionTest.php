@@ -467,19 +467,7 @@ final class SessionManagerRealSessionTest extends TestCase
         $session = new SessionManager();
         $session->start(SessionConfig::fromArray([]));
         $before = session_id();
-
-        // PHPUnit holds its own output buffer, so every level must be flushed
-        // before PHP counts the headers as sent. The levels are reopened after,
-        // because closing the runner's buffer is flagged as a risky test.
-        $levels = ob_get_level();
-        ob_start();
-        echo 'output';
-        while (ob_get_level() > 0) {
-            ob_end_flush();
-        }
-        while (ob_get_level() < $levels) {
-            ob_start();
-        }
+        $this->sendOutputToBrowser();
 
         $thrown = null;
         try {
@@ -490,6 +478,30 @@ final class SessionManagerRealSessionTest extends TestCase
 
         self::assertInstanceOf(SessionException::class, $thrown);
         self::assertSame($before, session_id(), 'the id must not change when PHP refused');
+    }
+
+    /**
+     * PHP's warning says why it refused, and that text must not reach the
+     * message, which travels to logs and pages. It stays on phpReason().
+     */
+    #[RunInSeparateProcess]
+    public function testRegenerateKeepsPhpReasonOffTheMessageButExposesIt(): void
+    {
+        $session = new SessionManager();
+        $session->start(SessionConfig::fromArray([]));
+        $this->sendOutputToBrowser();
+
+        $thrown = null;
+        try {
+            $session->regenerate();
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertStringContainsString('headers', (string) $thrown->phpReason());
+        self::assertStringNotContainsString('headers', $thrown->getMessage());
+        self::assertStringNotContainsString(__FILE__, $thrown->getMessage());
     }
 
     // ── destroy refusal ───────────────────────────────────────────────────────
@@ -509,6 +521,24 @@ final class SessionManagerRealSessionTest extends TestCase
         $this->expectException(SessionException::class);
 
         $session->destroy();
+    }
+
+    /**
+     * PHP's output warning is the only record of why it refused, so the helper
+     * flushes every buffer level before PHP counts the headers as sent, then
+     * reopens the levels: closing the runner's buffer is flagged as risky.
+     */
+    private function sendOutputToBrowser(): void
+    {
+        $levels = ob_get_level();
+        ob_start();
+        echo 'output';
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        while (ob_get_level() < $levels) {
+            ob_start();
+        }
     }
 }
 
