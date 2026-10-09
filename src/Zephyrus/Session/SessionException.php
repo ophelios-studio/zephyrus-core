@@ -7,7 +7,7 @@ namespace Zephyrus\Session;
 use Zephyrus\Exceptions\ZephyrusException;
 
 /**
- * Thrown when PHP refuses a session operation.
+ * Thrown when PHP refuses a session operation or the session storage is misconfigured.
  *
  * The message names the possible causes and never the warning PHP raised, since
  * that warning carries absolute server paths. The warning is kept on
@@ -55,6 +55,15 @@ final class SessionException extends ZephyrusException
             'PHP refused to destroy the session, so the stored session may still be live.',
             $phpReason,
         );
+    }
+
+    public static function dataColumnNotText(string $type): self
+    {
+        return new self(sprintf(
+            'The data column of the session table returned %s instead of a string. '
+            . 'Declare it TEXT NOT NULL, as DatabaseSessionHandler documents.',
+            $type,
+        ));
     }
 
     public static function noActiveSession(string $operation): self

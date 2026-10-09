@@ -345,6 +345,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * An expired row reads as absent. The row is deliberately left in place
      * rather than deleted here: gc() owns removal, and a read path that writes
      * turns every page load into a write transaction.
+     *
+     * @throws SessionException when the data column holds something other than text.
      */
     public function read(string $id): string
     {
@@ -362,6 +364,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         try {
             // Under a savepoint in the caller's transaction, so a failure leaves it able to run the unlock.
             $row = $this->database->inTransaction() ? $this->database->transaction($select) : $select();
+            $payload = $row === null ? null : self::decodePayload($row->data);
         } catch (Throwable $failure) {
             // PHP does not call close() when read() throws out of session_start().
             $this->idStates[$id] = self::STATE_READ_FAILED;
@@ -370,7 +373,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             throw $failure;
         }
 
-        if ($row === null) {
+        if ($payload === null) {
             // Not held for a new session. Requests admitted before a logout may still race to recreate this id.
             $this->idStates[$id] = self::STATE_CREATED;
             $this->releaseLock();
@@ -380,7 +383,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $this->idStates[$id] = self::STATE_RESUMED;
 
-        return self::decodePayload((string) $row->data);
+        return $payload;
     }
 
     /**
@@ -461,8 +464,15 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         return $verbatim ? $data : self::ENCODED_PAYLOAD_PREFIX . base64_encode($data);
     }
 
-    private static function decodePayload(string $stored): string
+    /**
+     * @throws SessionException when the data column holds something other than text.
+     */
+    private static function decodePayload(mixed $stored): string
     {
+        if (!is_string($stored)) {
+            throw SessionException::dataColumnNotText(get_debug_type($stored));
+        }
+
         if (!str_starts_with($stored, self::ENCODED_PAYLOAD_PREFIX)) {
             return $stored;
         }

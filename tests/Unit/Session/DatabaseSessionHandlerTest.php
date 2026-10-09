@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Session\DatabaseSessionHandler;
+use Zephyrus\Session\SessionException;
 
 /**
  * Tests DatabaseSessionHandler using an in-memory SQLite database so no
@@ -635,6 +636,39 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', ''));
         self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nonTextDataProvider(): array
+    {
+        return ['null' => ['NULL'], 'integer' => ['42']];
+    }
+
+    #[DataProvider('nonTextDataProvider')]
+    public function testADataColumnThatIsNotTextFailsTheReadAndReleasesTheLock(string $storedValue): void
+    {
+        [$pdo, $handler] = $this->recordingHandler();
+        $pdo->exec('DROP TABLE session');
+        $pdo->exec('CREATE TABLE session (session_id VARCHAR PRIMARY KEY, access INTEGER NOT NULL, expire INTEGER NOT NULL, data)');
+        $pdo->exec(sprintf(
+            "INSERT INTO session VALUES ('43e880c2447ca10d3092d51d258c050c', %d, %d, %s)",
+            time(),
+            time() + 1440,
+            $storedValue,
+        ));
+
+        try {
+            $handler->read('43e880c2447ca10d3092d51d258c050c');
+            self::fail('read() was expected to fail');
+        } catch (SessionException $exception) {
+            self::assertStringContainsString('TEXT', $exception->getMessage());
+            self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $exception->getMessage());
+        }
+
+        self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
+        self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', ''));
     }
 
     /**

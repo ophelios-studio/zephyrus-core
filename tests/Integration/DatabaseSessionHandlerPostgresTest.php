@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Session\DatabaseSessionHandler;
+use Zephyrus\Session\SessionException;
 
 /**
  * DatabaseSessionHandler against a real PostgreSQL server, for the behaviour
@@ -323,6 +324,27 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
             "SELECT COUNT(*) FROM {$this->schema}.session WHERE data LIKE ?",
             ['%user@example.com%'],
         ));
+    }
+
+    public function testABinaryDataColumnFailsTheReadAndLeavesNoLockHeld(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $this->database->pdo()->exec(
+            "ALTER TABLE {$this->schema}.session ALTER COLUMN data DROP DEFAULT,
+             ALTER COLUMN data TYPE BYTEA USING convert_to(data, 'UTF8')",
+        );
+
+        $thrown = null;
+        try {
+            $this->handler()->read($id);
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertStringContainsString('TEXT', $thrown->getMessage());
+        self::assertStringNotContainsString($id, $thrown->getMessage());
+        self::assertSame(0, $this->advisoryLocksHeld());
     }
 
     /**
