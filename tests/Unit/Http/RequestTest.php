@@ -1386,6 +1386,47 @@ final class RequestTest extends TestCase
         self::assertNull($request->cookies()->get('nonexistent'));
     }
 
+    public function testFromArrayNormalizesNativeFilesShapeLikeFromGlobals(): void
+    {
+        $request = Request::fromArray('POST', '/upload', files: [
+            'avatar' => [
+                'name' => 'me.png',
+                'type' => 'image/png',
+                'tmp_name' => '/tmp/phpA',
+                'error' => UPLOAD_ERR_OK,
+                'size' => 123,
+            ],
+        ]);
+
+        self::assertEquals(new FileUpload('me.png', 'image/png', '/tmp/phpA', 123), $request->file('avatar'));
+    }
+
+    public function testFromArrayKeepsFileUploadListAsGiven(): void
+    {
+        $first = new FileUpload('a.png', 'image/png', '/tmp/phpA', 1);
+        $second = new FileUpload('b.png', 'image/png', '/tmp/phpB', 2);
+        $request = Request::fromArray('POST', '/upload', files: ['gallery' => [$first, $second]]);
+
+        self::assertSame([$first, $second], $request->filesOf('gallery'));
+    }
+
+    public function testFileReturnsFirstUploadFromList(): void
+    {
+        $first = new FileUpload('a.png', 'image/png', '/tmp/phpA', 1);
+        $second = new FileUpload('b.png', 'image/png', '/tmp/phpB', 2);
+        $request = Request::fromArray('POST', '/upload', files: ['photos' => [$first, $second]]);
+
+        self::assertSame($first, $request->file('photos'));
+    }
+
+    public function testFileReturnsLeadingUploadFromListMixedWithOtherValues(): void
+    {
+        $upload = new FileUpload('a.png', 'image/png', '/tmp/phpA', 1);
+        $request = Request::fromArray('POST', '/upload', files: ['photos' => [$upload, 'junk']]);
+
+        self::assertSame($upload, $request->file('photos'));
+    }
+
     public function testFromGlobalsNormalizesSingleFileUpload(): void
     {
         $request = Request::fromGlobals(

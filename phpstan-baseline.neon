@@ -73,7 +73,7 @@ parameters:
         -
             identifier: instanceof.alwaysTrue
             path: src/Zephyrus/Http/Request.php
-            count: 2
+            count: 1
         # new ReflectionClass() on a class-string still throws when the class
         # cannot be autoloaded. The catch is live at runtime.
         -

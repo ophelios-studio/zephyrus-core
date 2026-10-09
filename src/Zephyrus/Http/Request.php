@@ -234,7 +234,9 @@ final readonly class Request
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
-     * @param array<string, FileUpload|array<int, FileUpload>> $files
+     * @param array<string, mixed> $files Native $_FILES entries or FileUpload values.
+     *
+     * fromArray() does not parse $rawBody: use fromGlobals() or a RequestBody to test a malformed body.
      */
     public static function fromArray(
         string $method,
@@ -256,7 +258,7 @@ final readonly class Request
             headers:    new HeaderBag(self::normalizeHeaders($headers)),
             cookies:    new CookieJar($cookies),
             attributes: $attributes,
-            files:      $files,
+            files:      self::normalizeFileUploads($files),
             clientIp:   $clientIp,
         );
     }
@@ -342,17 +344,7 @@ final readonly class Request
 
     public function file(string $field): ?FileUpload
     {
-        $entry = $this->files[$field] ?? null;
-
-        if ($entry instanceof FileUpload) {
-            return $entry;
-        }
-
-        if (is_array($entry) && $entry !== [] && $entry[0] instanceof FileUpload) {
-            return $entry[0];
-        }
-
-        return null;
+        return $this->filesOf($field)[0] ?? null;
     }
 
     /**
@@ -1123,7 +1115,20 @@ final readonly class Request
         $normalized = [];
 
         foreach ($files as $field => $entry) {
+            if ($entry instanceof FileUpload) {
+                $normalized[(string) $field] = $entry;
+
+                continue;
+            }
+
             if (!is_array($entry)) {
+                continue;
+            }
+
+            $uploads = self::uploadObjectsOf($entry);
+            if ($uploads !== null) {
+                $normalized[(string) $field] = $uploads;
+
                 continue;
             }
 
@@ -1141,6 +1146,17 @@ final readonly class Request
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param array<mixed> $entry
+     * @return list<FileUpload>|null The FileUpload items, or null when there are none.
+     */
+    private static function uploadObjectsOf(array $entry): ?array
+    {
+        $uploads = array_values(array_filter($entry, static fn (mixed $item): bool => $item instanceof FileUpload));
+
+        return $uploads === [] ? null : $uploads;
     }
 
     /**
