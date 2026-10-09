@@ -25,9 +25,9 @@ final class MailerException extends ZephyrusRuntimeException
      *
      * @param string $transportMessage The transport's own reply.
      */
-    public static function sendFailed(#[\SensitiveParameter] string $transportMessage, ?\Throwable $previous = null): self
+    public static function sendFailed(#[\SensitiveParameter] string $transportMessage): self
     {
-        return new self('The mail transport refused the message.', MailerFailure::SendFailed, $previous, $transportMessage);
+        return new self('The mail transport refused the message.', MailerFailure::SendFailed, null, $transportMessage);
     }
 
     /**

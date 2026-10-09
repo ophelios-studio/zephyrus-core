@@ -25,11 +25,11 @@ final class MailerExceptionTest extends TestCase
         self::assertSame('550 jane@example.com mailbox unavailable', $exception->transportMessage);
     }
 
-    public function testSendFailedWithPrevious(): void
+    public function testSendFailedTakesNoPreviousThrowable(): void
     {
-        $previous = new \RuntimeException('socket error');
-        $exception = MailerException::sendFailed('connection failed', $previous);
-        self::assertSame($previous, $exception->getPrevious());
+        $parameters = (new \ReflectionMethod(MailerException::class, 'sendFailed'))->getParameters();
+
+        self::assertCount(1, $parameters);
     }
 
     public function testInvalidAddressNamesTheMethodNotTheAddress(): void
