@@ -324,6 +324,35 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame(['a' => 1, 'b' => 2], $session->all());
     }
 
+    // ── start refusal ─────────────────────────────────────────────────────────
+
+    /**
+     * PHP refuses to start a session once output is sent. The app would then
+     * write data that is never saved, so start() must say so.
+     */
+    #[RunInSeparateProcess]
+    public function testStartThrowsWhenPhpRefusesToStartTheSession(): void
+    {
+        $session = new SessionManager();
+        $this->sendOutputToBrowser();
+
+        // PHP also warns about each ini and cookie setting start() applies after
+        // output, and those warnings are expected here, so they are set aside.
+        set_error_handler(static fn (): bool => true);
+        $thrown = null;
+        try {
+            $session->start(SessionConfig::fromArray([]));
+        } catch (SessionException $exception) {
+            $thrown = $exception;
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertInstanceOf(SessionException::class, $thrown);
+        self::assertSame(PHP_SESSION_NONE, session_status());
+        self::assertStringContainsString('headers', (string) $thrown->phpReason());
+    }
+
     // ── destroy ───────────────────────────────────────────────────────────────
 
     #[RunInSeparateProcess]

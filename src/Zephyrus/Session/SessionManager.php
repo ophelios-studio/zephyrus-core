@@ -161,6 +161,8 @@ final class SessionManager
      * A configured idleTimeout becomes session.gc_maxlifetime. DatabaseSessionHandler
      * refuses a session idle longer on read; PHP's files handler only uses it as
      * the garbage-collection age, so start() warns about that in debug.
+     *
+     * @throws SessionException when PHP refuses to start the session.
      */
     public function start(SessionConfig $config, ?bool $requestIsSecure = null): void
     {
@@ -193,7 +195,9 @@ final class SessionManager
             'samesite' => $config->sameSite,
         ]);
 
-        session_start();
+        if (!self::quietly(static fn (): bool => session_start(), $phpReason)) {
+            throw SessionException::startRefused($phpReason);
+        }
     }
 
     /**
