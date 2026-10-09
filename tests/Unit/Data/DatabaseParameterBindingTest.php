@@ -308,6 +308,7 @@ final class DatabaseParameterBindingTest extends TestCase
             self::fail('expected the value to be refused');
         } catch (\InvalidArgumentException $e) {
             self::assertStringContainsString('#2', $e->getMessage());
+            self::assertStringContainsString('Validate request input before querying', $e->getMessage());
             self::assertStringContainsString(Binary::class, $e->getMessage());
             self::assertStringNotContainsString('secret', $e->getMessage());
         }

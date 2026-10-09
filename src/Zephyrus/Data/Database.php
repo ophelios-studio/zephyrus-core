@@ -1004,12 +1004,12 @@ final class Database
             // As 0/1 rather than PARAM_BOOL's 't'/'f', which a text column keeps and reads back as true.
             is_bool($value) => [(int) $value, PDO::PARAM_INT],
             is_int($value) => [$value, PDO::PARAM_INT],
-            is_string($value) => [self::text($placeholder, $value), PDO::PARAM_STR],
+            is_string($value) => [self::refuseNulByte($placeholder, $value), PDO::PARAM_STR],
             is_float($value) => [self::floatLiteral($value), PDO::PARAM_STR],
             $value instanceof Binary => [$value->bytes, PDO::PARAM_LOB],
             $value instanceof \DateTimeInterface => [$value->format('Y-m-d H:i:s.uP'), PDO::PARAM_STR],
             $value instanceof \BackedEnum => self::bindable($placeholder, $value->value),
-            $value instanceof \Stringable => [self::text($placeholder, (string) $value), PDO::PARAM_STR],
+            $value instanceof \Stringable => [self::refuseNulByte($placeholder, (string) $value), PDO::PARAM_STR],
             is_resource($value) && get_resource_type($value) === 'stream' => [$value, PDO::PARAM_LOB],
             default => throw new \InvalidArgumentException(sprintf(
                 'Query parameter %s cannot be bound: %s has no SQL form. Bind a scalar, null, a '
@@ -1023,11 +1023,11 @@ final class Database
     /**
      * Refuse text holding a NUL byte, which pdo_pgsql would cut short there.
      */
-    private static function text(int|string $placeholder, #[\SensitiveParameter] string $value): string
+    private static function refuseNulByte(int|string $placeholder, #[\SensitiveParameter] string $value): string
     {
         if (str_contains($value, "\0")) {
             throw new \InvalidArgumentException(sprintf(
-                'Query parameter %s cannot be bound: text cannot hold a NUL byte. Bind binary data as a %s.',
+                'Query parameter %s cannot be bound: text cannot hold a NUL byte. Validate request input before querying; bind real binary data as a %s.',
                 self::placeholderName($placeholder),
                 Binary::class,
             ));
