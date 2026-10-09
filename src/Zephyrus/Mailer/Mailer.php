@@ -51,7 +51,7 @@ final class Mailer
     private ?string $htmlBody = null;
     private ?string $textBody = null;
 
-    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*\z~i';
+    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*(?:;[ \t]*[a-z0-9][a-z0-9!#$&^_.+-]*=(?:[a-z0-9!#$&^_.+-]+|"[^"\r\n\0\\\\]*"))*\z~i';
 
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
@@ -232,7 +232,7 @@ final class Mailer
      * @param string      $content  The file contents.
      * @param string      $name     Display name the recipient's client writes to disk: non-empty,
      *                              without NUL, CR, LF or a path separator.
-     * @param string|null $mimeType Media type as type/subtype. Null lets PHPMailer infer it from $name.
+     * @param string|null $mimeType Media type as type/subtype, optionally followed by parameters such as "; method=REQUEST". Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
      */

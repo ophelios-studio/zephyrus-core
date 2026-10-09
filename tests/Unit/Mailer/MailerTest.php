@@ -395,6 +395,14 @@ final class MailerTest extends TestCase
         $mailer->attachContent('content', $name);
     }
 
+    public function testAttachContentKeepsMediaTypeParameters(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attachContent('BEGIN:VCALENDAR', 'invite.ics', 'text/calendar; method=REQUEST');
+
+        self::assertSame('text/calendar; method=REQUEST', $mailer->getPhpMailer()->getAttachments()[0][4]);
+    }
+
     #[DataProvider('invalidMimeTypeProvider')]
     public function testAttachContentRejectsMalformedMimeType(string $mimeType): void
     {
@@ -430,9 +438,12 @@ final class MailerTest extends TestCase
         yield 'no subtype' => ['text'];
         yield 'empty subtype' => ['text/'];
         yield 'empty type' => ['/pdf'];
-        yield 'parameters' => ['text/plain; charset=utf-8'];
         yield 'extra segment' => ['application/pdf/extra'];
         yield 'leading space' => [' application/pdf'];
         yield 'CRLF header injection' => ["text/plain\r\nX-Injected: 1"];
+        yield 'parameter with CRLF injection' => ["application/pdf\r\nX-Inj: 1"];
+        yield 'bare type' => ['text'];
+        yield 'three segments' => ['a/b/c'];
+        yield 'unterminated quote' => ['text/plain; name="x'];
     }
 }
