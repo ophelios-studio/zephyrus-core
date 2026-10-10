@@ -1,7 +1,7 @@
 # Static analysis gate for zephyrus-framework/core.
 #
-# Level 6 is deliberate, so the framework is analysed at least as strictly as the
-# applications built on it.
+# Level 8 keeps the framework analysed at least as strictly as the applications
+# built on it.
 #
 # Only src/ is analysed. At this level tests/ produces almost only harness noise
 # (assertion narrowing, untyped helper arrays, undefined variables in bare view
@@ -13,7 +13,7 @@ includes:
     - phpstan-baseline.neon
 
 parameters:
-    level: 6
+    level: 8
     paths:
         - src
 

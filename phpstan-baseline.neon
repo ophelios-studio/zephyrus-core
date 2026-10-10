@@ -1,4 +1,4 @@
-# Baseline for the level 6 gate. Hand-grouped, not generated: each group states
+# Baseline for the analysis gate. Hand-grouped, not generated: each group states
 # why its findings are deferred rather than fixed.
 # Entries match on identifier, path and count, not line number. A count that stops
 # matching fails the run on purpose: re-examine it, do not bump it.
