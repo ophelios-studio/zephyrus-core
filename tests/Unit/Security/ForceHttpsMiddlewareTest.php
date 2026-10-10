@@ -75,7 +75,25 @@ final class ForceHttpsMiddlewareTest extends TestCase
         $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(308, $response->status);
-        self::assertContains('location: https://example.com', $response->toHeaderLines());
+        self::assertContains('location: https://example.com/', $response->toHeaderLines());
+    }
+
+    public function testHttpRedirectAcceptsUpperCaseScheme(): void
+    {
+        $request  = new Request('GET', 'HTTP://example.com/page?q=1');
+        $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(308, $response->status);
+        self::assertContains('location: https://example.com/page?q=1', $response->toHeaderLines());
+    }
+
+    public function testHttpRedirectKeepsBracketedIpv6LiteralAndPort(): void
+    {
+        $request  = new Request('GET', 'http://[2001:db8::1]:8080/path');
+        $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(308, $response->status);
+        self::assertContains('location: https://[2001:db8::1]:8080/path', $response->toHeaderLines());
     }
 
     public function testHttpRedirectPreservesNonStandardPort(): void

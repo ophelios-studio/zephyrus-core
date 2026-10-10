@@ -7,6 +7,7 @@ namespace Zephyrus\Security;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Http\Uri;
 
 /**
  * Middleware that enforces HTTPS by permanently redirecting plain-HTTP requests.
@@ -43,26 +44,24 @@ final class ForceHttpsMiddleware implements MiddlewareInterface
             return $next($request);
         }
 
-        return Response::redirect($this->buildHttpsUrl($request->uri()->full()), 308);
+        return Response::redirect($this->httpsUrl($request->uri()), 308);
     }
 
     /**
-     * Rewrite an HTTP URI to its HTTPS equivalent.
+     * The HTTPS counterpart of the request URL, rebuilt from its parts.
      *
-     * - Replaces the "http://" scheme with "https://".
-     * - Strips the default HTTP port (:80) when present so the HTTPS URL is clean.
+     * The port is dropped only when it is the default HTTP port. Userinfo and
+     * fragment are never copied.
      */
-    private function buildHttpsUrl(string $uri): string
+    private function httpsUrl(Uri $uri): string
     {
-        if (!str_starts_with($uri, 'http://')) {
-            return $uri;
-        }
+        $port  = $uri->port();
+        $query = $uri->queryString();
 
-        $https = 'https://' . substr($uri, strlen('http://'));
-
-        // Strip the default HTTP port from the authority component.
-        // "https://example.com:80/path" -> "https://example.com/path"
-        // "https://example.com:80"      -> "https://example.com"
-        return preg_replace('#^(https://[^/:]+):80(?=(?:[/?\#]|$))#', '$1', $https) ?? $https;
+        return 'https://'
+            . $uri->host()
+            . ($port === null || $port === 80 ? '' : ':' . $port)
+            . $uri->path()
+            . ($query === '' ? '' : '?' . $query);
     }
 }

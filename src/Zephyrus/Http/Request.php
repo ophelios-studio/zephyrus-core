@@ -697,8 +697,8 @@ final readonly class Request
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
-        if (preg_match('#^https?://#i', $requestUri) === 1) {
-            return $requestUri;
+        if (preg_match('#^(https?)://#i', $requestUri, $matches) === 1) {
+            return strtolower($matches[1]) . '://' . substr($requestUri, strlen($matches[0]));
         }
 
         if ($requestUri !== '*' && !str_starts_with($requestUri, '/')) {

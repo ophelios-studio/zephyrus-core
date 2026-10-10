@@ -967,7 +967,7 @@ final class RequestTest extends TestCase
             ],
         );
 
-        self::assertSame('HTTPS://real.example.com/api', $request->uri()->full());
+        self::assertSame('https://real.example.com/api', $request->uri()->full());
         self::assertSame('/api', $request->path());
     }
 
@@ -1744,6 +1744,27 @@ final class RequestTest extends TestCase
     // -------------------------------------------------------------------------
     // fromGlobals — absolute REQUEST_URI (reverse proxy)
     // -------------------------------------------------------------------------
+
+    #[DataProvider('absoluteRequestTargetsWithMixedCaseScheme')]
+    public function testFromGlobalsLowercasesTheSchemeOfAnAbsoluteRequestTarget(string $target, string $expected): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'proxy.internal',
+                'REQUEST_URI'    => $target,
+            ],
+        );
+
+        self::assertSame($expected, $request->uri()->full());
+    }
+
+    public static function absoluteRequestTargetsWithMixedCaseScheme(): iterable
+    {
+        yield 'upper HTTP' => ['HTTP://real.example.com/x', 'http://real.example.com/x'];
+        yield 'mixed HTTPS' => ['Https://real.example.com/x?y=1', 'https://real.example.com/x?y=1'];
+    }
+
 
     public function testFromGlobalsPassesThroughAbsoluteRequestUri(): void
     {
