@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Security;
 
 use InvalidArgumentException;
+use Zephyrus\Http\Response;
 
 use function array_key_exists;
 use function array_values;
@@ -61,7 +62,7 @@ final readonly class ContentSecurityPolicy
     public function withDirective(string $name, string|array $values = []): self
     {
         $normalizedName = self::normalizeDirectiveName($name);
-        $normalizedValues = self::normalizeDirectiveValues($values);
+        $normalizedValues = self::normalizeDirectiveValues($normalizedName, $values);
 
         $updated = $this->directives;
         $updated[$normalizedName] = $normalizedValues;
@@ -72,7 +73,7 @@ final readonly class ContentSecurityPolicy
     public function appendValue(string $name, string $value): self
     {
         $normalizedName = self::normalizeDirectiveName($name);
-        $normalizedValue = self::normalizeDirectiveValue($value);
+        $normalizedValue = self::normalizeDirectiveValue($normalizedName, $value);
 
         $updated = $this->directives;
         $existing = $updated[$normalizedName] ?? [];
@@ -175,7 +176,7 @@ final readonly class ContentSecurityPolicy
      * @param string|array<int|string, mixed> $values
      * @return list<string>
      */
-    private static function normalizeDirectiveValues(string|array $values): array
+    private static function normalizeDirectiveValues(string $name, string|array $values): array
     {
         if (is_string($values)) {
             $values = trim($values);
@@ -184,7 +185,7 @@ final readonly class ContentSecurityPolicy
             }
 
             // Checked before the split, which would consume CR and LF.
-            self::assertNoSeparators($values);
+            self::assertNoSeparators($name, $values);
 
             // A string is a whitespace-separated source list, as documented.
             $values = preg_split('/\s+/', $values) ?: [];
@@ -200,7 +201,7 @@ final readonly class ContentSecurityPolicy
                 throw new InvalidArgumentException('CSP directive values must be strings.');
             }
 
-            $normalizedValue = self::normalizeDirectiveValue($value);
+            $normalizedValue = self::normalizeDirectiveValue($name, $value);
             if (!in_array($normalizedValue, $normalized, true)) {
                 $normalized[] = $normalizedValue;
             }
@@ -213,14 +214,21 @@ final readonly class ContentSecurityPolicy
      * A value is exactly one source expression: interior whitespace is refused,
      * because "host 'unsafe-inline'" would emit two sources. Pass an array for several.
      */
-    private static function normalizeDirectiveValue(string $value): string
+    private static function normalizeDirectiveValue(string $name, string $value): string
     {
         $normalized = trim($value);
         if ($normalized === '') {
             throw new InvalidArgumentException('CSP directive values cannot be empty.');
         }
 
-        self::assertNoSeparators($normalized);
+        self::assertNoSeparators($name, $normalized);
+
+        if (!Response::isValidHeaderValue($normalized)) {
+            throw new InvalidArgumentException(sprintf(
+                'CSP directive "%s" contains a control character.',
+                $name,
+            ));
+        }
 
         if (preg_match('/\s/', $normalized) === 1) {
             throw new InvalidArgumentException(
@@ -231,10 +239,13 @@ final readonly class ContentSecurityPolicy
         return $normalized;
     }
 
-    private static function assertNoSeparators(string $value): void
+    private static function assertNoSeparators(string $name, string $value): void
     {
         if (preg_match('/[;\r\n]/', $value) === 1) {
-            throw new InvalidArgumentException('CSP directive values cannot contain separators.');
+            throw new InvalidArgumentException(sprintf(
+                'CSP directive "%s" cannot contain a separator (";", CR or LF).',
+                $name,
+            ));
         }
     }
 }

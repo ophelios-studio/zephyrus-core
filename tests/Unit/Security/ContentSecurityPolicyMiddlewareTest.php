@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
@@ -116,5 +117,58 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
         $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => $inner);
 
         self::assertSame("default-src 'none'", $response->headers['content-security-policy']);
+    }
+
+    #[DataProvider('controlCharacterPolicies')]
+    public function testRawPolicyWithAControlCharacterIsRefusedAtConstruction(string $policy): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        new ContentSecurityPolicyMiddleware($policy);
+    }
+
+    public function testRawPolicyRefusalDoesNotEchoThePolicy(): void
+    {
+        try {
+            new ContentSecurityPolicyMiddleware("default-src 'self'\x01 evil.example.com");
+            self::fail('A control character must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringContainsString('Content-Security-Policy', $exception->getMessage());
+            self::assertStringNotContainsString('evil.example.com', $exception->getMessage());
+        }
+    }
+
+    public static function controlCharacterPolicies(): iterable
+    {
+        yield 'SOH' => ["default-src 'self'\x01"];
+        yield 'DEL' => ["default-src 'self'\x7F"];
+        yield 'NUL in the middle' => ["default-src 'self'\0 img-src *"];
+        yield 'carriage return' => ["default-src 'self'\r\nSet-Cookie: s=1"];
+    }
+
+    public function testRefusalNamesTheEnforcedHeaderAndTheWayOut(): void
+    {
+        try {
+            new ContentSecurityPolicyMiddleware("default-src 'self'\x01");
+            self::fail('A control character must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'The Content-Security-Policy value contains a control character; write it on one line or build it with ContentSecurityPolicy.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testReportOnlyRefusalNamesTheReportOnlyHeader(): void
+    {
+        try {
+            new ContentSecurityPolicyMiddleware("default-src 'self'\x01", reportOnly: true);
+            self::fail('A control character must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'The Content-Security-Policy-Report-Only value contains a control character; write it on one line or build it with ContentSecurityPolicy.',
+                $exception->getMessage(),
+            );
+        }
     }
 }

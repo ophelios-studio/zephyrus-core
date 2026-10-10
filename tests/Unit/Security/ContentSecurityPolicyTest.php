@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Security;
 
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Security\ContentSecurityPolicy;
 
@@ -194,5 +195,74 @@ final class ContentSecurityPolicyTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         ContentSecurityPolicy::create()->withDirective('script-src', "'self' ; object-src 'none'");
+    }
+
+    #[DataProvider('controlCharacterValues')]
+    public function testControlCharacterIsRefusedInAStringValue(string $value): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->withDirective('img-src', "https://a.example.com{$value}");
+    }
+
+    #[DataProvider('controlCharacterValues')]
+    public function testControlCharacterIsRefusedInAnArrayValue(string $value): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->withDirective('img-src', ["https://a.example.com{$value}"]);
+    }
+
+    public function testControlCharacterRefusalNamesTheDirectiveButNotTheValue(): void
+    {
+        try {
+            ContentSecurityPolicy::create()->appendValue('img-src', "x\x01https://evil.example.com");
+            self::fail('A control character must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringContainsString('img-src', $exception->getMessage());
+            self::assertStringNotContainsString('evil.example.com', $exception->getMessage());
+        }
+    }
+
+    #[DataProvider('lineBreaks')]
+    public function testLineBreakRefusalNamesTheDirectiveButNotTheValue(string $lineBreak): void
+    {
+        $value = "https://a.example.com{$lineBreak}https://evil.example.com";
+
+        foreach (['appendValue', 'withDirective'] as $method) {
+            try {
+                ContentSecurityPolicy::create()->{$method}('img-src', $value);
+                self::fail("A line break given to $method() must be refused.");
+            } catch (InvalidArgumentException $exception) {
+                self::assertSame(
+                    'CSP directive "img-src" cannot contain a separator (";", CR or LF).',
+                    $exception->getMessage(),
+                );
+            }
+        }
+    }
+
+    public static function lineBreaks(): iterable
+    {
+        yield 'line feed' => ["\n"];
+        yield 'carriage return' => ["\r"];
+    }
+
+    public function testControlCharacterRefusalSaysControlCharacterOnly(): void
+    {
+        try {
+            ContentSecurityPolicy::create()->appendValue('img-src', "x\x01");
+            self::fail('A control character must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('CSP directive "img-src" contains a control character.', $exception->getMessage());
+        }
+    }
+
+    public static function controlCharacterValues(): iterable
+    {
+        yield 'SOH' => ["\x01"];
+        yield 'DEL' => ["\x7F"];
+        yield 'NUL in the middle' => ["\0x"];
+        yield 'unit separator' => ["\x1F"];
     }
 }

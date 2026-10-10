@@ -52,6 +52,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
      *   per-request nonce, e.g. ['script-src']. Empty (the default) disables
      *   nonce generation entirely and leaves the emitted header untouched.
      *
+     * @throws InvalidArgumentException When the policy holds a control character.
      * @throws InvalidArgumentException When nonce directives are requested for
      *   a raw string policy, which cannot be extended safely.
      */
@@ -63,6 +64,13 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         $this->policy = $policy instanceof ContentSecurityPolicy
             ? $policy->toHeaderValue()
             : trim($policy);
+
+        if (!Response::isValidHeaderValue($this->policy)) {
+            throw new InvalidArgumentException(sprintf(
+                'The %s value contains a control character; write it on one line or build it with ContentSecurityPolicy.',
+                $this->headerName(),
+            ));
+        }
 
         $this->nonceDirectives = array_values($nonceDirectives);
 
