@@ -132,4 +132,22 @@ final class EnvTagHttpoxyTest extends TestCase
         unset($_ENV['ZEPHYRUS_TEST_ABSENT'], $_SERVER['ZEPHYRUS_TEST_ABSENT']);
         self::assertSame('fallback', $this->resolve('ZEPHYRUS_TEST_ABSENT, fallback'));
     }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function nonScalarNames(): iterable
+    {
+        yield 'sequence' => ['[QUERY_STRING]'];
+        yield 'mapping' => ['{name: QUERY_STRING}'];
+    }
+
+    #[DataProvider('nonScalarNames')]
+    public function testANonScalarEnvTagValueIsRefusedNamingTheKey(string $tag): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('the key "value" must name one variable');
+
+        $this->resolve($tag);
+    }
 }

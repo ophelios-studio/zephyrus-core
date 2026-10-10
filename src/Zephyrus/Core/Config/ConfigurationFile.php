@@ -145,10 +145,15 @@ final class ConfigurationFile
 
     /**
      * Resolve an !env tag value (VAR_NAME[, default_value]) from $_ENV or the process environment.
-     * An empty name and the names refused by {@see EnvironmentVariable::read()} raise a ConfigurationException.
+     * An empty name, a list or mapping value, and the names refused by {@see EnvironmentVariable::read()}
+     * raise a ConfigurationException.
      */
     private function resolveEnvTag(mixed $value, string $key): mixed
     {
+        if (is_array($value)) {
+            throw new ConfigurationException(sprintf('!env tag: the key "%s" must name one variable, not a list or mapping.', $key));
+        }
+
         $raw = (string) $value;
         $arguments = explode(',', $raw, 2);
         $envKey = trim($arguments[0], " \t\n\r\0\x0B\"'");
