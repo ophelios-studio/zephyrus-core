@@ -7,28 +7,11 @@ namespace Zephyrus\Http;
 /**
  * Emits a {@see Response} to the PHP SAPI: status line, all headers, then body.
  *
- * The body is written in chunks of {@see $chunkSize} bytes so that large
- * payloads (file downloads, generated reports, etc.) do not require the full
- * body to be held in memory before the first byte reaches the client.
- *
- * Header emission is skipped silently when headers have already been sent
- * (e.g. because a prior echo flushed the output buffer in a legacy context).
- *
- * ## Entry-point example
+ * The body is written in chunks of $chunkSize bytes (default 8192, must be positive).
+ * Headers are skipped when they have already been sent.
  *
  * ```php
- * $kernel  = KernelBuilder::create()->withRouter($router)->build();
- * $emitter = new SapiEmitter();          // default 8 KiB chunk size
- *
- * $request  = Request::fromGlobals();
- * $response = $kernel->handle($request);
- * $emitter->emit($response);
- * ```
- *
- * ## Custom chunk size
- *
- * ```php
- * $emitter = new SapiEmitter(chunkSize: 4096);   // 4 KiB chunks
+ * (new SapiEmitter(chunkSize: 4096))->emit($kernel->handle(Request::fromGlobals()));
  * ```
  */
 final class SapiEmitter implements EmitterInterface
@@ -59,9 +42,6 @@ final class SapiEmitter implements EmitterInterface
         }
     }
 
-    /**
-     * Streams the body in fixed-size chunks. Empty bodies produce no output.
-     */
     private function emitBody(string $body): void
     {
         if ($body === '') {

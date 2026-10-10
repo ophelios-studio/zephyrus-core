@@ -13,25 +13,23 @@ use Zephyrus\Routing\Exception\RouteParameterException;
 use Zephyrus\Validation\ValidationException;
 
 /**
- * Converts thrown exceptions into HTTP error responses with content negotiation.
+ * Converts thrown exceptions into HTTP error responses, negotiated from the Accept header (text, JSON or problem+json).
  *
- * Built-in mappings:
- *   - RouteNotFoundException        → 404 Not Found
- *   - RouteParameterException       → 404 Not Found (type mismatch in URL segment)
- *   - MethodNotAllowedException     → 405 Method Not Allowed (+ Allow header)
- *   - ValidationException           → 422 Unprocessable Entity (+ field errors)
- *   - Any other Throwable           → 500 Internal Server Error
+ * Built-in mappings: RouteNotFoundException and RouteParameterException to 404, MethodNotAllowedException to 405
+ * with an Allow header, ValidationException to 422 with field errors in the JSON formats, any other Throwable to 500.
  *
- * Custom handlers can be registered via registerHandler(). When an exception
- * is thrown, registered handlers are checked first (most-specific class wins
- * via instanceof). If no custom handler matches, the built-in mappings apply.
+ * Built-in responses carry fixed messages only, never the exception message or trace; a registered handler decides
+ * its own body.
  *
- * Example:
+ * Handlers from registerHandler() run first. The most specific matching class wins, and among unrelated matches
+ * the first registered one.
  *
- *   $responder = new HttpExceptionResponder();
- *   $responder->registerHandler(AccessDeniedException::class, function (Throwable $e, ?Request $r) {
- *       return Response::text('Forbidden', 403);
- *   });
+ * ```php
+ * KernelBuilder::create()->withExceptionHandler(
+ *     AccessDeniedException::class,
+ *     fn (Throwable $e, ?Request $r): Response => Response::text('Forbidden', 403),
+ * );
+ * ```
  */
 class HttpExceptionResponder
 {
@@ -43,13 +41,7 @@ class HttpExceptionResponder
     private array $handlers = [];
 
     /**
-     * Register a custom exception handler for a specific exception class.
-     *
-     * The handler receives (Throwable $exception, ?Request $request) and must
-     * return a Response. Handlers are checked before built-in mappings.
-     *
-     * When multiple handlers could match (via inheritance), the most-specific
-     * class wins (checked by order of registration, with instanceof matching).
+     * Registers a handler for an exception class. Registering the same class again replaces the handler.
      *
      * @param class-string<Throwable> $exceptionClass
      * @param callable(Throwable, ?Request): Response $handler
@@ -64,7 +56,6 @@ class HttpExceptionResponder
 
     public function toResponse(Throwable $exception, ?Request $request = null): Response
     {
-        // Check custom handlers first (most-specific class wins)
         $customResponse = $this->resolveCustomHandler($exception, $request);
         if ($customResponse !== null) {
             return $customResponse;
@@ -94,13 +85,6 @@ class HttpExceptionResponder
         );
     }
 
-    /**
-     * Resolve the most-specific custom handler for the given exception.
-     *
-     * Handlers registered for more specific exception classes take precedence.
-     * When two handlers match, the one whose class is a subclass of the other wins.
-     * If neither is more specific (unrelated classes), the first registered match wins.
-     */
     private function resolveCustomHandler(Throwable $exception, ?Request $request): ?Response
     {
         if ($this->handlers === []) {
@@ -115,7 +99,7 @@ class HttpExceptionResponder
                 continue;
             }
 
-            // First match or more-specific match (subclass of current best)
+            // Keep the most specific match seen so far.
             if ($bestClass === null || is_subclass_of($class, $bestClass)) {
                 $bestClass = $class;
                 $bestHandler = $handler;

@@ -8,20 +8,12 @@ use InvalidArgumentException;
 
 final readonly class Response
 {
-    /**
-     * RFC 9110 "token": the only characters a header FIELD NAME may contain.
-     *
-     * withHeader() used to accept any string, so Response::withHeader() with a
-     * name taken from a request reached the SAPI verbatim: a route echoing a
-     * path segment into a header name emitted "content-length: v" and let a
-     * caller state a header the application never meant to send. The name is
-     * lowercased for storage, so the case-insensitive charset is enough.
-     */
+    /** RFC 9110 token: the characters a header field name may contain. */
     private const HEADER_NAME_PATTERN = "/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/D";
 
     /**
-     * One leading "/" that is not followed by another "/" or a backslash, then
-     * no backslash and no ASCII control character (0x00-0x1F, 0x7F).
+     * A single leading "/" (not "//"), then no backslash and no ASCII control character. Browsers read "/\" like "//",
+     * another host.
      */
     private const LOCAL_PATH_PATTERN = '#^/(?![/\\\\])[^\x00-\x1F\x7F\\\\]*+$#D';
 
@@ -106,15 +98,9 @@ final readonly class Response
     }
 
     /**
-     * Returns a redirect response. The given URL is placed in the Location
-     * header and the body is empty. Never pass user input here: use
-     * localRedirect() for a target that comes from a request.
+     * Redirects to $url with an empty body. Never pass user input here: use localRedirect().
      *
-     * Default status is 302 Found. Common alternatives:
-     *   301  Moved Permanently  -- cacheable, only safe to use for GET/HEAD.
-     *   303  See Other          -- redirect-after-POST pattern.
-     *   307  Temporary Redirect -- preserves request method.
-     *   308  Permanent Redirect -- preserves request method, cacheable.
+     * Default status 302. 301 and 308 are cacheable, 303 suits redirect-after-POST, 307 and 308 keep the method.
      */
     public static function redirect(string $url, int $status = 302): self
     {
@@ -122,18 +108,11 @@ final readonly class Response
     }
 
     /**
-     * Redirects to $target only when it is a path on this site, otherwise to
-     * $fallback. Use it for a target read from a request, such as a "next"
-     * parameter, which would otherwise be an open redirect.
+     * Redirects to $target when it is a local path, otherwise to $fallback. Use it for targets read from a request.
      *
-     * A local path starts with exactly one "/", has no backslash anywhere and
-     * no ASCII control character (tab, CR, LF and NUL included). Those are the
-     * forms a browser reads as another host or that break the header line. A
-     * percent-encoded CRLF stays local: it is inert in a Location header.
-     *
-     * A non-string target, such as an array from ?next[]=x, falls back too. $fallback
-     * is chosen by the code, not by a user, so a non-local fallback is a
-     * programming error and throws instead of redirecting.
+     * A local path starts with a single "/", has no backslash and no ASCII control character. Browsers read "/\" like
+     * "//", another host. A non-string $target falls back too. A percent-encoded CRLF stays local: it is inert in a
+     * Location header.
      *
      * @throws InvalidArgumentException When $fallback is not a local path.
      */
@@ -153,6 +132,8 @@ final readonly class Response
     }
 
     /**
+     * Returns a copy with the header set. The name is validated, the value is emitted as given.
+     *
      * @throws InvalidArgumentException When $name is not a valid header name.
      */
     public function withHeader(string $name, string $value): self
@@ -170,6 +151,8 @@ final readonly class Response
     }
 
     /**
+     * Returns a copy with the headers set, as withHeader() does.
+     *
      * @param array<string, string> $headers
      * @throws InvalidArgumentException When any name is not a valid header name.
      */
@@ -189,13 +172,7 @@ final readonly class Response
     }
 
     /**
-     * Refuse a header name outside the RFC 9110 token charset.
-     *
-     * Validated on the MUTATORS rather than in the constructor. The named
-     * constructors all pass fixed names, and the constructor is the path
-     * HttpExceptionResponder builds its fallback response on: a throw there
-     * would replace a handled error with an unhandled one. The mutators are
-     * where a name derived from outside input actually arrives.
+     * Refuses a name outside the RFC 9110 token charset. Not checked in the constructor, which error responses use.
      *
      * @throws InvalidArgumentException
      */
@@ -209,18 +186,13 @@ final readonly class Response
         }
     }
 
-    /**
-     * Whether a header of this name is present, whatever its value. The name is
-     * compared case-insensitively.
-     */
+    /** Whether a header is present, whatever its value. The name is matched case-insensitively. */
     public function hasHeader(string $name): bool
     {
         return $this->getHeader($name) !== null;
     }
 
-    /**
-     * The stored value of a header, or null when it is absent. Case-insensitive.
-     */
+    /** The stored value of a header, or null when it is absent. The name is matched case-insensitively. */
     public function getHeader(string $name): ?string
     {
         foreach ($this->headers as $existing => $value) {
@@ -232,10 +204,7 @@ final readonly class Response
         return null;
     }
 
-    /**
-     * Whether a header is present with a value that is not blank. A blank value
-     * counts as absent, so a security middleware may still set its default.
-     */
+    /** Whether a header is present with a non-blank value. A blank value counts as absent. */
     public function hasNonBlankHeader(string $name): bool
     {
         return trim($this->getHeader($name) ?? '') !== '';
@@ -262,27 +231,20 @@ final readonly class Response
         );
     }
 
-    /**
-     * Returns the standard HTTP reason phrase for this response's status code.
-     * Returns 'Unknown Status' for unrecognized codes.
-     */
+    /** The reason phrase of the status code, or 'Unknown Status'. */
     public function statusPhrase(): string
     {
         return self::STATUS_PHRASES[$this->status] ?? 'Unknown Status';
     }
 
-    /**
-     * Returns the formatted HTTP/1.1 status line, e.g. "HTTP/1.1 200 OK".
-     */
+    /** The HTTP/1.1 status line, e.g. "HTTP/1.1 200 OK". */
     public function toStatusLine(): string
     {
         return sprintf('HTTP/1.1 %d %s', $this->status, $this->statusPhrase());
     }
 
     /**
-     * Returns the formatted header lines that send() will emit, e.g.
-     * ["Content-Type: application/json; charset=utf-8", "X-Trace-Id: abc"].
-     * Useful for inspection and testing without touching the SAPI.
+     * The header lines send() emits, e.g. "X-Trace-Id: abc". Does not touch the SAPI.
      *
      * @return string[]
      */
@@ -296,16 +258,7 @@ final readonly class Response
         return $lines;
     }
 
-    /**
-     * Emits the response to the SAPI: status line, all headers, then body.
-     * Skips header emission if headers have already been sent.
-     *
-     * Typical entry-point usage:
-     *
-     *     $request  = Request::fromGlobals();
-     *     $response = $kernel->handle($request);
-     *     $response->send();
-     */
+    /** Emits the status line, headers and body to the SAPI. Headers are skipped when already sent. */
     public function send(): void
     {
         if (!headers_sent()) {

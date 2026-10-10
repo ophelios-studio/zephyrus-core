@@ -13,6 +13,8 @@ final readonly class HttpErrorPayload
     }
 
     /**
+     * The JSON error envelope: {"error": {"status": ..., "message": ...}}.
+     *
      * @return array{error: array{status: int, message: string}}
      */
     public function toArray(): array

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Zephyrus\Http;
 
 /**
- * Shared parser for IP addresses and CIDR ranges, used by trusted proxy and IP
- * allowlist matching. Anything it cannot parse is a non-match, never a match.
+ * Parses IP addresses and CIDR ranges for trusted proxy and allowlist matching.
+ *
+ * Input it cannot parse is a non-match. Refused: a range with bits set after its prefix, and an IPv4-mapped
+ * or dotted-quad IPv6 range shorter than /96.
  */
 final class IpRange
 {
@@ -16,17 +18,14 @@ final class IpRange
 
     private const string EMBEDDED_REFUSAL = 'an IPv6 range shorter than /96 that embeds an IPv4 address covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
 
-    /**
-     * Whether the value is an IP address or a CIDR range this class can match against.
-     */
+    /** Whether $range is an address or range this class can match against. Refused forms are not valid. */
     public static function isValid(string $range): bool
     {
         return self::parse($range) !== null;
     }
 
     /**
-     * Whether $ip is inside $range. A range without a prefix is an exact address
-     * match. Malformed input on either side returns false.
+     * Whether $ip is inside $range. A range without a prefix is an exact match. Malformed input returns false.
      */
     public static function contains(string $range, string $ip): bool
     {
@@ -59,8 +58,7 @@ final class IpRange
     }
 
     /**
-     * An entry as it may appear in an error message: at most 64 bytes, then the
-     * byte count when cut, with control characters escaped.
+     * An entry for an error message: at most 64 bytes, then its byte count when cut, control characters escaped.
      *
      * @internal
      */
@@ -76,9 +74,7 @@ final class IpRange
             : $shown;
     }
 
-    /**
-     * Why an IP address or CIDR range cannot be matched, or null when it can.
-     */
+    /** Why an address or range cannot be matched, or null when it can. */
     public static function invalidEntryReason(string $entry): ?string
     {
         $parsed = self::split($entry);
@@ -102,20 +98,14 @@ final class IpRange
         return $parsed;
     }
 
-    /**
-     * The reason a parsed range is refused, or null when it is safe.
-     */
+    /** The reason a parsed range is refused, or null. */
     private static function refusal(string $range, string $binary, int $prefix): ?string
     {
         return self::embeddedIpv4Refusal($range, $binary, $prefix)
             ?? self::hostBitsRefusal($range, $binary, $prefix);
     }
 
-    /**
-     * The refusal for an IPv6 range shorter than /96 whose address embeds an IPv4
-     * address, or null when it is safe. Such a range masks the IPv4 part away, so it
-     * matches far more than it names. From /96 on, hostBitsRefusal() applies.
-     */
+    /** Refuses an IPv6 range shorter than /96 that embeds an IPv4 address: it masks the IPv4 part away. */
     private static function embeddedIpv4Refusal(string $range, string $binary, int $prefix): ?string
     {
         if ($prefix >= 96 || !self::embedsIpv4($range, $binary)) {
@@ -160,9 +150,7 @@ final class IpRange
         return [$binary, $prefix];
     }
 
-    /**
-     * Whether the address is IPv4-mapped, or written with a dotted quad inside an IPv6 literal.
-     */
+    /** Whether the address is IPv4-mapped, or written with a dotted quad inside an IPv6 literal. */
     private static function embedsIpv4(string $range, string $binary): bool
     {
         return self::isIpv4Mapped($binary) || (str_contains($range, '.') && str_contains($range, ':'));
@@ -173,9 +161,7 @@ final class IpRange
         return strlen($binary) === 16 && substr($binary, 0, 12) === str_repeat("\0", 10) . "\xff\xff";
     }
 
-    /**
-     * The refusal for a range whose address has bits after its prefix, naming the range it really covers.
-     */
+    /** Refuses a range whose address has bits after its prefix, naming the range it really covers. */
     private static function hostBitsRefusal(string $range, string $binary, int $prefix): ?string
     {
         if (!self::hasBitsAfterPrefix($binary, $prefix)) {
@@ -216,8 +202,8 @@ final class IpRange
     }
 
     /**
-     * The refusal for an IPv6 range at /96 or longer with host bits, which names the IPv4
-     * range it means. The masked IPv6 network is withheld only when it would cover every IPv4 peer.
+     * Refuses an IPv6 range at /96 or longer with host bits, and names the IPv4 range it means. The IPv6
+     * network is withheld only when it would cover every IPv4 peer.
      */
     private static function embeddedIpv4HostBitsRefusal(string $range, string $binary, int $prefix): string
     {
@@ -272,9 +258,7 @@ final class IpRange
         return str_pad($mask, $length, "\0");
     }
 
-    /**
-     * Whether any bit after the first $prefix bits of the binary address is set.
-     */
+    /** Whether any bit after the first $prefix bits of the binary address is set. */
     private static function hasBitsAfterPrefix(string $binary, int $prefix): bool
     {
         if ($prefix >= strlen($binary) * 8) {
@@ -289,10 +273,7 @@ final class IpRange
         return ltrim(substr($binary, $byte + 1), "\0") !== '';
     }
 
-    /**
-     * filter_var rejects what inet_pton tolerates on some platforms (leading zero
-     * octets, zone identifiers), so it runs first.
-     */
+    /** Rejects leading-zero octets and zone identifiers, which inet_pton may accept on some platforms. */
     private static function toBinary(string $address): ?string
     {
         if (filter_var($address, FILTER_VALIDATE_IP) === false) {

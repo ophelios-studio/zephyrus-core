@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Http;
 
+/**
+ * Immutable chain of middlewares. The first one piped runs outermost.
+ */
 final class MiddlewarePipeline
 {
     /**
@@ -19,6 +22,7 @@ final class MiddlewarePipeline
         $this->middlewares = $middlewares;
     }
 
+    /** Returns a copy with $middleware appended to the chain. */
     public function pipe(MiddlewareInterface $middleware): self
     {
         $middlewares = $this->middlewares;
@@ -28,6 +32,8 @@ final class MiddlewarePipeline
     }
 
     /**
+     * Returns a copy with each middleware appended, in order.
+     *
      * @param array<int, MiddlewareInterface> $middlewares
      */
     public function pipeMany(array $middlewares): self
@@ -42,6 +48,8 @@ final class MiddlewarePipeline
     }
 
     /**
+     * Runs the chain around $destination and returns the response.
+     *
      * @param callable(Request): Response $destination
      */
     public function handle(Request $request, callable $destination): Response

@@ -6,8 +6,6 @@ namespace Zephyrus\Http;
 
 /**
  * Immutable, case-insensitive HTTP header collection.
- *
- * All header names are stored in lowercase for consistent lookups.
  */
 final readonly class HeaderBag
 {
@@ -37,10 +35,9 @@ final readonly class HeaderBag
     }
 
     /**
-     * Extract a Bearer token from the given header (defaults to Authorization).
+     * Returns the token after the prefix, or null when the header is missing, blank or has no token after it.
      *
-     * Returns null when the header is missing, empty, or does not contain
-     * a token after the prefix.
+     * A value without the prefix is returned whole (trimmed), not rejected.
      */
     public function bearerToken(string $headerName = 'Authorization', string $prefix = 'Bearer '): ?string
     {

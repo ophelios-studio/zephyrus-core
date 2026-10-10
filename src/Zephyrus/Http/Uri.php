@@ -7,12 +7,12 @@ namespace Zephyrus\Http;
 /**
  * Immutable value object representing a parsed URI.
  *
- * Constructed once from a full URL string and provides typed accessors for
- * each component (scheme, host, port, path, query string, fragment).
+ * Built from a full URL string, with typed accessors per component. Malformed input never throws: an unreadable
+ * authority is kept as written, and refusing such a request is up to the caller.
  */
 final readonly class Uri
 {
-    /** Anchored: a "://" later in an origin-form target belongs to its query, not to a scheme. */
+    /** Anchored, so a "://" inside an origin-form query is not read as a scheme. */
     private const SCHEME_PATTERN = '#^([a-zA-Z][a-zA-Z0-9+.\-]*)://#';
 
     private string $scheme;
@@ -42,57 +42,10 @@ final readonly class Uri
     }
 
     /**
-     * Split a URL that parse_url() refused, WITHOUT inventing anything.
+     * Splits a URL that parse_url() refused, keeping each part as written.
      *
-     * ## What went wrong before
-     *
-     * parse_url() returns false, not a partial result, for an authority it
-     * cannot read. The constructor read every component off that false with a
-     * `??`, so ONE unreadable character replaced the whole URL at once:
-     * "https://app.example.com:evil/dashboard" became scheme "http", host
-     * "localhost", path "/", no query, no fragment. Silently, with nothing
-     * logged and nothing thrown.
-     *
-     * That single fallback is the root cause of two separate findings.
-     * SecureHeadersMiddleware dropped HSTS from a response that arrived over
-     * TLS, because the collapsed URI said "http". ForceHttpsMiddleware saw
-     * isSecure() === false and redirected to HTTPS a request that was ALREADY
-     * HTTPS, and since buildHttpsUrl() returns a non-"http://" string
-     * unchanged, the 308 pointed at the URL just requested. A malformed Host
-     * repeats on the next request, so that is a redirect loop.
-     *
-     * The trigger is cheap: a Host header of "app.example.com:evil" defeats
-     * parse_url() outright, and Request::fromGlobals composes the URL as
-     * scheme . "://" . host . target. Apache answers 400 to the direct form,
-     * but a trusted X-Forwarded-Host or a laxer front server reaches it.
-     *
-     * ## Preserve, do not throw
-     *
-     * Throwing here was considered and rejected. Uri is constructed from inside
-     * Request::fromGlobals(), at the very top of the lifecycle, BEFORE the
-     * kernel's error handling exists; this codebase already documents that as a
-     * poor place to introduce a throw (see Request::collapseLeadingSlashes()).
-     * Throwing would also turn a hostile probe into an uncatchable fatal, which
-     * hands an attacker a denial of service in exchange for closing a
-     * disclosure that is not one.
-     *
-     * Preserving is strictly better, because the honest value is the one every
-     * downstream check needs: isSecure() answers correctly, so HSTS survives
-     * and ForceHttps stops looping, and AllowedHostsMiddleware finally judges
-     * the host that was really sent instead of a "localhost" nobody sent. The
-     * decision to REFUSE the request then sits in a middleware, inside the
-     * kernel, where a 400 can be returned and logged.
-     *
-     * ## The line this draws
-     *
-     * An unreadable ":port" suffix stays part of the host. Trimming it would
-     * report "app.example.com", a host that was never sent, which is the same
-     * class of invention as "localhost" and would quietly hand a host-allowlist
-     * a value it can approve.
-     *
-     * "localhost" is still the default when the URL genuinely carries NO
-     * authority ("/just-a-path", "http://"). What was wrong was DISCARDING an
-     * authority that was reported, not defaulting one that was never there.
+     * Nothing is invented: an unreadable authority is not replaced by "localhost", so the scheme and host the
+     * caller sees are the ones sent. "localhost" is the default only when the URL has no authority.
      *
      * @return array{scheme?: string, host?: string, port?: int, path?: string, query?: string, fragment?: string}
      */
@@ -108,8 +61,7 @@ final readonly class Uri
             $authority = self::cutAuthority($remainder);
             $remainder = substr($remainder, strlen($authority));
 
-            // Userinfo is a credential, never an address, and parse_url() drops
-            // it too. The LAST "@" wins, because a userinfo may contain one.
+            // Userinfo is dropped up to the last "@", as parse_url() does.
             $userinfoEnd = strrpos($authority, '@');
             if ($userinfoEnd !== false) {
                 $authority = substr($authority, $userinfoEnd + 1);
@@ -117,8 +69,8 @@ final readonly class Uri
 
             $host = $authority;
 
-            // Only a port that IS a port becomes one. Anything else stays
-            // visible in the host rather than being silently discarded.
+            // Only a valid port number is split off; anything else stays in the host, so a host
+            // allowlist never approves a host that was not sent.
             if (preg_match('#^(\[[^\]]*\]|[^:]*):(\d+)$#', $authority, $portMatch) === 1
                 && self::isPortNumber($portMatch[2])) {
                 $host = $portMatch[1];
@@ -165,10 +117,8 @@ final readonly class Uri
     }
 
     /**
-     * The authority as written, userinfo and port included, or the host when
-     * the URL has no scheme. Meant for validation, not for building URLs, since
-     * it keeps the userinfo. The written authority is not lowercased, the
-     * fallback host is.
+     * The authority as written (userinfo and port included, not lowercased), or the lowercased host when the URL
+     * has no scheme. Do not build URLs from it: it keeps the userinfo.
      */
     public function authority(): string
     {
@@ -185,11 +135,7 @@ final readonly class Uri
         return $this->path;
     }
 
-    /**
-     * Raw query string without the leading "?".
-     *
-     * Example: "page=2&sort=name"
-     */
+    /** Raw query string, without the leading "?". */
     public function queryString(): string
     {
         return $this->queryString;
@@ -205,11 +151,7 @@ final readonly class Uri
         return $this->scheme === 'https';
     }
 
-    /**
-     * Scheme + host + optional non-default port.
-     *
-     * Example: "https://example.com" or "http://localhost:8080"
-     */
+    /** Scheme and host, plus the port unless it is the scheme's default, e.g. "https://example.com". */
     public function baseUrl(): string
     {
         $base = $this->scheme . '://' . $this->host;
@@ -221,9 +163,7 @@ final readonly class Uri
         return $base;
     }
 
-    /**
-     * Full original URL string as provided at construction time.
-     */
+    /** The URL as given to the constructor. */
     public function full(): string
     {
         return $this->url;
@@ -234,10 +174,7 @@ final readonly class Uri
         return $this->url;
     }
 
-    /**
-     * The text between "scheme://" and the first "/", "?" or "#", or null when
-     * the URL has no scheme.
-     */
+    /** The text between "scheme://" and the first "/", "?" or "#", or null without a scheme. */
     private static function rawAuthority(string $url): ?string
     {
         if (preg_match(self::SCHEME_PATTERN, $url, $matches) !== 1) {
@@ -247,9 +184,7 @@ final readonly class Uri
         return self::cutAuthority(substr($url, strlen($matches[0])));
     }
 
-    /**
-     * The authority at the start of the text that follows "scheme://".
-     */
+    /** The authority at the start of the text after "scheme://". */
     private static function cutAuthority(string $afterScheme): string
     {
         return substr($afterScheme, 0, strcspn($afterScheme, '/?#'));
