@@ -156,6 +156,14 @@ final class AllowedHostsMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
+    public function testAllowedHostsAreExposedInTheirNormalisedForm(): void
+    {
+        $mw = new AllowedHostsMiddleware(['Example.COM.', '[2001:DB8::1]', '*.Example.com', 'app.test']);
+
+        self::assertSame(['example.com', '2001:db8::1', '*.example.com', 'app.test'], $mw->allowedHosts());
+        self::assertSame([], (new AllowedHostsMiddleware([]))->allowedHosts());
+    }
+
     /**
      * Raw Host values with the expected verdict. Each one is judged by allows()
      * directly, and by process() on a request whose URL carries that value, so

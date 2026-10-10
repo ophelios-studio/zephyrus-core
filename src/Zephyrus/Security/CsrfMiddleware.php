@@ -66,6 +66,12 @@ final class CsrfMiddleware implements MiddlewareInterface
     ) {
     }
 
+    /** The configuration this middleware enforces. */
+    public function config(): CsrfConfig
+    {
+        return $this->config;
+    }
+
     public function process(Request $request, callable $next): Response
     {
         if ($this->config->enabled

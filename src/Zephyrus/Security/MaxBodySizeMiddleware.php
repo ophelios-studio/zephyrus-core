@@ -18,9 +18,9 @@ use function trim;
  * Refuses, with a 413 JSON response, a request whose body exceeds a byte budget.
  *
  * Opt-in by design: a registration driven by config would duplicate the copy an application
- * already adds. ApplicationBuilder::build() refuses to boot when security.maxBodySize is positive,
- * this middleware is not registered as a global middleware, and the key is not acknowledged with
- * withAcknowledgedSecurityKeys(['maxBodySize']).
+ * already adds. ApplicationBuilder::build() refuses to boot when security.maxBodySize is positive
+ * and either no global instance of this middleware is registered or one has a looser limit (larger, or 0),
+ * unless the key is acknowledged with withAcknowledgedSecurityKeys(['maxBodySize']).
  *
  *   $builder->withMiddleware(new MaxBodySizeMiddleware($config->security->maxBodySize));
  *
@@ -43,6 +43,12 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
         if ($maxBytes < 0) {
             throw new InvalidArgumentException('Maximum body size must be 0 (unlimited) or a positive byte count.');
         }
+    }
+
+    /** The maximum accepted body size in bytes; 0 means unlimited. */
+    public function maxBytes(): int
+    {
+        return $this->maxBytes;
     }
 
     public function process(Request $request, callable $next): Response

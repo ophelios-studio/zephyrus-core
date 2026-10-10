@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
+use Closure;
 use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
@@ -367,7 +368,7 @@ final class ApplicationBuilder
      *
      * Wired here: the localization section (loader, supported locales). Wired in build(): application.debug
      * (Tracy) and localization.timezone. Nothing in `security:` is wired, on purpose: build() refuses to boot
-     * when a declared protection is not mounted, rather than letting it sit inert.
+     * when a declared protection is not mounted or mounted with another value, rather than letting it sit inert.
      *
      * @param Configuration $configuration The full application configuration.
      * @param string|null   $basePath      Prefixed to a relative locale_path when given.
@@ -519,16 +520,18 @@ final class ApplicationBuilder
     }
 
     /**
-     * Refuses to boot when a declared security setting asks for a protection that no mounted middleware enforces.
+     * Refuses to boot when a declared security setting asks for a protection the mounted middlewares do not enforce.
      *
      * The security section is never wired from configuration: registering the middlewares here would give
      * applications that mount their own a second CSRF or header middleware. Checked: forceHttps, a non-empty
      * allowedHosts, a finite maxBodySize and the headers section, each only when declared, and csrfEnabled when
-     * any csrf key is declared; a protection counts as enforced only when its middleware is mounted with
-     * withMiddleware(), and the headers only when every global SecureHeadersMiddleware carries security.headers.
+     * any csrf key is declared. A protection counts as enforced only when its middleware is mounted with
+     * withMiddleware() and every global instance carries the declared value, or for maxBodySize a positive limit no
+     * larger than it (ForceHttpsMiddleware takes none).
      * Not checked: trustedProxies, trustedHeaders and encryptionKey, which are consumed outside the builder.
      *
-     * @throws ConfigurationException when a declared protection is not mounted and not acknowledged.
+     * @throws ConfigurationException when a declared protection is not mounted, or mounted with another value,
+     *                                and not acknowledged.
      */
     private function assertSecurityConfigurationIsWired(SecurityConfig $security): void
     {
@@ -543,15 +546,26 @@ final class ApplicationBuilder
             && $security->forceHttps
             && !$this->kernelBuilder->hasGlobalMiddleware(ForceHttpsMiddleware::class)
         ) {
-            $unwired['forceHttps'] = $this->describeUnwiredMiddleware(ForceHttpsMiddleware::class);
+            $unwired['security.forceHttps'] = 'mount ' . ForceHttpsMiddleware::class . ' with withMiddleware()'
+                . self::routeNameClause($this->kernelBuilder->routeNamesOf(ForceHttpsMiddleware::class));
         }
 
-        if (
-            $security->isDeclared('allowedHosts')
-            && $security->allowedHosts !== []
-            && !$this->kernelBuilder->hasGlobalMiddleware(AllowedHostsMiddleware::class)
-        ) {
-            $unwired['allowedHosts'] = $this->describeUnwiredMiddleware(AllowedHostsMiddleware::class);
+        if ($security->isDeclared('allowedHosts') && $security->allowedHosts !== []) {
+            $declaredHosts = (new AllowedHostsMiddleware(array_values($security->allowedHosts)))->allowedHosts();
+            $rebuildHosts = "build the middleware from the configuration's security->allowedHosts";
+            $unwired['security.allowedHosts'] = $this->describeUnwiredValue(
+                AllowedHostsMiddleware::class,
+                "the configuration's security->allowedHosts",
+                static fn (AllowedHostsMiddleware $instance): ?string => $instance->allowedHosts() === []
+                    ? 'carries an empty allowlist, which accepts every host; ' . $rebuildHosts
+                    : self::describeListDifference(
+                        $instance->allowedHosts(),
+                        $declaredHosts,
+                        'security.allowedHosts',
+                        ['allows', 'omits'],
+                        $rebuildHosts,
+                    ),
+            );
         }
 
         if (
@@ -559,110 +573,191 @@ final class ApplicationBuilder
                 || $security->isDeclared('csrfExceptions')
                 || $security->isDeclared('csrfAutoHtml'))
             && $security->csrfEnabled
-            && !$this->kernelBuilder->hasGlobalMiddleware(CsrfMiddleware::class)
         ) {
-            $unwired['csrf'] = $this->describeUnwiredMiddleware(CsrfMiddleware::class);
+            $declaredExceptions = array_values($security->csrfExceptions);
+            $rebuildCsrf = 'build the middleware with CsrfConfig::fromSecurityConfig()';
+            $unwired['security.csrf'] = $this->describeUnwiredValue(
+                CsrfMiddleware::class,
+                "the configuration's security through CsrfConfig::fromSecurityConfig()",
+                static fn (CsrfMiddleware $instance): ?string => $instance->config()->enabled
+                    ? self::describeListDifference(
+                        $instance->config()->excludedPathPatterns,
+                        $declaredExceptions,
+                        'security.csrf.exceptions',
+                        ['excludes', 'does not exclude'],
+                        $rebuildCsrf,
+                    )
+                    : 'is disabled; ' . $rebuildCsrf,
+                routeOnlyHint: ', and list the exempt routes under security.csrf.exceptions',
+            );
         }
 
-        if (
-            $security->isDeclared('maxBodySize')
-            && $security->maxBodySize > 0
-            && !$this->kernelBuilder->hasGlobalMiddleware(MaxBodySizeMiddleware::class)
-        ) {
-            $unwired['maxBodySize'] = $this->describeUnwiredMiddleware(MaxBodySizeMiddleware::class);
+        if ($security->isDeclared('maxBodySize') && $security->maxBodySize > 0) {
+            $declaredLimit = $security->maxBodySize;
+            $unwired['security.maxBodySize'] = $this->describeUnwiredValue(
+                MaxBodySizeMiddleware::class,
+                "the configuration's security->maxBodySize",
+                static function (MaxBodySizeMiddleware $instance) use ($declaredLimit): ?string {
+                    $limit = $instance->maxBytes();
+                    if ($limit > 0 && $limit <= $declaredLimit) {
+                        return null;
+                    }
+
+                    return 'carries a looser limit (' . ($limit === 0 ? '0, unlimited' : $limit . ' bytes')
+                        . ') than security.maxBodySize (' . $declaredLimit . ' bytes); '
+                        . 'give it a positive limit no larger than security.maxBodySize';
+                },
+            );
         }
 
         if ($security->isDeclared('headers')) {
-            $mounted = $this->kernelBuilder->globalMiddlewaresOf(SecureHeadersMiddleware::class);
-            $mismatched = array_values(array_filter(
-                $mounted,
-                static fn (SecureHeadersMiddleware $instance): bool => $instance->config() != $security->headers,
-            ));
-
-            if ($mounted === [] || $mismatched !== []) {
-                $unwired['headers'] = $this->describeUnwiredHeaders($mounted, $mismatched);
-            }
+            $unwired['security.headers'] = $this->describeUnwiredValue(
+                SecureHeadersMiddleware::class,
+                "the configuration's security->headers",
+                static fn (SecureHeadersMiddleware $instance): ?string => $instance->config() == $security->headers
+                    ? null
+                    : "carries another configuration; build the middleware from the configuration's security->headers",
+            );
         }
 
+        $unwired = array_filter($unwired);
+
         foreach ($this->acknowledgedSecurityKeys as $acknowledged) {
-            unset($unwired[$acknowledged]);
+            unset($unwired['security.' . $acknowledged]);
         }
 
         if ($unwired !== []) {
-            $qualified = [];
-            foreach ($unwired as $setting => $instruction) {
-                $qualified['security.' . $setting] = $instruction;
-            }
-
-            throw ConfigurationException::unwiredSecurity($qualified);
+            throw ConfigurationException::unwiredSecurity($unwired);
         }
     }
 
     /**
-     * Returns the instruction that enforces a class, naming the route names that already hold it.
+     * Says how to enforce a declared value through a middleware's global instances, or null when at least one is
+     * mounted and none differs from it.
      *
-     * @param class-string $middleware
+     * @template T of object
+     * @param class-string<T> $middleware
+     * @param string $declaredValue Where a missing instance takes its value from.
+     * @param Closure(T): ?string $differenceOf What an instance carries instead and how to fix it, or null.
+     * @param string $routeOnlyHint Added to the mount instruction when only route names hold the middleware.
      */
-    private function describeUnwiredMiddleware(string $middleware): string
-    {
-        $instruction = 'mount ' . $middleware . ' with withMiddleware()';
-
-        if ($middleware === CsrfMiddleware::class && $this->kernelBuilder->routeNamesOf($middleware) !== []) {
-            $instruction .= ' and exempt routes through security.csrf.exceptions';
-        }
-
-        return $instruction . $this->routeNameClause($middleware);
-    }
-
-    /**
-     * Describes how to mount or correct SecureHeadersMiddleware, given the global instances and those that differ.
-     *
-     * @param list<SecureHeadersMiddleware> $mounted
-     * @param list<SecureHeadersMiddleware> $mismatched
-     */
-    private function describeUnwiredHeaders(array $mounted, array $mismatched): string
-    {
-        $middleware = SecureHeadersMiddleware::class;
+    private function describeUnwiredValue(
+        string $middleware,
+        string $declaredValue,
+        Closure $differenceOf,
+        string $routeOnlyHint = '',
+    ): ?string {
+        $mounted = $this->kernelBuilder->globalMiddlewaresOf($middleware);
 
         if ($mounted === []) {
-            return 'mount new ' . $middleware . '(...) globally with withMiddleware(), '
-                . "built from the configuration's security->headers" . $this->routeNameClause($middleware);
+            $names = $this->kernelBuilder->routeNamesOf($middleware);
+
+            return 'mount new ' . $middleware . '(...) globally with withMiddleware(), built from ' . $declaredValue
+                . ($names === [] ? '' : $routeOnlyHint) . self::routeNameClause($names);
+        }
+
+        $differences = [];
+        foreach ($mounted as $index => $instance) {
+            $difference = $differenceOf($instance);
+            if ($difference !== null) {
+                $differences[$index] = $difference;
+            }
+        }
+
+        if ($differences === []) {
+            return null;
         }
 
         $total = count($mounted);
-        $mismatchedCount = count($mismatched);
 
         if ($total === 1) {
-            return 'give the global ' . $middleware . " the configuration's security->headers: "
-                . 'the global instance carries another configuration';
+            return 'the global ' . $middleware . ' ' . $differences[0];
         }
 
-        $fix = 'give every global ' . $middleware . " the configuration's security->headers";
+        $count = count($differences);
+        $summary = $count === $total
+            ? 'none of the ' . $total . ' global ' . $middleware . ' instances enforces it as declared, '
+                . 'and each instance applies its own: fix each one'
+            : $count . ' of the ' . $total . ' global ' . $middleware . ' instances '
+                . ($count === 1 ? 'does' : 'do') . ' not enforce it as declared, '
+                . 'and each instance applies its own: fix or remove ' . ($count === 1 ? 'it' : 'them');
 
-        if ($mismatchedCount === $total) {
-            return $fix . ': all ' . $total . ' global instances carry another configuration';
+        foreach ($differences as $index => $difference) {
+            $summary .= "\n    - instance " . ($index + 1) . ' of ' . $total . ' ' . $difference;
         }
 
-        return $fix . ', or remove the extra ones: ' . $mismatchedCount . ' of the ' . $total . ' global instances '
-            . ($mismatchedCount === 1 ? 'carries' : 'carry')
-            . ' another configuration (an outer instance fills any header an inner one leaves out)';
+        return $summary;
     }
 
     /**
-     * The route names holding the class, as a clause to append to an instruction (empty when there are none).
+     * The route names holding a middleware, as a clause to append to an instruction (empty when there are none).
      *
-     * @param class-string $middleware
+     * @param list<string> $names
      */
-    private function routeNameClause(string $middleware): string
+    private static function routeNameClause(array $names): string
     {
-        $names = $this->kernelBuilder->routeNamesOf($middleware);
-
         if ($names === []) {
             return '';
         }
 
         return '; it is registered only under route ' . (count($names) > 1 ? 'names ' : 'name ')
             . implode(', ', array_map(static fn (string $name): string => "'" . $name . "'", $names));
+    }
+
+    /**
+     * Names the values an instance holds that a declared list does not and those it lacks, then how to align them,
+     * or returns null when both hold the same values in any order.
+     *
+     * @param list<string> $carried
+     * @param list<string> $declared
+     * @param array{string, string} $verbs What the instance does with a value it holds, then with one it lacks.
+     */
+    private static function describeListDifference(
+        array $carried,
+        array $declared,
+        string $setting,
+        array $verbs,
+        string $rebuild,
+    ): ?string {
+        $extra = array_values(array_unique(array_diff($carried, $declared)));
+        $missing = array_values(array_unique(array_diff($declared, $carried)));
+
+        if ($extra === [] && $missing === []) {
+            return null;
+        }
+
+        $clauses = [];
+        if ($extra !== []) {
+            $clauses[] = $verbs[0] . ' ' . self::quoted($extra) . ', which ' . $setting . ' does not list';
+        }
+        if ($missing !== []) {
+            $clauses[] = $verbs[1] . ' ' . self::quoted($missing) . ', which ' . $setting . ' lists';
+        }
+
+        $alignment = match (true) {
+            $missing === [] => 'declare ' . (count($extra) === 1 ? 'it' : 'them') . ' in ' . $setting,
+            $extra === [] => 'remove ' . (count($missing) === 1 ? 'it' : 'them') . ' from ' . $setting,
+            default => 'make ' . $setting . ' match the middleware',
+        };
+
+        return implode(', and ', $clauses) . '; ' . $alignment . ', or ' . $rebuild;
+    }
+
+    /**
+     * The values as comma-separated JSON strings.
+     *
+     * @param list<string> $values
+     */
+    private static function quoted(array $values): string
+    {
+        // JSON-escaped so a control character in a value never reaches a log line raw.
+        return implode(', ', array_map(
+            static fn (string $value): string => json_encode(
+                $value,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR,
+            ),
+            $values,
+        ));
     }
 
     /**

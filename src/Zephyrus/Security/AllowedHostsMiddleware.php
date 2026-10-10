@@ -113,6 +113,16 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return null;
     }
 
+    /**
+     * The allowlist in its normalised form: lowercased, trailing dot and IPv6 brackets removed.
+     *
+     * @return list<string>
+     */
+    public function allowedHosts(): array
+    {
+        return $this->allowedHosts;
+    }
+
     public function process(Request $request, callable $next): Response
     {
         if ($this->allowedHosts === []) {

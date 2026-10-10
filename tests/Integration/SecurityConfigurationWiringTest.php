@@ -69,23 +69,30 @@ final class SecurityConfigurationWiringTest extends TestCase
                 $message,
             );
             self::assertStringContainsString(
-                'security.allowedHosts is not enforced: mount ' . AllowedHostsMiddleware::class
-                . ' with withMiddleware()',
+                'security.allowedHosts is not enforced: mount new ' . AllowedHostsMiddleware::class
+                . "(...) globally with withMiddleware(), built from the configuration's security->allowedHosts",
                 $message,
             );
             self::assertStringContainsString(
-                'security.csrf is not enforced: mount ' . CsrfMiddleware::class . ' with withMiddleware()',
+                'security.csrf is not enforced: mount new ' . CsrfMiddleware::class
+                . "(...) globally with withMiddleware(), built from the configuration's security through "
+                . 'CsrfConfig::fromSecurityConfig()',
                 $message,
             );
             self::assertStringContainsString(
-                'security.maxBodySize is not enforced: mount ' . MaxBodySizeMiddleware::class
-                . ' with withMiddleware()',
+                'security.maxBodySize is not enforced: mount new ' . MaxBodySizeMiddleware::class
+                . "(...) globally with withMiddleware(), built from the configuration's security->maxBodySize",
+                $message,
+            );
+            self::assertStringStartsWith(
+                "Configuration declares security settings that this application does not enforce as declared:\n",
                 $message,
             );
             self::assertStringContainsString(
-                'Mount the middleware(s) globally with withMiddleware(), or acknowledge the gap explicitly with',
+                'Apply the fix given for each setting, or acknowledge the gap explicitly with',
                 $message,
             );
+            self::assertStringNotContainsString('(s)', $message);
             self::assertStringNotContainsString('register', $message);
         }
     }
@@ -136,51 +143,375 @@ final class SecurityConfigurationWiringTest extends TestCase
         }
     }
 
-    public function testDeclaredHeadersWithTheMiddlewareMountedBootNormally(): void
-    {
-        $application = $this->bootWithDeclaredHeaders(
-            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
-        );
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    #[DataProvider('declaredValueProvider')]
+    public function testAGlobalMiddlewareCarryingAnotherValueRefusesToBoot(
+        array $configuration,
+        string $setting,
+        string $expectedInstruction,
+        MiddlewareInterface $carryingAnotherValue,
+        MiddlewareInterface $carryingTheDeclaredValue,
+    ): void {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray($configuration)
+                ->withRouter(new Router())
+                ->withMiddleware($carryingAnotherValue)
+                ->build();
+
+            self::fail(sprintf('build() accepted a global middleware that does not carry security.%s', $setting));
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'security.' . $setting . ' is not enforced: the global ' . $carryingAnotherValue::class . ' '
+                . $expectedInstruction,
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString('instance 1 of', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    #[DataProvider('declaredValueProvider')]
+    public function testAGlobalMiddlewareCarryingTheDeclaredValueBoots(
+        array $configuration,
+        string $setting,
+        string $expectedInstruction,
+        MiddlewareInterface $carryingAnotherValue,
+        MiddlewareInterface $carryingTheDeclaredValue,
+    ): void {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray($configuration)
+            ->withRouter(new Router())
+            ->withMiddleware($carryingTheDeclaredValue)
+            ->build();
 
         self::assertInstanceOf(Application::class, $application);
     }
 
-    public function testDeclaredHeadersWithTheMiddlewareMountedWithAnotherConfigurationRefuseToBoot(): void
-    {
-        try {
-            $this->bootWithDeclaredHeaders(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()));
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    #[DataProvider('declaredValueProvider')]
+    public function testAGlobalMiddlewareCarryingAnotherValueBootsWhenItsKeyIsAcknowledged(
+        array $configuration,
+        string $setting,
+        string $expectedInstruction,
+        MiddlewareInterface $carryingAnotherValue,
+        MiddlewareInterface $carryingTheDeclaredValue,
+    ): void {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray($configuration)
+            ->withAcknowledgedSecurityKeys([$setting])
+            ->withRouter(new Router())
+            ->withMiddleware($carryingAnotherValue)
+            ->build();
 
-            self::fail('build() accepted a declared csp that the mounted middleware never sends.');
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    #[DataProvider('declaredValueProvider')]
+    public function testAGlobalInstanceOnAnotherValueIsNotDescribedAsRouteOnly(
+        array $configuration,
+        string $setting,
+        string $expectedInstruction,
+        MiddlewareInterface $carryingAnotherValue,
+        MiddlewareInterface $carryingTheDeclaredValue,
+    ): void {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray($configuration)
+                ->withRouter(new Router())
+                ->withMiddleware($carryingAnotherValue)
+                ->registerMiddleware('sec', $carryingTheDeclaredValue)
+                ->build();
+
+            self::fail(sprintf('build() accepted a global middleware that does not carry security.%s', $setting));
         } catch (ConfigurationException $exception) {
-            self::assertStringContainsString(
-                'security.headers is not enforced: give the global ' . SecureHeadersMiddleware::class
-                . " the configuration's security->headers: the global instance carries another configuration",
-                $exception->getMessage(),
-            );
-            self::assertStringNotContainsString('remove the extra ones', $exception->getMessage());
+            self::assertStringContainsString($expectedInstruction, $exception->getMessage());
+            self::assertStringNotContainsString("registered only under route name 'sec'", $exception->getMessage());
         }
     }
 
-    public function testAGlobalInstanceOnAnotherConfigurationIsNotDescribedAsRouteOnly(): void
+    /**
+     * @return iterable<string, array{array<string, mixed>, string, string, MiddlewareInterface, MiddlewareInterface}>
+     */
+    public static function declaredValueProvider(): iterable
+    {
+        $maxBodySize = ['security' => ['max_body_size' => 2_097_152]];
+        $allowedHosts = ['security' => ['allowed_hosts' => ['app.test']]];
+        $csrf = ['security' => ['csrf' => ['enabled' => true]]];
+        $csrfExceptions = ['security' => ['csrf' => ['exceptions' => ['#^/webhooks/#']]]];
+        $looserLimit = static fn (string $carried): string => 'carries a looser limit (' . $carried
+            . ') than security.maxBodySize (2097152 bytes); '
+            . 'give it a positive limit no larger than security.maxBodySize';
+        $rebuildHosts = "build the middleware from the configuration's security->allowedHosts";
+        $rebuildCsrf = 'build the middleware with CsrfConfig::fromSecurityConfig()';
+
+        yield 'maxBodySize unlimited' => [
+            $maxBodySize,
+            'maxBodySize',
+            $looserLimit('0, unlimited'),
+            new MaxBodySizeMiddleware(0),
+            new MaxBodySizeMiddleware(2_097_152),
+        ];
+
+        yield 'maxBodySize larger' => [
+            $maxBodySize,
+            'maxBodySize',
+            $looserLimit('104857600 bytes'),
+            new MaxBodySizeMiddleware(104_857_600),
+            new MaxBodySizeMiddleware(2_097_152),
+        ];
+
+        yield 'maxBodySize one byte larger' => [
+            $maxBodySize,
+            'maxBodySize',
+            $looserLimit('2097153 bytes'),
+            new MaxBodySizeMiddleware(2_097_153),
+            new MaxBodySizeMiddleware(2_097_152),
+        ];
+
+        yield 'allowedHosts empty' => [
+            $allowedHosts,
+            'allowedHosts',
+            'carries an empty allowlist, which accepts every host; ' . $rebuildHosts,
+            new AllowedHostsMiddleware([]),
+            new AllowedHostsMiddleware(['app.test']),
+        ];
+
+        yield 'allowedHosts wider' => [
+            $allowedHosts,
+            'allowedHosts',
+            'allows "evil.test", which security.allowedHosts does not list; '
+            . 'declare it in security.allowedHosts, or ' . $rebuildHosts,
+            new AllowedHostsMiddleware(['app.test', 'evil.test']),
+            new AllowedHostsMiddleware(['app.test']),
+        ];
+
+        yield 'allowedHosts wildcard' => [
+            $allowedHosts,
+            'allowedHosts',
+            'allows "*.app.test", which security.allowedHosts does not list, '
+            . 'and omits "app.test", which security.allowedHosts lists; '
+            . 'make security.allowedHosts match the middleware, or ' . $rebuildHosts,
+            new AllowedHostsMiddleware(['*.app.test']),
+            new AllowedHostsMiddleware(['app.test']),
+        ];
+
+        yield 'csrf disabled' => [
+            $csrf,
+            'csrf',
+            'is disabled; ' . $rebuildCsrf,
+            new CsrfMiddleware(new WiringTokenManager(), new CsrfConfig(enabled: false)),
+            new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()),
+        ];
+
+        yield 'csrf extra exception' => [
+            $csrf,
+            'csrf',
+            'excludes "#^/api/#", which security.csrf.exceptions does not list; '
+            . 'declare it in security.csrf.exceptions, or ' . $rebuildCsrf,
+            new CsrfMiddleware(new WiringTokenManager(), new CsrfConfig(excludedPathPatterns: ['#^/api/#'])),
+            new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()),
+        ];
+
+        yield 'csrf missing exception' => [
+            $csrfExceptions,
+            'csrf',
+            'does not exclude "#^/webhooks/#", which security.csrf.exceptions lists; '
+            . 'remove it from security.csrf.exceptions, or ' . $rebuildCsrf,
+            new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()),
+            new CsrfMiddleware(new WiringTokenManager(), new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#'])),
+        ];
+
+        yield 'headers' => [
+            self::DECLARED_HEADERS,
+            'headers',
+            "carries another configuration; build the middleware from the configuration's security->headers",
+            new SecureHeadersMiddleware(SecureHeadersConfig::defaults()),
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+        ];
+    }
+
+    public function testDeclaredAllowedHostsMatchAMiddlewareSpellingThemInAnotherCaseAndOrder(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['allowed_hosts' => ['Example.COM', 'app.test', '2001:DB8::1']]])
+            ->withRouter(new Router())
+            ->withMiddleware(new AllowedHostsMiddleware(['[2001:db8::1]', 'app.test.', 'example.com']))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testDeclaredAllowedHostsMatchAMiddlewareListingDigitOnlyHostsInAnotherOrder(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['allowed_hosts' => ['10', '9', '1a']]])
+            ->withRouter(new Router())
+            ->withMiddleware(new AllowedHostsMiddleware(['1a', '10', '9']))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testDeclaredCsrfExceptionsMatchAMiddlewareListingThemInAnotherOrder(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(
+                ['security' => ['csrf' => ['exceptions' => ['#^/webhooks/#', '#^/logout$#']]]],
+            )
+            ->withRouter(new Router())
+            ->withMiddleware(new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(excludedPathPatterns: ['#^/logout$#', '#^/webhooks/#']),
+            ))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testACsrfMiddlewareExcludingUndeclaredPathsNamesThemAndHowToKeepThem(): void
     {
         try {
             ApplicationBuilder::create()
-                ->withConfigurationArray(self::DECLARED_HEADERS)
+                ->withConfigurationArray(['security' => ['csrf' => ['exceptions' => []]]])
                 ->withRouter(new Router())
-                ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
-                ->registerMiddleware(
-                    'sec',
-                    new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
-                )
+                ->withMiddleware(new CsrfMiddleware(
+                    new WiringTokenManager(),
+                    new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#', '#^/passkey/#']),
+                ))
                 ->build();
 
-            self::fail('build() accepted a global SecureHeadersMiddleware with another configuration.');
+            self::fail('build() accepted a CsrfMiddleware excluding paths security.csrf.exceptions does not list.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'the global instance carries another configuration',
+                "\n  - security.csrf is not enforced: the global " . CsrfMiddleware::class
+                . ' excludes "#^/webhooks/#", "#^/passkey/#", which security.csrf.exceptions does not list; '
+                . 'declare them in security.csrf.exceptions, or build the middleware with '
+                . "CsrfConfig::fromSecurityConfig()\n",
                 $exception->getMessage(),
             );
-            self::assertStringNotContainsString("registered only under route name 'sec'", $exception->getMessage());
+        }
+    }
+
+    public function testDifferingValuesArePrintedAsJsonStrings(): void
+    {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(['security' => ['csrf' => ['exceptions' => []]]])
+                ->withRouter(new Router())
+                ->withMiddleware(new CsrfMiddleware(
+                    new WiringTokenManager(),
+                    new CsrfConfig(excludedPathPatterns: ["#^/caf\u{e9}\e/#"]),
+                ))
+                ->build();
+
+            self::fail('build() accepted a CsrfMiddleware excluding a path security.csrf.exceptions does not list.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('excludes "#^/café\u001b/#", which', $exception->getMessage());
+            self::assertStringNotContainsString("\e", $exception->getMessage());
+        }
+    }
+
+    public function testASingleGlobalMaxBodySizeStricterThanTheDeclaredLimitBoots(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['max_body_size' => 2_097_152]])
+            ->withRouter(new Router())
+            ->withMiddleware(new MaxBodySizeMiddleware(1))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    #[DataProvider('noLooserSecondLimitProvider')]
+    public function testASecondGlobalMaxBodySizeNoLooserThanTheDeclaredLimitBoots(int $secondLimit): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['max_body_size' => 11_534_336]])
+            ->withRouter(new Router())
+            ->withMiddleware(new MaxBodySizeMiddleware(11_534_336))
+            ->withMiddleware(new MaxBodySizeMiddleware($secondLimit))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function noLooserSecondLimitProvider(): iterable
+    {
+        yield 'stricter' => [2_304_000];
+        yield 'one byte' => [1];
+        yield 'equal' => [11_534_336];
+    }
+
+    #[DataProvider('looserSecondLimitProvider')]
+    public function testASecondGlobalMaxBodySizeLooserThanTheDeclaredLimitRefusesToBoot(
+        int $secondLimit,
+        string $describedLimit,
+    ): void {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(['security' => ['max_body_size' => 11_534_336]])
+                ->withRouter(new Router())
+                ->withMiddleware(new MaxBodySizeMiddleware(11_534_336))
+                ->withMiddleware(new MaxBodySizeMiddleware($secondLimit))
+                ->build();
+
+            self::fail('build() accepted a second global MaxBodySizeMiddleware with a looser limit.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'security.maxBodySize is not enforced: 1 of the 2 global ' . MaxBodySizeMiddleware::class
+                . ' instances does not enforce it as declared, and each instance applies its own: fix or remove it'
+                . "\n    - instance 2 of 2 carries a looser limit (" . $describedLimit . ') than security.maxBodySize '
+                . '(11534336 bytes); give it a positive limit no larger than security.maxBodySize',
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString('instance 1 of 2', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{int, string}>
+     */
+    public static function looserSecondLimitProvider(): iterable
+    {
+        yield 'unlimited' => [0, '0, unlimited'];
+        yield 'one byte larger' => [11_534_337, '11534337 bytes'];
+        yield 'larger' => [104_857_600, '104857600 bytes'];
+    }
+
+    public function testEveryGlobalMaxBodySizeLooserThanTheDeclaredLimitIsReportedInstanceByInstance(): void
+    {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(['security' => ['max_body_size' => 2_097_152]])
+                ->withRouter(new Router())
+                ->withMiddleware(new MaxBodySizeMiddleware(0))
+                ->withMiddleware(new MaxBodySizeMiddleware(4_194_304))
+                ->build();
+
+            self::fail('build() accepted two global MaxBodySizeMiddleware with looser limits.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'security.maxBodySize is not enforced: none of the 2 global ' . MaxBodySizeMiddleware::class
+                . ' instances enforces it as declared, and each instance applies its own: fix each one'
+                . "\n    - instance 1 of 2 carries a looser limit (0, unlimited) than security.maxBodySize "
+                . '(2097152 bytes); give it a positive limit no larger than security.maxBodySize'
+                . "\n    - instance 2 of 2 carries a looser limit (4194304 bytes) than security.maxBodySize "
+                . '(2097152 bytes); give it a positive limit no larger than security.maxBodySize',
+                $exception->getMessage(),
+            );
         }
     }
 
@@ -195,10 +526,14 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted two global SecureHeadersMiddleware with another configuration.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'all 2 global instances carry another configuration',
+                'security.headers is not enforced: none of the 2 global ' . SecureHeadersMiddleware::class
+                . ' instances enforces it as declared, and each instance applies its own: fix each one'
+                . "\n    - instance 1 of 2 carries another configuration; "
+                . "build the middleware from the configuration's security->headers"
+                . "\n    - instance 2 of 2 carries another configuration; ",
                 $exception->getMessage(),
             );
-            self::assertStringNotContainsString('remove the extra ones', $exception->getMessage());
+            self::assertStringNotContainsString('fix or remove', $exception->getMessage());
         }
     }
 
@@ -213,13 +548,13 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted a second global SecureHeadersMiddleware with another configuration.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                '1 of the 2 global instances carries another configuration',
+                'security.headers is not enforced: 1 of the 2 global ' . SecureHeadersMiddleware::class
+                . ' instances does not enforce it as declared, and each instance applies its own: fix or remove it'
+                . "\n    - instance 1 of 2 carries another configuration; "
+                . "build the middleware from the configuration's security->headers\n",
                 $exception->getMessage(),
             );
-            self::assertStringContainsString(
-                'give every global ' . SecureHeadersMiddleware::class,
-                $exception->getMessage(),
-            );
+            self::assertStringNotContainsString('instance 2 of 2', $exception->getMessage());
         }
     }
 
@@ -239,18 +574,6 @@ final class SecurityConfigurationWiringTest extends TestCase
             new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
             new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
         );
-
-        self::assertInstanceOf(Application::class, $application);
-    }
-
-    public function testDeclaredHeadersWithAnotherConfigurationAcknowledgedBootNormally(): void
-    {
-        $application = ApplicationBuilder::create()
-            ->withConfigurationArray(self::DECLARED_HEADERS)
-            ->withAcknowledgedSecurityKeys(['headers'])
-            ->withRouter(new Router())
-            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
-            ->build();
 
         self::assertInstanceOf(Application::class, $application);
     }
@@ -359,8 +682,9 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted a csrf middleware that only route names reference');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.csrf is not enforced: mount ' . CsrfMiddleware::class
-                . ' with withMiddleware() and exempt routes through security.csrf.exceptions; '
+                'security.csrf is not enforced: mount new ' . CsrfMiddleware::class
+                . "(...) globally with withMiddleware(), built from the configuration's security through "
+                . 'CsrfConfig::fromSecurityConfig(), and list the exempt routes under security.csrf.exceptions; '
                 . "it is registered only under route names 'api', 'admin'",
                 $exception->getMessage(),
             );
@@ -394,6 +718,12 @@ final class SecurityConfigurationWiringTest extends TestCase
             ['security' => ['max_body_size' => 2_097_152]],
             'security.maxBodySize',
             new MaxBodySizeMiddleware(2_097_152),
+        ];
+
+        yield 'headers' => [
+            self::DECLARED_HEADERS,
+            'security.headers',
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
         ];
     }
 

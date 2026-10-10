@@ -93,7 +93,7 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * Raised when a `security:` setting asks for a protection that no global middleware enforces.
+     * Raised when a `security:` setting asks for a protection that the global middlewares do not enforce as declared.
      *
      * Fails at boot on purpose: the framework must not add middlewares from configuration,
      * or an application that mounts its own would get a second copy of each.
@@ -108,9 +108,9 @@ final class ConfigurationException extends ZephyrusException
         }
 
         return new self(
-            "Configuration declares security settings that nothing in this application enforces:\n"
+            "Configuration declares security settings that this application does not enforce as declared:\n"
             . implode("\n", $lines)
-            . "\n\nMount the middleware(s) globally with withMiddleware(), or acknowledge the gap explicitly with "
+            . "\n\nApply the fix given for each setting, or acknowledge the gap explicitly with "
             . 'ApplicationBuilder::withAcknowledgedSecurityKeys([...]) when the protection is provided '
             . 'elsewhere (a reverse proxy, a wrapping middleware, the web server).',
         );

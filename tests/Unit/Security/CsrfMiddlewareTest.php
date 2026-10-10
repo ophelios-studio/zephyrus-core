@@ -40,6 +40,13 @@ final class CsrfMiddlewareTest extends TestCase
         return new CsrfMiddleware($this->makeManager(), $config ?? CsrfConfig::defaults());
     }
 
+    public function testConfigIsExposed(): void
+    {
+        $config = new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#'], enabled: false);
+
+        self::assertSame($config, $this->makeMiddleware($config)->config());
+    }
+
     public function testGetPassesThroughWithoutToken(): void
     {
         $mw       = $this->makeMiddleware();
