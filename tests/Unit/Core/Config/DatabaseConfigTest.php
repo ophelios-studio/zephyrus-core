@@ -712,4 +712,200 @@ final class DatabaseConfigTest extends TestCase
             self::assertStringContainsString("'1.10'", $e->getMessage());
         }
     }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function dsnSyntaxValues(): iterable
+    {
+        $values = [
+            'space and key' => 'app host=127.0.0.1 port=1',
+            'semicolon' => 'a;b',
+            'equals' => 'a=b',
+            'single quote' => "a'b",
+            'double quote' => 'a"b',
+            'backslash' => 'a\\b',
+            'nul' => "a\0b",
+            'tab' => "a\tb",
+            'newline' => "a\nb",
+            'carriage return' => "a\rb",
+            'delete' => "a\x7Fb",
+        ];
+
+        foreach (['host', 'database'] as $field) {
+            foreach ($values as $label => $value) {
+                yield $field . ' ' . $label => [$field, $value];
+            }
+        }
+    }
+
+    #[DataProvider('dsnSyntaxValues')]
+    public function testFromArrayRefusesDsnSyntaxInHostAndDatabase(string $field, string $value): void
+    {
+        try {
+            DatabaseConfig::fromArray([
+                'host'     => $field === 'host' ? $value : 'localhost',
+                'database' => $field === 'database' ? $value : 'db',
+                'username' => 'u',
+            ]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field '" . $field . "' has invalid value", $e->getMessage());
+            self::assertStringContainsString('would truncate or extend the DSN', $e->getMessage());
+        }
+    }
+
+    #[DataProvider('dsnSyntaxValues')]
+    public function testConstructorRefusesDsnSyntaxInHostAndDatabase(string $field, string $value): void
+    {
+        try {
+            new DatabaseConfig(
+                driver: 'pgsql',
+                host: $field === 'host' ? $value : 'localhost',
+                port: 5432,
+                database: $field === 'database' ? $value : 'db',
+                username: 'u',
+                password: '',
+                charset: 'utf8',
+            );
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field '" . $field . "' has invalid value", $e->getMessage());
+            self::assertStringContainsString('would truncate or extend the DSN', $e->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function ordinaryHostAndDatabaseValues(): iterable
+    {
+        foreach (['localhost', 'db.example.com', 'my-db_1', '192.0.2.1', '::1', '[::1]', '/var/run/postgresql'] as $host) {
+            yield 'host ' . $host => ['host', $host];
+        }
+
+        foreach (['my-db_1', 'db.example.com', 'café'] as $database) {
+            yield 'database ' . $database => ['database', $database];
+        }
+    }
+
+    #[DataProvider('ordinaryHostAndDatabaseValues')]
+    public function testFromArrayKeepsOrdinaryHostAndDatabaseValues(string $field, string $value): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'host'     => $field === 'host' ? $value : 'localhost',
+            'database' => $field === 'database' ? $value : 'db',
+            'username' => 'u',
+        ]);
+
+        self::assertSame($value, $field === 'host' ? $config->host : $config->database);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function controlCharacterRootCerts(): iterable
+    {
+        yield 'nul' => ["/a\0b"];
+        yield 'unit separator' => ["/a\x1Fb"];
+        yield 'delete' => ["/a\x7Fb"];
+    }
+
+    #[DataProvider('controlCharacterRootCerts')]
+    public function testThrowsForSslRootCertContainingAControlCharacter(string $path): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'sslrootcert' => $path]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field 'sslrootcert' has invalid value", $e->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function unusableDsnValues(): iterable
+    {
+        foreach (['host', 'database', 'sslrootcert'] as $field) {
+            yield $field . ' equals sign' => [$field, '/tmp/user=x'];
+            yield $field . ' non-breaking space byte' => [$field, "\xA0"];
+            yield $field . ' vertical tab' => [$field, "a\x0Bb"];
+            yield $field . ' form feed' => [$field, "a\x0Cb"];
+        }
+
+        yield 'database trailing newline' => ['database', "app\n"];
+        yield 'host empty' => ['host', ''];
+        yield 'host comma list' => ['host', '127.0.0.1,tenant.db.invalid'];
+        yield 'host leading comma' => ['host', ',127.0.0.1'];
+        yield 'database empty' => ['database', ''];
+    }
+
+    #[DataProvider('unusableDsnValues')]
+    public function testConstructorRefusesAnEmptyOrAmbiguousDsnValue(string $field, string $value): void
+    {
+        $field = $field === 'sslrootcert' ? 'sslRootCert' : $field;
+
+        try {
+            new DatabaseConfig(
+                driver: 'pgsql',
+                host: $field === 'host' ? $value : 'localhost',
+                port: 5432,
+                database: $field === 'database' ? $value : 'db',
+                username: 'u',
+                password: '',
+                charset: 'utf8',
+                sslMode: 'verify-full',
+                sslRootCert: $field === 'sslRootCert' ? $value : null,
+            );
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field '" . $field . "' has invalid value", $e->getMessage());
+        }
+    }
+
+    public function testHostRefusalSaysItIsASingleHost(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['host' => 'a.example.com,b.example.com', 'database' => 'db', 'username' => 'u']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString('single host', $e->getMessage());
+        }
+    }
+
+    public function testFromArrayRefusesAnEmptyHost(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['host' => '', 'database' => 'db', 'username' => 'u']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field 'host' has invalid value", $e->getMessage());
+        }
+    }
+
+    public function testFromArrayRefusesAHostThatIsOnlyWhitespace(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        DatabaseConfig::fromArray(['host' => '   ', 'database' => 'db', 'username' => 'u']);
+    }
+
+    public function testFromArrayRefusesADatabaseMadeOfANonBreakingSpaceByte(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => "\xA0", 'username' => 'u', 'sslMode' => 'verify-full']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field 'database' has invalid value", $e->getMessage());
+        }
+    }
+
+    public function testFromArrayTrimsHostAndDatabase(): void
+    {
+        $config = DatabaseConfig::fromArray(['host' => " db.example.com\n", 'database' => "\tmy_db ", 'username' => 'u']);
+
+        self::assertSame('db.example.com', $config->host);
+        self::assertSame('my_db', $config->database);
+    }
 }

@@ -10,14 +10,18 @@ namespace Zephyrus\Core\Config;
  * Required fields: database, username. Defaults: driver 'pgsql', host 'localhost', port 5432,
  * password '', charset 'utf8', sslMode and sslRootCert null, columnCacheVersion ''.
  *
- * Validation (fromArray, and the constructor for charset, sslMode and sslRootCert):
+ * Validation (fromArray, and the constructor for host, database, charset, sslMode and sslRootCert):
  *   - database and username: non-empty strings (fromArray only).
  *   - port: 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
  *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
  *   - sslMode, sslRootCert, columnCacheVersion: one spelling per setting (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
- *   - sslMode and sslRootCert: DSN-safe, as they are interpolated into the PDO DSN.
+ *   - host, database and sslRootCert: non-empty, valid UTF-8, with no whitespace, semicolons, equals
+ *     signs, quotes, backslashes or control characters, as they are interpolated into the PDO DSN.
+ *     host also refuses commas: it is a single host name or address, not a libpq host list.
+ *   - sslMode: one of SSL_MODES.
+ *   - fromArray trims host and database first.
  *
  * Prepared statements are always PostgreSQL server-side (extended query protocol).
  * The emulate_prepares keys are refused, see REMOVED_EMULATE_PREPARES_KEYS.
@@ -62,7 +66,7 @@ final readonly class DatabaseConfig
         public ?string $sslRootCert = null,
         public string $columnCacheVersion = '',
     ) {
-        // The constructor re-checks these three, so a directly built config cannot carry a
+        // The constructor re-checks these values, so a directly built config cannot carry a
         // value fromArray() would refuse. fromArray() normalises first (trim, lower-case,
         // empty to null).
 
@@ -76,8 +80,12 @@ final readonly class DatabaseConfig
             );
         }
 
+        self::assertDsnSafeValue($this->host, 'host', singleHost: true);
+        self::assertDsnSafeValue($this->database, 'database');
         self::assertSslMode($this->sslMode, 'sslMode');
-        self::assertSslRootCert($this->sslRootCert, 'sslRootCert');
+        if ($this->sslRootCert !== null) {
+            self::assertDsnSafeValue($this->sslRootCert, 'sslRootCert');
+        }
     }
 
     /**
@@ -101,9 +109,9 @@ final readonly class DatabaseConfig
         }
 
         $driver   = (string) ($values['driver']   ?? 'pgsql');
-        $host     = (string) ($values['host']     ?? 'localhost');
+        $host     = trim((string) ($values['host']     ?? 'localhost'));
         $port     = (int)    ($values['port']     ?? 5432);
-        $database = (string) ($values['database'] ?? '');
+        $database = trim((string) ($values['database'] ?? ''));
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
@@ -121,9 +129,11 @@ final readonly class DatabaseConfig
         }
 
         self::assertSslMode($sslMode, $sslModeKey);
-        self::assertSslRootCert($sslRootCert, $sslRootCertKey);
+        if ($sslRootCert !== null) {
+            self::assertDsnSafeValue($sslRootCert, $sslRootCertKey);
+        }
 
-        if (trim($database) === '') {
+        if ($database === '') {
             throw ConfigurationException::missingRequired('database', 'database');
         }
 
@@ -203,19 +213,22 @@ final readonly class DatabaseConfig
     }
 
     /**
-     * @throws ConfigurationException if sslRootCert is not null and not a DSN-safe path.
+     * @throws ConfigurationException if value is empty or holds DSN syntax or a control character.
      */
-    private static function assertSslRootCert(?string $sslRootCert, string $field): void
+    private static function assertDsnSafeValue(string $value, string $field, bool $singleHost = false): void
     {
-        // Whitespace, semicolons, quotes and backslashes are DSN syntax to libpq; whether the
-        // file exists is reported at connect time.
-        if ($sslRootCert !== null && preg_match('/^[^\\s;\'"\\\\]+$/D', $sslRootCert) !== 1) {
+        $forbidden = $singleHost ? ',' : '';
+        // Space and \x00-\x1F cover every ASCII whitespace character; \s would vary with the locale.
+        $pattern = '/^[^ ;=\'"\\\\\x00-\x1F\x7F' . $forbidden . ']+$/Du';
+
+        if (preg_match($pattern, $value) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
                 $field,
-                $sslRootCert,
-                'must be null or a non-empty path free of whitespace, semicolons, quotes and backslashes, '
-                    . 'any of which would truncate or extend the DSN',
+                $value,
+                'must be non-empty, valid UTF-8 and must not contain whitespace, semicolons, equals signs, quotes, '
+                    . 'backslashes or control characters, any of which would truncate or extend the DSN'
+                    . ($singleHost ? '; it must be a single host name or address, not a comma-separated list' : ''),
             );
         }
     }
