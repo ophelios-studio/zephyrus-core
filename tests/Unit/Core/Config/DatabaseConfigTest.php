@@ -921,11 +921,7 @@ final class DatabaseConfigTest extends TestCase
             "host=db.example.test PASSWORD = 's3 cr3t' port=5432",
             '"host=db.example.test PASSWORD = ***"',
         ];
-        yield 'database' => [
-            'database',
-            'postgres://app:s3cr=t@db.example.test/app',
-            '"postgres://***@db.example.test/app"',
-        ];
+        yield 'database' => ['database', 'app;password=s3cr3t', '"app;password=***"'];
         yield 'root certificate' => ['sslRootCert', '/certs/root.crt?password=s3cr3t', '"/certs/root.crt?password=***"'];
         yield 'conninfo with an at sign in the password' => [
             'host',
@@ -1202,6 +1198,38 @@ final class DatabaseConfigTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function connectionUrlsAsTheDatabase(): iterable
+    {
+        yield 'with credentials' => [
+            'postgres://app:s3cret@db.example.com:5432/app',
+            '"postgres://***@db.example.com:5432/app"',
+        ];
+        yield 'without credentials' => ['postgresql://db.example.com/app', '"postgresql://db.example.com/app"'];
+        yield 'with a query string' => [
+            'postgres://u:pw@h:5432/app?sslmode=require',
+            '"postgres://***@h:5432/app?sslmode=require"',
+        ];
+    }
+
+    #[DataProvider('connectionUrlsAsTheDatabase')]
+    public function testAConnectionUrlIsRefusedAsTheDatabaseName(string $database, string $shown): void
+    {
+        try {
+            DatabaseConfig::fromArray(['host' => 'db.example.com', 'database' => $database, 'username' => 'app']);
+
+            self::fail('A connection URL was accepted as the database name.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'database' has invalid value " . $shown
+                    . ': must be a database name, not a connection URL.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testTheConstructorRefusesAnAtSignInTheHost(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -1233,6 +1261,9 @@ final class DatabaseConfigTest extends TestCase
         yield 'credentials in the host' => [[...$section, 'host' => 'app:s3cret-pw@db.example.com']];
         yield 'fractional port' => [[...$section, 'port' => 1.5]];
         yield 'charset refused by the constructor' => [[...$section, 'charset' => 'utf8;']];
+        yield 'connection URL as the database' => [
+            [...$section, 'database' => 'postgres://app:s3cret-pw@db.example.com/app'],
+        ];
     }
 
     /**

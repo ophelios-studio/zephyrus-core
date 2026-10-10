@@ -23,6 +23,7 @@ namespace Zephyrus\Core\Config;
  *   - host, database and sslRootCert: non-empty, valid UTF-8, with no ASCII whitespace, semicolons, equals
  *     signs, quotes, backslashes or control characters, as they are interpolated into the PDO DSN.
  *     host also refuses commas and "@": it is a single host name or address, not a libpq host list or a URL.
+ *     database also refuses "://": it is a database name, not a connection URL.
  *   - sslMode: one of SSL_MODES.
  *   - fromArray trims host, port and database first.
  *
@@ -78,7 +79,7 @@ final readonly class DatabaseConfig
         public string $driver,
         #[\SensitiveParameter] public string $host,
         public int $port,
-        public string $database,
+        #[\SensitiveParameter] public string $database,
         public string $username,
         #[\SensitiveParameter] public string $password,
         public string $charset,
@@ -101,7 +102,16 @@ final readonly class DatabaseConfig
         }
 
         self::assertDsnSafeValue($this->host, 'host', singleHost: true);
+        if (str_contains($this->database, '://')) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                'database',
+                self::withoutCredentials($this->database),
+                'must be a database name, not a connection URL',
+            );
+        }
         self::assertDsnSafeValue($this->database, 'database');
+
         self::assertSslMode($this->sslMode, 'sslMode');
         if ($this->sslRootCert !== null) {
             self::assertDsnSafeValue($this->sslRootCert, 'sslRootCert');
