@@ -218,7 +218,8 @@ final class Container implements ContainerInterface
 
             if ($type === null) {
                 throw new ContainerException(
-                    "Cannot auto-wire parameter \${$name} of [{$className}]: no type hint and no default value."
+                    "Cannot auto-wire parameter \${$name} of [{$className}]: it has no type hint and no default value; "
+                    . "add a type, give it a default value, or bind [{$className}] explicitly."
                 );
             }
 

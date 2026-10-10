@@ -63,6 +63,11 @@ final class ProtectedConstructorService
     protected function __construct(public readonly SimpleService $dep) {}
 }
 
+final class ServiceWithUntypedParam
+{
+    public function __construct($value) {}
+}
+
 final class ServiceWithScalarVariadic
 {
     /** @var list<string> */
@@ -346,6 +351,20 @@ final class ContainerTest extends TestCase
             self::assertStringContainsString('bind [' . ServiceWithUnresolvableParam::class . '] explicitly', $e->getMessage());
             self::assertStringContainsString('give $dsn a default value', $e->getMessage());
             self::assertStringNotContainsString('no type hint', $e->getMessage());
+        }
+    }
+
+    public function testAutoWireUntypedParamWithoutDefaultNamesTheFix(): void
+    {
+        try {
+            $this->container->get(ServiceWithUntypedParam::class);
+            self::fail('An untyped parameter without a default must be refused.');
+        } catch (ContainerException $e) {
+            self::assertStringContainsString('parameter $value of [' . ServiceWithUntypedParam::class . ']', $e->getMessage());
+            self::assertStringContainsString(
+                'add a type, give it a default value, or bind [' . ServiceWithUntypedParam::class . '] explicitly',
+                $e->getMessage(),
+            );
         }
     }
 
