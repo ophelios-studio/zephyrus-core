@@ -592,6 +592,19 @@ final class FormatterTest extends TestCase
         self::assertSame([], $this->formatter->getCustomFormatterNames());
     }
 
+    public function testUnparsableDateErrorDescribesTheInputWithoutEchoingIt(): void
+    {
+        $input = 'zzz-SECRETX-zzz';
+
+        try {
+            $this->formatter->date($input);
+            self::fail('An unparsable date string was formatted.');
+        } catch (FormatterException $exception) {
+            self::assertStringNotContainsString('SECRETX', $exception->getMessage());
+            self::assertStringContainsString('15 bytes', $exception->getMessage());
+        }
+    }
+
     public function testHasAcceptsEveryBuiltInNameIgnoringCase(): void
     {
         foreach (Formatter::BUILT_IN_FORMATTERS as $builtIn) {

@@ -601,8 +601,8 @@ final class Formatter
             $ts = strtotime($value);
             if ($ts === false) {
                 throw FormatterException::formattingFailed('datetime', sprintf(
-                    'Unable to parse date string: %s',
-                    $value,
+                    'Unable to parse date string of %d bytes',
+                    strlen($value),
                 ));
             }
             return $ts;
