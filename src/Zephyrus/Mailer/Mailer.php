@@ -196,8 +196,8 @@ final class Mailer
      * @param string      $name        Display name (default: original filename). May not
      *                                 contain a NUL byte, a line break, a path separator or "=?",
      *                                 exceed 255 bytes, have surrounding spaces, nor be blank,
-     *                                 "0", "." or "..": it lands in a MIME header and is what
-     *                                 the recipient's client writes to disk.
+     *                                 "0", "." or "..", nor end with a dot: it lands in a MIME
+     *                                 header and is what the recipient's client writes to disk.
      * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
      *                                 the historical behaviour of trusting the caller.
      */
@@ -332,11 +332,11 @@ final class Mailer
 
         $sent = trim((string) ($isStringAttachment ? PHPMailer::mb_pathinfo($name, PATHINFO_BASENAME) : $name));
 
-        if ($sent !== $name || in_array($name, ['', '0', '.', '..'], true)) {
+        if ($sent !== $name || str_ends_with($name, '.') || in_array($name, ['', '0', '.', '..'], true)) {
             throw MailerException::attachmentRejected(
                 'display name',
                 $name,
-                'is not a usable file name (blank, "0", "." or "..", or the mailer would trim or shorten it)',
+                'is not a usable file name (blank, "0", "." or "..", ends with a dot, or the mailer would trim or shorten it)',
             );
         }
     }

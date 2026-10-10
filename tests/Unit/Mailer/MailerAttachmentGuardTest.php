@@ -177,6 +177,10 @@ final class MailerAttachmentGuardTest extends TestCase
         yield 'zero before a tab' => ["0\t"];
         yield 'dot dot padded with a space' => [' ..'];
         yield 'dot dot before a space' => ['.. '];
+        yield 'trailing dot' => ['report.'];
+        yield 'double extension with trailing dot' => ['evil.exe.'];
+        yield 'dots only' => ['...'];
+        yield 'zero before a dot' => ['0.'];
     }
 
     #[DataProvider('unusableDisplayNameProvider')]
@@ -190,13 +194,6 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer->attach($this->inside, $name);
     }
 
-    public function testADisplayNameWithATrailingDotIsSentUnchangedByAttach(): void
-    {
-        $mailer = new Mailer($this->config);
-        $mailer->attach($this->inside, 'report.');
-
-        self::assertSame('report.', $mailer->getPhpMailer()->getAttachments()[0][2]);
-    }
 
     public function testADisplayNameOf255BytesIsAcceptedByAttach(): void
     {
