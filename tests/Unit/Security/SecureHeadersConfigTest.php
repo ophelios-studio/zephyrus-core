@@ -204,4 +204,229 @@ final class SecureHeadersConfigTest extends TestCase
 
         SecureHeadersConfig::fromArray(['hsts_include_subdomains' => 'maybe']);
     }
+
+    public function testADeclaredNullIncludeSubdomainsIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'hstsIncludeSubdomains'/");
+
+        SecureHeadersConfig::fromArray(['hstsIncludeSubdomains' => null]);
+    }
+
+    public function testANullCamelCaseIncludeSubdomainsIsNotRescuedByTheSnakeCaseSpelling(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'hstsIncludeSubdomains'/");
+
+        SecureHeadersConfig::fromArray(['hstsIncludeSubdomains' => null, 'hsts_include_subdomains' => true]);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function controlCharacterValues(): array
+    {
+        return [
+            'vertical tab' => ["DENY\x0bX"],
+            'start of heading' => ["DENY\x01"],
+            'form feed' => ["DENY\x0c"],
+            'delete' => ["DENY\x7f"],
+        ];
+    }
+
+    #[DataProvider('controlCharacterValues')]
+    public function testAHeaderValueWithAControlCharacterIsRefused(string $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'xFrameOptions'/");
+
+        SecureHeadersConfig::fromArray(['xFrameOptions' => $value]);
+    }
+
+    public function testAHeaderValueWithAHorizontalTabIsAccepted(): void
+    {
+        self::assertSame("a\tb", SecureHeadersConfig::fromArray(['permissionsPolicy' => "a\tb"])->permissionsPolicy);
+    }
+
+    public function testEverySpellingTheUnknownKeyCheckAcceptsIsRead(): void
+    {
+        $config = SecureHeadersConfig::fromArray([
+            'x_frame_options' => 'a', 'x_content_type_options' => 'b', 'referrer_policy' => 'c',
+            'xss_protection' => 'd', 'hsts_max_age' => 5, 'hsts_include_subdomains' => true,
+            'csp' => 'e', 'permissions_policy' => 'f',
+        ]);
+
+        self::assertSame(['a', 'b', 'c', 'd', 5, true, 'e', 'f'], [
+            $config->xFrameOptions, $config->xContentTypeOptions, $config->referrerPolicy,
+            $config->xssProtection, $config->hstsMaxAge, $config->hstsIncludeSubdomains,
+            $config->csp, $config->permissionsPolicy,
+        ]);
+    }
+
+    public function testTheUnknownKeyRefusalListsTheCamelCaseNamesOnly(): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['bogus' => 'x']);
+
+            self::fail('An unknown key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'xFrameOptions, xContentTypeOptions, referrerPolicy, xssProtection, hstsMaxAge, '
+                . 'hstsIncludeSubdomains, csp, permissionsPolicy',
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString('x_frame_options', $exception->getMessage());
+        }
+    }
+
+    public function testANullStringHeaderRefusalSaysHowToOmitTheHeader(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/; use '' to omit the header\\./");
+
+        SecureHeadersConfig::fromArray(['csp' => null]);
+    }
+
+    public function testAFloatHstsMaxAgeIsShownWithItsDecimalForm(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("invalid value '1.0'");
+
+        SecureHeadersConfig::fromArray(['hstsMaxAge' => 1.0]);
+    }
+
+    // ── fromArray(): refusals ───────────────────────────────────────────────
+
+    public function testAMisspelledKeyIsRefusedNamingTheKeyAndTheAcceptedOnes(): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['contentSecurityPolicy' => "default-src 'self'"]);
+
+            self::fail('A misspelled key was accepted and would silently leave the policy off.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("field 'contentSecurityPolicy'", $exception->getMessage());
+            self::assertStringContainsString('security.headers', $exception->getMessage());
+            self::assertStringContainsString('csp', $exception->getMessage());
+        }
+    }
+
+    public function testAnUnknownSnakeCaseKeyIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'frame_options'.*unknown key/");
+
+        SecureHeadersConfig::fromArray(['frame_options' => 'DENY']);
+    }
+
+    public function testAKeyWithNulBytesIsShownEscapedInTheRefusal(): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(["csp\0x" => "default-src 'self'"]);
+
+            self::fail('An unknown key containing a NUL byte was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringNotContainsString("\0", $exception->getMessage());
+        }
+    }
+
+    /** @return array<string, array{string, mixed}> */
+    public static function nonScalarStringHeaders(): array
+    {
+        return [
+            'csp as array' => ['csp', ["default-src 'self'"]],
+            'xFrameOptions as array' => ['xFrameOptions', ['DENY']],
+            'permissions_policy as object' => ['permissions_policy', new \stdClass()],
+            'referrerPolicy as nested array' => ['referrerPolicy', ['a' => ['b']]],
+            'csp declared null' => ['csp', null],
+            'xssProtection declared null' => ['xssProtection', null],
+        ];
+    }
+
+    #[DataProvider('nonScalarStringHeaders')]
+    public function testANonScalarOrNullHeaderIsRefusedNamingTheKey(string $key, mixed $value): void
+    {
+        try {
+            SecureHeadersConfig::fromArray([$key => $value]);
+
+            self::fail("The value written under '$key' was accepted.");
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("field '$key'", $exception->getMessage());
+            self::assertStringNotContainsString('Array', $exception->getMessage());
+        }
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function headerValuesWithLineBreaksOrNul(): array
+    {
+        return [
+            'csp with CRLF' => ['csp', "default-src 'self'\r\nSet-Cookie: x=1"],
+            'csp with LF' => ['csp', "default-src 'self'\nX-Injected: 1"],
+            'csp with CR' => ['csp', "default-src 'self'\r"],
+            'xFrameOptions with NUL' => ['xFrameOptions', "DENY\0"],
+            'permissions_policy with LF' => ['permissions_policy', "camera=()\n"],
+        ];
+    }
+
+    #[DataProvider('headerValuesWithLineBreaksOrNul')]
+    public function testAHeaderValueWithLineBreaksOrNulIsRefused(string $key, string $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field '$key'/");
+
+        SecureHeadersConfig::fromArray([$key => $value]);
+    }
+
+    /** @return array<string, array{mixed}> */
+    public static function unreadableHstsMaxAgeValues(): array
+    {
+        return [
+            'phrase' => ['1 year'],
+            'letters' => ['abc'],
+            'float' => [1.5],
+            'true' => [true],
+            'false' => [false],
+            'negative string' => ['-1'],
+            'plus sign' => ['+60'],
+            'leading space' => [' 60'],
+            'empty string' => [''],
+            'overflowing digits' => ['99999999999999999999999'],
+            'declared null' => [null],
+            'array' => [[60]],
+        ];
+    }
+
+    #[DataProvider('unreadableHstsMaxAgeValues')]
+    public function testAnUnreadableHstsMaxAgeIsRefusedNamingTheKey(mixed $value): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['hstsMaxAge' => $value]);
+
+            self::fail('An hstsMaxAge that is not an integer was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("field 'hstsMaxAge'", $exception->getMessage());
+        }
+    }
+
+    /** @return array<string, array{mixed, int}> */
+    public static function readableHstsMaxAgeValues(): array
+    {
+        return [
+            'int' => [31_536_000, 31_536_000],
+            'digit string' => ['31536000', 31_536_000],
+            'zero string' => ['0', 0],
+            'leading zeros' => ['0010', 10],
+            'snake_case digit string' => [['hsts_max_age' => '86400'], 86_400],
+        ];
+    }
+
+    #[DataProvider('readableHstsMaxAgeValues')]
+    public function testAnIntegerOrDigitStringHstsMaxAgeIsAccepted(mixed $value, int $expected): void
+    {
+        $values = is_array($value) ? $value : ['hstsMaxAge' => $value];
+
+        self::assertSame($expected, SecureHeadersConfig::fromArray($values)->hstsMaxAge);
+    }
+
+    public function testAnIntegerXssProtectionFromYamlIsAccepted(): void
+    {
+        self::assertSame('0', SecureHeadersConfig::fromArray(['xssProtection' => 0])->xssProtection);
+    }
 }

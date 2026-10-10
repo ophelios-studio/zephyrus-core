@@ -6,6 +6,7 @@ namespace Zephyrus\Security;
 
 use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Http\IpRange;
 
 /**
  * Immutable configuration for the HTTP security response headers.
@@ -24,6 +25,18 @@ use Zephyrus\Core\Config\ConfigurationException;
  */
 final readonly class SecureHeadersConfig
 {
+    /** Accepted spellings per property, in order of preference; any other key is refused. */
+    private const array SPELLINGS = [
+        'xFrameOptions' => ['xFrameOptions', 'x_frame_options'],
+        'xContentTypeOptions' => ['xContentTypeOptions', 'x_content_type_options'],
+        'referrerPolicy' => ['referrerPolicy', 'referrer_policy'],
+        'xssProtection' => ['xssProtection', 'xss_protection'],
+        'hstsMaxAge' => ['hstsMaxAge', 'hsts_max_age'],
+        'hstsIncludeSubdomains' => ['hstsIncludeSubdomains', 'hsts_include_subdomains'],
+        'csp' => ['csp'],
+        'permissionsPolicy' => ['permissionsPolicy', 'permissions_policy'],
+    ];
+
     public function __construct(
         public string $xFrameOptions,
         public string $xContentTypeOptions,
@@ -58,42 +71,175 @@ final readonly class SecureHeadersConfig
     /**
      * Builds the config from a key-value array, falling back to defaults() for missing keys.
      *
-     * Each key takes its camelCase or snake_case spelling; camelCase wins when both are set.
+     * Each key takes its camelCase or snake_case spelling; camelCase wins when both are set. A blank header
+     * value is read as empty, which means not emitted.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when hstsIncludeSubdomains is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown, a value is null or not a string or number, a header
+     *         value contains a control character other than a horizontal tab, hstsMaxAge is not an integer or a
+     *         string of digits, or hstsIncludeSubdomains is not a recognisable boolean.
      */
     public static function fromArray(array $values): self
     {
+        self::assertKnownKeys($values);
         $defaults = self::defaults();
 
         return new self(
-            xFrameOptions: (string) (
-                $values['xFrameOptions'] ?? $values['x_frame_options'] ?? $defaults->xFrameOptions
-            ),
-            xContentTypeOptions: (string) (
-                $values['xContentTypeOptions'] ?? $values['x_content_type_options'] ?? $defaults->xContentTypeOptions
-            ),
-            referrerPolicy: (string) (
-                $values['referrerPolicy'] ?? $values['referrer_policy'] ?? $defaults->referrerPolicy
-            ),
-            xssProtection: (string) (
-                $values['xssProtection'] ?? $values['xss_protection'] ?? $defaults->xssProtection
-            ),
-            hstsMaxAge: (int) (
-                $values['hstsMaxAge'] ?? $values['hsts_max_age'] ?? $defaults->hstsMaxAge
-            ),
-            hstsIncludeSubdomains: ConfigBoolean::firstSet(
-                'secureHeaders',
-                $values,
-                ['hstsIncludeSubdomains', 'hsts_include_subdomains'],
-                $defaults->hstsIncludeSubdomains,
-            ),
-            csp: (string) ($values['csp'] ?? $defaults->csp),
-            permissionsPolicy: (string) (
-                $values['permissionsPolicy'] ?? $values['permissions_policy'] ?? $defaults->permissionsPolicy
-            ),
+            xFrameOptions: self::text($values, 'xFrameOptions', $defaults->xFrameOptions),
+            xContentTypeOptions: self::text($values, 'xContentTypeOptions', $defaults->xContentTypeOptions),
+            referrerPolicy: self::text($values, 'referrerPolicy', $defaults->referrerPolicy),
+            xssProtection: self::text($values, 'xssProtection', $defaults->xssProtection),
+            hstsMaxAge: self::hstsMaxAge($values, $defaults->hstsMaxAge),
+            hstsIncludeSubdomains: self::includeSubdomains($values, $defaults->hstsIncludeSubdomains),
+            csp: self::text($values, 'csp', $defaults->csp),
+            permissionsPolicy: self::text($values, 'permissionsPolicy', $defaults->permissionsPolicy),
         );
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @throws ConfigurationException
+     */
+    private static function assertKnownKeys(array $values): void
+    {
+        foreach ($values as $key => $value) {
+            if (!self::isKnownKey((string) $key)) {
+                throw ConfigurationException::invalidValue(
+                    'security.headers',
+                    IpRange::shownEntry((string) $key),
+                    self::shownValue($value),
+                    'unknown key, the accepted keys are ' . implode(', ', array_keys(self::SPELLINGS)),
+                );
+            }
+        }
+    }
+
+    private static function isKnownKey(string $key): bool
+    {
+        foreach (self::SPELLINGS as $spellings) {
+            if (in_array($key, $spellings, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @throws ConfigurationException
+     */
+    private static function includeSubdomains(array $values, bool $default): bool
+    {
+        $key = self::writtenKey($values, self::SPELLINGS['hstsIncludeSubdomains']);
+
+        return $key === null ? $default : ConfigBoolean::parse('security.headers', $key, $values[$key]);
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @throws ConfigurationException
+     */
+    private static function text(array $values, string $property, string $default): string
+    {
+        $key = self::writtenKey($values, self::SPELLINGS[$property]);
+
+        if ($key === null) {
+            return $default;
+        }
+
+        $value = $values[$key];
+
+        if (!is_string($value) && !is_int($value) && !is_float($value)) {
+            throw ConfigurationException::invalidValue(
+                'security.headers',
+                $key,
+                self::shownValue($value),
+                'must be a string or a number'
+                . ($value === null || $value === false ? "; use '' to omit the header" : ''),
+            );
+        }
+
+        $text = (string) $value;
+
+        if (trim($text) === '') {
+            return '';
+        }
+
+        if (preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $text) === 1) {
+            throw ConfigurationException::invalidValue(
+                'security.headers',
+                $key,
+                self::shownValue($text),
+                'must not contain a control character',
+            );
+        }
+
+        return $text;
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @throws ConfigurationException
+     */
+    private static function hstsMaxAge(array $values, int $default): int
+    {
+        $key = self::writtenKey($values, self::SPELLINGS['hstsMaxAge']);
+
+        if ($key === null) {
+            return $default;
+        }
+
+        $value = $values[$key];
+
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && preg_match('/\A[0-9]+\z/', $value) === 1) {
+            $seconds = filter_var(ltrim($value, '0') ?: '0', FILTER_VALIDATE_INT);
+
+            if ($seconds !== false) {
+                return $seconds;
+            }
+        }
+
+        throw ConfigurationException::invalidValue(
+            'security.headers',
+            $key,
+            self::shownValue($value),
+            'must be a whole number of seconds, or a string of digits',
+        );
+    }
+
+    /**
+     * The first spelling present in the array, whatever its value.
+     *
+     * @param array<string, mixed> $values
+     * @param list<string>         $spellings
+     */
+    private static function writtenKey(array $values, array $spellings): ?string
+    {
+        foreach ($spellings as $spelling) {
+            if (array_key_exists($spelling, $values)) {
+                return $spelling;
+            }
+        }
+
+        return null;
+    }
+
+    /** A value for a message: strings escaped and bounded, scalars as written, anything else by type. */
+    private static function shownValue(mixed $value): string
+    {
+        return match (true) {
+            is_string($value) => IpRange::shownEntry($value),
+            is_bool($value) => $value ? 'true' : 'false',
+            is_float($value) => var_export($value, true),
+            is_scalar($value) => (string) $value,
+            $value === null => 'null',
+            default => get_debug_type($value),
+        };
     }
 
     /** The Strict-Transport-Security value, or an empty string when hstsMaxAge is 0 or less. */
