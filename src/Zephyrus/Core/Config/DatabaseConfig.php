@@ -8,12 +8,13 @@ namespace Zephyrus\Core\Config;
  * Immutable configuration section for a single database connection.
  *
  * Required fields: database, username. Defaults: driver 'pgsql', host 'localhost', port 5432,
- * password '', charset 'utf8', sslMode and sslRootCert null.
+ * password '', charset 'utf8', sslMode and sslRootCert null, columnCacheVersion ''.
  *
  * Validation (fromArray, and the constructor for charset, sslMode and sslRootCert):
  *   - database and username: non-empty strings (fromArray only).
  *   - port: 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
+ *   - columnCacheVersion: a scalar, trimmed (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
  *   - sslMode and sslRootCert: DSN-safe, as they are interpolated into the PDO DSN.
  *
@@ -24,6 +25,9 @@ namespace Zephyrus\Core\Config;
  * DSN so libpq keeps its own default ('prefer'). A pinned mode is a deployment decision:
  * 'require' or stricter fails against a server built without TLS. Client-certificate
  * authentication (sslcert, sslkey) is not supported.
+ *
+ * columnCacheVersion: set it to a value that changes with every schema migration (a release id or the
+ * migration version, typically !env RELEASE_VERSION). It keys the shared column shape cache, see Database.
  */
 final readonly class DatabaseConfig
 {
@@ -51,6 +55,7 @@ final readonly class DatabaseConfig
         public string $charset,
         public ?string $sslMode = null,
         public ?string $sslRootCert = null,
+        public string $columnCacheVersion = '',
     ) {
         // The constructor re-checks these three, so a directly built config cannot carry a
         // value fromArray() would refuse. fromArray() normalises first (trim, lower-case,
@@ -115,6 +120,9 @@ final readonly class DatabaseConfig
         $charset  = (string) ($values['charset']  ?? 'utf8');
         $sslMode     = self::normalizeOptional($values['sslMode'] ?? $values['sslmode'] ?? null);
         $sslRootCert = self::normalizeOptional($values['sslRootCert'] ?? $values['sslrootcert'] ?? null);
+        $columnCacheVersion = self::normalizeColumnCacheVersion(
+            $values['columnCacheVersion'] ?? $values['column_cache_version'] ?? null,
+        );
 
         // libpq matches sslmode exactly, so REQUIRE is folded. The cert path is case-sensitive.
         if ($sslMode !== null) {
@@ -166,6 +174,7 @@ final readonly class DatabaseConfig
             charset:         $charset,
             sslMode:         $sslMode,
             sslRootCert:     $sslRootCert,
+            columnCacheVersion: $columnCacheVersion,
         );
     }
 
@@ -205,5 +214,28 @@ final readonly class DatabaseConfig
         $normalized = trim((string) $value);
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    /**
+     * Trims the cache version to a string. Null means no version; a non-scalar is refused.
+     *
+     * @throws ConfigurationException if the value is an array or an object.
+     */
+    private static function normalizeColumnCacheVersion(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (!is_scalar($value)) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                'columnCacheVersion',
+                get_debug_type($value),
+                'must be a scalar, such as a release id or a migration version',
+            );
+        }
+
+        return trim((string) $value);
     }
 }

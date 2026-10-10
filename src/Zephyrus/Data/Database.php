@@ -28,7 +28,7 @@ final class Database
     private array $columnTypeCache = [];
 
     /**
-     * Process-wide column shapes, keyed by sha1(dsn . '|' . sql) . '|' . columnCount.
+     * Process-wide column shapes, keyed by sha1(dsn . '|' . columnCacheVersion . '|' . sql) . '|' . columnCount.
      *
      * Holds plain data (column name => native type), never converters: each instance
      * rebuilds its callables from its own registry, so an override such as a string
@@ -36,8 +36,10 @@ final class Database
      * SELECT * shape change, which self-invalidates the key. Only fromConfig()
      * connections take part. Backed by APCu across requests, see fetchColumnShapeFromApcu().
      *
-     * Known limit: a column that changes type while keeping its name and the column count
-     * stays undetected until its APCu entry expires (APCU_TTL) or flushSharedColumnMetadata() runs.
+     * Known limit: without a columnCacheVersion, a column that changes type while keeping its name and the
+     * column count stays undetected until its APCu entry expires (APCU_TTL) or flushSharedColumnMetadata() runs.
+     * A columnCacheVersion that changes with each migration removes it for every process that reads the new
+     * value, see the DatabaseConfig class docblock.
      *
      * @var array<string, array{count: int, types: array<string, string>}>
      */
@@ -57,6 +59,11 @@ final class Database
      * a shape, so the process-wide layer is bypassed entirely.
      */
     private ?string $connectionDsn = null;
+
+    /**
+     * Schema version set by fromConfig(), part of the shared column shape key. See the DatabaseConfig class docblock.
+     */
+    private string $columnCacheVersion = '';
 
     /**
      * Savepoint nesting depth: each nested transaction() level gets its own savepoint name.
@@ -214,6 +221,7 @@ final class Database
 
         // Identity of the connection for shared shapes. The DSN holds no credentials: PDO receives them separately.
         $db->connectionDsn = $dsn;
+        $db->columnCacheVersion = $config->columnCacheVersion;
 
         // $config->charset is interpolated: DatabaseConfig validates it against ^[a-zA-Z0-9_]+$ on construction.
         // A failure is ignored, so a server that lacks the charset still yields a working connection.
@@ -1124,7 +1132,9 @@ final class Database
         }
 
         $shared = $this->connectionDsn !== null && self::$sharedColumnMetadataEnabled;
-        $sharedKey = $shared ? sha1($this->connectionDsn . '|' . $sql) . '|' . $columnCount : '';
+        $sharedKey = $shared
+            ? sha1($this->connectionDsn . '|' . $this->columnCacheVersion . '|' . $sql) . '|' . $columnCount
+            : '';
         $shape = null;
 
         if ($shared) {

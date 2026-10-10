@@ -536,6 +536,39 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertLessThan($cap, count(self::sharedStore()), 'Passing the cap must reset the store.');
     }
 
+    public function testSchemaVersionSeparatesSharedShapesAcrossAMigration(): void
+    {
+        $pdo = $this->makePdo(self::TWO_COLUMN_TABLE);
+        $pdo->exec("INSERT INTO records (id, price) VALUES (1, 'abc')");
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+
+        // Before the migration price is INT4, so the converter reads 'abc' as 0.
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'INT4'];
+        self::assertSame(0, $this->makeDatabaseOn($pdo, '1')->selectOne($sql)->price);
+
+        // The migration turns price into TEXT. The same version keeps the old shape: the documented limit.
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'TEXT'];
+        self::assertSame(0, $this->makeDatabaseOn($pdo, '1')->selectOne($sql)->price);
+
+        // A new version resolves the column again.
+        self::assertSame('abc', $this->makeDatabaseOn($pdo, '2')->selectOne($sql)->price);
+    }
+
+    public function testEmptySchemaVersionKeepsTheSharedShapeAcrossInstances(): void
+    {
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+        $pdo = $this->makePdo(self::TWO_COLUMN_TABLE);
+        $pdo->exec("INSERT INTO records (id, price) VALUES (1, '12.50')");
+
+        $this->makeDatabaseOn($pdo, '')->selectOne($sql);
+        $callsAfterCold = MetaSpyStatement::$calls;
+
+        $this->makeDatabaseOn($pdo, '')->selectOne($sql);
+
+        self::assertSame($callsAfterCold, MetaSpyStatement::$calls, 'An empty version must still share the shape.');
+    }
+
     public function testDirectlyInjectedPdoNeverTouchesTheSharedLayer(): void
     {
         // A PDO injected through the constructor has no identity to key on, so it keeps the per-instance memo only.
@@ -575,6 +608,20 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         $pdo = $this->makePdo($ddl);
 
         // fromConfig() runs a SET client_encoding that SQLite rejects; the framework swallows it.
+        return Database::fromConfig(
+            $config,
+            static fn (string $dsn, string $username, string $password, array $options): PDO => $pdo,
+        );
+    }
+
+    private function makeDatabaseOn(PDO $pdo, string $columnCacheVersion): Database
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'versioned',
+            'username' => 'app',
+            'columnCacheVersion' => $columnCacheVersion,
+        ]);
+
         return Database::fromConfig(
             $config,
             static fn (string $dsn, string $username, string $password, array $options): PDO => $pdo,

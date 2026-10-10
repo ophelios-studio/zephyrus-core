@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\DatabaseConfig;
@@ -402,6 +403,86 @@ final class DatabaseConfigTest extends TestCase
             'database'    => 'db',
             'username'    => 'u',
             'sslrootcert' => '/etc/root.crt;sslmode=disable',
+        ]);
+    }
+
+    public function testColumnCacheVersionDefaultsToEmptyString(): void
+    {
+        $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u']);
+
+        self::assertSame('', $config->columnCacheVersion);
+    }
+
+    public function testColumnCacheVersionCamelCaseKeyIsAccepted(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => '2026.10.1',
+        ]);
+
+        self::assertSame('2026.10.1', $config->columnCacheVersion);
+    }
+
+    public function testColumnCacheVersionSnakeCaseKeyIsAccepted(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'column_cache_version' => '42',
+        ]);
+
+        self::assertSame('42', $config->columnCacheVersion);
+    }
+
+    public function testColumnCacheVersionIsTrimmedAndBlankMeansEmpty(): void
+    {
+        $padded = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => '  release-7 ',
+        ]);
+        $blank = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => '   ',
+        ]);
+
+        self::assertSame('release-7', $padded->columnCacheVersion);
+        self::assertSame('', $blank->columnCacheVersion);
+    }
+
+    public function testIntegerColumnCacheVersionIsKeptAsItsDigits(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => 12,
+        ]);
+
+        self::assertSame('12', $config->columnCacheVersion);
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function nonScalarColumnCacheVersions(): iterable
+    {
+        yield 'list' => [['v1']];
+        yield 'map' => [['version' => 'v1']];
+        yield 'object' => [new \stdClass()];
+    }
+
+    #[DataProvider('nonScalarColumnCacheVersions')]
+    public function testThrowsForNonScalarColumnCacheVersion(mixed $version): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/columnCacheVersion' has invalid value '(array|stdClass)'/");
+
+        DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => $version,
         ]);
     }
 }
