@@ -10,42 +10,18 @@ use Zephyrus\Core\Config\SessionConfig;
 /**
  * Thin, testable wrapper around PHP's native session functions.
  *
- * The constructor accepts an optional *override storage* array. When supplied,
- * all read/write operations target that array instead of $_SESSION, and
- * session_start() / session_destroy() / session_regenerate_id() are never
- * called. This makes the class trivially testable without spawning real PHP
- * sessions.
- *
- * ## Override mode simulates an id, and rotates it
- *
- * It used to do neither: start(), setHandler() and regenerate() were silent
- * no-ops while isStarted() reported true, so a consumer test asserting "login
- * rotates the session id" passed against an implementation that rotated
- * nothing. That is the same shape as the ini-flag bug this class already fixed
- * once, where a security-relevant setting read as done and did nothing.
- *
- * Override mode now carries an id of its own: id() returns it, regenerate()
- * replaces it while keeping the data, destroy() clears both, and setHandler()
- * records the handler for handler() to expose without registering it with PHP.
+ * The constructor accepts an optional override storage array. When supplied, data
+ * operations target that array instead of $_SESSION, the id is simulated, and no
+ * real PHP session is started. Intended for tests.
  *
  * In production, omit the override and call start() once at bootstrap:
  *
  *   $session = new SessionManager();
  *   $session->start($config->session);
  *
- * ## Flash values
- *
- * flash() reads and immediately removes the value in the same request — handy
- * for one-time status messages across a redirect.
- *
- * ## Concurrency note
- *
- * SessionManager itself adds no locking: two concurrent requests sharing a
- * session id are serialized (or not) by whatever save handler is registered.
- * PHP's built-in `files` handler serializes them with flock, and
- * DatabaseSessionHandler takes a PostgreSQL advisory lock for the same reason.
- * A handler that does neither loses one of the two writes, because PHP hands a
- * save handler the WHOLE payload rather than a delta.
+ * SessionManager adds no locking: concurrent requests sharing a session id are
+ * serialized by the registered save handler. PHP's files handler uses flock, and
+ * DatabaseSessionHandler takes a PostgreSQL advisory lock.
  */
 final class SessionManager
 {
@@ -59,17 +35,12 @@ final class SessionManager
     /** The handler registered through setHandler(), when one was. */
     private ?\SessionHandlerInterface $handler = null;
 
-    /**
-     * The id override mode pretends to have. Empty when there is none, which
-     * is the state destroy() leaves behind.
-     */
+    /** The id override mode pretends to have. Empty when there is none. */
     private string $simulatedId = '';
 
     /**
-     * @param array<string, mixed>|null $overrideStorage
-     *   When non-null, all session data is read from / written to this array.
-     *   start(), regenerate(), and destroy() become no-ops (or lightweight
-     *   equivalents). Intended for unit tests only.
+     * @param array<string, mixed>|null $overrideStorage When non-null, all session data is read from and
+     *   written to this array, and no real PHP session is used.
      */
     public function __construct(?array $overrideStorage = null)
     {
@@ -80,27 +51,17 @@ final class SessionManager
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Lifecycle
-    // -------------------------------------------------------------------------
-
     /**
-     * Register a custom session save handler.
+     * Register a custom session save handler, before start().
      *
-     * Must be called **before** start() so that PHP uses the handler when
-     * opening the session. Throws SessionException when PHP refuses the
-     * registration (a session is already active), and then keeps no handler,
-     * so handler() never reports one PHP is not using. In override-storage
-     * (test) mode the handler is recorded but not registered.
+     * Throws SessionException when PHP refuses the registration, and then keeps no handler.
+     * In override mode the handler is recorded but not registered.
      *
      * @throws SessionException
      */
     public function setHandler(\SessionHandlerInterface $handler): void
     {
         if ($this->overrideStorage !== null) {
-            // Recorded but not registered: override mode never opens a real
-            // PHP session, so there is nothing for PHP to call. Recording it
-            // is what lets a consumer test assert the wiring it just built.
             $this->handler = $handler;
 
             return;
@@ -122,45 +83,13 @@ final class SessionManager
     /**
      * Configure PHP session parameters and start the session.
      *
-     * Safe to call multiple times — returns immediately if a session is already
-     * active. No-op when an override storage is active (test mode).
+     * Returns immediately when a session is already active, and does nothing in override mode.
      *
-     * Strict mode is forced on. PHP defaults session.use_strict_mode to 0,
-     * which makes it ADOPT any session ID the client sends and persist a record
-     * under it. That lets an unauthenticated caller seed session IDs of its own
-     * choosing, one stored record per request.
-     *
-     * It removes a STEP from session fixation rather than making it possible.
-     * An attacker does not have to invent an id: SessionMiddleware starts the
-     * session eagerly, so even a request matching no route mints and persists a
-     * server-blessed id that can be fetched and then planted. What actually
-     * defeats fixation is ROTATING the id at every privilege change (login,
-     * second factor, logout, password change) through regenerate(), because a
-     * planted id then never survives into an authenticated session. Refusing an
-     * unknown id is defence in depth on top of that.
-     *
-     * ## The flag alone is NOT enough with a custom save handler
-     *
-     * PHP only consults use_strict_mode when the save handler supplies
-     * validateId(), i.e. when it implements SessionUpdateTimestampHandlerInterface.
-     * For a handler that does not, the flag is INERT and the client's id is
-     * adopted verbatim. Measured:
-     *
-     *   strict mode on, plain handler       -> session_id() = attackerchosenid123
-     *   strict mode on, validateId handler  -> session_id() = 43e880c2447c...
-     *
-     * PHP's built-in `files` handler implements the check internally, so a
-     * default-configured application is covered by the flag alone. A custom
-     * handler is not. DatabaseSessionHandler implements the interface for
-     * exactly this reason; any other handler must do the same or this setting
-     * buys it nothing. When debug is on, start() warns about a handler that
-     * cannot honour it.
-     *
-     * ## The idle timeout depends on the handler
-     *
-     * A configured idleTimeout becomes session.gc_maxlifetime. DatabaseSessionHandler
-     * refuses a session idle longer on read; PHP's files handler only uses it as
-     * the garbage-collection age, so start() warns about that in debug.
+     * Forces session.use_strict_mode on, because PHP otherwise adopts any id the client sends. This only
+     * removes one step of session fixation: rotate the id on each privilege change with regenerate().
+     * The flag is inert unless the save handler implements SessionUpdateTimestampHandlerInterface (validateId()),
+     * and a configured idleTimeout is enforced on read only by DatabaseSessionHandler. In debug mode, start()
+     * warns about either gap.
      *
      * @throws SessionException when output has already been sent or PHP refuses to start the session.
      */
@@ -213,12 +142,8 @@ final class SessionManager
     /**
      * Fallback for the `secure: auto` setting when the caller passed no answer.
      *
-     * Reads $_SERVER['HTTPS'] and NOTHING ELSE. A forwarded-protocol header is
-     * deliberately ignored here, because SessionManager holds no trusted-proxy
-     * allowlist and reading one without it is how a caller gets to choose the
-     * answer. SessionMiddleware passes the value Request already resolved,
-     * which does consult the allowlist, so the normal path is not limited to
-     * this check.
+     * Reads $_SERVER['HTTPS'] only: without a trusted-proxy allowlist, a forwarded-protocol header
+     * must not decide it. SessionMiddleware passes the answer Request already resolved.
      */
     private static function serverReportsHttps(): bool
     {
@@ -248,15 +173,7 @@ final class SessionManager
         );
     }
 
-    /**
-     * Warn, in debug only, when the registered save handler cannot honour the
-     * strict-mode flag we just set.
-     *
-     * The framework enabling a security-relevant ini setting that silently does
-     * nothing is precisely the failure this guards: it reads as done. Only
-     * reachable for a handler registered through setHandler(); a handler passed
-     * straight to session_set_save_handler() is invisible here.
-     */
+    /** Warn, in debug only, when the registered save handler cannot honour the strict-mode flag. */
     private function warnIfHandlerCannotHonourStrictMode(): void
     {
         if ($this->handler === null || $this->handler instanceof \SessionUpdateTimestampHandlerInterface) {
@@ -280,22 +197,15 @@ final class SessionManager
     }
 
     /**
-     * Regenerate the session ID (e.g. after login to prevent fixation attacks).
+     * Regenerate the session id, e.g. after login to prevent fixation.
      *
-     * Throws when no session is active or PHP refuses the rotation: a caller
-     * that asked for a new id must not be told it got one.
+     * @param bool $deleteOld Delete the old session data when true (default).
      *
-     * @param bool $deleteOld Delete the old session data file when true (default).
-     *
-     * @throws SessionException
+     * @throws SessionException when no session is active or PHP refuses the rotation.
      */
     public function regenerate(bool $deleteOld = true): void
     {
         if ($this->overrideStorage !== null) {
-            // Rotates the simulated id and keeps the data, which is what
-            // session_regenerate_id() does. Returning without rotating made a
-            // consumer test asserting "login rotates the session id" pass
-            // against an implementation that rotated nothing.
             $this->simulatedId = self::mintSimulatedId();
 
             return;
@@ -313,12 +223,10 @@ final class SessionManager
     /**
      * Destroy the session and clear all stored data.
      *
-     * When an override storage is active, the array is cleared in-place.
-     * No-op when there is no session at all. Throws when the session is closed
-     * but still has an id, or when PHP or the save handler refuses, so a logout
-     * never reports success while the stored session survives.
+     * Does nothing when no session exists.
      *
-     * @throws SessionException
+     * @throws SessionException when PHP or the save handler refuses, so a logout never reports success
+     *   while the stored session survives.
      */
     public function destroy(): void
     {
@@ -344,8 +252,7 @@ final class SessionManager
     }
 
     /**
-     * The current session id: the real one, or the simulated one in override
-     * mode. Empty string when no session is running.
+     * The current session id, or the simulated one in override mode. Empty string when no session is running.
      */
     public function id(): string
     {
@@ -356,16 +263,14 @@ final class SessionManager
         return session_status() === PHP_SESSION_ACTIVE ? (string) session_id() : '';
     }
 
-    /** Shaped like a PHP session id so a consumer assertion on format holds. */
+    /** A hex id in the shape of a PHP session id. */
     private static function mintSimulatedId(): string
     {
         return bin2hex(random_bytes(16));
     }
 
     /**
-     * Return true when a real PHP session is currently active.
-     *
-     * Always returns true in override-storage (test) mode.
+     * Return true when a real PHP session is currently active. Always true in override mode.
      */
     public function isStarted(): bool
     {
@@ -375,10 +280,6 @@ final class SessionManager
 
         return session_status() === PHP_SESSION_ACTIVE;
     }
-
-    // -------------------------------------------------------------------------
-    // Data access
-    // -------------------------------------------------------------------------
 
     /**
      * Retrieve a value from the session, or $default when the key is absent.
@@ -445,9 +346,7 @@ final class SessionManager
     }
 
     /**
-     * Read a value and immediately remove it from the session.
-     *
-     * Useful for one-time status / error messages passed across a redirect.
+     * Read a value and immediately remove it from the session, for one-time messages across a redirect.
      */
     public function flash(string $key, mixed $default = null): mixed
     {
@@ -465,9 +364,9 @@ final class SessionManager
     }
 
     /**
-     * Runs a session_*() call with PHP's warning swallowed, so its boolean
-     * answer is the only signal. The warning is not re-raised, since its text
-     * carries absolute server paths; it is handed back through $phpWarning.
+     * Run a session_*() call with PHP's warning swallowed, so its boolean answer is the only signal.
+     *
+     * The warning carries absolute server paths, so it is returned through $phpWarning for logging, never displayed.
      *
      * @param callable(): bool $call
      */
