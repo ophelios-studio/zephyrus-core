@@ -542,6 +542,26 @@ final class DebugIntegrationTest extends TestCase
         }
     }
 
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksThePrivateAndProtectedPropertiesOfAnObjectInAnArrayObject(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+        $token = self::marker('token');
+        $user = self::marker('user');
+        $container = new \ArrayObject(new CredentialHolder($secret, $token, $user));
+
+        $html = Dumper::toHtml($container, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($container, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must dump an unlisted property.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered a private property of an ArrayObject's object.");
+            self::assertStringNotContainsString($token, $output, "$label rendered a protected property of an ArrayObject's object.");
+        }
+    }
+
     private static function exceptionCarrying(string $message, string $secret): \RuntimeException
     {
         try {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use ArrayIterator;
+use ArrayObject;
 use Closure;
 use PHPMailer\PHPMailer\PHPMailer;
 use ReflectionFunction;
@@ -196,7 +197,7 @@ final class DebugIntegration
     }
 
     /**
-     * Teach Tracy the framework's own secret-bearing key names and how to render config sections, closures, array iterators and PHPMailer objects.
+     * Teach Tracy the framework's own secret-bearing key names and how to render config sections, closures, array iterators, array objects and PHPMailer objects.
      *
      * Both registries are written because they feed different renderers:
      * Debugger::$keysToHide reaches dump() and the debug bar, while the
@@ -221,6 +222,9 @@ final class DebugIntegration
 
         // @phpstan-ignore assign.propertyType (same as above)
         Dumper::$objectExporters[ArrayIterator::class] = self::exposeArrayIterator(...);
+
+        // @phpstan-ignore assign.propertyType (same as above)
+        Dumper::$objectExporters[ArrayObject::class] = self::exposeArrayObject(...);
 
         // @phpstan-ignore assign.propertyType (same as above)
         Dumper::$objectExporters[PHPMailer::class] = self::exposePhpMailer(...);
@@ -302,19 +306,36 @@ final class DebugIntegration
     /**
      * Render an ArrayIterator's elements as a storage property, so masking applies to them.
      *
-     * @see \Tracy\Dumper\Exposer::exposeArrayObject()
-     *
      * @param ArrayIterator<array-key, mixed> $iterator
      */
     private static function exposeArrayIterator(ArrayIterator $iterator, Value $value, Describer $describer): void
     {
-        $flags = $iterator->getFlags();
-        $iterator->setFlags(ArrayIterator::STD_PROP_LIST);
-        Exposer::exposeObject($iterator, $value, $describer);
-        $iterator->setFlags($flags);
+        self::exposeArrayContainer($iterator, ArrayIterator::class, $value, $describer);
+    }
 
-        $describer->addPropertyTo($value, 'storage', self::withBareKeys($iterator->getArrayCopy(), $describer), Value::PropertyPrivate, null, ArrayIterator::class);
-        $value->value .= ' (' . count($iterator) . ')';
+    /**
+     * Render an ArrayObject's elements as a storage property, so masking applies to them.
+     *
+     * @param ArrayObject<array-key, mixed> $container
+     */
+    private static function exposeArrayObject(ArrayObject $container, Value $value, Describer $describer): void
+    {
+        self::exposeArrayContainer($container, ArrayObject::class, $value, $describer);
+    }
+
+    /**
+     * @param ArrayIterator<array-key, mixed>|ArrayObject<array-key, mixed> $container
+     * @param class-string $storageClass
+     */
+    private static function exposeArrayContainer(ArrayIterator|ArrayObject $container, string $storageClass, Value $value, Describer $describer): void
+    {
+        $flags = $container->getFlags();
+        $container->setFlags(ArrayObject::STD_PROP_LIST);
+        Exposer::exposeObject($container, $value, $describer);
+        $container->setFlags($flags);
+
+        $describer->addPropertyTo($value, 'storage', self::withBareKeys($container->getArrayCopy(), $describer), Value::PropertyPrivate, null, $storageClass);
+        $value->value .= ' (' . count($container) . ')';
     }
 
     /**
