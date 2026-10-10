@@ -11,6 +11,7 @@ use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\LocalizationConfig;
+use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -261,6 +262,41 @@ final class ApplicationBuilderTest extends TestCase
             'messages.plain',
             request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr']),
         ));
+    }
+
+    public function testBuildInstallsAUrlGeneratorOverTheRouterRoutes(): void
+    {
+        $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health')->name('health');
+
+        ApplicationBuilder::create()->withRouter($router)->build();
+
+        self::assertSame('/health', route('health'));
+    }
+
+    public function testBuildWithoutRouterLeavesTheUrlGeneratorUnset(): void
+    {
+        ApplicationBuilder::create()->build();
+
+        self::assertNull(App::getUrlGenerator());
+    }
+
+    public function testBuildWithoutRouterClearsTheUrlGeneratorOfAPreviousApplication(): void
+    {
+        $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health')->name('health');
+        ApplicationBuilder::create()->withRouter($router)->build();
+
+        ApplicationBuilder::create()->build();
+
+        self::assertNull(App::getUrlGenerator());
+    }
+
+    public function testBuildInstallsAUrlGeneratorForARouterGivenToTheKernelBuilder(): void
+    {
+        $router = (new Router())->get('/health', ApplicationBuilderFixtureController::class . '@health')->name('health');
+
+        (new ApplicationBuilder(KernelBuilder::create()->withRouter($router)))->build();
+
+        self::assertSame('/health', route('health'));
     }
 
     public function testHandleDelegatesToKernel(): void

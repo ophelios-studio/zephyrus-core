@@ -18,6 +18,7 @@ use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\RenderEngine;
 use Zephyrus\Routing\Router;
+use Zephyrus\Routing\RouteUrlGenerator;
 use Zephyrus\Security\AllowedHostsMiddleware;
 use Zephyrus\Security\CsrfMiddleware;
 use Zephyrus\Security\ForceHttpsMiddleware;
@@ -702,6 +703,9 @@ final class ApplicationBuilder
         }
         App::setTranslator($translator);
         App::setFormatter($formatter);
+
+        $router = $this->kernelBuilder->router();
+        App::setUrlGenerator($router === null ? null : new RouteUrlGenerator($router->routes()));
 
         return new Application(
             kernel:           $this->kernelBuilder->build(),

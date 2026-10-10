@@ -12,6 +12,10 @@ use Zephyrus\Formatting\FormatterException;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
+use Zephyrus\Routing\Exception\RouteUrlGenerationException;
+use Zephyrus\Routing\Route;
+use Zephyrus\Routing\RouteCollection;
+use Zephyrus\Routing\RouteUrlGenerator;
 use Zephyrus\Session\SessionManager;
 
 final class FunctionsTest extends TestCase
@@ -356,6 +360,71 @@ final class FunctionsTest extends TestCase
         $this->expectException(FormatterException::class);
         $this->expectExceptionMessage('money, decimal, percent');
         format('nonexistent');
+    }
+
+    // ─── route() ──────────────────────────────────────────────────────
+
+    private function useRoutes(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9]+'])->withName('users.show'));
+        $routes->add(Route::define('GET', '/home', 'HomeController@index')->withName('home'));
+        App::setUrlGenerator(new RouteUrlGenerator($routes));
+    }
+
+    public function testRouteGeneratesPathFromNamedRouteParametersAndQuery(): void
+    {
+        $this->useRoutes();
+
+        self::assertSame('/users/42', route('users.show', ['id' => 42]));
+        self::assertSame('/users/42?tab=posts', route('users.show', ['id' => 42], ['tab' => 'posts']));
+        self::assertSame('/home', route('home'));
+    }
+
+    public function testRouteEncodesParameterValues(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/files/{name}', 'FileController@show')->withName('files.show'));
+        App::setUrlGenerator(new RouteUrlGenerator($routes));
+
+        self::assertSame('/files/a%20b%2Fc', route('files.show', ['name' => 'a b/c']));
+    }
+
+    public function testRouteRefusesAnUnknownName(): void
+    {
+        $this->useRoutes();
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Unknown route name: users.delete');
+
+        route('users.delete');
+    }
+
+    public function testRouteRefusesAMissingParameter(): void
+    {
+        $this->useRoutes();
+
+        $this->expectException(RouteUrlGenerationException::class);
+        $this->expectExceptionMessage('Missing route parameter "id" for route "users.show"');
+
+        route('users.show');
+    }
+
+    public function testRouteAppendsAFragment(): void
+    {
+        $this->useRoutes();
+
+        self::assertSame('/home#top', route('home', [], [], 'top'));
+        self::assertSame('/home#top', route('home', [], [], '#top'));
+        self::assertSame('/home', route('home', [], [], ''));
+    }
+
+    public function testRouteThrowsWhenNoGeneratorIsSet(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('ApplicationBuilder::withRouter(), or call App::setUrlGenerator()');
+
+        route('home');
     }
 
     // ─── asset() ──────────────────────────────────────────────────────

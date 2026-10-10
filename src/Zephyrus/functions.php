@@ -258,6 +258,29 @@ if (!function_exists('asset')) {
     }
 }
 
+if (!function_exists('route')) {
+    /**
+     * Generate the URL of a named route. For absolute links (emails), call
+     * App::setUrlGenerator(new RouteUrlGenerator($router->routes(), 'https://example.com')) after building.
+     *
+     * @param string                              $name       The route name.
+     * @param array<string, scalar>               $parameters Path parameters, keyed by placeholder name.
+     * @param array<string, scalar|array<scalar>> $query      Query string values.
+     * @param string|null                         $fragment   The URL fragment, without or with its leading "#".
+     * @throws \LogicException when no URL generator is installed.
+     * @throws \Zephyrus\Routing\Exception\RouteUrlGenerationException for an unknown name, a missing or unexpected parameter, or a value violating its constraint.
+     */
+    function route(string $name, array $parameters = [], array $query = [], ?string $fragment = null): string
+    {
+        $generator = App::getUrlGenerator();
+        if ($generator === null) {
+            throw new \LogicException('route() needs the application routes: build the application with ApplicationBuilder::withRouter(), or call App::setUrlGenerator().');
+        }
+
+        return $generator->generate($name, $parameters, $query, $fragment);
+    }
+}
+
 if (!function_exists('embed')) {
     /**
      * Inline-embed an asset's file contents (e.g. SVG).

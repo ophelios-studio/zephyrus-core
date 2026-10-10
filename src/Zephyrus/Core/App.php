@@ -8,13 +8,14 @@ use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
+use Zephyrus\Routing\RouteUrlGenerator;
 use Zephyrus\Session\SessionManager;
 
 /**
  * Lightweight application registry for global helper function access.
  *
  * Holds references to framework services so that global helper functions
- * (env(), config(), session(), localize(), format(), asset(), nonce()) can
+ * (env(), config(), session(), localize(), format(), asset(), route(), nonce()) can
  * access them without dependency injection.
  *
  * Usage in bootstrap:
@@ -34,6 +35,7 @@ final class App
     private static ?SessionManager $session = null;
     private static ?Formatter $formatter = null;
     private static ?Asset $asset = null;
+    private static ?RouteUrlGenerator $urlGenerator = null;
     private static ?Translator $translator = null;
     private static ?string $nonce = null;
 
@@ -92,6 +94,21 @@ final class App
         return self::$asset;
     }
 
+    // ─── URL generator ────────────────────────────────────────────────
+
+    /**
+     * Installs the generator used by route(); null clears it.
+     */
+    public static function setUrlGenerator(?RouteUrlGenerator $urlGenerator): void
+    {
+        self::$urlGenerator = $urlGenerator;
+    }
+
+    public static function getUrlGenerator(): ?RouteUrlGenerator
+    {
+        return self::$urlGenerator;
+    }
+
     // ─── Translator ───────────────────────────────────────────────────
 
     public static function setTranslator(Translator $translator): void
@@ -138,6 +155,7 @@ final class App
         self::$session = null;
         self::$formatter = null;
         self::$asset = null;
+        self::$urlGenerator = null;
         self::$translator = null;
         self::$nonce = null;
     }

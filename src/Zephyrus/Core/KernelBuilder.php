@@ -97,6 +97,14 @@ final class KernelBuilder
     }
 
     /**
+     * Returns the router set by withRouter(), or null when none was set.
+     */
+    public function router(): ?Router
+    {
+        return $this->router;
+    }
+
+    /**
      * Appends a global middleware that wraps every request before route
      * matching middleware and the handler are executed.
      *

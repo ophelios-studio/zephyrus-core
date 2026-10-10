@@ -11,6 +11,8 @@ use Zephyrus\Formatting\Formatter;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\Asset;
+use Zephyrus\Routing\RouteCollection;
+use Zephyrus\Routing\RouteUrlGenerator;
 use Zephyrus\Session\SessionManager;
 
 final class AppTest extends TestCase
@@ -76,6 +78,25 @@ final class AppTest extends TestCase
         self::assertSame($asset, App::getAsset());
     }
 
+    public function testUrlGeneratorDefaultsToNull(): void
+    {
+        self::assertNull(App::getUrlGenerator());
+    }
+
+    public function testSetAndGetUrlGenerator(): void
+    {
+        $generator = new RouteUrlGenerator(new RouteCollection());
+        App::setUrlGenerator($generator);
+        self::assertSame($generator, App::getUrlGenerator());
+    }
+
+    public function testSetUrlGeneratorToNullClearsIt(): void
+    {
+        App::setUrlGenerator(new RouteUrlGenerator(new RouteCollection()));
+        App::setUrlGenerator(null);
+        self::assertNull(App::getUrlGenerator());
+    }
+
     // ─── Translator ───────────────────────────────────────────────────
 
     public function testTranslatorDefaultsToNull(): void
@@ -132,6 +153,7 @@ final class AppTest extends TestCase
         App::setSession(new SessionManager([]));
         App::setFormatter(new Formatter('en_US'));
         App::setAsset(new Asset(sys_get_temp_dir()));
+        App::setUrlGenerator(new RouteUrlGenerator(new RouteCollection()));
 
         $loader = new class implements LocaleLoaderInterface {
             public function load(string $locale): array
@@ -148,6 +170,7 @@ final class AppTest extends TestCase
         self::assertNull(App::getSession());
         self::assertNull(App::getFormatter());
         self::assertNull(App::getAsset());
+        self::assertNull(App::getUrlGenerator());
         self::assertNull(App::getTranslator());
 
         // Nonce should be regenerated after reset.
