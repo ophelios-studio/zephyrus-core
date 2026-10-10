@@ -57,6 +57,8 @@ final readonly class Response
     public array $headers;
 
     /**
+     * Header values are stored as given; use withHeader() for computed or request values.
+     *
      * @param array<string, string> $headers
      */
     public function __construct(
@@ -210,7 +212,7 @@ final readonly class Response
     }
 
     /**
-     * Refuses a name outside the RFC 9110 token charset. Not checked in the constructor, which error responses use.
+     * Refuses a name outside the RFC 9110 token charset.
      *
      * @throws InvalidArgumentException
      */
@@ -225,7 +227,7 @@ final readonly class Response
     }
 
     /**
-     * Refuses a control character other than HTAB. Not checked in the constructor, which error responses use.
+     * Refuses a control character other than HTAB.
      *
      * @throws InvalidArgumentException
      */
