@@ -224,7 +224,8 @@ final class Container implements ContainerInterface
 
             throw new ContainerException(
                 "Cannot auto-wire parameter \${$name} of [{$className}]: it has the {$typeName}, "
-                . "which the container cannot provide, and no default value."
+                . "which the container cannot provide, and no default value; "
+                . "bind [{$className}] explicitly or give \${$name} a default value."
             );
         }
 

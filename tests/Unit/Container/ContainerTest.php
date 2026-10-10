@@ -307,6 +307,8 @@ final class ContainerTest extends TestCase
         } catch (ContainerException $e) {
             self::assertStringContainsString('parameter $dsn of [' . ServiceWithUnresolvableParam::class . ']', $e->getMessage());
             self::assertStringContainsString('built-in type string', $e->getMessage());
+            self::assertStringContainsString('bind [' . ServiceWithUnresolvableParam::class . '] explicitly', $e->getMessage());
+            self::assertStringContainsString('give $dsn a default value', $e->getMessage());
             self::assertStringNotContainsString('no type hint', $e->getMessage());
         }
     }
