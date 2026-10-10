@@ -198,4 +198,12 @@ final class RouteTest extends TestCase
         self::assertNull($route->name);
         self::assertSame('users.index', $named->name);
     }
+
+    public function testIsSkippableRecognisesASecurityMiddlewareWhateverTheSpelling(): void
+    {
+        self::assertFalse(Route::isSkippable('\\zephyrus\\security\\secureheadersmiddleware'));
+        self::assertFalse(Route::isSkippable('zephyrus\\security\\csrfmiddleware'));
+        self::assertTrue(Route::isSkippable('\\' . SessionMiddleware::class));
+        self::assertFalse(Route::isSkippable('Missing\\Middleware'));
+    }
 }

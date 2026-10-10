@@ -134,7 +134,7 @@ final readonly class Route
     public static function isSkippable(string $middleware): bool
     {
         return is_a($middleware, MiddlewareInterface::class, true)
-            && self::protectingSecurityMiddleware((new \ReflectionClass($middleware))->getName()) === null;
+            && self::protectingSecurityMiddleware($middleware) === null;
     }
 
     private static function protectingSecurityMiddleware(string $middleware): ?string

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use Zephyrus\Http\Uri;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
@@ -11,7 +12,6 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final class RouteCollection
 {
-    private const CONTROL_CHARACTER_PATTERN = '/[\x00-\x1F\x7F]/';
 
     /**
      * @var array<int, Route>
@@ -605,10 +605,15 @@ final class RouteCollection
      */
     private static function isWellFormedValue(string $value): bool
     {
-        if (preg_match(self::CONTROL_CHARACTER_PATTERN, $value) === 1) {
+        if (preg_match(Uri::CONTROL_CHARACTER_PATTERN, $value) === 1) {
             return false;
         }
 
+        return self::isValidUtf8($value);
+    }
+
+    private static function isValidUtf8(string $value): bool
+    {
         return @preg_match('//u', $value) === 1;
     }
 
@@ -622,11 +627,11 @@ final class RouteCollection
     {
         $rawPath = substr($rawPath, 0, strcspn($rawPath, '?#'));
 
-        if (preg_match(self::CONTROL_CHARACTER_PATTERN, $rawPath) === 1) {
+        if (preg_match(Uri::CONTROL_CHARACTER_PATTERN, $rawPath) === 1) {
             return RouteNotFoundException::REASON_CONTROL_CHARACTER;
         }
 
-        if (!self::isWellFormedValue($rawPath) || !self::isWellFormedValue($normalizedPath)) {
+        if (!self::isValidUtf8($rawPath) || !self::isWellFormedValue($normalizedPath)) {
             return RouteNotFoundException::REASON_INVALID_UTF8;
         }
 

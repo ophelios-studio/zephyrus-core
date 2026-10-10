@@ -12,6 +12,9 @@ namespace Zephyrus\Http;
  */
 final readonly class Uri
 {
+    /** A C0 control character or DEL. */
+    public const string CONTROL_CHARACTER_PATTERN = '/[\x00-\x1F\x7F]/';
+
     /** Anchored, so a "://" inside an origin-form query is not read as a scheme. */
     private const SCHEME_PATTERN = '#^([a-zA-Z][a-zA-Z0-9+.\-]*)://#';
 
@@ -148,7 +151,7 @@ final readonly class Uri
      */
     public function pathHasControlCharacter(): bool
     {
-        return preg_match('/[\x00-\x1F\x7F]/', self::rawPath($this->url)) === 1;
+        return preg_match(self::CONTROL_CHARACTER_PATTERN, self::rawPath($this->url)) === 1;
     }
 
     public function fragment(): string

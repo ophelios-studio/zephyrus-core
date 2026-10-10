@@ -48,6 +48,8 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     }
 
     /**
+     * @internal
+     *
      * @param list<string> $classes The classes of the group that can be skipped.
      */
     public static function excludedMiddlewareGroup(string $subject, string $name, array $classes): self
