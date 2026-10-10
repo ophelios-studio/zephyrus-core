@@ -17,6 +17,9 @@ final class IpRangeTest extends TestCase
     {
         yield 'ipv4 cidr' => ['10.0.0.0/8'];
         yield 'ipv4 zero prefix' => ['0.0.0.0/0'];
+        yield 'ipv4 compatible range at /96' => ['::10.0.0.0/96'];
+        yield 'nat64 range at /96' => ['64:ff9b::10.0.0.0/96'];
+        yield 'mapped range at /104' => ['::ffff:10.0.0.0/104'];
         yield 'ipv4 full prefix' => ['10.0.0.0/32'];
         yield 'ipv4 bare address' => ['10.0.0.1'];
         yield 'ipv4 three digit prefix' => ['10.0.0.0/008'];
@@ -67,6 +70,10 @@ final class IpRangeTest extends TestCase
         yield 'ipv4 mapped range at /8' => ['::ffff:10.0.0.0/8'];
         yield 'ipv4 mapped range at /0' => ['::ffff:0.0.0.0/0'];
         yield 'ipv4 mapped range in hex' => ['::ffff:a00:0/8'];
+        yield 'ipv4 compatible range below /96' => ['::10.0.0.0/8'];
+        yield 'ipv4 compatible range at /95' => ['::10.0.0.0/95'];
+        yield 'nat64 range below /96' => ['64:ff9b::10.0.0.0/8'];
+        yield 'nat64 range at /95' => ['64:ff9b::10.0.0.0/95'];
     }
 
     /**
@@ -86,6 +93,24 @@ final class IpRangeTest extends TestCase
     public function testInvalidEntryReasonRefusesOnlyShortMappedRangesWithTheMappedReason(string $range, bool $expected): void
     {
         self::assertSame($expected, str_contains(IpRange::invalidEntryReason($range) ?? '', 'shorter than /96'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function ipv6RangesEmbeddingIpv4(): iterable
+    {
+        yield 'ipv4 compatible' => ['::10.0.0.0/8'];
+        yield 'ipv4 compatible at /95' => ['::10.0.0.0/95'];
+        yield 'nat64' => ['64:ff9b::10.0.0.0/8'];
+        yield 'nat64 at /95' => ['64:ff9b::10.0.0.0/95'];
+    }
+
+    #[DataProvider('ipv6RangesEmbeddingIpv4')]
+    public function testInvalidEntryReasonRefusesIpv6RangesEmbeddingIpv4BelowSlash96(string $range): void
+    {
+        self::assertStringContainsString('embeds an IPv4 address', IpRange::invalidEntryReason($range) ?? '');
+        self::assertFalse(IpRange::contains($range, '::1'));
     }
 
     #[DataProvider('validRanges')]

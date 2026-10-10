@@ -236,6 +236,8 @@ final class SecurityConfigTest extends TestCase
         yield 'leading space' => [' 10.0.0.1'];
         yield 'bracketed ipv6' => ['[::1]'];
         yield 'comma separated pair' => ['10.0.0.0/8,172.16.0.0/12'];
+        yield 'ipv4 compatible range below /96' => ['::10.0.0.0/8'];
+        yield 'nat64 range below /96' => ['64:ff9b::10.0.0.0/8'];
     }
 
     #[DataProvider('malformedTrustedProxyEntries')]

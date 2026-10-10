@@ -15,6 +15,8 @@ final class IpRange
 
     private const string MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
 
+    private const string EMBEDDED_REFUSAL = 'an IPv6 range shorter than /96 that embeds an IPv4 address covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
+
     /**
      * Whether the value is an IP address or a CIDR range this class can match against.
      */
@@ -85,7 +87,11 @@ final class IpRange
             return 'not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32';
         }
 
-        return self::isShortIpv4Mapped($parsed[0], $parsed[1]) ? self::MAPPED_REFUSAL : null;
+        if (!self::isShortEmbeddedIpv4($entry, $parsed[0], $parsed[1])) {
+            return null;
+        }
+
+        return self::isIpv4Mapped($parsed[0]) ? self::MAPPED_REFUSAL : self::EMBEDDED_REFUSAL;
     }
 
     /**
@@ -94,7 +100,7 @@ final class IpRange
     private static function parse(string $range): ?array
     {
         $parsed = self::split($range);
-        if ($parsed === null || self::isShortIpv4Mapped($parsed[0], $parsed[1])) {
+        if ($parsed === null || self::isShortEmbeddedIpv4($range, $parsed[0], $parsed[1])) {
             return null;
         }
 
@@ -136,9 +142,22 @@ final class IpRange
         return [$binary, $prefix];
     }
 
-    private static function isShortIpv4Mapped(string $binary, int $prefix): bool
+    /**
+     * A range below /96 whose address embeds an IPv4 address, in dotted or hex form.
+     * Only an IPv6 literal can contain both a dot and a colon.
+     */
+    private static function isShortEmbeddedIpv4(string $range, string $binary, int $prefix): bool
     {
-        return $prefix < 96 && strlen($binary) === 16 && substr($binary, 0, 12) === str_repeat("\0", 10) . "\xff\xff";
+        if ($prefix >= 96) {
+            return false;
+        }
+
+        return self::isIpv4Mapped($binary) || (str_contains($range, '.') && str_contains($range, ':'));
+    }
+
+    private static function isIpv4Mapped(string $binary): bool
+    {
+        return strlen($binary) === 16 && substr($binary, 0, 12) === str_repeat("\0", 10) . "\xff\xff";
     }
 
     /**
