@@ -7,6 +7,9 @@ namespace Zephyrus\Security;
 use Closure;
 use Zephyrus\Http\Request;
 
+/**
+ * Authorises a request when the predicate returns true for it.
+ */
 final class PredicateAuthGuard implements AuthGuardInterface
 {
     /**

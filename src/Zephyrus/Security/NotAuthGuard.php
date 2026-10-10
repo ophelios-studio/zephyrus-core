@@ -6,6 +6,9 @@ namespace Zephyrus\Security;
 
 use Zephyrus\Http\Request;
 
+/**
+ * Authorises a request that the wrapped guard refuses.
+ */
 final class NotAuthGuard implements AuthGuardInterface
 {
     public function __construct(private readonly AuthGuardInterface $inner)

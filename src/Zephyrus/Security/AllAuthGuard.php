@@ -6,6 +6,9 @@ namespace Zephyrus\Security;
 
 use Zephyrus\Http\Request;
 
+/**
+ * Authorises a request only when every wrapped guard authorises it.
+ */
 final class AllAuthGuard implements AuthGuardInterface
 {
     /**

@@ -6,6 +6,9 @@ namespace Zephyrus\Security;
 
 use Zephyrus\Http\Request;
 
+/**
+ * Authorises a request presenting the expected token in a header, compared in constant time.
+ */
 final class HeaderTokenGuard implements AuthGuardInterface
 {
     public function __construct(

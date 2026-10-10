@@ -5,75 +5,51 @@ declare(strict_types=1);
 namespace Zephyrus\Security;
 
 /**
- * Stateless cryptographic utilities built on libsodium (ext-sodium).
+ * Stateless cryptographic helpers built on libsodium (ext-sodium).
  *
- * Provides a clean, opinionated API for common cryptographic operations:
- *
- * - **Encryption/Decryption**: XChaCha20-Poly1305 AEAD symmetric encryption.
- * - **Password Hashing**: Argon2id via sodium_crypto_pwhash_str.
- * - **Hashing**: BLAKE2b keyed/unkeyed hashing.
- * - **Random Generation**: Cryptographically secure random strings/bytes/ints.
- * - **Key Management**: Encryption key generation, signing keypair generation.
- *
- * All methods are static. No global state is required.
+ * Encryption is XChaCha20-Poly1305 IETF AEAD, password hashing is Argon2id and
+ * hashing is BLAKE2b.
  *
  * ## Encryption format
  *
- * The `encrypt()` method produces a base64url-encoded string containing:
- *   - 24-byte nonce (XChaCha20-Poly1305 IETF)
- *   - Ciphertext + 16-byte Poly1305 tag
- *
- * Format: base64url(nonce || ciphertext)
+ * `encrypt()` returns base64url(nonce || ciphertext): a fresh random 24-byte
+ * nonce per call, then the ciphertext with its 16-byte Poly1305 tag. The tag
+ * covers the ciphertext and the context.
  *
  * ## Context binding
  *
- * `encrypt()`/`decrypt()` take an optional `$context` passed to the AEAD as
- * additional authenticated data. It is not secret and is not stored in the
- * ciphertext; it only has to be reproduced verbatim at decryption time. Binding
- * a ciphertext to where it lives (tenant, table, column, row) makes a
- * transplanted ciphertext fail to open instead of decrypting cleanly somewhere
- * it was never written.
- *
- * The default is the empty string, which is byte-for-byte what the AEAD received
- * before the parameter existed, so ciphertext already in a database keeps
- * opening. Adopting a context on a column that already holds data means
- * decrypting with the old context and re-encrypting with the new one. There is
- * no in-place upgrade.
+ * `$context` is additional authenticated data: it is neither secret nor stored,
+ * and `decrypt()` must receive it verbatim. A ciphertext moved to another tenant,
+ * table, column or row fails to open. The empty default keeps existing ciphertext
+ * opening; adopting a context on populated data means decrypting and
+ * re-encrypting, there is no in-place upgrade.
  *
  * ## Key requirements
  *
- * - Encryption key: exactly 32 bytes (use `generateEncryptionKey()` to generate)
- *   and not the all-zero key, which is what an unset or mis-decoded configuration
- *   value produces.
+ * - Encryption key: exactly 32 bytes, not all-zero (see `generateEncryptionKey()`).
  * - BLAKE2b key: `null` for an unkeyed hash, otherwise 16-64 bytes. An empty
- *   string is REJECTED rather than read as "unkeyed": libsodium treats an empty
- *   key as no key at all, so accepting it would return a public digest that is
- *   indistinguishable from a MAC and forgeable by anyone holding the message.
+ *   string is rejected.
  */
 final class Cryptography
 {
     /**
      * Expected key length for XChaCha20-Poly1305 IETF encryption.
      */
-    public const int ENCRYPTION_KEY_BYTES = SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES; // 32
+    public const int ENCRYPTION_KEY_BYTES = SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES;
 
     /**
      * Nonce length for XChaCha20-Poly1305 IETF.
      */
-    private const int NONCE_BYTES = SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES; // 24
-
-    // ─── Encryption / Decryption ──────────────────────────────────────
+    private const int NONCE_BYTES = SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES;
 
     /**
-     * Encrypt a plaintext string using XChaCha20-Poly1305 AEAD.
+     * Encrypt a plaintext string with XChaCha20-Poly1305 AEAD.
      *
      * @param string $plaintext The data to encrypt.
      * @param string $key       A 32-byte encryption key (raw binary).
-     * @param string $context   Optional additional authenticated data binding the
-     *                          ciphertext to its location, e.g.
-     *                          "tenant:42|table:client|column:ssn". Must be
-     *                          reproduced verbatim by `decrypt()`.
-     * @return string Base64url-encoded ciphertext (nonce prepended).
+     * @param string $context   Additional authenticated data, e.g. "tenant:42|table:client|column:ssn".
+     *                          Must be repeated verbatim by `decrypt()`.
+     * @return string Base64url-encoded nonce and ciphertext.
      * @throws CryptographyException If the key is invalid or encryption fails.
      */
     public static function encrypt(
@@ -88,7 +64,7 @@ final class Cryptography
         try {
             $ciphertext = sodium_crypto_aead_xchacha20poly1305_ietf_encrypt(
                 $plaintext,
-                $context, // Additional authenticated data (AAD).
+                $context,
                 $nonce,
                 $key,
             );
@@ -104,13 +80,10 @@ final class Cryptography
      *
      * @param string $encoded The base64url-encoded ciphertext.
      * @param string $key     The same 32-byte key used for encryption.
-     * @param string $context The same context passed to `encrypt()`. A mismatch
-     *                        fails the Poly1305 tag check exactly like tampering,
-     *                        so a ciphertext moved to another column or another
-     *                        tenant does not open.
+     * @param string $context The same context passed to `encrypt()`; a mismatch fails like tampering.
      * @return string The decrypted plaintext.
-     * @throws CryptographyException If decryption fails (wrong key, wrong context,
-     *                               corrupted data).
+     * @throws CryptographyException If the key is invalid, the payload is malformed,
+     *                               or authentication fails (wrong key or context, tampering).
      */
     public static function decrypt(
         #[\SensitiveParameter] string $encoded,
@@ -130,7 +103,7 @@ final class Cryptography
         try {
             $plaintext = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(
                 $ciphertext,
-                $context, // AAD
+                $context,
                 $nonce,
                 $key,
             );
@@ -145,23 +118,13 @@ final class Cryptography
         return $plaintext;
     }
 
-    // ─── Password Hashing (Argon2id) ──────────────────────────────────
-
     /**
-     * Hash a password using Argon2id.
+     * Hash a password with Argon2id at the interactive limits.
      *
-     * Optionally prepends a pepper to the password before hashing for
-     * defense-in-depth (the pepper should be a secret not stored in the DB).
-     *
-     * WARNING: THE PEPPER IS CONCATENATED WITH NO DELIMITER, so the boundary between
-     * pepper and password is not recoverable and pairs collide:
-     * hashPassword('B', 'A') verifies against verifyPassword('AB', $hash, null),
-     * and hashPassword('BC', 'A') verifies against verifyPassword('C', $hash, 'AB').
-     * The construction is LEFT AS IS ON PURPOSE. Any delimiter, length prefix or
-     * HMAC would change the hashed input and invalidate every peppered hash
-     * already stored, which is a password reset for every account that has one.
-     * A caller who needs the boundary should pepper with a fixed-length value
-     * (e.g. 32 raw bytes) so no other pair can produce the same concatenation.
+     * The pepper, a secret kept outside the database, is prepended with no delimiter,
+     * so distinct pairs can collide: pepper 'A' with password 'B' matches pepper null
+     * with password 'AB'. Use a fixed-length pepper (e.g. 32 bytes) to rule that out.
+     * The construction is kept as is, since changing it invalidates every stored peppered hash.
      *
      * @param string      $password The password to hash.
      * @param string|null $pepper   Optional secret pepper to prepend.
@@ -210,7 +173,7 @@ final class Cryptography
 
     /**
      * Check if a password hash needs to be rehashed (e.g. after security
-     * parameter changes).
+     * parameter changes). Returns true when the hash cannot be parsed.
      */
     public static function needsRehash(#[\SensitiveParameter] string $hash): bool
     {
@@ -225,19 +188,17 @@ final class Cryptography
         }
     }
 
-    // ─── Hashing (BLAKE2b) ────────────────────────────────────────────
-
     /**
      * Compute a BLAKE2b hash of the given data.
      *
-     * Pass `null` (or omit the key) for an unkeyed digest. An empty string is
-     * rejected: see `validateHashKey()`.
+     * Pass `null` (or omit the key) for an unkeyed digest. An empty key is rejected.
      *
      * @param string      $data   The data to hash.
      * @param string|null $key    Optional 16-64 byte key for keyed hashing.
      * @param int         $length Output length in bytes (16-64, default 32).
      * @return string Hex-encoded hash.
-     * @throws CryptographyException If the key is present but not 16-64 bytes.
+     * @throws CryptographyException If the key is present but not 16-64 bytes,
+     *                               or $length is outside 16-64.
      */
     public static function hash(
         #[\SensitiveParameter] string $data,
@@ -256,18 +217,16 @@ final class Cryptography
     }
 
     /**
-     * Compute a BLAKE2b hash of a file's contents.
+     * Compute a BLAKE2b hash of a file's contents, read in 8 KB chunks.
      *
-     * Reads the file in chunks for memory efficiency on large files.
-     *
-     * Pass `null` (or omit the key) for an unkeyed digest. An empty string is
-     * rejected: see `validateHashKey()`.
+     * Pass `null` (or omit the key) for an unkeyed digest. An empty key is rejected.
      *
      * @param string      $path   Absolute path to the file.
      * @param string|null $key    Optional 16-64 byte key for keyed hashing.
-     * @param int         $length Output length in bytes (default 32).
+     * @param int         $length Output length in bytes (16-64, default 32).
      * @return string Hex-encoded hash.
-     * @throws CryptographyException If the key is present but not 16-64 bytes.
+     * @throws CryptographyException If the key is invalid, the file is missing or
+     *                               unreadable, or hashing fails.
      */
     public static function hashFile(
         string $path,
@@ -310,8 +269,6 @@ final class Cryptography
         return sodium_bin2hex($hash);
     }
 
-    // ─── Random Generation ────────────────────────────────────────────
-
     /**
      * Generate a cryptographically secure random string.
      *
@@ -319,6 +276,7 @@ final class Cryptography
      *
      * @param int $length Desired string length in characters.
      * @return string Random URL-safe string of the requested length.
+     * @throws CryptographyException If $length is below 1.
      */
     public static function randomString(int $length): string
     {
@@ -326,7 +284,6 @@ final class Cryptography
             throw CryptographyException::invalidArgument('Length must be at least 1.');
         }
 
-        // Generate enough random bytes, encode, and truncate to requested length.
         $bytesNeeded = (int) ceil($length * 3 / 4) + 1;
         $raw = random_bytes($bytesNeeded);
 
@@ -338,6 +295,7 @@ final class Cryptography
      *
      * @param int $length Number of bytes.
      * @return string Raw random bytes.
+     * @throws CryptographyException If $length is below 1.
      */
     public static function randomBytes(int $length): string
     {
@@ -353,6 +311,7 @@ final class Cryptography
      *
      * @param int $length Number of hex characters (must be even for full bytes).
      * @return string Hex string.
+     * @throws CryptographyException If $length is below 1.
      */
     public static function randomHex(int $length): string
     {
@@ -366,13 +325,12 @@ final class Cryptography
 
     /**
      * Generate a cryptographically secure random integer in the given range.
+     * A $min greater than $max raises a ValueError.
      */
     public static function randomInt(int $min, int $max): int
     {
         return random_int($min, $max);
     }
-
-    // ─── Key Management ───────────────────────────────────────────────
 
     /**
      * Generate a new random encryption key for XChaCha20-Poly1305.
@@ -408,12 +366,9 @@ final class Cryptography
     }
 
     /**
-     * Decode a base64url-encoded encryption key back to raw bytes.
+     * Decode a base64url-encoded encryption key to raw bytes.
      *
-     * The decoded value is validated as an encryption key. Without that check
-     * decodeKey('') returned zero bytes and every caller downstream believed it
-     * held a key, which is the shortest route from an unset environment variable
-     * to a keyed operation carrying no key at all.
+     * The decoded bytes are validated as an encryption key, so an empty value is refused.
      *
      * @throws CryptographyException If the value is not base64url, or does not
      *                               decode to a valid 32-byte encryption key.
@@ -430,17 +385,10 @@ final class Cryptography
         return $key;
     }
 
-    // ─── Internal Helpers ─────────────────────────────────────────────
-
     /**
-     * The all-zero key is rejected alongside the wrong lengths. It is not weaker
-     * than any other 32 bytes on its own, but it is the value a configuration
-     * mistake produces (an unset variable decoded into a zero-filled buffer, a
-     * str_repeat placeholder), and a mistake that boots normally and encrypts
-     * real data is worth refusing at the door.
+     * Rejects wrong lengths and the all-zero key, which a configuration mistake produces.
      *
-     * hash_equals, not ===, so the comparison does not leak how many leading
-     * bytes of a key happened to be zero.
+     * The zero-key check uses hash_equals, not ===, so it is constant-time.
      */
     private static function validateEncryptionKey(#[\SensitiveParameter] string $key): void
     {
@@ -460,16 +408,8 @@ final class Cryptography
     }
 
     /**
-     * A BLAKE2b key is either absent or a real key, never an empty string.
-     *
-     * sodium_crypto_generichash() reads an empty key as "no key", so
-     * hash($data, '') returned the plain unkeyed digest of $data: a value that
-     * looks exactly like a MAC, passes any length or hex check, and can be
-     * recomputed by anyone who knows the message. Every OTHER invalid length was
-     * already rejected loudly by libsodium, so the single input that switched
-     * authentication off was the single input that was accepted.
-     *
-     * null keeps its meaning of "unkeyed on purpose" and is untouched.
+     * An empty key is refused: libsodium reads it as no key, which would return an
+     * unkeyed digest that looks like a MAC. `null` remains the explicit unkeyed choice.
      */
     private static function validateHashKey(#[\SensitiveParameter] ?string $key): void
     {

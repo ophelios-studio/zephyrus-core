@@ -8,6 +8,9 @@ use InvalidArgumentException;
 use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
 
+/**
+ * Authorises a request whose client IP is in the allowlist of addresses or CIDR ranges.
+ */
 final class IpAllowlistGuard implements AuthGuardInterface
 {
     /**

@@ -8,6 +8,9 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
+/**
+ * Answers a request refused by the guard with `{"error": $message}` JSON at $status.
+ */
 final class AuthGuardMiddleware implements MiddlewareInterface
 {
     public function __construct(

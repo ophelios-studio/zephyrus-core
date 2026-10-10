@@ -6,6 +6,7 @@ namespace Zephyrus\Security;
 
 use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigBoolean;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
 
 use function is_array;
@@ -23,50 +24,24 @@ use function trim;
 /**
  * Immutable configuration for CsrfMiddleware.
  *
- * Bundles tuneable knobs in one place so that CsrfMiddleware has a single,
- * stable constructor signature and application config arrays can be forwarded
- * with fromArray().
+ * ## excludedPathPatterns
  *
- * excludedPathPatterns
- * --------------------
- * A list of PCRE regex patterns matched against the request path
- * (everything after the host, including the leading "/").  Any path that
- * matches at least one pattern is exempt from CSRF validation entirely,
- * useful for webhook endpoints, API routes protected by other means, or
- * health-check URLs.
+ * PCRE patterns matched against the request path (including the leading "/").
+ * A path matching any of them skips CSRF validation.
  *
- * ## Every pattern MUST be anchored at BOTH ends of a path segment
+ * Every pattern must start with "^" or "\A", after an optional inline modifier such as "(?i)",
+ * and end with "/", "$", "\z" or "\Z", or the constructor refuses it. A loose pattern is a hole:
+ * "#^/api/public#" also exempts "/api/publicity/42/delete". Constructing with named arguments
+ * is validated the same way as fromArray().
  *
- * An exemption is a hole in CSRF protection, and a pattern that matches
- * loosely widens the hole onto routes nobody meant to exempt. Both of these
- * match, and each match is a mutating route reached with no CSRF token:
+ * To exempt a route and everything under it, end with "/" ("#^/webhooks/#"). To exempt the route
+ * with and without children, list both "#^/webhooks$#" and "#^/webhooks/#".
+ * To exempt exactly one path, end with "$" ("#^/logout$#").
  *
- *   #/webhooks/#      matches  /account/webhooks/close
- *   #^/api/public#    matches  /api/publicity/42/delete
+ * ## Forms
  *
- * The first needs an attacker-controlled path segment. The second needs
- * nothing at all: the pattern is anchored, but it stops mid-segment, so it
- * exempts every sibling route sharing the prefix. That exact pattern used to
- * be the example shipped in this file.
- *
- * So a pattern is refused at construction unless it:
- *
- *   - starts with "^" or "\A", pinning the match to the start of the path, and
- *   - ends with "/", "$", "\z" or "\Z", pinning it to a segment boundary or to
- *     the end of the path.
- *
- * To exempt a route AND everything under it, end with "/" ("#^/webhooks/#").
- * To exempt exactly one path, end with "$" ("#^/logout$#"). To exempt a route
- * both with and without children, list both patterns.
- *
- * This is validated by the CONSTRUCTOR, not only by fromArray(), because
- * building the object directly with named arguments is the documented usage
- * and would otherwise skip the check entirely.
- *
- * Forms must carry the token themselves. Automatic injection is not supported, so
- * every state-changing form needs a hidden input named after bodyField:
- *
- *   <input type="hidden" name="_csrf_token" value="…">
+ * Token injection is not supported: every state-changing form carries a hidden
+ * input named after bodyField (`<input type="hidden" name="_csrf_token" value="...">`).
  *
  * Example:
  *
@@ -85,7 +60,7 @@ use function trim;
 final class CsrfConfig
 {
     /**
-     * Refusal sentence for automatic token injection, without its final period. The %s placeholder is the body field name.
+     * Refusal message for injectToken, without its final period. %s is the body field name.
      */
     public const string INJECTION_REFUSAL = 'Automatic token injection is not supported because it cannot follow '
         . 'the browser\'s HTML parsing and could send the token to another site. Add a hidden "%s" field to your '
@@ -106,7 +81,7 @@ final class CsrfConfig
      * @param bool   $injectToken          Must be false: true is refused.
      * @param array<mixed> $excludedPathPatterns Anchored PCRE patterns; see the class docblock.
      * @param bool   $enabled              Enable CSRF token validation on mutating requests.
-     * @throws InvalidArgumentException when $injectToken is true.
+     * @throws InvalidArgumentException when $injectToken is true or an exclusion pattern is refused.
      */
     public function __construct(
         public readonly string $bodyField            = '_csrf_token',
@@ -145,10 +120,16 @@ final class CsrfConfig
     /**
      * Build from a plain associative array.
      *
-     * Accepts both camelCase and snake_case keys; camelCase takes priority
-     * when both are present to match typed config conventions elsewhere.
+     * Accepted keys, in priority order when several are set (first non-null wins):
+     * enabled | csrf_enabled | csrfEnabled (default true);
+     * bodyField | body_field (default "_csrf_token");
+     * headerName | header_name (default "X-CSRF-Token");
+     * injectToken | inject_token | csrf_auto_html | csrfAutoHtml (must be false);
+     * excludedPathPatterns | excluded_path_patterns | csrf_exceptions | csrfExceptions.
      *
      * @param array<string, mixed> $config
+     * @throws InvalidArgumentException when injectToken is true or an exclusion pattern is refused.
+     * @throws ConfigurationException when enabled or injectToken is not a recognisable boolean.
      */
     public static function fromArray(array $config): self
     {
@@ -174,7 +155,7 @@ final class CsrfConfig
 
     /**
      * @param mixed  $patterns
-     * @param string $label    Format naming the pattern in errors, its index is substituted for %s.
+     * @param string $label    Error label; %s is replaced by the pattern index.
      * @return list<string>
      */
     private static function normalizeExcludedPathPatterns(mixed $patterns, string $label = 'CSRF excluded path pattern at index %s'): array
@@ -204,13 +185,9 @@ final class CsrfConfig
     }
 
     /**
-     * Refuse a pattern that can match beyond the routes it names.
+     * Refuses a pattern that can match beyond the routes it names (see the class docblock).
      *
-     * See the class docblock for the two loose patterns this refuses. The
-     * check is syntactic on purpose: whether a regex can only match whole path
-     * segments is not decidable in general, so the rule is a shape a human can
-     * satisfy and verify by reading, rather than an analysis that would be
-     * wrong quietly.
+     * Syntactic on purpose: a shape a reader can verify beats an analysis that could be quietly wrong.
      *
      * @param string $where Configuration key or index of the pattern, used in the error message.
      */
@@ -227,8 +204,6 @@ final class CsrfConfig
             ));
         }
 
-        // A leading inline modifier group, "(?i)" and friends, is allowed to
-        // sit in front of the anchor.
         $anchorable = preg_replace('/^\(\?[a-zA-Z]+\)/', '', $body) ?? $body;
 
         if (!str_starts_with($anchorable, '^') && !str_starts_with($anchorable, '\A')) {

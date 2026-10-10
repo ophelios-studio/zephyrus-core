@@ -7,19 +7,14 @@ namespace Zephyrus\Security;
 /**
  * Contract for CSRF token storage and validation.
  *
- * Implementations are responsible for generating, persisting, and verifying
- * the synchronizer token. The canonical implementation uses the session (see
- * SessionCsrfTokenManager in the Session module), but any backing store works
- * as long as:
+ * Generates, stores and verifies the synchronizer token. SessionCsrfTokenManager
+ * (Zephyrus\Session) is the session-backed default; any store works as long as:
  *
  *   - getToken()      returns the same token for the duration of a user's session.
- *   - isTokenValid()  returns true only when $submitted matches the stored token
- *                     via a timing-safe comparison.
+ *   - isTokenValid()  returns true only when $submitted matches the stored token,
+ *                     compared in constant time (hash_equals()).
  *
- * A timing-safe comparison MUST be used to prevent timing-based oracle attacks.
- * PHP's hash_equals() satisfies this requirement and is available since 5.6.
- *
- * Example minimal in-memory implementation (useful for tests):
+ * Minimal in-memory implementation for tests:
  *
  *   $manager = new class('secret-fixed-token') implements CsrfTokenManagerInterface {
  *       public function __construct(private string $token) {}

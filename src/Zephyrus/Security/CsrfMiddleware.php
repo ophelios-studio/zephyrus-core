@@ -14,55 +14,25 @@ use function str_contains;
 use function strtolower;
 
 /**
- * Middleware that enforces synchronizer-token CSRF protection.
+ * Synchronizer-token CSRF protection.
  *
- * Safe HTTP methods (GET, HEAD, OPTIONS, TRACE) pass through unchanged.
- * State-changing methods (POST, PUT, PATCH, DELETE) must supply a valid CSRF
- * token or the middleware returns a 403 Forbidden response without calling
- * the inner handler.
+ * GET, HEAD, OPTIONS and TRACE pass through. Every other method must carry a valid
+ * token, or the middleware refuses the request with a 403 without calling the next handler.
  *
- * Token lookup order (first match wins):
- *   1. Request body field (default: "_csrf_token", via CsrfConfig::bodyField).
- *   2. Request header (default: "X-CSRF-Token", via CsrfConfig::headerName).
+ * The token is read from the body field CsrfConfig::bodyField (default "_csrf_token");
+ * when that field is absent, from the header CsrfConfig::headerName (default "X-CSRF-Token").
+ * Validation is delegated to the CsrfTokenManagerInterface.
  *
- * Both sources are checked so that traditional HTML forms and AJAX/fetch
- * clients can both authenticate their requests with the same token.
+ * Paths matching a pattern in CsrfConfig::excludedPathPatterns skip the check.
  *
- * Path exclusions
- * ---------------
- * Paths whose URI matches any PCRE pattern in CsrfConfig::excludedPathPatterns
- * are exempt from CSRF checks entirely.  This is useful for webhook receivers,
- * public API endpoints protected by other means (bearer tokens, HMAC, …), or
- * health-check routes.
- *
- *   $mw = new CsrfMiddleware(
- *       new SessionCsrfTokenManager($session),
- *       CsrfConfig::fromSecurityConfig($configuration->security),
- *   );
- *
- * fromSecurityConfig() reads csrfEnabled and csrfExceptions from the
- * application's security section. See CsrfConfig for the pattern rules.
- *
- * Unmatched routes
- * ----------------
- * A request that matched no route is never gated. When HttpKernel finds no
- * route it flags the request with Request::ATTRIBUTE_UNMATCHED_ROUTE, and this
- * middleware passes it straight through so the response is the 404 or 405 it
- * should be, not a 403. There is no resource to protect when nothing matched,
- * and a security-shaped error there hides an ordinary wrong-URL bug. The error
- * response still travels through the rest of the global pipeline, so it keeps
- * its security headers.
- *
- * The token is validated by the injected CsrfTokenManagerInterface using a
- * constant-time comparison; the middleware itself does not generate tokens.
- *
- * A refused request is answered by the optional $onFailure callback (see its @param).
+ * Requests that matched no route are never refused: the 404 or 405 is answered
+ * instead, since no handler runs and no state changes.
  *
  * Usage:
  *
  *   $csrf = new SessionCsrfTokenManager($session);
  *   $kernel = KernelBuilder::create()
- *       ->withMiddleware(new CsrfMiddleware($csrf))
+ *       ->withMiddleware(new CsrfMiddleware($csrf, CsrfConfig::fromSecurityConfig($configuration->security)))
  *       ->build();
  *
  *   // In a template, embed the token:
@@ -83,10 +53,11 @@ final class CsrfMiddleware implements MiddlewareInterface
         . 'Reload the page and try again.';
 
     /**
-     * @param (Closure(Request, CsrfFailure): ?Response)|null $onFailure Called as ($onFailure)(Request, CsrfFailure)
-     *        to answer a refusal. Returning null, or passing no callback, keeps the default refusal. The callback
-     *        receives attacker-controlled input: it must only answer the refusal, never replay the request or act
-     *        on the account from it.
+     * @param CsrfConfig $config Built by fromSecurityConfig() to read csrfEnabled and csrfExceptions: a bare
+     *        CsrfConfig ignores security.csrf.exceptions.
+     * @param (Closure(Request, CsrfFailure): ?Response)|null $onFailure Answers a refusal; returning null keeps the
+     *        default response: a 403 as text/plain when Accept lists text/html, JSON otherwise. It receives
+     *        attacker-controlled input: only answer the refusal, never replay the request or act on the account.
      */
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,
@@ -113,9 +84,8 @@ final class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Answers a refused request with the failure callback when it returns a
-     * Response, otherwise with the default 403: plain text for a browser form
-     * post (Accept lists text/html), JSON for every other client.
+     * Answers a refusal: the $onFailure response if it returns one, otherwise a 403 as
+     * text/plain when Accept lists text/html, or as JSON {"error": ...} for every other client.
      */
     private function refuse(Request $request, CsrfFailure $failure): Response
     {
@@ -138,20 +108,7 @@ final class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Returns true when no route matched, so this request is heading for a 404
-     * or a 405 and there is nothing to protect.
-     *
-     * CSRF defends a RESOURCE against a state change triggered by a third-party
-     * site. When routing found nothing, no handler runs and no state changes,
-     * so validating a token guards nothing. Answering 403 there would replace a
-     * plain "that URL does not exist" with a security-shaped error, and send
-     * whoever debugs it hunting a token or signature problem when the real
-     * fault is the URL: a stale webhook or a renamed endpoint is the common
-     * case. It also buys no secrecy, because GET is a safe method and already
-     * reveals the same 404.
-     *
-     * The 404 or 405 still leaves through the rest of the global pipeline, so
-     * it keeps every security header a matched response would carry.
+     * Returns true when HttpKernel flagged that no route matched, so nothing is protected.
      */
     private function isUnmatchedRoute(Request $request): bool
     {
@@ -159,8 +116,7 @@ final class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Returns true when the request path matches any of the configured
-     * exclusion patterns and should bypass CSRF validation.
+     * Returns true when the request path matches any configured exclusion pattern.
      */
     private function isPathExcluded(Request $request): bool
     {
@@ -168,12 +124,7 @@ final class CsrfMiddleware implements MiddlewareInterface
             return false;
         }
 
-        // The CANONICAL path, never uri()->path(). Keying an exclusion on the
-        // raw path was a live bypass: with an unanchored pattern such as
-        // #/webhooks/#, a POST to //webhooks/account/close matched the
-        // exclusion, skipped the token check, and the router dispatched the
-        // protected /account/close. CsrfConfig now refuses that unanchored
-        // shape outright, so this is the second of two independent guards.
+        // Match the canonical path the router dispatches, never the raw URI path.
         $path = $request->path();
         foreach ($this->config->excludedPathPatterns as $pattern) {
             if (@preg_match($pattern, $path) === 1) {
@@ -185,14 +136,12 @@ final class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Resolve the submitted CSRF token from the request (body or header) and
-     * delegate validation to the injected token manager.
+     * Resolves the submitted token (body field first, then header) and validates it.
      *
      * @return CsrfFailure|null null when the token is valid
      */
     private function tokenFailure(Request $request): ?CsrfFailure
     {
-        // Body field takes precedence over the header.
         $submitted = $request->body()->get($this->config->bodyField)
             ?? $request->headers()->get($this->config->headerName);
 
