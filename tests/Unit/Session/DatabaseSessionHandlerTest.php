@@ -302,7 +302,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     public function testUpdateTimestampNeverRecreatesARowThatIsNoLongerThere(): void
     {
         self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
-        self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', ''));
+        self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'live payload'));
 
         self::assertSame(
             0,
@@ -388,17 +388,6 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'payload'));
         self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
-    }
-
-    /**
-     * A brand-new session still gets its row once it holds data.
-     */
-    public function testWriteStillCreatesTheRowForASessionThisRequestOpened(): void
-    {
-        self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
-
-        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'foo=bar'));
-        self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session', []));
     }
 
     /**

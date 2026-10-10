@@ -223,12 +223,12 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * Refresh the access window of an unchanged session without rewriting its payload.
      *
      * A bare UPDATE, never an upsert: an upsert would re-create a row deleted while the request was in flight,
-     * such as by a logout. Returns false when no row was refreshed. A session this request created has no row
-     * to refresh and returns true without a statement. An id this handler never read is refused.
+     * such as by a logout. Returns false when no row was refreshed. A created session with an empty payload is not
+     * stored and returns true without a statement. An id this handler never read is refused.
      */
     public function updateTimestamp(string $id, string $data): bool
     {
-        return $this->writeRow($id, true, function () use ($id): int {
+        return $this->writeRow($id, $data === '', function () use ($id): int {
             $access = time();
 
             return $this->database()->execute(
