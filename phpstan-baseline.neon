@@ -184,10 +184,6 @@ parameters:
             count: 2
         -
             identifier: missingType.iterableValue
-            path: src/Zephyrus/Core/Config/ApplicationConfig.php
-            count: 1
-        -
-            identifier: missingType.iterableValue
             path: src/Zephyrus/Core/Config/ConfigSection.php
             count: 1
         # RenderConfig's entry was RESOLVED, not swept: its fromArray() override

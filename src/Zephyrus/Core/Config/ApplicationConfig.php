@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+/**
+ * Application-wide settings: the environment and whether debug output is enabled.
+ */
 final readonly class ApplicationConfig
 {
     public function __construct(
@@ -13,6 +16,7 @@ final readonly class ApplicationConfig
     }
 
     /**
+     * @param array<string, mixed> $values
      * @throws ConfigurationException when the debug value is not a recognisable boolean.
      */
     public static function fromArray(array $values): self
