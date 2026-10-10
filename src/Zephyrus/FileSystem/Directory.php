@@ -7,6 +7,7 @@ namespace Zephyrus\FileSystem;
 use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use SplFileInfo;
 
 /**
  * Object-oriented wrapper for directory operations.
@@ -73,7 +74,7 @@ final class Directory extends FileSystemNode
         $iterator = new FilesystemIterator($this->path, FilesystemIterator::SKIP_DOTS);
 
         foreach ($iterator as $item) {
-            if ($item->isDir()) {
+            if ($item instanceof SplFileInfo && $item->isDir()) {
                 $dirs[] = new self($item->getPathname());
             }
         }
