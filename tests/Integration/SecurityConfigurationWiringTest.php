@@ -66,22 +66,22 @@ final class SecurityConfigurationWiringTest extends TestCase
 
             // It must say what to DO, not merely that something is wrong.
             self::assertStringContainsString(
-                'security.forceHttps is not enforced: mount ' . ForceHttpsMiddleware::class . ' with withMiddleware()',
+                'security.forceHttps is not enforced as declared: mount ' . ForceHttpsMiddleware::class . ' with withMiddleware()',
                 $message,
             );
             self::assertStringContainsString(
-                'security.allowedHosts is not enforced: mount new ' . AllowedHostsMiddleware::class
+                'security.allowedHosts is not enforced as declared: mount new ' . AllowedHostsMiddleware::class
                 . "(...) globally with withMiddleware(), built from the configuration's security->allowedHosts",
                 $message,
             );
             self::assertStringContainsString(
-                'security.csrf is not enforced: mount new ' . CsrfMiddleware::class
+                'security.csrf is not enforced as declared: mount new ' . CsrfMiddleware::class
                 . "(...) globally with withMiddleware(), built from the configuration's security through "
                 . 'CsrfConfig::fromSecurityConfig()',
                 $message,
             );
             self::assertStringContainsString(
-                'security.maxBodySize is not enforced: mount new ' . MaxBodySizeMiddleware::class
+                'security.maxBodySize is not enforced as declared: mount new ' . MaxBodySizeMiddleware::class
                 . "(...) globally with withMiddleware(), built from the configuration's security->maxBodySize",
                 $message,
             );
@@ -137,7 +137,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted declared security headers that nothing sends.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.headers is not enforced: mount new ' . SecureHeadersMiddleware::class
+                'security.headers is not enforced as declared: mount new ' . SecureHeadersMiddleware::class
                 . "(...) globally with withMiddleware(), built from the configuration's security->headers",
                 $exception->getMessage(),
             );
@@ -165,7 +165,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail(sprintf('build() accepted a global middleware that does not carry security.%s', $setting));
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.' . $setting . ' is not enforced: the global ' . $carryingAnotherValue::class . ' '
+                'security.' . $setting . ' is not enforced as declared: the global ' . $carryingAnotherValue::class . ' '
                 . $expectedInstruction,
                 $exception->getMessage(),
             );
@@ -394,7 +394,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted a CsrfMiddleware excluding paths security.csrf.exceptions does not list.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                "\n  - security.csrf is not enforced: the global " . CsrfMiddleware::class
+                "\n  - security.csrf is not enforced as declared: the global " . CsrfMiddleware::class
                 . ' excludes "#^/webhooks/#", "#^/passkey/#", which security.csrf.exceptions does not list; '
                 . 'declare them in security.csrf.exceptions, or build the middleware with '
                 . "CsrfConfig::fromSecurityConfig()\n",
@@ -472,7 +472,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted a second global MaxBodySizeMiddleware with a looser limit.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.maxBodySize is not enforced: 1 of the 2 global ' . MaxBodySizeMiddleware::class
+                'security.maxBodySize is not enforced as declared: 1 of the 2 global ' . MaxBodySizeMiddleware::class
                 . ' instances does not enforce it as declared, and every global instance must carry the declared value: fix or remove it'
                 . "\n    - instance 2 of 2 carries a looser limit (" . $describedLimit . ') than security.maxBodySize '
                 . '(11534336 bytes); give it a positive limit no larger than security.maxBodySize',
@@ -505,7 +505,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted two global MaxBodySizeMiddleware with looser limits.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.maxBodySize is not enforced: none of the 2 global ' . MaxBodySizeMiddleware::class
+                'security.maxBodySize is not enforced as declared: none of the 2 global ' . MaxBodySizeMiddleware::class
                 . ' instances enforces it as declared, and every global instance must carry the declared value: fix each one'
                 . "\n    - instance 1 of 2 carries a looser limit (0, unlimited) than security.maxBodySize "
                 . '(2097152 bytes); give it a positive limit no larger than security.maxBodySize'
@@ -527,7 +527,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted two global SecureHeadersMiddleware with another configuration.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.headers is not enforced: none of the 2 global ' . SecureHeadersMiddleware::class
+                'security.headers is not enforced as declared: none of the 2 global ' . SecureHeadersMiddleware::class
                 . ' instances enforces it as declared, and every global instance must carry the declared value: fix each one'
                 . "\n    - instance 1 of 2 carries another configuration; "
                 . "build the middleware from the configuration's security->headers"
@@ -549,7 +549,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted a second global SecureHeadersMiddleware with another configuration.');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.headers is not enforced: 1 of the 2 global ' . SecureHeadersMiddleware::class
+                'security.headers is not enforced as declared: 1 of the 2 global ' . SecureHeadersMiddleware::class
                 . ' instances does not enforce it as declared, and every global instance must carry the declared value: fix or remove it'
                 . "\n    - instance 1 of 2 carries another configuration; "
                 . "build the middleware from the configuration's security->headers\n",
@@ -683,7 +683,7 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::fail('build() accepted a csrf middleware that only route names reference');
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
-                'security.csrf is not enforced: mount new ' . CsrfMiddleware::class
+                'security.csrf is not enforced as declared: mount new ' . CsrfMiddleware::class
                 . "(...) globally with withMiddleware(), built from the configuration's security through "
                 . 'CsrfConfig::fromSecurityConfig(), and list the exempt routes under security.csrf.exceptions; '
                 . "it is registered only under route names 'api', 'admin'",

@@ -104,7 +104,7 @@ final class ConfigurationException extends ZephyrusException
     {
         $lines = [];
         foreach ($unwired as $setting => $instruction) {
-            $lines[] = sprintf('  - %s is not enforced: %s', $setting, $instruction);
+            $lines[] = sprintf('  - %s is not enforced as declared: %s', $setting, $instruction);
         }
 
         return new self(
