@@ -110,7 +110,15 @@ $apiToken = getenv('API_TOKEN') ?: throw new \RuntimeException('API_TOKEN is not
 $apiAuth = new AuthGuardMiddleware(new HeaderTokenGuard($apiToken));
 ```
 
-Register it under a name on the bootstrap's builder, then reference that name in route attributes. Mutating API calls authenticate with the bearer token instead of the CSRF token, so exclude the API prefix from the CSRF check. This chain replaces the one in the Bootstrap section. Add the `use` line for `CsrfConfig`; the other imports are those of the Bootstrap block:
+Register it under a name on the bootstrap's builder, then reference that name in route attributes. Mutating API calls authenticate with the bearer token instead of the CSRF token, so exclude the API prefix from the CSRF check under `security.csrf.exceptions` in your configuration file:
+
+```yaml
+security:
+  csrf:
+    exceptions: ['#^/api/#']
+```
+
+The middleware reads that section through `CsrfConfig::fromSecurityConfig()`. This chain replaces the one in the Bootstrap section, and needs the `use` line for `CsrfConfig`; the other imports are those of the Bootstrap block:
 
 ```php
 use Zephyrus\Security\CsrfConfig;
@@ -120,7 +128,7 @@ $kernel = KernelBuilder::create()
     ->registerMiddleware('auth', $apiAuth)
     ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
     ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
-    ->withMiddleware(new CsrfMiddleware($csrf, new CsrfConfig(excludedPathPatterns: ['#^/api/#'])))
+    ->withMiddleware(new CsrfMiddleware($csrf, CsrfConfig::fromSecurityConfig($configuration->security)))
     ->build();
 ```
 
@@ -191,6 +199,7 @@ $this->validate($form, $request->body()->all());
 Wire everything together once at startup:
 
 ```php
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\Request;
@@ -201,6 +210,8 @@ use Zephyrus\Security\SecureHeadersMiddleware;
 use Zephyrus\Session\SessionCsrfTokenManager;
 use Zephyrus\Session\SessionManager;
 use Zephyrus\Session\SessionMiddleware;
+
+$configuration = Configuration::fromYamlFile(__DIR__ . '/../config.yml');
 
 $router = (new Router())
     ->discoverControllers('App\\Controllers', __DIR__ . '/../app/Controllers');
@@ -225,6 +236,24 @@ $response->send();
 ```php
 <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf->getToken(), ENT_QUOTES, 'UTF-8') ?>">
 ```
+
+A refused browser form post (an `Accept` header listing `text/html`) gets a plain-text 403 that tells the person to reload the page. Every other client gets a JSON 403. To answer refusals yourself, pass a callback that returns a `Response`, or `null` to keep the default:
+
+```php
+use Zephyrus\Http\Response;
+use Zephyrus\Security\CsrfConfig;
+use Zephyrus\Security\CsrfFailure;
+
+$middleware = new CsrfMiddleware(
+    $csrf,
+    CsrfConfig::fromSecurityConfig($configuration->security),
+    onFailure: static fn (Request $request, CsrfFailure $failure): ?Response => $request->path() === '/login'
+        ? Response::redirect('/login?expired=1')
+        : null,
+);
+```
+
+The callback receives attacker-controlled input: it should only answer the refusal, never replay the request or act on the account from it.
 
 ---
 
