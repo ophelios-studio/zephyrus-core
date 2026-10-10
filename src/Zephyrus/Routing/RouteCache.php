@@ -11,10 +11,9 @@ use Zephyrus\Routing\Exception\RouteCacheException;
  * Persists the compiled route table as a JSON file and validates it on load.
  *
  * The file is {"meta": {...}, "routes": [...]}. meta holds the format version (1), the sha256 of the
- * routes section, the route count and generated_at. When meta is present, load() refuses an unknown
- * version and a count or hash mismatch. The hash detects corruption, not tampering: a file without
- * meta loads unchecked, so protect the file with permissions. A cache whose hash no longer matches
- * the current routes is stale.
+ * routes section, the route count and generated_at. load() refuses a file without meta, an unknown
+ * version, or a count or hash mismatch. The hash detects corruption, not tampering, so protect the
+ * file with permissions. A cache whose hash no longer matches the current routes is stale.
  */
 final class RouteCache
 {
@@ -336,7 +335,7 @@ final class RouteCache
     /**
      * Loads and validates the cache file into a RouteCollection.
      *
-     * @throws RouteCacheException When the file is missing or unreadable, or fails a structure, version,
+     * @throws RouteCacheException When the file is missing or unreadable, or fails a structure, metadata,
      *                             hash or route validation.
      */
     public function load(): RouteCollection
@@ -352,41 +351,43 @@ final class RouteCache
         }
 
         $meta = $decoded['meta'] ?? null;
-        if ($meta !== null && (!is_array($meta) || !isset($meta['routes_hash']) || !is_string($meta['routes_hash']))) {
+        if ($meta === null) {
+            throw new RouteCacheException('Route cache payload missing metadata section, rebuild the cache with save() or warm()');
+        }
+
+        if (!is_array($meta) || !isset($meta['routes_hash']) || !is_string($meta['routes_hash'])) {
             throw new RouteCacheException('Route cache payload contains invalid metadata');
         }
 
-        if ($meta !== null && (!array_key_exists('version', $meta) || !is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION)) {
+        if (!array_key_exists('version', $meta) || !is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION) {
             throw new RouteCacheException('Route cache payload contains unsupported metadata version');
         }
 
-        if ($meta !== null && !preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash'])) {
+        if (!preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash'])) {
             throw new RouteCacheException('Route cache payload contains invalid metadata hash format');
         }
 
-        if ($meta !== null && array_key_exists('route_count', $meta) && !is_int($meta['route_count'])) {
+        if (!array_key_exists('route_count', $meta) || !is_int($meta['route_count'])) {
             throw new RouteCacheException('Route cache payload contains invalid metadata route count');
         }
 
-        if ($meta !== null && array_key_exists('generated_at', $meta) && !is_int($meta['generated_at'])) {
+        if (!array_key_exists('generated_at', $meta) || !is_int($meta['generated_at'])) {
             throw new RouteCacheException('Route cache payload contains invalid metadata generation timestamp');
         }
 
         $routesPayload = $decoded['routes'];
-        if ($meta !== null) {
-            if (array_key_exists('route_count', $meta) && $meta['route_count'] !== count($routesPayload)) {
-                throw new RouteCacheException('Route cache payload metadata route count mismatch');
-            }
+        if ($meta['route_count'] !== count($routesPayload)) {
+            throw new RouteCacheException('Route cache payload metadata route count mismatch');
+        }
 
-            try {
-                $actualHash = $this->computePayloadHash($routesPayload);
-            } catch (RouteCacheException $exception) {
-                throw new RouteCacheException('Unable to validate route cache payload hash', previous: $exception);
-            }
+        try {
+            $actualHash = $this->computePayloadHash($routesPayload);
+        } catch (RouteCacheException $exception) {
+            throw new RouteCacheException('Unable to validate route cache payload hash', previous: $exception);
+        }
 
-            if (!hash_equals($meta['routes_hash'], $actualHash)) {
-                throw new RouteCacheException('Route cache payload hash mismatch');
-            }
+        if (!hash_equals($meta['routes_hash'], $actualHash)) {
+            throw new RouteCacheException('Route cache payload hash mismatch');
         }
 
         $collection = new RouteCollection();
