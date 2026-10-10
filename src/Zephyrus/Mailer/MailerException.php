@@ -35,6 +35,11 @@ final class MailerException extends ZephyrusRuntimeException
     private const int MAX_BOUNDARY_WALK = 3;
 
     /**
+     * C1 controls, U+061C, U+2028, U+2029 and the bidi controls, escaped as \u{XXXX} in messages.
+     */
+    private const string ESCAPED_CHARACTER_PATTERN = '~[\x{80}-\x{9F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2028}\x{2029}\x{2066}-\x{2069}]~u';
+
+    /**
      * The transport did not accept the message. Its reply goes to transportMessage(), not the message, because it can name recipients.
      *
      * @param string $transportMessage The transport's own reply.
@@ -104,7 +109,7 @@ final class MailerException extends ZephyrusRuntimeException
      * a caller logging them should be able to tell them apart.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", control characters and backslashes are escaped, and values over 64 bytes are cut on a character boundary (within 3 bytes): paths keep their last 64 bytes, other values their first 64.
+     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", C0 and C1 controls, DEL, U+061C, U+2028, U+2029, the bidi controls and backslashes are escaped, and values over 64 bytes are cut on a character boundary (within 3 bytes): paths keep their last 64 bytes, other values their first 64.
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
@@ -141,17 +146,12 @@ final class MailerException extends ZephyrusRuntimeException
         return sprintf('"%s..." (%d bytes)', self::escaped($cut), strlen($value));
     }
 
-    /**
-     * Invisible and direction-changing characters, escaped as \u{XXXX} in messages.
-     */
-    private const string INVISIBLE_CHARACTER_PATTERN = '~[\x{80}-\x{9F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2028}\x{2029}\x{2066}-\x{2069}]~u';
-
     private static function escaped(string $value): string
     {
         $escaped = addcslashes(mb_scrub($value, 'UTF-8'), "\\\0..\37\177");
 
         return preg_replace_callback(
-            self::INVISIBLE_CHARACTER_PATTERN,
+            self::ESCAPED_CHARACTER_PATTERN,
             static fn (array $match): string => sprintf('\u{%04X}', mb_ord($match[0], 'UTF-8')),
             $escaped,
         ) ?? '';

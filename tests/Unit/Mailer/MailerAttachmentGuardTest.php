@@ -145,27 +145,6 @@ final class MailerAttachmentGuardTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function displayNameWithControlCharacterProvider(): iterable
-    {
-        yield 'carriage return' => ["a\rb"];
-        yield 'line feed' => ["a\nb"];
-        yield 'NUL byte' => ["a\0b"];
-    }
-
-    #[DataProvider('displayNameWithControlCharacterProvider')]
-    public function testADisplayNameWithAControlCharacterIsRefusedByAttach(string $name): void
-    {
-        $mailer = new Mailer($this->config);
-
-        $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('contains a control or bidirectional formatting character');
-
-        $mailer->attach($this->inside, $name);
-    }
-
-    /**
-     * @return iterable<string, array{string}>
-     */
     public static function unusableDisplayNameProvider(): iterable
     {
         yield 'zero' => ['0'];
@@ -240,7 +219,7 @@ final class MailerAttachmentGuardTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
-    public static function controlOrBidiCharacterNameProvider(): iterable
+    public static function controlBidiOrLineSeparatorNameProvider(): iterable
     {
         yield 'tab' => ["inv\toice.pdf"];
         yield 'unit separator' => ["inv\x1Foice.pdf"];
@@ -262,27 +241,20 @@ final class MailerAttachmentGuardTest extends TestCase
         yield 'paragraph separator' => ["inv\u{2029}oice.pdf"];
     }
 
-    #[DataProvider('controlOrBidiCharacterNameProvider')]
-    public function testAControlOrBidiCharacterInTheDisplayNameIsRefusedByAttach(string $name): void
-    {
-        $mailer = new Mailer($this->config);
-
-        $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('contains a control or bidirectional formatting character');
-
-        $mailer->attach($this->inside, $name);
-    }
-
-    public function testABidiOverrideInTheRejectedNameIsNotEchoedRaw(): void
+    #[DataProvider('controlBidiOrLineSeparatorNameProvider')]
+    public function testAControlBidiOrLineSeparatorInTheDisplayNameIsRefusedByAttach(string $name): void
     {
         $mailer = new Mailer($this->config);
 
         try {
-            $mailer->attach($this->inside, "invoice\u{202E}fdp.exe");
-            self::fail('A display name with a bidi override must be refused.');
+            $mailer->attach($this->inside, $name);
+            self::fail('A display name with a control, bidirectional or line separator character must be refused.');
         } catch (MailerException $exception) {
-            self::assertStringContainsString('\u{202E}', $exception->getMessage());
-            self::assertStringNotContainsString("\u{202E}", $exception->getMessage());
+            self::assertStringContainsString(
+                'contains a control, bidirectional formatting or line separator character',
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString($name, $exception->getMessage());
         }
     }
 

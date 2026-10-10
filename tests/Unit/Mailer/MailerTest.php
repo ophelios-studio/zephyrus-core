@@ -668,13 +668,13 @@ final class MailerTest extends TestCase
         $mailer->attachContent('content', str_repeat('a', 256) . '.pdf');
     }
 
-    #[DataProviderExternal(MailerAttachmentGuardTest::class, 'controlOrBidiCharacterNameProvider')]
-    public function testAControlOrBidiCharacterInTheDisplayNameIsRefusedByAttachContent(string $name): void
+    #[DataProviderExternal(MailerAttachmentGuardTest::class, 'controlBidiOrLineSeparatorNameProvider')]
+    public function testAControlBidiOrLineSeparatorInTheDisplayNameIsRefusedByAttachContent(string $name): void
     {
         $mailer = new Mailer($this->config);
 
         $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('contains a control or bidirectional formatting character');
+        $this->expectExceptionMessage('contains a control, bidirectional formatting or line separator character');
 
         $mailer->attachContent('content', $name);
     }
