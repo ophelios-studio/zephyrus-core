@@ -56,8 +56,7 @@ use function strtolower;
  * The token is validated by the injected CsrfTokenManagerInterface using a
  * constant-time comparison; the middleware itself does not generate tokens.
  *
- * A refused request is answered by the optional $onFailure closure, called as
- * ($onFailure)(Request, CsrfFailure). Returning null leaves the default refusal in place.
+ * A refused request is answered by the optional $onFailure callback (see its @param).
  *
  * Usage:
  *
@@ -67,7 +66,7 @@ use function strtolower;
  *       ->build();
  *
  *   // In a template, embed the token:
- *   <input type="hidden" name="_csrf_token" value="<?= $csrf->getToken() ?>">
+ *   <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf->getToken()) ?>">
  *
  *   // Or via AJAX header:
  *   fetch('/api/action', {
@@ -84,7 +83,10 @@ final class CsrfMiddleware implements MiddlewareInterface
         . 'Reload the page and try again.';
 
     /**
-     * @param (Closure(Request, CsrfFailure): ?Response)|null $onFailure Answers a refusal; null from it, or no callback, gives the default refusal.
+     * @param (Closure(Request, CsrfFailure): ?Response)|null $onFailure Called as ($onFailure)(Request, CsrfFailure)
+     *        to answer a refusal. Returning null, or passing no callback, keeps the default refusal. The callback
+     *        receives attacker-controlled input: it must only answer the refusal, never replay the request or act
+     *        on the account from it.
      */
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,

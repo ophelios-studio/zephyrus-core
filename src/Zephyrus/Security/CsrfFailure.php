@@ -7,8 +7,7 @@ namespace Zephyrus\Security;
 /**
  * Why CsrfMiddleware refused a request.
  *
- * The failure callback runs on attacker-controlled input: it must answer the refusal only, never replay the
- * request or act on the account from it.
+ * The failure callback receives attacker-controlled input, see CsrfMiddleware::__construct().
  */
 enum CsrfFailure: string
 {
