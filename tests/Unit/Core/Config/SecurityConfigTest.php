@@ -262,6 +262,50 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(['::ffff:10.0.0.0/96'], $config->trustedProxies);
     }
 
+    public function testTrustedProxiesStringIsSplitOnCommas(): void
+    {
+        $config = SecurityConfig::fromArray(['trustedProxies' => '10.0.0.1, 10.0.0.2']);
+
+        self::assertSame(['10.0.0.1', '10.0.0.2'], $config->trustedProxies);
+    }
+
+    public function testTrustedProxiesStringDropsEmptyEntries(): void
+    {
+        $config = SecurityConfig::fromArray(['trustedProxies' => ' 10.0.0.1 , ,, 10.0.0.2 ,']);
+
+        self::assertSame(['10.0.0.1', '10.0.0.2'], $config->trustedProxies);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function stringsNamingNothing(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'blank' => [' '];
+        yield 'lone comma' => [','];
+        yield 'commas and spaces' => [' , '];
+    }
+
+    #[DataProvider('stringsNamingNothing')]
+    public function testTrustedProxiesStringNamingNothingTrustsNoProxy(string $value): void
+    {
+        self::assertSame([], SecurityConfig::fromArray(['trustedProxies' => $value])->trustedProxies);
+    }
+
+    public function testTrustedProxiesEmptyArrayMeansNoProxy(): void
+    {
+        self::assertSame([], SecurityConfig::fromArray(['trustedProxies' => []])->trustedProxies);
+    }
+
+    public function testTrustedProxiesStringValidatesEachEntry(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'trustedProxies[1]' has invalid value 'bogus'");
+
+        SecurityConfig::fromArray(['trustedProxies' => '10.0.0.1, bogus']);
+    }
+
     public function testCommaSeparatedTrustedProxiesAskForOneEntryPerListItem(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -612,6 +656,44 @@ final class SecurityConfigTest extends TestCase
         yield 'unicode name' => ['bücher.example', 'punycode'];
         yield 'path' => ['example.com/x', 'must be a host name'];
         yield 'non-numeric port' => ['example.com:evil', 'must be a host name'];
+    }
+
+    public function testAllowedHostsStringIsSplitAndTrimmed(): void
+    {
+        $config = SecurityConfig::fromArray(['allowedHosts' => 'a.example, ,b.example']);
+
+        self::assertSame(['a.example', 'b.example'], $config->allowedHosts);
+    }
+
+    #[DataProvider('stringsNamingNothing')]
+    public function testAllowedHostsStringNamingNothingIsRefused(string $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'allowedHosts' has invalid value");
+        $this->expectExceptionMessage('set the variable to at least one entry, or remove it');
+
+        SecurityConfig::fromArray(['allowedHosts' => $value]);
+    }
+
+    public function testDeclaredNullAllowedHostsIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'allowedHosts' has invalid value 'null'");
+
+        SecurityConfig::fromArray(['allowedHosts' => null]);
+    }
+
+    public function testAbsentAllowedHostsIsAnEmptyList(): void
+    {
+        self::assertSame([], SecurityConfig::fromArray([])->allowedHosts);
+    }
+
+    public function testAllowedHostsStringValidatesEachEntry(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'allowedHosts[1]' has invalid value 'bad host'");
+
+        SecurityConfig::fromArray(['allowedHosts' => 'a.example, bad host']);
     }
 
     public function testCommaSeparatedAllowedHostsAskForOneEntryPerListItem(): void

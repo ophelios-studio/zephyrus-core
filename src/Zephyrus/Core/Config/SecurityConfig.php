@@ -51,7 +51,10 @@ use Zephyrus\Security\CsrfConfig;
  *
  * Validation rules:
  *   - maxBodySize must be 0 or greater.
- *   - Each allowedHost entry must be a non-empty string.
+ *   - Each allowedHost entry must be a non-empty string. allowedHosts and
+ *     trustedProxies also accept one comma-separated string, such as from !env.
+ *     A string naming nothing is an empty trustedProxies (no proxy is trusted) but
+ *     is REJECTED for allowedHosts, where an empty list would allow every host.
  *   - Each csrfExceptions entry must be a non-empty string.
  *   - csrf.autoHtml and its aliases are not settings: omit them. A value that
  *     casts to true is REJECTED at boot.
@@ -161,9 +164,19 @@ final readonly class SecurityConfig
         $csrfAutoHtml = (bool) ($autoHtml[1] ?? false);
         $csrfExceptions = (array) (self::read('csrfExceptions', $sections) ?? []);
 
-        $allowedHosts = (array) (self::read('allowedHosts', $sections) ?? []);
+        $declaredKeys = self::declaredKeys($sections);
+        $allowedHostsValue = self::read('allowedHosts', $sections);
+        if ($allowedHostsValue === null && in_array('allowedHosts', $declaredKeys, true)) {
+            throw ConfigurationException::invalidValue('security', 'allowedHosts', 'null', 'an empty list is written []');
+        }
+
+        $allowedHosts = self::listValue($allowedHostsValue);
+        if ($allowedHosts === [] && is_string($allowedHostsValue)) {
+            throw ConfigurationException::invalidValue('security', 'allowedHosts', self::shownValue($allowedHostsValue), 'set the variable to at least one entry, or remove it');
+        }
+
         $maxBodySize = (int) (self::read('maxBodySize', $sections) ?? 2_097_152);
-        $trustedProxies = (array) (self::read('trustedProxies', $sections) ?? []);
+        $trustedProxies = self::listValue(self::read('trustedProxies', $sections));
         // An ABSENT key takes the default set; an explicitly empty list is a
         // valid, maximally strict setting and must not be confused with it.
         $trustedHeaders = (array) (self::read('trustedHeaders', $sections) ?? Request::TRUSTED_HEADERS_DEFAULT);
@@ -268,8 +281,31 @@ final readonly class SecurityConfig
             trustedProxies: array_values($trustedProxies),
             encryptionKey: $encryptionKey,
             trustedHeaders: $normalizedTrustedHeaders,
-            declaredKeys: self::declaredKeys($sections),
+            declaredKeys: $declaredKeys,
         );
+    }
+
+    /**
+     * A list setting: an array as given, or a comma-separated string (typically from !env)
+     * split into trimmed, non-empty entries. A string that names nothing is an empty list.
+     *
+     * @return array<mixed>
+     */
+    private static function listValue(mixed $value): array
+    {
+        if (!is_string($value)) {
+            return (array) ($value ?? []);
+        }
+
+        $entries = [];
+        foreach (explode(',', $value) as $entry) {
+            $entry = trim($entry);
+            if ($entry !== '') {
+                $entries[] = $entry;
+            }
+        }
+
+        return $entries;
     }
 
     /**
