@@ -9,11 +9,10 @@ use IntlDateFormatter;
 use NumberFormatter;
 
 /**
- * Locale-aware formatting utilities built on ext-intl.
+ * Formatting built on ext-intl: numbers, money, dates, ordinals and spelled-out numbers.
  *
- * Provides a clean API for formatting numbers, currency, dates, times,
- * durations, file sizes, lists, and more — all respecting the configured
- * locale.
+ * money(), decimal(), percent(), ordinal(), spellOut(), date(), time() and datetime() use the locale given to
+ * the constructor. timeago(), duration(), filesize() and list() output English whatever the locale.
  *
  * Usage:
  *
@@ -24,7 +23,7 @@ use NumberFormatter;
  *   $fmt->ordinal(3);            // "3rd"
  *   $fmt->spellOut(42);          // "forty-two"
  *   $fmt->date(new DateTime());  // "Mar 10, 2026"
- *   $fmt->timeago(time() - 3600);  // "1 hour ago"
+ *   $fmt->timeago(time() - 3600); // "1 hour ago"
  *   $fmt->filesize(1536000);     // "1.5 MB"
  *   $fmt->duration(7830);        // "2h 10m 30s"
  *   $fmt->list(['a', 'b', 'c']); // "a, b, and c"
@@ -49,18 +48,14 @@ final class Formatter
 
     /**
      * @param string      $locale                 ICU locale identifier (e.g. 'en', 'en_US', 'fr_CA').
-     * @param string|null $defaultCurrency         ISO 4217 currency code used by money() when no
-     *                                             explicit currency is given (e.g. 'USD', 'CAD').
-     *                                             If null, the locale's native currency is used.
-     * @param string      $defaultDatePattern      Default pattern for date(). ICU preset name
-     *                                             ('short', 'medium', 'long', 'full') or a custom
-     *                                             ICU pattern (e.g. 'yyyy-MM-dd').
-     * @param string      $defaultTimePattern      Default pattern for time().
-     * @param string      $defaultDatetimePattern  Default pattern for datetime().
-     * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and
-     *                                             ordinal(). Null keeps the ICU default of the locale, '' disables
-     *                                             grouping. Otherwise at most 4 bytes, no digit or control
-     *                                             character, and not the locale's decimal, monetary or minus sign.
+     * @param string|null $defaultCurrency         ISO 4217 code used by money() when none is given. Null uses the locale's currency.
+     * @param string      $defaultDatePattern      Default for date(): ICU preset ('short', 'medium', 'long', 'full') or ICU pattern.
+     * @param string      $defaultTimePattern      Default for time(), same syntax.
+     * @param string      $defaultDatetimePattern  Default for datetime(), same syntax.
+     * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and ordinal().
+     *                                             Null keeps the locale's ICU default, '' disables grouping. Otherwise
+     *                                             at most 4 bytes, valid UTF-8, no digit or control character, not the
+     *                                             locale's decimal, monetary decimal or minus sign.
      * @throws FormatterException if the grouping separator is not accepted.
      */
     public function __construct(
@@ -83,7 +78,7 @@ final class Formatter
     }
 
     /**
-     * Get the active locale.
+     * Returns the locale given to the constructor.
      */
     public function getLocale(): string
     {
@@ -91,7 +86,7 @@ final class Formatter
     }
 
     /**
-     * Get the configured default currency, if any.
+     * Returns the default currency, or null when none was configured.
      */
     public function getDefaultCurrency(): ?string
     {
@@ -99,7 +94,7 @@ final class Formatter
     }
 
     /**
-     * Get the configured default date pattern.
+     * Returns the default date pattern.
      */
     public function getDefaultDatePattern(): string
     {
@@ -107,7 +102,7 @@ final class Formatter
     }
 
     /**
-     * Get the configured default time pattern.
+     * Returns the default time pattern.
      */
     public function getDefaultTimePattern(): string
     {
@@ -115,25 +110,23 @@ final class Formatter
     }
 
     /**
-     * Get the configured default datetime pattern.
+     * Returns the default datetime pattern.
      */
     public function getDefaultDatetimePattern(): string
     {
         return $this->defaultDatetimePattern;
     }
 
-    // ─── Numeric ──────────────────────────────────────────────────────
-
     /**
-     * Format a monetary amount.
+     * Formats a monetary amount.
      *
-     * Resolution order for the currency code:
-     *  1. The explicit $currency argument.
-     *  2. The default currency set on this Formatter instance.
-     *  3. The locale's native currency (e.g. 'en_US' → 'USD').
+     * The currency is the explicit $currency, else the default currency, else the locale's native currency. A locale
+     * without a region (en, fr) has no native currency and prints ¤; set $defaultCurrency.
      *
      * @param float       $amount   The monetary value.
-     * @param string|null $currency ISO 4217 currency code (e.g. 'USD', 'EUR').
+     * @param string|null $currency ISO 4217 code (e.g. 'USD', 'EUR').
+     *
+     * @throws FormatterException When ICU cannot format the amount.
      */
     public function money(float $amount, ?string $currency = null): string
     {
@@ -152,7 +145,9 @@ final class Formatter
     }
 
     /**
-     * Format a decimal number with grouping separators.
+     * Formats a number with grouping separators and exactly $precision fraction digits.
+     *
+     * @throws FormatterException When ICU cannot format the value.
      */
     public function decimal(float $value, int $precision = 2): string
     {
@@ -169,9 +164,9 @@ final class Formatter
     }
 
     /**
-     * Format a value as a percentage.
+     * Formats a fraction as a percentage (0.85 gives "85%").
      *
-     * Input is a fraction (0.85 = 85%).
+     * @throws FormatterException When ICU cannot format the value.
      */
     public function percent(float $value, int $precision = 0): string
     {
@@ -188,7 +183,9 @@ final class Formatter
     }
 
     /**
-     * Format a number as an ordinal (e.g. "1st", "2nd", "3rd").
+     * Formats a number as an ordinal (e.g. "1st", "2nd", "3rd").
+     *
+     * @throws FormatterException When ICU cannot format the value.
      */
     public function ordinal(int $value): string
     {
@@ -202,7 +199,9 @@ final class Formatter
     }
 
     /**
-     * Spell out a number in words (e.g. 42 => "forty-two").
+     * Spells out a number in words (e.g. 42 gives "forty-two").
+     *
+     * @throws FormatterException When ICU cannot format the value.
      */
     public function spellOut(float $value): string
     {
@@ -215,18 +214,13 @@ final class Formatter
         return $result;
     }
 
-    // ─── Temporal ─────────────────────────────────────────────────────
-
     /**
-     * Format a date.
-     *
-     * When called without an explicit $pattern, the default configured via
-     * the constructor is used. Override per-call with any ICU preset
-     * ('short', 'medium', 'long', 'full') or a custom ICU pattern
-     * (e.g. 'yyyy-MM-dd', 'EEEE d MMMM yyyy').
+     * Formats a date. Without $pattern, the constructor default is used.
      *
      * @param mixed       $date    A DateTimeInterface, Unix timestamp (int), or date string.
      * @param string|null $pattern Preset or ICU pattern. Null uses the configured default.
+     *
+     * @throws FormatterException When the value is not a supported date or ICU cannot format it.
      */
     public function date(mixed $date, ?string $pattern = null): string
     {
@@ -234,10 +228,12 @@ final class Formatter
     }
 
     /**
-     * Format a time.
+     * Formats a time. Without $pattern, the constructor default is used.
      *
      * @param mixed       $time    A DateTimeInterface, Unix timestamp (int), or time string.
      * @param string|null $pattern Preset or ICU pattern. Null uses the configured default.
+     *
+     * @throws FormatterException When the value is not a supported time or ICU cannot format it.
      */
     public function time(mixed $time, ?string $pattern = null): string
     {
@@ -245,10 +241,12 @@ final class Formatter
     }
 
     /**
-     * Format a date and time.
+     * Formats a date and time. Without $pattern, the constructor default is used.
      *
      * @param mixed       $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
      * @param string|null $pattern  Preset or ICU pattern. Null uses the configured default.
+     *
+     * @throws FormatterException When the value is not a supported datetime or ICU cannot format it.
      */
     public function datetime(mixed $datetime, ?string $pattern = null): string
     {
@@ -256,9 +254,11 @@ final class Formatter
     }
 
     /**
-     * Format a relative time difference (e.g. "2 hours ago", "in 3 days").
+     * Formats the distance to now in English ("2 hours ago", "in 3 days", "just now").
      *
      * @param mixed $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
+     *
+     * @throws FormatterException When the value is not a supported datetime.
      */
     public function timeago(mixed $datetime): string
     {
@@ -268,7 +268,6 @@ final class Formatter
         $absDiff = abs($diff);
         $isFuture = $diff < 0;
 
-        // Determine the most appropriate unit.
         [$value, $unit] = match (true) {
             $absDiff < 60 => [$absDiff, 'second'],
             $absDiff < 3600 => [(int) round($absDiff / 60), 'minute'],
@@ -278,7 +277,6 @@ final class Formatter
             default => [(int) round($absDiff / 31536000), 'year'],
         };
 
-        // Use relative-time formatting rules.
         $plural = $value !== 1 ? 's' : '';
 
         if ($isFuture) {
@@ -293,9 +291,7 @@ final class Formatter
     }
 
     /**
-     * Format a duration in seconds as a human-readable string.
-     *
-     * Examples: "2h 10m 30s", "45s", "1h 0m 5s".
+     * Formats a duration in seconds in English ("2h 10m 30s", "45s", "1h 0m 5s"). Negative values get a leading "-".
      */
     public function duration(int $seconds): string
     {
@@ -320,12 +316,8 @@ final class Formatter
         return $seconds < 0 ? '-' . $result : $result;
     }
 
-    // ─── Specialized ──────────────────────────────────────────────────
-
     /**
-     * Format a byte count as a human-readable file size.
-     *
-     * Examples: "1.5 MB", "320 KB", "2.1 GB".
+     * Formats a byte count in 1024-based English units ("1.5 MB", "320 KB"). Bytes are shown without decimals.
      */
     public function filesize(int $bytes, int $precision = 1): string
     {
@@ -348,10 +340,10 @@ final class Formatter
     }
 
     /**
-     * Format a list of items using locale-aware conjunction/disjunction.
+     * Joins items with English "and" or "or" ("a, b, and c"), whatever the locale.
      *
      * @param string[] $items List of items.
-     * @param string   $type  'conjunction' (a, b, and c) or 'disjunction' (a, b, or c).
+     * @param string   $type  'conjunction' (a, b, and c) or 'disjunction' (a, b, or c). Any other value is a conjunction.
      */
     public function list(array $items, string $type = 'conjunction'): string
     {
@@ -374,13 +366,9 @@ final class Formatter
     }
 
     /**
-     * Truncate a string to the given length, appending a suffix if truncated.
+     * Truncates to at most $length characters, appending $suffix (default "...") when cut.
      *
-     * The result never exceeds `$length` characters. When `$length` is shorter
-     * than the suffix there is no room for both, so the suffix alone is cut to
-     * fit; a naive `$length - mb_strlen($suffix)` would go negative and make
-     * `mb_substr()` trim from the END of the value, returning a string LONGER
-     * than the one that was passed in.
+     * A $suffix longer than $length is itself cut, so the result never exceeds $length. A negative $length is 0.
      */
     public function truncate(string $value, int $length, string $suffix = '...'): string
     {
@@ -399,13 +387,11 @@ final class Formatter
         return mb_substr($value, 0, $keep) . $suffix;
     }
 
-    // ─── Custom Formatters ────────────────────────────────────────────
-
     /**
-     * Register a custom named formatter. A built-in name, in any case, overrides that built-in.
+     * Registers a custom formatter. A name matching a built-in (ignoring case) overrides that built-in.
      *
      * @param string   $name      Formatter name (e.g. 'phone').
-     * @param callable $formatter A callable that receives mixed args and returns string.
+     * @param callable $formatter Receives the arguments given to format() and returns a string.
      */
     public function register(string $name, callable $formatter): void
     {
@@ -413,7 +399,7 @@ final class Formatter
     }
 
     /**
-     * Check whether format() runs a custom formatter for this name, using the same name matching as format().
+     * Whether format() runs a custom formatter for this name.
      */
     public function hasCustomFormatter(string $name): bool
     {
@@ -421,7 +407,7 @@ final class Formatter
     }
 
     /**
-     * Check whether format() can apply this name, as a custom or a built-in formatter.
+     * Whether format() can apply this name, as a custom or a built-in formatter.
      */
     public function has(string $name): bool
     {
@@ -429,7 +415,7 @@ final class Formatter
     }
 
     /**
-     * Get the names of all registered custom formatters.
+     * Returns the names of all registered custom formatters.
      *
      * @return string[]
      */
@@ -439,10 +425,15 @@ final class Formatter
     }
 
     /**
-     * Apply a formatter by name. Built-in names (and their overrides) match ignoring case; other custom names are exact.
+     * Applies the formatter called $name: a custom registration first, then a built-in.
+     *
+     * Built-in names match ignoring case; other custom names are exact.
      *
      * @param mixed ...$args Arguments passed to the formatter.
-     * @throws FormatterException if neither a custom nor a built-in formatter has this name.
+     *
+     * @throws FormatterException For an unknown name, or when a built-in formatter fails. A custom formatter's
+     *                            own exception propagates unchanged. A built-in given a wrong argument type or
+     *                            count throws TypeError or ArgumentCountError.
      */
     public function format(string $name, mixed ...$args): string
     {
@@ -458,8 +449,6 @@ final class Formatter
 
         throw FormatterException::unknownFormatter($name, self::BUILT_IN_FORMATTERS);
     }
-
-    // ─── Internal Helpers ─────────────────────────────────────────────
 
     /**
      * NumberFormatter whose grouping separator is the configured one, if any.
@@ -477,8 +466,10 @@ final class Formatter
     }
 
     /**
-     * @throws FormatterException if the separator is longer than 4 bytes, has a digit or a control character,
-     *         is not valid UTF-8, or equals the locale's decimal, monetary or minus sign.
+     * Rejects a separator over 4 bytes, not valid UTF-8, containing a digit or control character, or equal to the
+     * locale's decimal, monetary decimal or minus sign (see reservedSeparators()).
+     *
+     * @throws FormatterException
      */
     private function assertValidGroupingSeparator(string $separator): void
     {
@@ -503,7 +494,7 @@ final class Formatter
     }
 
     /**
-     * ICU ordinal rules ignore the grouping symbol setting, so swap the locale's grouping character between digits.
+     * ICU ordinals ignore the grouping setting, so the locale's grouping character between digits is swapped.
      */
     private function replaceOrdinalGrouping(string $ordinal): string
     {
@@ -525,10 +516,9 @@ final class Formatter
     }
 
     /**
-     * Find the custom formatter answering to a name: the exact registration, else the
-     * override of the built-in name the given name matches ignoring case.
+     * The exact custom registration, else the override of the built-in matching the name ignoring case.
      *
-     * @return callable|null null when format() falls through to a built-in or fails.
+     * @return callable|null Null when format() falls through to a built-in, or fails.
      */
     private function resolveCustomFormatter(string $name): ?callable
     {
@@ -555,9 +545,6 @@ final class Formatter
         return null;
     }
 
-    /**
-     * Format a datetime value using IntlDateFormatter.
-     */
     private function formatDateTime(
         mixed $value,
         string $pattern,
@@ -598,7 +585,11 @@ final class Formatter
     }
 
     /**
-     * Convert a mixed datetime value to a Unix timestamp.
+     * Converts a DateTimeInterface, an int timestamp or a string to a Unix timestamp.
+     *
+     * Strings go through strtotime(), so relative forms such as 'tomorrow' are accepted.
+     *
+     * @throws FormatterException When the string cannot be parsed or the type is unsupported.
      */
     private function toTimestamp(mixed $value): int
     {

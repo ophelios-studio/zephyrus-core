@@ -26,6 +26,9 @@ final class FormatterException extends ZephyrusRuntimeException
         );
     }
 
+    /**
+     * Raised by the global format() helper when App has no Formatter.
+     */
     public static function formatterRequired(string $type): self
     {
         return new self(sprintf(
