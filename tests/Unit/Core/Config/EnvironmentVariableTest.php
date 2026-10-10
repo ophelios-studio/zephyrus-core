@@ -41,6 +41,9 @@ final class EnvironmentVariableTest extends TestCase
         'SSL_CLIENT_S_DN',
         'ssl_server_name',
         'SERVER_SIGNATURE',
+        'PHP_SELF',
+        'argc',
+        'argv',
         'HTTP2',
         'H2PUSH',
         'H2_PUSH_POLICY',
@@ -167,6 +170,7 @@ final class EnvironmentVariableTest extends TestCase
             'QUERY_STRING', 'CONTENT_TYPE', 'REQUEST_URI', 'SERVER_NAME', 'HTTPS', 'PHP_AUTH_USER',
             'DOCUMENT_ROOT', 'REMOTE_PORT', 'SERVER_ADDR', 'SCRIPT_URI', 'SCRIPT_URL',
             'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT', 'SERVER_SIGNATURE', 'HTTP2', 'H2PUSH',
+            'PHP_SELF', 'argc', 'argv',
         ] as $name) {
             yield $name => [$name];
         }

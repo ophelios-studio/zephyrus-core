@@ -22,7 +22,7 @@ final class EnvironmentVariable
             'SERVER_PORT', 'SERVER_ADDR', 'SERVER_PROTOCOL', 'SERVER_SOFTWARE', 'REQUEST_URI',
             'DOCUMENT_URI', 'DOCUMENT_ROOT', 'SCRIPT_FILENAME', 'SCRIPT_URI', 'SCRIPT_URL',
             'CONTEXT_PREFIX', 'CONTEXT_DOCUMENT_ROOT', 'REQUEST_SCHEME', 'HTTPS', 'PHP_AUTH_USER',
-            'PHP_AUTH_PW', 'PHP_AUTH_DIGEST',
+            'PHP_AUTH_PW', 'PHP_AUTH_DIGEST', 'PHP_SELF', 'ARGC', 'ARGV',
         ],
         'Apache' => ['SERVER_SIGNATURE'],
         'Apache mod_http2' => ['HTTP2', 'H2PUSH'],
