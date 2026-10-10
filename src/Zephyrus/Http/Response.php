@@ -177,7 +177,8 @@ final readonly class Response
      * Returns a copy with the headers set, as withHeader() does.
      *
      * @param array<string, string> $headers
-     * @throws InvalidArgumentException When a key is an integer, which means a list was passed.
+     * @throws InvalidArgumentException When a key is an integer: a list, or a numeric name PHP cast to int.
+     * @throws InvalidArgumentException When a value is not a string.
      * @throws InvalidArgumentException When any name is not a valid header name.
      * @throws InvalidArgumentException When any value holds a control character other than HTAB.
      */

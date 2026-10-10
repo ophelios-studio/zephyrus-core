@@ -93,13 +93,14 @@ final readonly class SecureHeadersConfig
     /**
      * Builds the config from a key-value array, falling back to defaults() for missing keys.
      *
-     * Each key takes its camelCase or snake_case spelling; camelCase wins when both are set. A blank header
-     * value is read as empty, which means not emitted.
+     * Each key takes its camelCase or snake_case spelling; camelCase wins when both are set.
+     * Header values are trimmed of surrounding spaces, tabs, CR and LF; a blank one is read as empty, which means
+     * not emitted.
      *
      * @param array<string, mixed> $values
      * @throws ConfigurationException when a key is unknown, a value is null or not a string or number, a header
-     *         value contains a control character other than a horizontal tab, hstsMaxAge is not an integer or a
-     *         string of digits, or hstsIncludeSubdomains is not a recognisable boolean.
+     *         value contains a control character other than a horizontal tab after trimming, hstsMaxAge is not an
+     *         integer or a string of digits, or hstsIncludeSubdomains is not a recognisable boolean.
      */
     public static function fromArray(array $values): self
     {

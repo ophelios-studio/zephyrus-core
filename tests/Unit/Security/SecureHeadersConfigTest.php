@@ -459,10 +459,16 @@ final class SecureHeadersConfigTest extends TestCase
 
     public function testAControlCharacterStillRefusedInAValueThatEndsWithANewline(): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/field 'csp'/");
-
-        SecureHeadersConfig::fromArray(['csp' => "default-src\x01 'self'\n"]);
+        try {
+            SecureHeadersConfig::fromArray(['csp' => "default-src\x01 'self'\n"]);
+            self::fail('A control character must be refused.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security.headers' field 'csp' has invalid value 'default-src\\001 'self'': "
+                . 'must not contain a control character.',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testATrailingNulIsRefusedAndNotTrimmedAway(): void
