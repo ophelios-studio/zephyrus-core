@@ -112,8 +112,8 @@ final class DebugIntegration
      * Name patterns the Bluescreen scrubber masks, and every renderer for a variable a closure captures.
      *
      * Elsewhere dump() and the debug bar apply only the exact names (SENSITIVE_KEYS,
-     * SENSITIVE_PROPERTIES and the session name), and the Bluescreen skips int,
-     * float, bool and null values; exact names mask any value.
+     * SENSITIVE_PROPERTIES and the session name). The pattern skips int, float,
+     * bool and null values; exact names mask any value.
      */
     public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
@@ -281,7 +281,7 @@ final class DebugIntegration
      */
     private static function isSensitiveCapture(string $name, mixed $binding, Describer $describer): bool
     {
-        return self::isSensitiveKey($name)
+        return self::isSensitiveEntry($name, $binding)
             || isset($describer->keysToHide[strtolower($name)])
             || ($describer->scrubber !== null && ($describer->scrubber)($name, $binding, null));
     }

@@ -531,6 +531,20 @@ final class DebugIntegrationTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
+    public function testCapturedScalarsFollowTheScrubberRuleForPatternOnlyNames(): void
+    {
+        $passwordMinLength = random_int(100_000_000, 999_999_999);
+        $token = random_int(100_000_000, 999_999_999);
+        DebugIntegration::initialize(debug: true);
+
+        $text = Dumper::toText(static fn (): array => [$passwordMinLength, $token]);
+
+        self::assertStringContainsString((string) $passwordMinLength, $text, 'A number under a pattern-only name was masked.');
+        self::assertStringNotContainsString((string) $token, $text, 'An exact sensitive name must mask any value.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testCapturedClosuresAreMaskedAtEveryDepth(): void
     {
         $password = self::marker('password');
