@@ -103,8 +103,6 @@ final class UploaderTest extends TestCase
         self::assertSame('final.txt', $relative);
         self::assertFileExists($dest . '/final.txt');
         self::assertSame('data', (string) file_get_contents($dest . '/final.txt'));
-
-        $this->removeDir($dest);
     }
 
     public function test_store_with_explicit_name_and_subdirectory_returns_relative_path(): void
@@ -116,8 +114,6 @@ final class UploaderTest extends TestCase
 
         self::assertSame('images/avatar.png', $relative);
         self::assertFileExists($dest . '/images/avatar.png');
-
-        $this->removeDir($dest);
     }
 
     public function test_store_generates_random_hex_name_when_target_absent(): void
@@ -130,8 +126,6 @@ final class UploaderTest extends TestCase
         // 32 hex chars (128-bit) + ".pdf"
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.pdf$#', $relative);
         self::assertFileExists($dest . '/' . $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_generated_name_omits_extension_when_original_has_none(): void
@@ -143,8 +137,6 @@ final class UploaderTest extends TestCase
 
         // Exactly 32 hex chars, no dot.
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}$#', $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_generated_name_lowercases_extension(): void
@@ -155,8 +147,6 @@ final class UploaderTest extends TestCase
         $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
 
         self::assertStringEndsWith('.jpg', $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_creates_subdirectory_under_destination_root(): void
@@ -168,8 +158,6 @@ final class UploaderTest extends TestCase
 
         self::assertStringStartsWith('assets/', $relative);
         self::assertDirectoryExists($dest . '/assets');
-
-        $this->removeDir($dest);
     }
 
     public function test_store_creates_nested_subdirectory(): void
@@ -181,8 +169,6 @@ final class UploaderTest extends TestCase
 
         self::assertSame('images/thumbs/small.jpg', $relative);
         self::assertDirectoryExists($dest . '/images/thumbs');
-
-        $this->removeDir($dest);
     }
 
     public function test_store_ignores_leading_and_trailing_separators_in_subdir(): void
@@ -194,8 +180,6 @@ final class UploaderTest extends TestCase
         $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, '/uploads/', 'file.txt');
 
         self::assertSame('uploads/file.txt', $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_creates_missing_destination_directory(): void
@@ -208,8 +192,6 @@ final class UploaderTest extends TestCase
 
         self::assertSame('x.bin', $relative);
         self::assertFileExists($dest . '/x.bin');
-
-        $this->removeDir($base);
     }
 
     public function test_store_generates_unique_names_on_successive_calls(): void
@@ -220,8 +202,6 @@ final class UploaderTest extends TestCase
         $relative2 = (new Uploader($dest, fileMover: $this->fileMover()))->store(new FileUpload('b.png', '', $this->makeTempFile(), 0));
 
         self::assertNotSame($relative1, $relative2);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_throws_when_file_has_upload_error(): void
@@ -229,13 +209,9 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = new FileUpload('x.bin', '', '/tmp/x', 0, UPLOAD_ERR_INI_SIZE);
 
-        try {
-            $this->expectException(UploadException::class);
-            $this->expectExceptionMessage('upload_max_filesize');
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        $this->expectExceptionMessage('upload_max_filesize');
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
     }
 
     public function test_store_rejects_file_when_size_exceeds_configured_maximum(): void
@@ -244,14 +220,9 @@ final class UploaderTest extends TestCase
         $tmp = $this->makeTempFile('1234567890');
         $file = new FileUpload('payload.txt', 'text/plain', $tmp, 10, UPLOAD_ERR_OK);
 
-        try {
-            $this->expectException(UploadException::class);
-            $this->expectExceptionMessage('too large');
-            (new Uploader($dest, maxSizeBytes: 8, fileMover: $this->fileMover()))->store($file);
-        } finally {
-            @unlink($tmp);
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        $this->expectExceptionMessage('too large');
+        (new Uploader($dest, maxSizeBytes: 8, fileMover: $this->fileMover()))->store($file);
     }
 
     public function test_store_rejects_file_when_extension_not_allowlisted(): void
@@ -259,13 +230,9 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile('avatar.gif', 'image/gif');
 
-        try {
-            $this->expectException(UploadException::class);
-            $this->expectExceptionMessage('Allowed extensions: jpg, png');
-            (new Uploader($dest, allowedExtensions: ['jpg', '.png'], fileMover: $this->fileMover()))->store($file);
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        $this->expectExceptionMessage('Allowed extensions: jpg, png');
+        (new Uploader($dest, allowedExtensions: ['jpg', '.png'], fileMover: $this->fileMover()))->store($file);
     }
 
     public function test_store_rejects_file_when_mime_type_not_allowlisted(): void
@@ -273,13 +240,9 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile('avatar.jpg', 'image/gif');
 
-        try {
-            $this->expectException(UploadException::class);
-            $this->expectExceptionMessage('Allowed MIME types: image/jpeg, image/png');
-            (new Uploader($dest, allowedMimeTypes: ['image/jpeg', 'image/png'], fileMover: $this->fileMover()))->store($file);
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        $this->expectExceptionMessage('Allowed MIME types: image/jpeg, image/png');
+        (new Uploader($dest, allowedMimeTypes: ['image/jpeg', 'image/png'], fileMover: $this->fileMover()))->store($file);
     }
 
     public function test_store_accepts_file_when_constraints_match(): void
@@ -298,8 +261,6 @@ final class UploaderTest extends TestCase
 
         self::assertMatchesRegularExpression('#^avatars/[a-f0-9]{32}\.jpg$#', $relative);
         self::assertFileExists($dest . '/' . $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_rejects_double_dot_in_subdirectory(): void
@@ -307,13 +268,9 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            $this->expectExceptionMessage('traversal');
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, '../escape');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        $this->expectExceptionMessage('traversal');
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, '../escape');
     }
 
     public function test_store_rejects_double_dot_segment_within_subdirectory(): void
@@ -321,12 +278,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, 'images/../../../etc');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, 'images/../../../etc');
     }
 
     public function test_store_rejects_forward_slash_in_target_name(): void
@@ -334,12 +287,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '../escape.bin');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '../escape.bin');
     }
 
     public function test_store_rejects_backslash_in_target_name(): void
@@ -347,12 +296,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'sub\\escape.bin');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'sub\\escape.bin');
     }
 
     public function test_store_rejects_empty_target_name(): void
@@ -360,12 +305,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '');
     }
 
     public function test_store_rejects_dot_as_target_name(): void
@@ -373,12 +314,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '.');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '.');
     }
 
     public function test_store_rejects_double_dot_as_target_name(): void
@@ -386,12 +323,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '..');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, '..');
     }
 
     public function test_store_rejects_a_php_payload_announced_as_an_image(): void
@@ -408,7 +341,6 @@ final class UploaderTest extends TestCase
         } finally {
             @unlink($tmp);
             self::assertSame([], glob($dest . '/*') ?: [], 'Nothing may be written for a refused upload.');
-            $this->removeDir($dest);
         }
     }
 
@@ -421,8 +353,6 @@ final class UploaderTest extends TestCase
 
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.jpg$#', $relative);
         self::assertStringEndsNotWith('.php', $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_stores_no_extension_when_the_bytes_are_unidentifiable(): void
@@ -434,8 +364,6 @@ final class UploaderTest extends TestCase
         $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
 
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}$#', $relative);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_rejects_a_double_extension_that_ends_in_an_allowlisted_one(): void
@@ -449,7 +377,6 @@ final class UploaderTest extends TestCase
             (new Uploader($dest, allowedExtensions: ['jpg']))->store($file);
         } finally {
             self::assertSame([], glob($dest . '/*') ?: []);
-            $this->removeDir($dest);
         }
     }
 
@@ -464,7 +391,6 @@ final class UploaderTest extends TestCase
             (new Uploader($dest, allowedExtensions: ['jpg']))->store($file, null, 'shell.phtml');
         } finally {
             self::assertSame([], glob($dest . '/*') ?: []);
-            $this->removeDir($dest);
         }
     }
 
@@ -479,7 +405,6 @@ final class UploaderTest extends TestCase
             (new Uploader($dest))->store($file, null, '.htaccess');
         } finally {
             self::assertFileDoesNotExist($dest . '/.htaccess');
-            $this->removeDir($dest);
         }
     }
 
@@ -488,12 +413,8 @@ final class UploaderTest extends TestCase
         $dest = $this->makeTempDir();
         $file = $this->makeValidFile();
 
-        try {
-            $this->expectException(UploadException::class);
-            (new Uploader($dest))->store($file, null, '  ..  ');
-        } finally {
-            $this->removeDir($dest);
-        }
+        $this->expectException(UploadException::class);
+        (new Uploader($dest))->store($file, null, '  ..  ');
     }
 
     public function test_store_measures_the_real_size_and_not_the_declared_one(): void
@@ -510,7 +431,6 @@ final class UploaderTest extends TestCase
         } finally {
             @unlink($tmp);
             self::assertSame([], glob($dest . '/*') ?: []);
-            $this->removeDir($dest);
         }
     }
 
@@ -529,7 +449,6 @@ final class UploaderTest extends TestCase
             self::assertFileExists($source, 'The refused source must survive; rename() would have destroyed it.');
             self::assertFileDoesNotExist($dest . '/leaked.txt');
             @unlink($source);
-            $this->removeDir($dest);
         }
     }
 
@@ -545,7 +464,6 @@ final class UploaderTest extends TestCase
             (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'report.txt');
         } finally {
             self::assertSame('TENANT A', (string) file_get_contents($dest . '/report.txt'));
-            $this->removeDir($dest);
         }
     }
 
@@ -559,8 +477,6 @@ final class UploaderTest extends TestCase
             ->store($file, null, 'report.txt');
 
         self::assertSame('NEW', (string) file_get_contents($dest . '/report.txt'));
-
-        $this->removeDir($dest);
     }
 
     public function test_store_refuses_a_subdirectory_that_escapes_the_root_through_a_symlink(): void
@@ -577,8 +493,6 @@ final class UploaderTest extends TestCase
         } finally {
             self::assertFileDoesNotExist($outside . '/note.txt');
             @unlink($dest . '/exports');
-            $this->removeDir($dest);
-            $this->removeDir($outside);
         }
     }
 
@@ -598,8 +512,6 @@ final class UploaderTest extends TestCase
                 'mkdir() must not have followed the link before the upload was refused.',
             );
             @unlink($dest . '/exports');
-            $this->removeDir($dest);
-            $this->removeDir($outside);
         }
     }
 
@@ -610,8 +522,6 @@ final class UploaderTest extends TestCase
         $paths = (new Uploader($dest, fileMover: $this->fileMover()))->storeMany([]);
 
         self::assertSame([], $paths);
-
-        $this->removeDir($dest);
     }
 
     public function test_store_many_returns_relative_paths_in_order(): void
@@ -631,8 +541,6 @@ final class UploaderTest extends TestCase
             self::assertFileExists($dest . '/' . $path);
         }
         self::assertCount(3, array_unique($paths), 'Each file should receive a unique name.');
-
-        $this->removeDir($dest);
     }
 
     public function test_store_many_stops_on_first_invalid_file(): void
@@ -651,7 +559,6 @@ final class UploaderTest extends TestCase
             // Only the first file should have been written.
             $stored = glob($dest . '/*');
             self::assertCount(1, $stored ?: []);
-            $this->removeDir($dest);
         }
     }
 }
