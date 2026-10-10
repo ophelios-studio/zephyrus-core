@@ -15,6 +15,8 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Localization\LocaleLoaderInterface;
+use Zephyrus\Rendering\RenderEngine;
+use Zephyrus\Rendering\RenderResponses;
 use Zephyrus\Routing\Router;
 
 final class ApplicationBuilderTest extends TestCase
@@ -685,6 +687,17 @@ final class ApplicationBuilderTest extends TestCase
 
         self::assertSame('yes', $response->headers['x-app']);
     }
+
+    public function testWithRenderEngineReachesAControllerRegisteredAfterIt(): void
+    {
+        $app = ApplicationBuilder::create()
+            ->withRouter((new Router())->get('/page', ApplicationBuilderRenderingController::class . '@page'))
+            ->withRenderEngine(new ApplicationBuilderFakeEngine())
+            ->withControllerFactory(static fn (string $class): object => new $class())
+            ->build();
+
+        self::assertSame('engine:home', $app->handle(Request::fromArray('GET', '/page'))->body);
+    }
 }
 
 final class ApplicationBuilderFixtureController
@@ -692,5 +705,28 @@ final class ApplicationBuilderFixtureController
     public function health(): Response
     {
         return Response::text('ok');
+    }
+}
+
+final class ApplicationBuilderFakeEngine implements RenderEngine
+{
+    public function render(string $page, array $args = []): string
+    {
+        return 'engine:' . $page;
+    }
+
+    public function exists(string $page): bool
+    {
+        return true;
+    }
+}
+
+final class ApplicationBuilderRenderingController
+{
+    use RenderResponses;
+
+    public function page(): Response
+    {
+        return $this->render('home');
     }
 }

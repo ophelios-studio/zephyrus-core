@@ -10,6 +10,8 @@ use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
+use Zephyrus\Rendering\RenderEngine;
+use Zephyrus\Rendering\RenderResponses;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\HandlerResolver;
 use Zephyrus\Routing\RouteDispatcher;
@@ -71,6 +73,8 @@ final class KernelBuilder
     private mixed $controllerFactory = null;
 
     private ?EventDispatcher $eventDispatcher = null;
+
+    private ?RenderEngine $renderEngine = null;
 
     /** @var array<class-string<\Throwable>, callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response> */
     private array $exceptionHandlers = [];
@@ -148,6 +152,20 @@ final class KernelBuilder
     {
         $clone = clone $this;
         $clone->controllerFactory = $factory;
+
+        return $clone;
+    }
+
+    /**
+     * Sets the render engine given to every controller that uses the RenderResponses trait.
+     *
+     * The engine is applied after the controller factory (the default one or the one
+     * set with withControllerFactory()), so the order of the two calls does not matter.
+     */
+    public function withRenderEngine(RenderEngine $engine): self
+    {
+        $clone = clone $this;
+        $clone->renderEngine = $engine;
 
         return $clone;
     }
@@ -278,7 +296,7 @@ final class KernelBuilder
 
         $globalPipeline = new MiddlewarePipeline($this->globalMiddlewares);
 
-        $resolver = new HandlerResolver($this->controllerFactory);
+        $resolver = new HandlerResolver($this->renderEngineAwareFactory());
 
         $dispatcher = new RouteDispatcher(
             routes: $router->routes(),
@@ -305,6 +323,65 @@ final class KernelBuilder
         return new HttpKernel($dispatcher, $responder, $this->eventDispatcher, $globalPipeline);
     }
 
+    /**
+     * Returns the controller factory, wrapped so that a controller using the
+     * RenderResponses trait receives the render engine.
+     *
+     * @return (callable(class-string): object)|null
+     */
+    private function renderEngineAwareFactory(): ?callable
+    {
+        $engine = $this->renderEngine;
+
+        if ($engine === null) {
+            return $this->controllerFactory;
+        }
+
+        $factory = $this->controllerFactory ?? static fn (string $class): object => new $class();
+
+        return static function (string $class) use ($factory, $engine): object {
+            $controller = $factory($class);
+
+            if (self::usesRenderResponses($controller) && method_exists($controller, 'setRenderEngine')) {
+                $controller->setRenderEngine($engine);
+            }
+
+            return $controller;
+        };
+    }
+
+    /**
+     * Whether the object's class, or one of its parents, uses the RenderResponses trait,
+     * directly or through another trait.
+     */
+    private static function usesRenderResponses(object $controller): bool
+    {
+        for ($class = $controller::class; $class !== false; $class = get_parent_class($class)) {
+            if (self::traitsUseRenderResponses(class_uses($class) ?: [])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, string> $traits
+     */
+    private static function traitsUseRenderResponses(array $traits): bool
+    {
+        if (isset($traits[RenderResponses::class])) {
+            return true;
+        }
+
+        foreach ($traits as $trait) {
+            if (self::traitsUseRenderResponses(class_uses($trait) ?: [])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     /**
      * The outer middleware sees the inner csp already on the response and
      * leaves it, so the csp wins and the policy registered outside is never sent.

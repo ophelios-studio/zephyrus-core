@@ -12,9 +12,9 @@ use Zephyrus\Http\Response;
  * Use this trait in your Controller subclass to gain access to `render()`,
  * `renderWith()`, and `html()` methods that produce HTML Response objects.
  *
- * The trait requires a `RenderEngine` to be supplied. By default it uses
- * the engine set via `setRenderEngine()`, which the application builder
- * configures automatically from `RenderConfig`.
+ * The trait requires a `RenderEngine` to be supplied, through
+ * `setRenderEngine()`. `ApplicationBuilder::withRenderEngine()` calls it for
+ * every controller that uses this trait.
  *
  * Usage:
  *
@@ -90,8 +90,8 @@ trait RenderResponses
     {
         if ($this->renderEngine === null) {
             throw RenderException::engineError(
-                'No render engine has been configured. Call setRenderEngine() '
-                . 'or ensure the application builder has configured rendering.',
+                'No render engine has been configured. Call withRenderEngine() on the builder, '
+                . 'or setRenderEngine() from your own controller factory.',
             );
         }
 

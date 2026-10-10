@@ -11,6 +11,8 @@ use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Rendering\RenderEngine;
+use Zephyrus\Rendering\RenderResponses;
 use Zephyrus\Routing\Router;
 
 final class KernelBuilderTest extends TestCase
@@ -241,6 +243,81 @@ final class KernelBuilderTest extends TestCase
         self::assertSame(1, $calls);
     }
 
+    // -- Render engine --------------------------------------------------------
+
+    public function testRenderEngineReachesAControllerBuiltByTheDefaultFactory(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderRenderingController::class . '@page'))
+            ->withRenderEngine(new KernelBuilderFakeEngine())
+            ->build();
+
+        self::assertSame('engine:home', $kernel->handle(Request::fromArray('GET', '/page'))->body);
+    }
+
+    public function testRenderEngineReachesAControllerBuiltByACustomFactoryRegisteredAfterIt(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderRenderingController::class . '@page'))
+            ->withRenderEngine(new KernelBuilderFakeEngine())
+            ->withControllerFactory(static fn (string $class): object => new $class())
+            ->build();
+
+        self::assertSame('engine:home', $kernel->handle(Request::fromArray('GET', '/page'))->body);
+    }
+
+    public function testRenderEngineReachesAControllerWhoseParentUsesTheTrait(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderRenderingChild::class . '@page'))
+            ->withRenderEngine(new KernelBuilderFakeEngine())
+            ->build();
+
+        self::assertSame('engine:home', $kernel->handle(Request::fromArray('GET', '/page'))->body);
+    }
+
+    public function testRenderEngineReachesAControllerThatUsesTheTraitThroughAnotherTrait(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderTraitUserController::class . '@page'))
+            ->withRenderEngine(new KernelBuilderFakeEngine())
+            ->build();
+
+        self::assertSame('engine:home', $kernel->handle(Request::fromArray('GET', '/page'))->body);
+    }
+
+    public function testRenderEngineReachesAControllerWhoseParentUsesTheTraitThroughAnotherTrait(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderParentTraitChild::class . '@page'))
+            ->withRenderEngine(new KernelBuilderFakeEngine())
+            ->build();
+
+        self::assertSame('engine:home', $kernel->handle(Request::fromArray('GET', '/page'))->body);
+    }
+
+    public function testAControllerWithoutTheTraitIsLeftAlone(): void
+    {
+        // Its setRenderEngine() throws, so a call would surface as a 500.
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderPlainController::class . '@page'))
+            ->withRenderEngine(new KernelBuilderFakeEngine())
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/page'));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('plain', $response->body);
+    }
+
+    public function testBuildWithoutAnEngineLeavesTheControllerUntouched(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/page', KernelBuilderRenderingController::class . '@page'))
+            ->build();
+
+        self::assertSame(500, $kernel->handle(Request::fromArray('GET', '/page'))->status);
+    }
     // -- Middleware lookup ----------------------------------------------------
 
     public function testHasGlobalMiddlewareSeesAGlobalRegistration(): void
@@ -330,4 +407,73 @@ final class KernelBuilderFixtureController
     {
         return Response::text('pong');
     }
+}
+
+final class KernelBuilderFakeEngine implements RenderEngine
+{
+    public function render(string $page, array $args = []): string
+    {
+        return 'engine:' . $page;
+    }
+
+    public function exists(string $page): bool
+    {
+        return true;
+    }
+}
+
+class KernelBuilderRenderingController
+{
+    use RenderResponses;
+
+    public function page(): Response
+    {
+        return $this->render('home');
+    }
+}
+
+final class KernelBuilderRenderingChild extends KernelBuilderRenderingController
+{
+}
+
+final class KernelBuilderPlainController
+{
+    public function page(): Response
+    {
+        return Response::text('plain');
+    }
+
+    public function setRenderEngine(RenderEngine $engine): void
+    {
+        throw new \LogicException('This controller does not use the render engine.');
+    }
+}
+
+trait KernelBuilderAppRendering
+{
+    use RenderResponses;
+}
+
+final class KernelBuilderTraitUserController
+{
+    use KernelBuilderAppRendering;
+
+    public function page(): Response
+    {
+        return $this->render('home');
+    }
+}
+
+abstract class KernelBuilderAbstractParent
+{
+    use KernelBuilderAppRendering;
+
+    public function page(): Response
+    {
+        return $this->render('home');
+    }
+}
+
+final class KernelBuilderParentTraitChild extends KernelBuilderAbstractParent
+{
 }

@@ -16,6 +16,7 @@ use Zephyrus\Localization\FallbackLocaleLoader;
 use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
+use Zephyrus\Rendering\RenderEngine;
 use Zephyrus\Routing\Router;
 use Zephyrus\Security\AllowedHostsMiddleware;
 use Zephyrus\Security\CsrfMiddleware;
@@ -180,6 +181,13 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    public function withRenderEngine(RenderEngine $engine): self
+    {
+        $clone = clone $this;
+        $clone->kernelBuilder = $this->kernelBuilder->withRenderEngine($engine);
+
+        return $clone;
+    }
     public function withContainer(ContainerInterface $container): self
     {
         $clone = clone $this;
