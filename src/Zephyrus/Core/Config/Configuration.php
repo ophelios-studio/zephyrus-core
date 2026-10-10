@@ -53,7 +53,7 @@ final readonly class Configuration
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
-    public static function fromArray(array $config, array $sectionFactories = []): self
+    public static function fromArray(#[\SensitiveParameter] array $config, array $sectionFactories = []): self
     {
         self::refuseMisspelledKeys($config, self::canonicalNames(self::BUILT_IN_SECTIONS), []);
 
@@ -165,8 +165,11 @@ final readonly class Configuration
      * @param list<string> $acceptedKeys
      * @throws ConfigurationException
      */
-    private static function refuseMisspelledKeys(array $config, array $canonicalNames, array $acceptedKeys): void
-    {
+    private static function refuseMisspelledKeys(
+        #[\SensitiveParameter] array $config,
+        array $canonicalNames,
+        array $acceptedKeys,
+    ): void {
         foreach (array_keys($config) as $key) {
             $key = (string) $key;
             $suggestion = $canonicalNames[self::foldName($key)] ?? null;
@@ -213,7 +216,7 @@ final readonly class Configuration
      * @param array<int|string, mixed> $config
      * @throws ConfigurationException
      */
-    private static function configKeyFor(array $config, string $normalizedName): ?string
+    private static function configKeyFor(#[\SensitiveParameter] array $config, string $normalizedName): ?string
     {
         $found = null;
         foreach (array_keys($config) as $key) {

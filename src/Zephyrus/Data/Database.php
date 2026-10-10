@@ -178,7 +178,7 @@ final class Database
      *
      * @throws DatabaseException on PDO connection failure.
      */
-    public static function fromConfig(DatabaseConfig $config, ?callable $pdoFactory = null): self
+    public static function fromConfig(#[\SensitiveParameter] DatabaseConfig $config, ?callable $pdoFactory = null): self
     {
         // DatabaseConfig refuses quotes and backslashes in these values, so quoting needs no escaping.
         $dsn = sprintf(

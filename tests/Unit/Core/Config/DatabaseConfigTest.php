@@ -1217,4 +1217,59 @@ final class DatabaseConfigTest extends TestCase
             charset: 'utf8',
         );
     }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function refusedSectionsHoldingAPassword(): iterable
+    {
+        $section = ['host' => 'db.example.com', 'database' => 'app', 'username' => 'app', 'password' => 's3cret-pw'];
+
+        yield 'removed key' => [[...$section, 'emulate_prepares' => true]];
+        yield 'unknown key' => [[...$section, 'sslmod' => 'require']];
+        yield 'two spellings' => [[...$section, 'sslMode' => 'require', 'ssl_mode' => 'require']];
+        yield 'optional setting of the wrong type' => [[...$section, 'sslRootCert' => ['/etc/ssl/root.crt']]];
+        yield 'host of the wrong type' => [[...$section, 'host' => ['db.example.com']]];
+        yield 'credentials in the host' => [[...$section, 'host' => 'app:s3cret-pw@db.example.com']];
+        yield 'fractional port' => [[...$section, 'port' => 1.5]];
+        yield 'charset refused by the constructor' => [[...$section, 'charset' => 'utf8;']];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('refusedSectionsHoldingAPassword')]
+    public function testNoFrameOfARefusalCarriesThePassword(array $values): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            DatabaseConfig::fromArray($values);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertArrayHasKey('args', $e->getTrace()[0], 'Control: the trace must carry arguments.');
+            self::assertSame([], self::framesPrinting($e, 's3cret-pw'));
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+    }
+
+    /**
+     * The framework frames of the trace whose arguments print the secret.
+     *
+     * @return list<string>
+     */
+    private static function framesPrinting(\Throwable $e, string $secret): array
+    {
+        $printing = [];
+        foreach ($e->getTrace() as $frame) {
+            $class = $frame['class'] ?? '';
+            if (str_starts_with($class, 'Zephyrus\\') && !str_starts_with($class, 'Zephyrus\\Tests\\')
+                && str_contains(print_r($frame['args'] ?? [], true), $secret)) {
+                $printing[] = $class . '::' . $frame['function'];
+            }
+        }
+
+        return $printing;
+    }
 }

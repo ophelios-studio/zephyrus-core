@@ -37,7 +37,7 @@ final readonly class ConfigKeys
      * @param array<string, list<string>> $spellings Property => accepted keys, preferred first.
      * @throws ConfigurationException when a key is not accepted, or two keys of one property are written.
      */
-    public static function read(string $section, array $values, array $spellings): self
+    public static function read(string $section, #[\SensitiveParameter] array $values, array $spellings): self
     {
         self::assertKnown($section, $values, $spellings);
 
@@ -99,7 +99,7 @@ final readonly class ConfigKeys
      * @param array<string, list<string>> $spellings
      * @throws ConfigurationException when a key is not accepted.
      */
-    private static function assertKnown(string $section, array $values, array $spellings): void
+    private static function assertKnown(string $section, #[\SensitiveParameter] array $values, array $spellings): void
     {
         $levels = self::levels($spellings);
         $mappings = array_keys(array_diff_key($levels, ['' => true]));
@@ -133,7 +133,7 @@ final readonly class ConfigKeys
      * @param array<array-key, mixed> $values
      * @return array{mixed}|null
      */
-    private static function locate(array $values, string $path): ?array
+    private static function locate(#[\SensitiveParameter] array $values, string $path): ?array
     {
         if (!str_contains($path, '.')) {
             return array_key_exists($path, $values) ? [$values[$path]] : null;

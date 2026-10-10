@@ -751,6 +751,60 @@ final class ConfigurationTest extends TestCase
 
         Configuration::fromArray(['session' => ['secur' => true]]);
     }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, array<string, class-string<ConfigSection>>}>
+     */
+    public static function refusedConfigurationsHoldingADatabasePassword(): iterable
+    {
+        $database = ['host' => 'db.example.com', 'database' => 'app', 'username' => 'app', 'password' => 's3cret-pw'];
+
+        yield 'refused database key' => [['database' => [...$database, 'sslmod' => 'require']], []];
+        yield 'misspelled section name' => [['database' => $database, 'Security' => []], []];
+        yield 'custom section written twice' => [
+            ['database' => $database, 'payment_gateway' => [], 'paymentGateway' => []],
+            ['paymentGateway' => FactoryNameSectionConfig::class],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed>                       $config
+     * @param array<string, class-string<ConfigSection>> $factories
+     */
+    #[DataProvider('refusedConfigurationsHoldingADatabasePassword')]
+    public function testNoFrameOfARefusalCarriesTheDatabasePassword(array $config, array $factories): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            Configuration::fromArray($config, $factories);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertArrayHasKey('args', $e->getTrace()[0], 'Control: the trace must carry arguments.');
+            self::assertSame([], self::framesPrinting($e, 's3cret-pw'));
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+    }
+
+    /**
+     * The framework frames of the trace whose arguments print the secret.
+     *
+     * @return list<string>
+     */
+    private static function framesPrinting(\Throwable $e, string $secret): array
+    {
+        $printing = [];
+        foreach ($e->getTrace() as $frame) {
+            $class = $frame['class'] ?? '';
+            if (str_starts_with($class, 'Zephyrus\\') && !str_starts_with($class, 'Zephyrus\\Tests\\')
+                && str_contains(print_r($frame['args'] ?? [], true), $secret)) {
+                $printing[] = $class . '::' . $frame['function'];
+            }
+        }
+
+        return $printing;
+    }
 }
 
 /**

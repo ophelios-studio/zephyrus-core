@@ -1010,6 +1010,48 @@ final class DatabaseTest extends TestCase
             self::assertStringContainsString('UNIQUE constraint failed', (string) $e->driverMessage());
         }
     }
+
+    /**
+     * @return iterable<string, array{string, string, int}>
+     */
+    public static function passwordsMatchingOtherConnectionText(): iterable
+    {
+        yield 'password equal to the user name' => ['app', 'app', 5432];
+        yield 'password inside the user name' => ['postgres', 'post', 5432];
+        yield 'password equal to the port' => ['app', '5471', 5471];
+        yield 'user name holding an at sign' => ['jane@example-project.iam', 's3cret-pw', 5432];
+    }
+
+    #[DataProvider('passwordsMatchingOtherConnectionText')]
+    public function testAFailedConnectionKeepsTheUserNameAndPortReadableWhateverThePassword(
+        string $username,
+        string $password,
+        int $port,
+    ): void {
+        $config = DatabaseConfig::fromArray([
+            'host' => 'db.example.com',
+            'port' => $port,
+            'database' => 'app',
+            'username' => $username,
+            'password' => $password,
+        ]);
+        $reason = 'SQLSTATE[08006] [7] connection to server at "db.example.com" (192.0.2.10), port ' . $port
+            . ' failed: FATAL:  password authentication failed for user "' . $username . '"';
+
+        try {
+            Database::fromConfig($config, static function () use ($reason): PDO {
+                throw new PDOException($reason);
+            });
+
+            self::fail('A failed connection was not reported.');
+        } catch (DatabaseException $e) {
+            self::assertSame(
+                "Database connection failed for DSN [pgsql:host='db.example.com';port=" . $port . ";dbname='app']: "
+                    . $reason,
+                $e->getMessage(),
+            );
+        }
+    }
 }
 
 /**

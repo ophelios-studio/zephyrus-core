@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Data;
 
 use PDOException;
+use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -13,8 +14,9 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * Driver messages can echo row values (PostgreSQL's DETAIL line, for example,
  * prints `Key (email)=(jane@example.com) already exists.`), so queryExecutionFailed() and
  * transactionExecutionFailed() keep them out of the message: read them through sql() and driverMessage().
- * queryFailed() and connectionFailed() print what their caller passes; fromConfig() passes the driver's
- * connect error, which names the server and user but holds no row data.
+ * queryFailed() prints what its caller passes. connectionFailed() prints the DSN and the reason with their
+ * credentials masked; fromConfig() passes the driver's connect error, which names the server and user but
+ * holds no row data.
  * No flag restores them in the message, so every sink that prints exceptions stays safe.
  */
 final class DatabaseException extends ZephyrusRuntimeException
@@ -27,9 +29,23 @@ final class DatabaseException extends ZephyrusRuntimeException
 
     private const ROLLBACK_HINT = 'Inside a transaction, let this exception propagate so the row is rolled back.';
 
-    public static function connectionFailed(string $dsn, string $reason, ?\Throwable $previous = null): self
-    {
-        return new self("Database connection failed for DSN [{$dsn}]: {$reason}", previous: $previous);
+    /**
+     * Masks credentials in the DSN as DatabaseConfig::withoutCredentials() does, and in the reason as
+     * DatabaseConfig::messageWithoutCredentials() does.
+     */
+    public static function connectionFailed(
+        #[\SensitiveParameter] string $dsn,
+        #[\SensitiveParameter] string $reason,
+        ?\Throwable $previous = null,
+    ): self {
+        return new self(
+            sprintf(
+                'Database connection failed for DSN [%s]: %s',
+                DatabaseConfig::withoutCredentials($dsn),
+                DatabaseConfig::messageWithoutCredentials($reason),
+            ),
+            previous: $previous,
+        );
     }
 
     public static function queryFailed(string $sql, string $reason, ?\Throwable $previous = null): self

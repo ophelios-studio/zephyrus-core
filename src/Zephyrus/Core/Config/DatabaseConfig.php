@@ -57,6 +57,9 @@ final readonly class DatabaseConfig
      */
     public const array REMOVED_EMULATE_PREPARES_KEYS = ['emulatePrepares', 'emulate_prepares'];
 
+    /** Everything after a password= key, in any case, with $1 holding the key. */
+    private const string PASSWORD_VALUE_PATTERN = '#(password\s*=\s*).*#is';
+
     /** Accepted keys per property, preferred first; any other key is refused. */
     private const array SPELLINGS = [
         'driver' => ['driver'],
@@ -73,7 +76,7 @@ final readonly class DatabaseConfig
 
     public function __construct(
         public string $driver,
-        public string $host,
+        #[\SensitiveParameter] public string $host,
         public int $port,
         public string $database,
         public string $username,
@@ -116,7 +119,7 @@ final readonly class DatabaseConfig
      * @throws ConfigurationException if a removed emulate_prepares key or an unknown key is present, two spellings
      *                                of one setting are present, a required field is missing, or a value is invalid.
      */
-    public static function fromArray(array $values): self
+    public static function fromArray(#[\SensitiveParameter] array $values): self
     {
         // Checked first, so an operator upgrading gets the removal message, not an unrelated error.
         foreach (self::REMOVED_EMULATE_PREPARES_KEYS as $removed) {
@@ -316,14 +319,31 @@ final readonly class DatabaseConfig
     /**
      * The value with everything after a password= key (any case) replaced by ***, then everything before its
      * last remaining @ (after a URL scheme).
+     *
+     * @internal
      */
-    private static function withoutCredentials(string $value): string
+    public static function withoutCredentials(#[\SensitiveParameter] string $value): string
     {
         // The password mask runs first: a password holding @ would otherwise lose its key to the userinfo mask.
         return preg_replace(
-            ['#(password\s*=\s*).*#is', '#^([A-Za-z][A-Za-z0-9+.\-]*://)?.*@#s'],
+            [self::PASSWORD_VALUE_PATTERN, '#^([A-Za-z][A-Za-z0-9+.\-]*://)?.*@#s'],
             ['$1***', '$1***@'],
             $value,
+        ) ?? '***';
+    }
+
+    /**
+     * The message with everything after a password= key (any case), then the user information of every URL,
+     * replaced by ***. A plain user@domain stays readable.
+     *
+     * @internal
+     */
+    public static function messageWithoutCredentials(#[\SensitiveParameter] string $message): string
+    {
+        return preg_replace(
+            [self::PASSWORD_VALUE_PATTERN, '#([A-Za-z][A-Za-z0-9+.\-]*://)[^\s"\']*@#'],
+            ['$1***', '$1***@'],
+            $message,
         ) ?? '***';
     }
 
@@ -335,8 +355,11 @@ final readonly class DatabaseConfig
      *                                trimmed value, null when absent or blank.
      * @throws ConfigurationException if the value is neither a string nor an integer.
      */
-    private static function optionalSetting(ConfigKeys $keys, string $property, string $hint = ''): array
-    {
+    private static function optionalSetting(
+        #[\SensitiveParameter] ConfigKeys $keys,
+        string $property,
+        string $hint = '',
+    ): array {
         $key = $keys->key($property);
         $value = $keys->value($property);
         if ($value === null) {

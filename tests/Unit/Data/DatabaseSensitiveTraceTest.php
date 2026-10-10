@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Data;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use Throwable;
+use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Broker;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
@@ -125,5 +126,24 @@ final class DatabaseSensitiveTraceTest extends TestCase
             is_scalar($value) => (string) $value,
             default => get_debug_type($value),
         };
+    }
+
+    public function testAFailedConnectionKeepsTheConfigOutOfTheTrace(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'host' => 'db.example.com',
+            'database' => 'app',
+            'username' => 'app',
+            'password' => 's3cret-pw',
+        ]);
+
+        $e = $this->thrownBy(fn () => Database::fromConfig($config, static function (): PDO {
+            throw new \PDOException('SQLSTATE[08006] [7] connection to server at "db.example.com" failed');
+        }));
+
+        self::assertInstanceOf(DatabaseException::class, $e);
+        $frame = $e->getTrace()[1];
+        self::assertSame('fromConfig', $frame['function']);
+        self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][0] ?? null);
     }
 }
