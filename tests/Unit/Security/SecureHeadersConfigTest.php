@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
@@ -359,9 +360,9 @@ final class SecureHeadersConfigTest extends TestCase
         return [
             'csp with CRLF' => ['csp', "default-src 'self'\r\nSet-Cookie: x=1"],
             'csp with LF' => ['csp', "default-src 'self'\nX-Injected: 1"],
-            'csp with CR' => ['csp', "default-src 'self'\r"],
+            'csp with interior CR' => ['csp', "default-src 'self'\rimg-src *"],
             'xFrameOptions with NUL' => ['xFrameOptions', "DENY\0"],
-            'permissions_policy with LF' => ['permissions_policy', "camera=()\n"],
+            'permissions_policy with interior LF' => ['permissions_policy', "camera=()\nmicrophone=()"],
         ];
     }
 
@@ -428,5 +429,82 @@ final class SecureHeadersConfigTest extends TestCase
     public function testAnIntegerXssProtectionFromYamlIsAccepted(): void
     {
         self::assertSame('0', SecureHeadersConfig::fromArray(['xssProtection' => 0])->xssProtection);
+    }
+
+    #[DataProvider('headerFields')]
+    public function testConstructorRefusesAControlCharacterInAHeaderField(string $field): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        new SecureHeadersConfig(...$this->withValueIn($field, "DENY\x01"));
+    }
+
+    public function testConstructorRefusalNamesTheFieldButNotTheValue(): void
+    {
+        try {
+            new SecureHeadersConfig(...$this->withValueIn('permissionsPolicy', "camera=()\x7F evil.example.com"));
+            self::fail('A control character must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringContainsString('permissionsPolicy', $exception->getMessage());
+            self::assertStringNotContainsString('evil.example.com', $exception->getMessage());
+        }
+    }
+
+    public function testAYamlFoldedValueEndingWithANewlineIsAcceptedWithoutIt(): void
+    {
+        $config = SecureHeadersConfig::fromArray(['csp' => "default-src 'self'\n"]);
+
+        self::assertSame("default-src 'self'", $config->csp);
+    }
+
+    public function testAControlCharacterStillRefusedInAValueThatEndsWithANewline(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'csp'/");
+
+        SecureHeadersConfig::fromArray(['csp' => "default-src\x01 'self'\n"]);
+    }
+
+    public function testATrailingNulIsRefusedAndNotTrimmedAway(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'csp'/");
+
+        SecureHeadersConfig::fromArray(['csp' => "default-src 'self'\0"]);
+    }
+
+    public function testConstructorAcceptsHorizontalTabInAHeaderField(): void
+    {
+        $config = new SecureHeadersConfig(...$this->withValueIn('csp', "default-src 'self'\t"));
+
+        self::assertSame("default-src 'self'\t", $config->csp);
+    }
+
+    /** @return array<string, mixed> */
+    private function withValueIn(string $field, string $value): array
+    {
+        $arguments = [
+            'xFrameOptions' => 'SAMEORIGIN',
+            'xContentTypeOptions' => 'nosniff',
+            'referrerPolicy' => 'strict-origin-when-cross-origin',
+            'xssProtection' => '0',
+            'hstsMaxAge' => 0,
+            'hstsIncludeSubdomains' => false,
+            'csp' => '',
+            'permissionsPolicy' => '',
+        ];
+        $arguments[$field] = $value;
+
+        return $arguments;
+    }
+
+    public static function headerFields(): iterable
+    {
+        yield 'xFrameOptions' => ['xFrameOptions'];
+        yield 'xContentTypeOptions' => ['xContentTypeOptions'];
+        yield 'referrerPolicy' => ['referrerPolicy'];
+        yield 'xssProtection' => ['xssProtection'];
+        yield 'csp' => ['csp'];
+        yield 'permissionsPolicy' => ['permissionsPolicy'];
     }
 }

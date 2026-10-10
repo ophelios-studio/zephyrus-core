@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\IpRange;
@@ -38,6 +39,9 @@ final readonly class SecureHeadersConfig
         'permissionsPolicy' => ['permissionsPolicy', 'permissions_policy'],
     ];
 
+    /**
+     * @throws InvalidArgumentException When a header field holds a control character other than HTAB.
+     */
     public function __construct(
         public string $xFrameOptions,
         public string $xContentTypeOptions,
@@ -48,6 +52,23 @@ final readonly class SecureHeadersConfig
         public string $csp,
         public string $permissionsPolicy,
     ) {
+        $headerFields = [
+            'xFrameOptions' => $this->xFrameOptions,
+            'xContentTypeOptions' => $this->xContentTypeOptions,
+            'referrerPolicy' => $this->referrerPolicy,
+            'xssProtection' => $this->xssProtection,
+            'csp' => $this->csp,
+            'permissionsPolicy' => $this->permissionsPolicy,
+        ];
+
+        foreach ($headerFields as $field => $value) {
+            if (!Response::isValidHeaderValue($value)) {
+                throw new InvalidArgumentException(sprintf(
+                    'Invalid security header field "%s": it contains a control character other than HTAB.',
+                    $field,
+                ));
+            }
+        }
     }
 
     /**
@@ -161,9 +182,9 @@ final readonly class SecureHeadersConfig
             );
         }
 
-        $text = (string) $value;
+        $text = trim((string) $value, " \t\r\n");
 
-        if (trim($text) === '') {
+        if ($text === '') {
             return '';
         }
 
