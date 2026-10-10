@@ -7,6 +7,7 @@ namespace Zephyrus\Routing;
 use JsonException;
 use Zephyrus\Routing\Exception\RouteCacheException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 
 /**
  * Persists the compiled route table as a JSON file and validates it on load.
@@ -59,29 +60,19 @@ final class RouteCache
         }
     }
 
+    /**
+     * Whether load() accepts the cache and its routes hash matches $routes.
+     */
     public function isFresh(RouteCollection $routes): bool
     {
-        if (!$this->has()) {
+        $meta = $this->metadata();
+        if ($meta === null) {
             return false;
         }
 
         try {
-            $decoded = $this->readPayload();
+            $this->load();
         } catch (RouteCacheException) {
-            return false;
-        }
-
-        if (!isset($decoded['routes']) || !is_array($decoded['routes'])) {
-            return false;
-        }
-
-        $meta = $decoded['meta'] ?? null;
-        if ($this->metadataFailure($meta) !== null) {
-            return false;
-        }
-
-        $routePayloadCount = count($decoded['routes']);
-        if ($meta['route_count'] !== $routePayloadCount) {
             return false;
         }
 
@@ -103,9 +94,7 @@ final class RouteCache
             return null;
         }
 
-        $meta = $decoded['meta'] ?? null;
-
-        return $this->metadataFailure($meta) === null ? $meta : null;
+        return $this->payloadFailure($decoded) === null ? $decoded['meta'] : null;
     }
 
     public function generatedAt(): ?int
@@ -168,6 +157,10 @@ final class RouteCache
             return null;
         }
 
+        if ($maxAgeSeconds > PHP_INT_MAX - $generatedAt) {
+            return PHP_INT_MAX;
+        }
+
         return $generatedAt + $maxAgeSeconds;
     }
 
@@ -208,11 +201,18 @@ final class RouteCache
      */
     public function ensureFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): void
     {
-        $state = $this->inspect($routes, $maxAgeSeconds, $now);
-        $message = $this->reasonToExceptionMessage($state['reason']);
+        if ($maxAgeSeconds < 0) {
+            throw new RouteCacheException('Route cache max age must be zero or greater');
+        }
 
-        if ($message !== null) {
-            throw new RouteCacheException($message);
+        $this->load();
+
+        if ($this->isExpired($maxAgeSeconds, $now)) {
+            throw $this->refuse('expired');
+        }
+
+        if (!$this->isFresh($routes)) {
+            throw $this->refuse('routes that differ from the current routes');
         }
     }
 
@@ -345,46 +345,27 @@ final class RouteCache
     public function load(): RouteCollection
     {
         if (!is_file($this->cacheFile)) {
-            throw new RouteCacheException(sprintf('Route cache file does not exist: %s', $this->cacheFile));
+            throw $this->refuse('not been written');
         }
 
         $decoded = $this->readPayload();
 
-        if (!isset($decoded['routes']) || !is_array($decoded['routes'])) {
-            throw new RouteCacheException('Route cache payload missing routes section');
-        }
-
-        $meta = $decoded['meta'] ?? null;
-        $refusal = $this->metadataFailure($meta);
-        if ($refusal !== null) {
-            throw new RouteCacheException($refusal);
+        $problem = $this->payloadFailure($decoded);
+        if ($problem !== null) {
+            throw $this->refuse($problem);
         }
 
         $routesPayload = $decoded['routes'];
-        if ($meta['route_count'] !== count($routesPayload)) {
-            throw new RouteCacheException($this->refusal('has a route count that does not match its routes section'));
-        }
-
-        try {
-            $actualHash = $this->computePayloadHash($routesPayload);
-        } catch (RouteCacheException $exception) {
-            throw new RouteCacheException($this->refusal('has a routes section that cannot be hashed'), previous: $exception);
-        }
-
-        if (!hash_equals($meta['routes_hash'], $actualHash)) {
-            throw new RouteCacheException($this->refusal('has a routes hash that does not match its routes section'));
-        }
-
         $collection = new RouteCollection();
 
         foreach ($routesPayload as $entry) {
             if (!is_array($entry)) {
-                throw new RouteCacheException('Route cache entry must be an object-like array');
+                throw $this->refuse('a route entry that is not an object');
             }
 
             foreach (['method', 'path', 'handler'] as $requiredKey) {
                 if (!array_key_exists($requiredKey, $entry) || !is_string($entry[$requiredKey])) {
-                    throw new RouteCacheException(sprintf('Route cache entry missing valid "%s"', $requiredKey));
+                    throw $this->refuse(sprintf('a route entry without a valid "%s"', $requiredKey));
                 }
             }
 
@@ -400,20 +381,19 @@ final class RouteCache
             $excludedMiddlewares = $entry[self::EXCLUDED_MIDDLEWARES_KEY] ?? [];
 
             if (!is_array($constraints) || !is_array($middlewares) || ($name !== null && !is_string($name))) {
-                throw new RouteCacheException('Route cache entry contains invalid optional fields');
+                throw $this->refuse('a route entry with invalid optional fields');
             }
 
             if (!is_array($excludedMiddlewares)) {
-                throw new RouteCacheException('Route cache entry contains invalid excluded middlewares list');
+                throw $this->refuse('a route entry with an invalid excluded middlewares list');
             }
 
             $this->assertValidConstraints($constraints);
-            $this->assertValidMiddlewares($middlewares);
+            $this->assertAllStrings($middlewares, 'middlewares');
             $this->assertValidRouteName($name);
             $this->assertValidExcludedMiddlewares($excludedMiddlewares);
 
             try {
-                // Any invalid entry must surface as RouteCacheException.
                 $route = Route::define(
                     method: $entry['method'],
                     path: $entry['path'],
@@ -423,8 +403,8 @@ final class RouteCache
                     name: $name,
                     excludedMiddlewares: $excludedMiddlewares,
                 );
-            } catch (\Zephyrus\Routing\Exception\RouteSignatureException | RouteMiddlewareException $exception) {
-                throw new RouteCacheException($exception->getMessage(), previous: $exception);
+            } catch (RouteSignatureException | RouteMiddlewareException $exception) {
+                throw $this->refuse('a route entry that is rejected: ' . $exception->getMessage(), $exception);
             }
 
             $collection->add($route);
@@ -432,8 +412,8 @@ final class RouteCache
 
         try {
             $collection->assertNoDuplicateRouteNames();
-        } catch (\Zephyrus\Routing\Exception\RouteSignatureException $exception) {
-            throw new RouteCacheException($exception->getMessage(), previous: $exception);
+        } catch (RouteSignatureException $exception) {
+            throw $this->refuse('a route table that is rejected: ' . $exception->getMessage(), $exception);
         }
 
         return $collection;
@@ -523,17 +503,6 @@ final class RouteCache
         ];
     }
 
-    private function reasonToExceptionMessage(string $reason): ?string
-    {
-        return match ($reason) {
-            self::REASON_MISSING_FILE => 'Route cache file is missing',
-            self::REASON_INVALID_METADATA => 'Route cache metadata is missing or invalid',
-            self::REASON_EXPIRED => 'Route cache is expired',
-            self::REASON_STALE_ROUTES => 'Route cache does not match current routes',
-            default => null,
-        };
-    }
-
     /**
      * Builds the routes section. The excluded middlewares key is written only when non-empty, which keeps
      * the hash of a route table without exclusions unchanged.
@@ -587,45 +556,79 @@ final class RouteCache
     }
 
     /**
+     * @param array<mixed> $decoded
+     * @return string|null The problem that load() would refuse, or null when the payload passes.
+     */
+    private function payloadFailure(array $decoded): ?string
+    {
+        $routesPayload = $decoded['routes'] ?? null;
+        if ($routesPayload === null) {
+            return 'no routes section';
+        }
+
+        if (!is_array($routesPayload) || !array_is_list($routesPayload)) {
+            return 'a routes section that is not a list';
+        }
+
+        $meta = $decoded['meta'] ?? null;
+        $problem = $this->metadataFailure($meta);
+        if ($problem !== null) {
+            return $problem;
+        }
+
+        if ($meta['route_count'] !== count($routesPayload)) {
+            return 'a route count that does not match its routes section';
+        }
+
+        try {
+            $actualHash = $this->computePayloadHash($routesPayload);
+        } catch (RouteCacheException) {
+            return 'a routes section that cannot be hashed';
+        }
+
+        return hash_equals($meta['routes_hash'], $actualHash) ? null : 'a routes hash that does not match its routes section';
+    }
+
+    /**
      * @param mixed $meta
-     * @return string|null The refusal message, or null when the metadata is valid.
+     * @return string|null The problem with the metadata, or null when it is valid.
      */
     private function metadataFailure(mixed $meta): ?string
     {
         if ($meta === null) {
-            return $this->refusal('has no metadata section');
+            return 'no metadata section';
         }
 
         if (!is_array($meta)) {
-            return $this->refusal('has a metadata section that is not an object');
-        }
-
-        if (!is_string($meta['routes_hash'] ?? null)) {
-            return $this->refusal('has a routes hash that is not a string');
+            return 'a metadata section that is not an object';
         }
 
         if (($meta['version'] ?? null) !== self::METADATA_VERSION) {
-            return $this->refusal('has an unsupported metadata version');
+            return 'been written by another version';
+        }
+
+        if (!is_string($meta['routes_hash'] ?? null)) {
+            return 'a routes hash that is not a string';
         }
 
         if (preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash']) !== 1) {
-            return $this->refusal('has a malformed routes hash');
+            return 'a malformed routes hash';
         }
 
         if (!is_int($meta['route_count'] ?? null) || $meta['route_count'] < 0) {
-            return $this->refusal('has an invalid route count');
+            return 'an invalid route count';
         }
 
         if (!is_int($meta['generated_at'] ?? null)) {
-            return $this->refusal('has an invalid generation timestamp');
+            return 'an invalid generation timestamp';
         }
 
         return null;
     }
 
-    private function refusal(string $problem): string
+    private function refuse(string $problem, ?\Throwable $previous = null): RouteCacheException
     {
-        return sprintf('Route cache file %s %s, rebuild the cache with save() or warm()', $this->cacheFile, $problem);
+        return RouteCacheException::refused($this->cacheFile, $problem, $previous);
     }
 
     /**
@@ -648,17 +651,17 @@ final class RouteCache
         $contents = @file_get_contents($this->cacheFile);
 
         if ($contents === false) {
-            throw new RouteCacheException(sprintf('Unable to read route cache file: %s', $this->cacheFile));
+            throw $this->refuse('contents that cannot be read');
         }
 
         try {
             $decoded = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $exception) {
-            throw new RouteCacheException('Unable to decode route cache payload', previous: $exception);
+            throw $this->refuse('contents that are not valid JSON', $exception);
         }
 
         if (!is_array($decoded)) {
-            throw new RouteCacheException('Route cache payload must decode to an array');
+            throw $this->refuse('contents that do not decode to an object');
         }
 
         return $decoded;
@@ -671,17 +674,9 @@ final class RouteCache
     {
         foreach ($constraints as $parameter => $pattern) {
             if (!is_string($parameter) || !is_string($pattern)) {
-                throw new RouteCacheException('Route cache entry contains invalid constraints map');
+                throw $this->refuse('a route entry with an invalid constraints map');
             }
         }
-    }
-
-    /**
-     * @param array<mixed> $middlewares
-     */
-    private function assertValidMiddlewares(array $middlewares): void
-    {
-        $this->assertAllStrings($middlewares, 'middlewares');
     }
 
     /**
@@ -690,7 +685,7 @@ final class RouteCache
     private function assertValidExcludedMiddlewares(array $middlewares): void
     {
         if (!array_is_list($middlewares)) {
-            throw new RouteCacheException('Route cache entry contains invalid excluded middlewares list');
+            throw $this->refuse('a route entry with an invalid excluded middlewares list');
         }
 
         $this->assertAllStrings($middlewares, 'excluded middlewares');
@@ -703,7 +698,7 @@ final class RouteCache
     {
         foreach ($values as $value) {
             if (!is_string($value)) {
-                throw new RouteCacheException(sprintf('Route cache entry contains invalid %s list', $label));
+                throw $this->refuse(sprintf('a route entry with an invalid %s list', $label));
             }
         }
     }
@@ -711,22 +706,22 @@ final class RouteCache
     private function assertValidMethodPathAndHandler(string $method, string $path, string $handler): void
     {
         if (preg_match('/^[A-Z]+$/D', $method) !== 1) {
-            throw new RouteCacheException('Route cache entry contains invalid HTTP method format');
+            throw $this->refuse('a route entry with an invalid HTTP method format');
         }
 
         if ($path === '' || !str_starts_with($path, '/')) {
-            throw new RouteCacheException('Route cache entry contains invalid route path');
+            throw $this->refuse('a route entry with an invalid route path');
         }
 
         if ($handler === '' || !str_contains($handler, '@')) {
-            throw new RouteCacheException('Route cache entry contains invalid handler format');
+            throw $this->refuse('a route entry with an invalid handler format');
         }
     }
 
     private function assertValidRouteName(?string $name): void
     {
         if ($name !== null && trim($name) === '') {
-            throw new RouteCacheException('Route cache entry contains invalid route name');
+            throw $this->refuse('a route entry with an invalid route name');
         }
     }
 }
