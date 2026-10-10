@@ -359,107 +359,17 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame($request, $received);
     }
 
-    public function testInjectTokenAddsHiddenFieldToHtmlForms(): void
+    public function testHtmlResponseWithFormsPassesThroughByteIdentical(): void
     {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
+        $mw      = $this->makeMiddleware();
         $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form method="post" action="/save"><button>Save</button></form></body></html>';
+        $html    = '<html><body><form method="post" action="/save"><button>Save</button></form></body></html>';
 
         $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
             'Content-Type' => 'text/html; charset=utf-8',
         ]));
 
-        self::assertStringContainsString('<input type="hidden" name="_csrf_token" value="valid-csrf-token-abc123">', $response->body);
-    }
-
-    public function testInjectTokenDoesNotModifyNonHtmlResponses(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
-        $request = new Request('GET', 'https://example.com/form');
-
-        $response = $mw->process($request, static fn (Request $r): Response => Response::json(['ok' => true]));
-
-        self::assertStringNotContainsString('_csrf_token', $response->body);
-    }
-
-    public function testInjectTokenSkipsGetForms(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
-        $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form method="get" action="/search"><input name="q"></form></body></html>';
-
-        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-        ]));
-
-        self::assertStringNotContainsString('_csrf_token', $response->body);
-    }
-
-    public function testInjectTokenSkipsFormsWithoutMethodAttribute(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
-        $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form action="/search"><input name="q"></form></body></html>';
-
-        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-        ]));
-
-        self::assertStringNotContainsString('_csrf_token', $response->body);
-    }
-
-    public function testInjectTokenSkipsFormsThatAlreadyContainCsrfField(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
-        $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form method="post" action="/save"><input type="hidden" name="_csrf_token" value="existing"><button>Save</button></form></body></html>';
-
-        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-        ]));
-
-        self::assertSame(1, substr_count($response->body, 'name="_csrf_token"'));
-        self::assertStringContainsString('value="existing"', $response->body);
-    }
-
-    public function testInjectTokenHonorsCustomBodyFieldWhenDetectingExistingInput(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true, bodyField: '_token'));
-        $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form method="post" action="/save"><input type="hidden" name="_token" value="existing-custom"></form></body></html>';
-
-        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-        ]));
-
-        self::assertSame(1, substr_count($response->body, 'name="_token"'));
-        self::assertStringContainsString('value="existing-custom"', $response->body);
-    }
-
-    public function testInjectTokenSkipsFormsWithDataCsrfAttribute(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
-        $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form method="post" action="/save" data-csrf><button>Save</button></form></body></html>';
-
-        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-        ]));
-
-        self::assertStringNotContainsString('_csrf_token', $response->body);
-    }
-
-    public function testInjectTokenSkipsFormsWithDataCsrfOptOutValue(): void
-    {
-        $mw = $this->makeMiddleware(new CsrfConfig(injectToken: true));
-        $request = new Request('GET', 'https://example.com/form');
-        $html = '<html><body><form method="post" action="/save" data-csrf="manual"><button>Save</button></form></body></html>';
-
-        $response = $mw->process($request, static fn (Request $r): Response => new Response($html, 200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-        ]));
-
-        self::assertStringNotContainsString('_csrf_token', $response->body);
+        self::assertSame($html, $response->body);
     }
 
     // ── CsrfConfig factory tests ──────────────────────────────────────────────
@@ -480,13 +390,13 @@ final class CsrfMiddlewareTest extends TestCase
         $config = CsrfConfig::fromArray([
             'body_field'             => '_token',
             'header_name'            => 'X-XSRF-TOKEN',
-            'inject_token'           => true,
+            'inject_token'           => false,
             'excluded_path_patterns' => ['#^/api/#'],
         ]);
 
         self::assertSame('_token', $config->bodyField);
         self::assertSame('X-XSRF-TOKEN', $config->headerName);
-        self::assertTrue($config->injectToken);
+        self::assertFalse($config->injectToken);
         self::assertSame(['#^/api/#'], $config->excludedPathPatterns);
     }
 
@@ -495,13 +405,13 @@ final class CsrfMiddlewareTest extends TestCase
         $config = CsrfConfig::fromArray([
             'bodyField'             => '_token',
             'headerName'            => 'X-XSRF-TOKEN',
-            'injectToken'           => true,
+            'injectToken'           => false,
             'excludedPathPatterns'  => ['#^/hooks/#'],
         ]);
 
         self::assertSame('_token', $config->bodyField);
         self::assertSame('X-XSRF-TOKEN', $config->headerName);
-        self::assertTrue($config->injectToken);
+        self::assertFalse($config->injectToken);
         self::assertSame(['#^/hooks/#'], $config->excludedPathPatterns);
     }
 
@@ -519,12 +429,12 @@ final class CsrfMiddlewareTest extends TestCase
     {
         $config = CsrfConfig::fromArray([
             'csrf_enabled'    => false,
-            'csrf_auto_html'  => true,
+            'csrf_auto_html'  => false,
             'csrf_exceptions' => ['#^/hooks/#'],
         ]);
 
         self::assertFalse($config->enabled);
-        self::assertTrue($config->injectToken);
+        self::assertFalse($config->injectToken);
         self::assertSame(['#^/hooks/#'], $config->excludedPathPatterns);
     }
 
@@ -537,6 +447,29 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame('X-CSRF-Token', $config->headerName);
         self::assertFalse($config->injectToken);
         self::assertSame([], $config->excludedPathPatterns);
+    }
+
+    public function testCsrfConfigRejectsAutomaticTokenInjection(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('automatic token injection was removed');
+        $this->expectExceptionMessage('"_csrf_token"');
+
+        new CsrfConfig(injectToken: true);
+    }
+
+    public function testCsrfConfigFromArrayRejectsAutomaticTokenInjectionAliases(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        CsrfConfig::fromArray(['csrf_auto_html' => true]);
+    }
+
+    public function testCsrfConfigAcceptsInjectTokenFalse(): void
+    {
+        $config = new CsrfConfig(injectToken: false);
+
+        self::assertFalse($config->injectToken);
     }
 
     public function testCsrfConfigFromArrayRejectsInvalidExcludedPathPatternRegex(): void

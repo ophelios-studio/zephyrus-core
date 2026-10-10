@@ -38,7 +38,7 @@ final class SecurityConfigTest extends TestCase
         $config = SecurityConfig::fromArray([
             'forceHttps' => true,
             'csrfEnabled' => false,
-            'csrfAutoHtml' => true,
+            'csrfAutoHtml' => false,
             'csrfExceptions' => ['#^/webhooks/#'],
             'allowedHosts' => ['example.com', 'api.example.com'],
             'maxBodySize' => 1_048_576,
@@ -46,7 +46,7 @@ final class SecurityConfigTest extends TestCase
 
         self::assertTrue($config->forceHttps);
         self::assertFalse($config->csrfEnabled);
-        self::assertTrue($config->csrfAutoHtml);
+        self::assertFalse($config->csrfAutoHtml);
         self::assertSame(['#^/webhooks/#'], $config->csrfExceptions);
         self::assertSame(['example.com', 'api.example.com'], $config->allowedHosts);
         self::assertSame(1_048_576, $config->maxBodySize);
@@ -61,7 +61,7 @@ final class SecurityConfigTest extends TestCase
         $config = SecurityConfig::fromArray([
             'force_https' => true,
             'csrf_enabled' => false,
-            'csrf_auto_html' => true,
+            'csrf_auto_html' => false,
             'csrf_exceptions' => ['#^/hooks/#'],
             'allowed_hosts' => ['app.local'],
             'max_body_size' => 512,
@@ -69,7 +69,7 @@ final class SecurityConfigTest extends TestCase
 
         self::assertTrue($config->forceHttps);
         self::assertFalse($config->csrfEnabled);
-        self::assertTrue($config->csrfAutoHtml);
+        self::assertFalse($config->csrfAutoHtml);
         self::assertSame(['#^/hooks/#'], $config->csrfExceptions);
         self::assertSame(['app.local'], $config->allowedHosts);
         self::assertSame(512, $config->maxBodySize);
@@ -84,14 +84,14 @@ final class SecurityConfigTest extends TestCase
         $config = SecurityConfig::fromArray([
             'forceHttps' => true,
             'force_https' => false,
-            'csrfAutoHtml' => true,
-            'csrf_auto_html' => false,
+            'csrfAutoHtml' => false,
+            'csrf_auto_html' => true,
             'csrfExceptions' => ['#^/camel/#'],
             'csrf_exceptions' => ['#^/snake/#'],
         ]);
 
         self::assertTrue($config->forceHttps);
-        self::assertTrue($config->csrfAutoHtml);
+        self::assertFalse($config->csrfAutoHtml);
         self::assertSame(['#^/camel/#'], $config->csrfExceptions);
     }
 
@@ -358,13 +358,13 @@ final class SecurityConfigTest extends TestCase
             'csrfEnabled' => true,  // flat key
             'csrf' => [
                 'enabled' => false,  // nested takes precedence
-                'autoHtml' => true,
+                'autoHtml' => false,
                 'exceptions' => ['#^/api/#'],
             ],
         ]);
 
         self::assertFalse($config->csrfEnabled);
-        self::assertTrue($config->csrfAutoHtml);
+        self::assertFalse($config->csrfAutoHtml);
         self::assertSame(['#^/api/#'], $config->csrfExceptions);
     }
 
@@ -372,11 +372,39 @@ final class SecurityConfigTest extends TestCase
     {
         $config = SecurityConfig::fromArray([
             'csrf' => [
-                'auto_html' => true,
+                'auto_html' => false,
             ],
         ]);
 
-        self::assertTrue($config->csrfAutoHtml);
+        self::assertFalse($config->csrfAutoHtml);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function autoHtmlEnablingSpellings(): iterable
+    {
+        yield 'flat camelCase' => [['csrfAutoHtml' => true]];
+        yield 'flat snake_case' => [['csrf_auto_html' => true]];
+        yield 'nested autoHtml' => [['csrf' => ['autoHtml' => true]]];
+        yield 'nested auto_html' => [['csrf' => ['auto_html' => true]]];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('autoHtmlEnablingSpellings')]
+    public function testAutomaticTokenInjectionIsRefusedAtBoot(array $values): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('automatic token injection was removed');
+
+        SecurityConfig::fromArray($values);
+    }
+
+    public function testCsrfAutoHtmlFalseIsAccepted(): void
+    {
+        $config = SecurityConfig::fromArray(['csrf' => ['autoHtml' => false]]);
+
+        self::assertFalse($config->csrfAutoHtml);
     }
 
     public function testNestedCsrfSectionDefaults(): void

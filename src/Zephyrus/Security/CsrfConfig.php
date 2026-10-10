@@ -29,7 +29,7 @@ use function trim;
  * --------------------
  * A list of PCRE regex patterns matched against the request path
  * (everything after the host, including the leading "/").  Any path that
- * matches at least one pattern is exempt from CSRF validation entirely —
+ * matches at least one pattern is exempt from CSRF validation entirely,
  * useful for webhook endpoints, API routes protected by other means, or
  * health-check URLs.
  *
@@ -61,23 +61,10 @@ use function trim;
  * building the object directly with named arguments is the documented usage
  * and would otherwise skip the check entirely.
  *
- * injectToken
- * -----------
- * When true, the middleware automatically injects a hidden CSRF input field
- * immediately after every <form…> opening tag in text/html responses.  This
- * removes the need to add the token manually in every template.
+ * Forms must carry the token themselves. Automatic injection was removed, so
+ * every state-changing form needs a hidden input named after bodyField:
  *
- *   <!-- before injection -->
- *   <form method="post" action="/login">
- *
- *   <!-- after injection -->
- *   <form method="post" action="/login">
  *   <input type="hidden" name="_csrf_token" value="…">
- *
- * Only responses with a Content-Type of text/html are modified; JSON, plain
- * text, and other types pass through unchanged. Individual forms can opt out
- * by adding a `data-csrf` attribute (with or without a value such as `manual`
- * or `off`), which signals the middleware to leave the markup untouched.
  *
  * Example:
  *
@@ -85,7 +72,6 @@ use function trim;
  *       'enabled'                  => true,
  *       'body_field'               => '_token',
  *       'header_name'              => 'X-XSRF-TOKEN',
- *       'inject_token'             => true,
  *       'excluded_path_patterns'   => [
  *           '#^/webhooks/#',
  *           '#^/api/v\d+/public/#',
@@ -106,9 +92,10 @@ final class CsrfConfig
     /**
      * @param string $bodyField            Name of the HTML hidden-field / POST body key.
      * @param string $headerName           HTTP header accepted as an alternative token source.
-     * @param bool   $injectToken          Auto-inject a hidden field into HTML form responses.
+     * @param bool   $injectToken          @deprecated Must be false; true is refused.
      * @param array<mixed> $excludedPathPatterns Anchored PCRE patterns; see the class docblock.
      * @param bool   $enabled              Enable CSRF token validation on mutating requests.
+     * @throws InvalidArgumentException when $injectToken is true.
      */
     public function __construct(
         public readonly string $bodyField            = '_csrf_token',
@@ -117,10 +104,18 @@ final class CsrfConfig
         array                  $excludedPathPatterns = [],
         public readonly bool   $enabled              = true,
     ) {
+        if ($injectToken) {
+            throw new InvalidArgumentException(sprintf(
+                'CSRF automatic token injection was removed because it cannot follow the browser\'s HTML parsing '
+                . 'and could send the token to another site. Add a hidden "%s" field to your form templates instead.',
+                $bodyField,
+            ));
+        }
+
         $this->excludedPathPatterns = self::normalizeExcludedPathPatterns($excludedPathPatterns);
     }
 
-    /** Returns a config with all defaults (no exclusions, injection disabled). */
+    /** Returns a config with all defaults (no exclusions). */
     public static function defaults(): self
     {
         return new self();

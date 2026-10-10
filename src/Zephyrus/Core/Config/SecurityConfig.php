@@ -41,7 +41,6 @@ use Zephyrus\Security\AllowedHostsMiddleware;
  * Defaults are conservative yet development-friendly:
  *   - forceHttps:     false (must be explicitly enabled in production)
  *   - csrfEnabled:    true  (on by default)
- *   - csrfAutoHtml:   false (disabled by default)
  *   - csrfExceptions: []    (no excluded paths by default)
  *   - allowedHosts:   []    (empty = any host; populate for production lockdown)
  *   - maxBodySize:    2097152 (2 MB; 0 = unlimited)
@@ -55,6 +54,8 @@ use Zephyrus\Security\AllowedHostsMiddleware;
  *   - maxBodySize must be 0 or greater.
  *   - Each allowedHost entry must be a non-empty string.
  *   - Each csrfExceptions entry must be a non-empty string.
+ *   - csrf.autoHtml (or any alias of csrfAutoHtml) must be false or absent:
+ *     automatic token injection was removed, so true is REJECTED at boot.
  *   - Each trustedProxies entry must be '*', a valid IP address or a valid CIDR range.
  *   - Each trustedHeaders entry must name a header Request can actually read;
  *     an unknown name is REJECTED rather than ignored, because silently dropping
@@ -65,7 +66,7 @@ final readonly class SecurityConfig
     /**
      * @param bool     $forceHttps      Redirect plain-HTTP requests to HTTPS.
      * @param bool     $csrfEnabled     Enable CSRF token verification on mutating requests.
-     * @param bool     $csrfAutoHtml    Auto-inject CSRF hidden input in HTML forms.
+     * @param bool     $csrfAutoHtml    @deprecated Must be false; true is refused at boot.
      * @param string[] $csrfExceptions  Regex path patterns excluded from CSRF validation.
      * @param string[] $allowedHosts    Restrict accepted Host headers; empty allows all.
      * @param int      $maxBodySize     Maximum request body in bytes (0 = unlimited).
@@ -176,6 +177,16 @@ final readonly class SecurityConfig
             }
         } else {
             $encryptionKey = null;
+        }
+
+        if ($csrfAutoHtml) {
+            throw ConfigurationException::invalidValue(
+                'security',
+                'csrfAutoHtml',
+                'true',
+                'automatic token injection was removed because it cannot follow the browser\'s HTML parsing '
+                    . 'and could send the token to another site; add a hidden "_csrf_token" field to your form templates',
+            );
         }
 
         if ($maxBodySize < 0) {

@@ -8,15 +8,7 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
-use function htmlspecialchars;
 use function preg_match;
-use function preg_quote;
-use function preg_replace_callback;
-use function sprintf;
-use function str_contains;
-use function strtolower;
-use function strtoupper;
-use function trim;
 
 /**
  * Middleware that enforces synchronizer-token CSRF protection.
@@ -84,9 +76,6 @@ final class CsrfMiddleware implements MiddlewareInterface
     /** HTTP methods that do not mutate server state and are exempt from CSRF checks. */
     private const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS', 'TRACE'];
 
-    /** Values that disable auto-injection when used with the data-csrf attribute. */
-    private const INJECTION_SKIP_VALUES = ['off', 'false', '0', 'skip', 'disabled', 'disable', 'manual'];
-
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,
         private readonly CsrfConfig $config = new CsrfConfig(),
@@ -110,11 +99,7 @@ final class CsrfMiddleware implements MiddlewareInterface
         /** @var Response $response */
         $response = $next($request);
 
-        if (!$this->config->injectToken) {
-            return $response;
-        }
-
-        return $this->injectTokenIntoHtmlForms($response);
+        return $response;
     }
 
     /**
@@ -179,108 +164,5 @@ final class CsrfMiddleware implements MiddlewareInterface
         }
 
         return $this->tokenManager->isTokenValid($submitted);
-    }
-
-    private function injectTokenIntoHtmlForms(Response $response): Response
-    {
-        if ($response->body === '' || !$this->isHtmlResponse($response)) {
-            return $response;
-        }
-
-        $token = htmlspecialchars($this->tokenManager->getToken(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $field = htmlspecialchars($this->config->bodyField, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $rawField = $this->config->bodyField;
-
-        $injectedBody = preg_replace_callback(
-            '/<form\b[^>]*>.*?<\/form>/is',
-            static function (array $match) use ($field, $rawField, $token): string {
-                $formHtml = $match[0];
-
-                if (!preg_match('/<form\b[^>]*>/i', $formHtml, $openTagMatch)) {
-                    return $formHtml;
-                }
-
-                $openTag = $openTagMatch[0];
-
-                if (!self::formRequiresCsrfToken($openTag)) {
-                    return $formHtml;
-                }
-
-                if (self::formOptedOutOfInjection($openTag)) {
-                    return $formHtml;
-                }
-
-                if (self::formAlreadyContainsTokenField($formHtml, $rawField)) {
-                    return $formHtml;
-                }
-
-                return preg_replace(
-                    '/<form\b[^>]*>/i',
-                    sprintf(
-                        "\$0\n" . '<input type="hidden" name="%s" value="%s">',
-                        $field,
-                        $token,
-                    ),
-                    $formHtml,
-                    1,
-                ) ?? $formHtml;
-            },
-            $response->body,
-        );
-
-        if ($injectedBody === null) {
-            return $response;
-        }
-
-        return new Response($injectedBody, $response->status, $response->headers);
-    }
-
-    private static function formRequiresCsrfToken(string $formTag): bool
-    {
-        if (preg_match('/\bmethod\s*=\s*["\']?([a-zA-Z]+)["\']?/i', $formTag, $matches) !== 1) {
-            return false;
-        }
-
-        return in_array(strtoupper($matches[1]), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
-    }
-
-    private static function formAlreadyContainsTokenField(string $formHtml, string $fieldName): bool
-    {
-        $quotedField = preg_quote($fieldName, '/');
-
-        return preg_match('/<input\b[^>]*\bname\s*=\s*["\']' . $quotedField . '["\'][^>]*>/i', $formHtml) === 1;
-    }
-
-    private static function formOptedOutOfInjection(string $formTag): bool
-    {
-        if (preg_match('/\bdata-csrf\b/i', $formTag) !== 1) {
-            return false;
-        }
-
-        if (preg_match('/\bdata-csrf\s*=\s*(["\'])(.*?)\1/i', $formTag, $match) === 1) {
-            $value = strtolower(trim($match[2]));
-
-            return $value === '' || in_array($value, self::INJECTION_SKIP_VALUES, true);
-        }
-
-        if (preg_match('/\bdata-csrf\s*=\s*([^\s>"\']+)/i', $formTag, $match) === 1) {
-            $value = strtolower(trim($match[1]));
-
-            return $value === '' || in_array($value, self::INJECTION_SKIP_VALUES, true);
-        }
-
-        // Boolean attribute (no explicit value) means \"don't touch this form\".
-        return true;
-    }
-
-    private function isHtmlResponse(Response $response): bool
-    {
-        foreach ($response->headers as $header => $value) {
-            if (strtolower($header) === 'content-type' && str_contains(strtolower($value), 'text/html')) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
