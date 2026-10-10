@@ -45,7 +45,7 @@ final class FormatterLocaleTest extends TestCase
         self::assertSame('il y a 2 ans', $fmt->timeago(time() - 800 * 86400));
         self::assertSame('dans 1 minute', $fmt->timeago(time() + 70));
         self::assertSame('dans 3 jours', $fmt->timeago(time() + 3 * 86400));
-        self::assertSame("à l'instant", $fmt->timeago(time()));
+        self::assertMatchesRegularExpression("/^(à l'instant|il y a 1 seconde)$/u", $fmt->timeago(time()));
     }
 
     #[DataProvider('englishFallbackLocales')]

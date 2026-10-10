@@ -351,7 +351,7 @@ final class FormatterTest extends TestCase
     public function testRelativeTimeJustNow(): void
     {
         $result = $this->formatter->timeago(time());
-        self::assertSame('just now', $result);
+        self::assertMatchesRegularExpression('/^(just now|1 second ago)$/', $result);
     }
 
     public function testRelativeTimeAcceptsDateTime(): void

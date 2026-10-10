@@ -88,6 +88,7 @@ final class Formatter
      *                                             U+00A0 and U+202F keep the groups in order; a space, U+2009, `'` or
      *                                             U+2019 reverses them.
      * @throws FormatterException if the default currency or the grouping separator is not accepted.
+     * @throws \ValueError on PHP 8.5 and later if $locale contains a NUL byte.
      */
     public function __construct(
         string $locale = 'en_US',
@@ -368,7 +369,7 @@ final class Formatter
      * of the locale, U+00A0 between number and unit), English for any other language. Bytes are shown without
      * decimals. No grouping separator.
      *
-     * @throws FormatterException When $precision is outside 0 to 20.
+     * @throws FormatterException When $precision is outside 0 to 20, or when ICU cannot format the value.
      */
     public function filesize(int $bytes, int $precision = 1): string
     {
