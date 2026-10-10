@@ -23,8 +23,7 @@ final class LatteEngineTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->cleanDirectory($this->cacheDir);
-        @rmdir($this->cacheDir);
+        $this->removeDirectory($this->cacheDir);
     }
 
     public function testImplementsRenderEngine(): void
@@ -135,8 +134,7 @@ final class LatteEngineTest extends TestCase
             self::assertDirectoryExists($tempCache);
             self::assertSame('Hello, World!', $output);
         } finally {
-            $this->cleanDirectory($tempCache);
-            @rmdir($tempCache);
+            $this->removeDirectory($tempCache);
         }
     }
 
@@ -213,15 +211,12 @@ final class LatteEngineTest extends TestCase
             self::assertSame('Hello, World!', $output);
             self::assertDirectoryDoesNotExist($tempCache);
         } finally {
-            $this->cleanDirectory($tempCache);
-            @rmdir($tempCache);
+            $this->removeDirectory($tempCache);
         }
     }
 
-    /**
-     * Recursively delete contents of a directory (but keep the directory itself).
-     */
-    private function cleanDirectory(string $dir): void
+    /** Recursively removes a directory and its contents. */
+    private function removeDirectory(string $dir): void
     {
         if (!is_dir($dir)) {
             return;
@@ -239,5 +234,7 @@ final class LatteEngineTest extends TestCase
                 @unlink($item->getPathname());
             }
         }
+
+        @rmdir($dir);
     }
 }
