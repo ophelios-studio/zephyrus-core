@@ -5,20 +5,13 @@ declare(strict_types=1);
 namespace Zephyrus\Upload;
 
 /**
- * Immutable value object representing a single file submitted via an HTTP multipart upload.
- *
- * Wraps the raw PHP `$_FILES` entry shape and exposes typed accessors.
- * Use `fromPhpArray()` to build from a single `$_FILES['field']` entry.
+ * Immutable value object for a file submitted through an HTTP multipart upload.
  */
 final readonly class FileUpload
 {
     /**
-     * Builds one-or-many FileUpload instances from a PHP $_FILES field entry.
-     *
-     * Supports both single uploads and nested/multi file arrays such as:
-     * - <input type="file" name="avatar">
-     * - <input type="file" name="photos[]" multiple>
-     * - <input type="file" name="attachments[contracts][]" multiple>
+     * Builds one or many FileUpload instances from a $_FILES field entry,
+     * including nested multi-file arrays such as `photos[]` or `attachments[contracts][]`.
      *
      * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
      * @return list<FileUpload>
@@ -49,7 +42,7 @@ final readonly class FileUpload
     }
 
     /**
-     * Builds a FileUpload from a single PHP `$_FILES` entry (i.e. `$_FILES['avatar']`).
+     * Builds a FileUpload from a single $_FILES entry such as `$_FILES['avatar']`.
      *
      * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
      *
@@ -71,8 +64,7 @@ final readonly class FileUpload
     }
 
     /**
-     * Returns the lowercased file extension derived from the client-supplied original name.
-     * Returns an empty string when no extension is present.
+     * The lowercased extension of the client-supplied name, or an empty string.
      */
     public function extension(): string
     {
@@ -82,17 +74,9 @@ final readonly class FileUpload
     }
 
     /**
-     * Returns every dotted segment of the client-supplied original name,
-     * lowercased and in order.
+     * Every dotted segment of the client-supplied name, lowercased, in order.
      *
-     * `extension()` only ever reports the last one, which is why an allowlist
-     * built on it lets `avatar.php.jpg` through. Callers enforcing an extension
-     * allowlist must check every segment returned here.
-     *
-     * Examples:
-     *   "avatar.php.jpg" => ["php", "jpg"]
-     *   ".htaccess"      => ["htaccess"]
-     *   "Makefile"       => []
+     * Unlike extension(), this reports all segments: an allowlist must check each one.
      *
      * @return list<string>
      */
@@ -109,7 +93,7 @@ final readonly class FileUpload
     }
 
     /**
-     * Returns true when the PHP upload pipeline reported no error.
+     * Whether PHP reported no upload error.
      */
     public function isValid(): bool
     {
@@ -117,9 +101,7 @@ final readonly class FileUpload
     }
 
     /**
-     * Asserts that the upload completed without error.
-     *
-     * @throws UploadException With a human-readable description of the PHP upload error code.
+     * @throws UploadException With a description of the PHP upload error code.
      */
     public function assertValid(): void
     {

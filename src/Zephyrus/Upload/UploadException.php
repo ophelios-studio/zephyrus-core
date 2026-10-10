@@ -6,6 +6,9 @@ namespace Zephyrus\Upload;
 
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
+/**
+ * Thrown when an upload is rejected or cannot be stored.
+ */
 final class UploadException extends ZephyrusRuntimeException
 {
     public static function invalidArrayShape(): self
@@ -51,11 +54,7 @@ final class UploadException extends ZephyrusRuntimeException
     }
 
     /**
-     * The source is not a file PHP registered as an HTTP upload.
-     *
-     * Raised by the default mover. Non-HTTP callers and tests inject their own
-     * `$fileMover` rather than relying on a fallback, because the only reason
-     * `move_uploaded_file()` fails is precisely this check.
+     * The source is not an HTTP upload registered with PHP.
      */
     public static function notAnUploadedFile(string $path): self
     {

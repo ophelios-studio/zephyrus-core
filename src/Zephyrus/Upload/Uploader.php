@@ -8,57 +8,33 @@ use Closure;
 use finfo;
 
 /**
- * Service responsible for persisting a validated upload to the filesystem.
+ * Persists a validated upload under a destination root.
  *
- * The `$destinationRoot` passed at construction is the absolute base directory
- * under which all files are stored.  The service returns a relative path from
- * that root so callers can store it in a database without coupling to the
- * server's directory layout.
+ * Returns paths relative to that root, so callers need not know the server layout.
  *
- * ## What is trusted, and what is not
- * Everything the browser sends is attacker-controlled: the original filename,
- * its extension, the declared MIME type and the declared size.  None of them is
- * used to decide whether a file is acceptable.
+ * Every browser-supplied value (filename, extension, declared MIME type and size)
+ * is untrusted and never decides acceptance on its own:
+ * - the MIME allowlist is matched against the type sniffed from the bytes;
+ * - the size limit is matched against the real size of the temporary file;
+ * - the extension allowlist is matched against every dotted segment of the name;
+ * - the stored extension comes from the sniffed type, so a PHP payload announced
+ *   as a JPEG never lands with a `.php` name;
+ * - an explicit `$targetName` is subject to the same extension allowlist and may
+ *   not be a dotfile.
  *
- * - The MIME allowlist is matched against the type **sniffed from the bytes**
- *   on disk (`finfo`), never against `$_FILES['x']['type']`.
- * - The size limit is matched against `filesize()` of the temporary file, never
- *   against the declared size.
- * - The extension allowlist is matched against **every** dotted segment of the
- *   client filename, so `avatar.php.jpg` does not slip past an allowlist of
- *   `['jpg']`.
- * - The stored extension is derived from the sniffed type, so a PHP payload
- *   announced as a JPEG can never land with a `.php` name.
- * - An explicit `$targetName` is subjected to the same extension allowlist and
- *   may not be a dotfile.
+ * `..` segments are refused, null bytes are stripped, and the destination must
+ * stay under the root after `realpath()`. An existing file is replaced only with
+ * `$overwriteExisting`.
  *
- * ## Path safety
- * - `$subDirectory` segments are checked for `..` traversal; invalid segments
- *   raise `UploadException::pathTraversalDetected()`.
- * - `$targetName` must be a bare filename (no slashes); any separator character
- *   triggers `UploadException::pathTraversalDetected()`.
- * - Null bytes are stripped and both inputs are trimmed before evaluation.
- * - The resolved destination directory must still sit under `$destinationRoot`
- *   once `realpath()` has collapsed symbolic links, so a sub-directory that
- *   traverses a pre-existing symlink cannot escape the root.
- * - An existing destination file is never silently replaced unless the caller
- *   opts in with `$overwriteExisting`.
- *
- * ## File moving
- * The default mover requires a genuine PHP upload (`is_uploaded_file()`) and
- * then uses `move_uploaded_file()`.  There is deliberately no fallback: the one
- * reason `move_uploaded_file()` fails is that the source is not a registered
- * upload, so falling back would defeat the exact check it performs.  Tests and
- * other non-HTTP callers inject their own `$fileMover` instead.
+ * The default mover accepts only genuine HTTP uploads and has no fallback.
+ * Non-HTTP callers and tests inject their own `$fileMover`.
  */
 final class Uploader
 {
     /**
      * Sniffed MIME type to the extension the stored file receives.
      *
-     * Types that are dangerous to serve back (text/html, text/x-php,
-     * application/x-httpd-php, shell scripts, ...) are deliberately absent, so
-     * they can never contribute a stored extension.
+     * Types dangerous to serve back (HTML, PHP, shell scripts) are absent on purpose.
      */
     private const array MIME_EXTENSIONS = [
         'image/jpeg' => 'jpg',
@@ -152,11 +128,9 @@ final class Uploader
     }
 
     /**
-     * Persists multiple uploads in order and returns their relative paths.
+     * Stores the uploads in order and returns their relative paths.
      *
-     * Each file is validated and stored via `store()`, sharing the same optional
-     * `$subDirectory`.  Processing stops immediately on the first failure and the
-     * same `UploadException` is re-thrown, leaving previously stored files in place.
+     * Stops at the first failure, leaving earlier files in place.
      *
      * @param list<FileUpload> $files       Uploads to persist.
      * @param string|null      $subDirectory Optional sub-path applied to every file.
@@ -219,11 +193,7 @@ final class Uploader
     }
 
     /**
-     * Validates optional extension/MIME/size constraints configured at construction.
-     *
-     * Size and MIME are judged on the bytes actually present in the temporary
-     * file; only the extension allowlist looks at the client-supplied name, and
-     * it looks at every dotted segment of it.
+     * Applies the size, extension and MIME constraints.
      */
     private function assertConstraints(FileUpload $file, string $sniffedMimeType): void
     {
@@ -242,10 +212,6 @@ final class Uploader
             throw UploadException::mimeTypeNotAllowed($sniffedMimeType, $this->allowedMimeTypes);
         }
     }
-
-    // ------------------------------------------------------------------
-    // Internals
-    // ------------------------------------------------------------------
 
     /**
      * Reads the real MIME type from the bytes of the temporary file.
@@ -267,7 +233,7 @@ final class Uploader
     }
 
     /**
-     * The real size on disk, which is the only size the client cannot lie about.
+     * The real size of the temporary file.
      */
     private function actualSize(FileUpload $file): int
     {
@@ -280,8 +246,7 @@ final class Uploader
     }
 
     /**
-     * Every dotted segment of a filename must be allowlisted, otherwise
-     * `avatar.php.jpg` passes an allowlist that only permits `jpg`.
+     * Every dotted segment of a filename must be allowlisted.
      *
      * @param list<string> $extensions
      */
@@ -310,13 +275,8 @@ final class Uploader
     }
 
     /**
-     * Confirms the deepest part of the destination path that already exists is
-     * contained, BEFORE anything is created.
-     *
-     * Without this, a sub-directory whose first segment is a pre-existing
-     * symlink out of the root would have `mkdir()` follow the link and create
-     * the remaining segments outside, even though the upload itself is then
-     * refused by {@see self::assertContainedDirectory()}.
+     * Checks the deepest existing ancestor of the destination before anything is created,
+     * so that `mkdir()` cannot follow a symlink out of the root.
      */
     private function assertContainedAncestor(string $absoluteDir): void
     {
@@ -325,14 +285,14 @@ final class Uploader
         while (!file_exists($probe)) {
             $parent = dirname($probe);
             if ($parent === $probe) {
-                return; // Walked past the filesystem root; nothing exists to check.
+                return;
             }
             $probe = $parent;
         }
 
         $realRoot = realpath(rtrim($this->destinationRoot, '/\\'));
         if ($realRoot === false) {
-            return; // The root itself is not created yet; the post-check covers it.
+            return;
         }
 
         $realProbe = realpath($probe);
@@ -394,9 +354,8 @@ final class Uploader
     }
 
     /**
-     * Validates a caller-supplied target filename: must be a bare, trimmed name
-     * with no directory separators, must not be empty, a dot-alias or a dotfile,
-     * and must satisfy the extension allowlist just like a generated name.
+     * Validates a caller-supplied target filename: a bare name, not a dot-alias or dotfile,
+     * that satisfies the extension allowlist.
      */
     private function validateTargetName(string $name): string
     {
@@ -410,8 +369,6 @@ final class Uploader
             throw UploadException::pathTraversalDetected($name);
         }
 
-        // A leading dot makes the file a configuration dotfile such as
-        // ".htaccess", which never belongs in an upload destination.
         if (str_starts_with($name, '.')) {
             throw UploadException::invalidTargetName($name);
         }
@@ -438,11 +395,8 @@ final class Uploader
     /**
      * The extension the stored file receives.
      *
-     * An upload whose name carries no extension keeps none. Otherwise the
-     * sniffed type decides. When the bytes cannot be mapped to a known type the
-     * client extension is used only if the application declared a closed
-     * extension allowlist that contains it, which the upload has already been
-     * validated against; failing that, the file is stored without an extension.
+     * The sniffed type decides. An unmapped type falls back to the client
+     * extension only when the allowlist contains it, otherwise the file has none.
      */
     private function storedExtension(FileUpload $file, string $sniffedMimeType): string
     {
