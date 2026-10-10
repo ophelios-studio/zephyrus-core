@@ -1242,7 +1242,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route that is not an object');
+        $this->assertExactRefusal(static fn (): mixed => $cache->load(), 'a route that is not an object at entry 0');
     }
 
     public function testLoadThrowsWhenRouteEntryMissingRequiredKey(): void
@@ -1566,12 +1566,15 @@ final class RouteCacheTest extends TestCase
         $meta = ['route_count' => 1, 'routes_hash' => hash('sha256', json_encode($section, JSON_THROW_ON_ERROR))] + self::metadataFor([]);
         file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => $section], JSON_THROW_ON_ERROR));
 
-        $state = (new RouteCache($this->cacheFile))->inspect(new RouteCollection(), 60, 1700000010);
+        $cache = new RouteCache($this->cacheFile);
+        $state = $cache->inspect(new RouteCollection(), 60, 1700000010);
 
         self::assertSame('invalid-payload', $state['reason']);
         self::assertFalse($state['metadata_valid']);
         self::assertTrue($state['expired']);
         self::assertSame('a routes section that is not a list', $state['problem']);
+        self::assertNull($cache->metadata());
+        self::assertTrue($cache->isExpired(60, 1700000010));
     }
 
     #[DataProvider('unloadableRouteProvider')]
@@ -1702,7 +1705,7 @@ final class RouteCacheTest extends TestCase
                 $write();
                 self::fail('Expected a RouteCacheException');
             } catch (RouteCacheException $exception) {
-                self::assertStringContainsString('more than one route is named "users.show"; give each route a unique name', $exception->getMessage());
+                self::assertSame('Route cache not written: more than one route is named "users.show"; give each route a unique name', $exception->getMessage());
             }
         }
 

@@ -70,6 +70,9 @@ final class RouteCache
     }
 
     /**
+     * Returns the metadata when the file decodes and its sections and metadata are well formed, or null.
+     * A non-null result does not mean the file is usable: load() may still refuse it.
+     *
      * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}|null
      */
     public function metadata(): ?array
@@ -83,9 +86,7 @@ final class RouteCache
             return null;
         }
 
-        $problem = $this->sectionFailure($decoded) ?? $this->metadataFailure($decoded['meta'] ?? null);
-
-        return $problem === null ? $decoded['meta'] : null;
+        return $this->headerFailure($decoded) === null ? $decoded['meta'] : null;
     }
 
     public function generatedAt(): ?int
@@ -189,13 +190,16 @@ final class RouteCache
     /**
      * Inspects the cache state for diagnostics.
      *
-     * exists: the file is present. metadata_valid: its metadata section is accepted, which is false when the
-     * file is missing or cannot be decoded, or when its sections are invalid (checked first). fresh: usable now.
-     * expired: older than $maxAgeSeconds or dated in the future, and also true when the file is missing or its
-     * sections or metadata are invalid. reason: one of missing-file, invalid-metadata, invalid-payload, expired,
-     * stale-routes, fresh. age and expires_at: seconds since
-     * generation and the expiry instant. generated_at: the generation instant. problem: what a refusal
-     * would say after "Route cache file <file> has ", null when fresh.
+     * exists: the file is present.
+     * metadata_valid: the sections and the metadata are accepted: false when the file is missing or cannot be
+     * decoded, or when its sections or metadata are invalid.
+     * fresh: load() accepts the file, it is within its window and its routes hash matches $routes.
+     * expired: older than $maxAgeSeconds or dated in the future; also true when the file is missing or its
+     * sections or metadata are invalid.
+     * reason: one of missing-file, invalid-metadata, invalid-payload, expired, stale-routes, fresh.
+     * age and expires_at: seconds since generation and the expiry instant.
+     * generated_at: the generation instant.
+     * problem: what a refusal would say after "Route cache file <file> has ", null when fresh.
      *
      * @throws RouteCacheException When $maxAgeSeconds is negative.
      * @return array{
@@ -516,9 +520,16 @@ final class RouteCache
      */
     private function payloadFailure(array $decoded): ?string
     {
-        return $this->sectionFailure($decoded)
-            ?? $this->metadataFailure($decoded['meta'] ?? null)
-            ?? $this->integrityFailure($decoded);
+        return $this->headerFailure($decoded) ?? $this->integrityFailure($decoded);
+    }
+
+    /**
+     * @param array<mixed> $decoded
+     * @return string|null The first problem found in the sections or the metadata, or null.
+     */
+    private function headerFailure(array $decoded): ?string
+    {
+        return $this->sectionFailure($decoded) ?? $this->metadataFailure($decoded['meta'] ?? null);
     }
 
     /**
