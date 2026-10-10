@@ -1037,4 +1037,33 @@ final class SecurityConfigTest extends TestCase
 
         SecurityConfig::fromArray(['headers' => ['xFrameOptions' => '', 'x_frame_options' => 'DENY']]);
     }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function declaredNullBooleans(): iterable
+    {
+        yield 'forceHttps' => [['forceHttps' => null], 'forceHttps'];
+        yield 'nested csrf.enabled' => [['csrf' => ['enabled' => null]], 'csrf.enabled'];
+        yield 'flat csrf_auto_html' => [['csrf_auto_html' => null], 'csrf_auto_html'];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('declaredNullBooleans')]
+    public function testADeclaredNullBooleanIsRefusedRatherThanReadAsTheDefault(array $values, string $field): void
+    {
+        try {
+            SecurityConfig::fromArray($values);
+
+            self::fail('A declared null was read as the default.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field '" . $field . "' has invalid value null: is not a boolean; "
+                . 'use true/false, 1/0, on/off or yes/no.',
+                $exception->getMessage(),
+            );
+        }
+    }
 }

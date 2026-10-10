@@ -51,6 +51,7 @@ use Zephyrus\Security\SecureHeadersConfig;
  *     trustedProxies, but is REJECTED for allowedHosts, where an empty list allows every host.
  *     A declared null allowedHosts (an unset !env without default) is REJECTED for the same reason.
  *   - csrfExceptions: each entry a non-empty string.
+ *   - forceHttps, csrfEnabled, csrfAutoHtml: a boolean; a declared null is REJECTED.
  *   - csrf.autoHtml and its aliases: not settings, omit them. A true value is REJECTED at boot.
  *   - trustedProxies: each entry '*', a valid IP address or a valid CIDR range. IPv6 ranges
  *     below /96 that embed an IPv4 address (::ffff:a.b.c.d/N, ::a.b.c.d/N, 64:ff9b::a.b.c.d/N)
@@ -326,14 +327,12 @@ final readonly class SecurityConfig
     }
 
     /**
-     * A null value reads as the default.
-     *
-     * @throws ConfigurationException when the written value is not a boolean.
+     * @throws ConfigurationException when the written value, null included, is not a boolean.
      */
     private static function readBool(ConfigKeys $keys, string $property, bool $default): bool
     {
-        $value = $keys->value($property);
-
-        return $value === null ? $default : ConfigBoolean::parse('security', $keys->key($property), $value);
+        return $keys->has($property)
+            ? ConfigBoolean::parse('security', $keys->key($property), $keys->value($property))
+            : $default;
     }
 }

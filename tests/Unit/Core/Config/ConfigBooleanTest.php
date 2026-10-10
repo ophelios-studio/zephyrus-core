@@ -114,7 +114,7 @@ final class ConfigBooleanTest extends TestCase
     public function testTheFirstSpellingThatIsSetDecidesTheValue(): void
     {
         self::assertFalse(ConfigBoolean::firstSet('csrf', ['enabled' => false, 'csrf_enabled' => true], ['enabled', 'csrf_enabled'], true));
-        self::assertFalse(ConfigBoolean::firstSet('csrf', ['enabled' => null, 'csrf_enabled' => false], ['enabled', 'csrf_enabled'], true));
+
         self::assertTrue(ConfigBoolean::firstSet('csrf', ['csrf_enabled' => true], ['enabled', 'csrf_enabled'], false));
     }
 
@@ -126,7 +126,21 @@ final class ConfigBooleanTest extends TestCase
     public function testTheDefaultAppliesOnlyWhenNoSpellingIsSet(): void
     {
         self::assertTrue(ConfigBoolean::firstSet('session', [], ['httpOnly', 'http_only'], true));
-        self::assertFalse(ConfigBoolean::firstSet('session', ['http_only' => null], ['httpOnly', 'http_only'], false));
+    }
+
+    public function testADeclaredNullIsRefusedRatherThanReadAsTheDefault(): void
+    {
+        try {
+            ConfigBoolean::firstSet('session', ['http_only' => null], ['httpOnly', 'http_only'], true);
+
+            self::fail('A declared null was read as the default.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'session' field 'http_only' has invalid value null: is not a boolean; "
+                . 'use true/false, 1/0, on/off or yes/no.',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testAnEmptySetValueIsRefusedInsteadOfUsingTheDefault(): void

@@ -80,4 +80,12 @@ final class ApplicationConfigTest extends TestCase
             );
         }
     }
+
+    public function testADeclaredNullDebugIsRefusedRatherThanReadAsTheEnvironmentDefault(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'application' field 'debug' has invalid value null: is not a boolean");
+
+        ApplicationConfig::fromArray(['environment' => 'development', 'debug' => null]);
+    }
 }

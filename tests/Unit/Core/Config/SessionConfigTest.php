@@ -442,4 +442,12 @@ final class SessionConfigTest extends TestCase
 
         SessionConfig::fromArray(['sameSite' => 'Strict', 'same_site' => 'Lax']);
     }
+
+    public function testADeclaredNullHttpOnlyIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'session' field 'httpOnly' has invalid value null: is not a boolean");
+
+        SessionConfig::fromArray(['httpOnly' => null]);
+    }
 }

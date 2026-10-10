@@ -138,4 +138,20 @@ final class CsrfConfigTest extends TestCase
 
         CsrfConfig::fromArray(['bodyField' => '_token', 'body_field' => '_csrf']);
     }
+
+    public function testFromArrayRefusesADeclaredNullEnabled(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'csrf' field 'csrf_enabled' has invalid value null: is not a boolean");
+
+        CsrfConfig::fromArray(['csrf_enabled' => null]);
+    }
+
+    public function testFromArrayRefusesADeclaredNullInjectToken(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'csrf' field 'injectToken' has invalid value null: is not a boolean");
+
+        CsrfConfig::fromArray(['injectToken' => null]);
+    }
 }

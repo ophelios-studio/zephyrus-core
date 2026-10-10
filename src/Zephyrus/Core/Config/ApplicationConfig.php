@@ -23,7 +23,8 @@ final readonly class ApplicationConfig
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when a key is unknown, or the debug value is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown, or the debug value, null included, is not a recognisable
+     *         boolean.
      */
     public static function fromArray(array $values): self
     {
@@ -33,7 +34,7 @@ final readonly class ApplicationConfig
             ? Environment::fromString((string) $keys->value('environment'))
             : Environment::Production;
 
-        $debug = $keys->value('debug') ?? !$environment->isProductionLike();
+        $debug = $keys->has('debug') ? $keys->value('debug') : !$environment->isProductionLike();
 
         return new self(
             environment: $environment,
