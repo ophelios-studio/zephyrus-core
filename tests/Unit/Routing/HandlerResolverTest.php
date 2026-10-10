@@ -20,6 +20,19 @@ use Zephyrus\Routing\RouteMatch;
 // Fixture controllers used only in this test file
 // ---------------------------------------------------------------------------
 
+interface ContractHandlerController
+{
+    public function show(): Response;
+}
+
+final class ContractHandlerImplementation implements ContractHandlerController
+{
+    public function show(): Response
+    {
+        return Response::text('from the implementation');
+    }
+}
+
 /**
  * A plain controller with no base class.
  */
@@ -522,6 +535,51 @@ final class HandlerResolverTest extends TestCase
         $resolver->resolve($match, Request::fromArray('GET', '/hello'));
 
         self::assertSame(1, $factoryCallCount);
+    }
+
+    public function testAnInterfaceHandlerIdReachesTheFactory(): void
+    {
+        $resolver = new HandlerResolver(
+            static fn (string $id): object => new ContractHandlerImplementation(),
+        );
+        $match = $this->makeMatch('GET', '/show', ContractHandlerController::class . '@show');
+
+        $response = $resolver->resolve($match, Request::fromArray('GET', '/show'));
+
+        self::assertSame('from the implementation', $response->body);
+    }
+
+    public function testAMissingHandlerClassIsRefusedBeforeTheFactoryIsCalled(): void
+    {
+        $factoryCalls = 0;
+        $resolver = new HandlerResolver(static function (string $class) use (&$factoryCalls): object {
+            $factoryCalls++;
+
+            return new \stdClass();
+        });
+        $match = $this->makeMatch('GET', '/act', 'No\\Such\\Ctrl@act');
+
+        try {
+            $resolver->resolve($match, Request::fromArray('GET', '/act'));
+            self::fail('Expected a HandlerResolverException.');
+        } catch (HandlerResolverException $e) {
+            self::assertSame('Handler class "No\\\\Such\\\\Ctrl" does not exist.', $e->getMessage());
+        }
+
+        self::assertSame(0, $factoryCalls);
+    }
+
+    public function testAMissingHandlerClassIsRefusedWithTheDefaultFactory(): void
+    {
+        $match = $this->makeMatch('GET', '/act', "Bad\x00Class@act");
+
+        try {
+            $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
+            self::fail('Expected a HandlerResolverException.');
+        } catch (HandlerResolverException $e) {
+            self::assertStringStartsWith('Handler class ', $e->getMessage());
+            self::assertStringNotContainsString("\x00", $e->getMessage());
+        }
     }
 
     public function testUnresolvableClassThrowsWrappedException(): void

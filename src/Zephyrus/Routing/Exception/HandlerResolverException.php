@@ -6,6 +6,7 @@ namespace Zephyrus\Routing\Exception;
 
 use ReflectionException;
 use Throwable;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 final class HandlerResolverException extends ZephyrusRuntimeException
@@ -18,6 +19,11 @@ final class HandlerResolverException extends ZephyrusRuntimeException
                 $handler,
             ),
         );
+    }
+
+    public static function missingClass(string $className): self
+    {
+        return new self(sprintf('Handler class %s does not exist.', MessageValue::quote($className)));
     }
 
     public static function unresolvableClass(string $className, Throwable $previous): self

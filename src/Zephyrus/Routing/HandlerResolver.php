@@ -65,6 +65,10 @@ final class HandlerResolver
     {
         [$class, $method] = $this->parseHandler($match->route->handler);
 
+        if (!class_exists($class) && !interface_exists($class)) {
+            throw HandlerResolverException::missingClass($class);
+        }
+
         try {
             $controller = ($this->factory)($class);
         } catch (Throwable $e) {
