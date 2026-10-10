@@ -45,12 +45,17 @@ final class EnvTagHttpoxyTest extends TestCase
      */
     private function resolve(string $tag)
     {
-        file_put_contents($this->path, "app:\n  value: !env " . $tag . "\n");
+        return $this->resolveYaml("app:\n  value: !env " . $tag . "\n")['app']['value'];
+    }
 
-        /** @var array{app: array{value: mixed}} $parsed */
-        $parsed = (new ConfigurationFile($this->path))->toArray();
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveYaml(string $yaml): array
+    {
+        file_put_contents($this->path, $yaml);
 
-        return $parsed['app']['value'];
+        return (new ConfigurationFile($this->path))->toArray();
     }
 
     public function testAnHttpPrefixedTagIsRefusedNamingTheKey(): void
@@ -114,9 +119,25 @@ final class EnvTagHttpoxyTest extends TestCase
     public function testAnEmptyNameInAnEnvTagIsRefusedNamingTheKey(string $tag): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('"value"');
+        $this->expectExceptionMessage('"app.value"');
 
         $this->resolve($tag);
+    }
+
+    public function testARefusedEnvTagInAListNamesTheIndexedPath(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('!env tag at "app.allowed_hosts.0": it has an empty variable name');
+
+        $this->resolveYaml("app:\n  allowed_hosts:\n    - !env \"\"\n");
+    }
+
+    public function testARefusedEnvTagNamesItsFullPathWhenTheLastSegmentIsAmbiguous(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('!env tag at "mailer.host": HTTP_PROXY: ');
+
+        $this->resolveYaml("database:\n  host: localhost\nmailer:\n  host: !env HTTP_PROXY\n");
     }
 
     public function testEnvTakesPrecedenceAndDefaultsStillApply(): void
@@ -146,7 +167,7 @@ final class EnvTagHttpoxyTest extends TestCase
     public function testANonScalarEnvTagValueIsRefusedNamingTheKey(string $tag): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('the key "value" must name one variable');
+        $this->expectExceptionMessage('!env tag at "app.value": it must name one variable, not a list or mapping');
 
         $this->resolve($tag);
     }

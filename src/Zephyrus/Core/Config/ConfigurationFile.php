@@ -117,15 +117,18 @@ final class ConfigurationFile
      * Resolve the custom YAML tags recursively. Only !env is resolved; other tags keep their value.
      *
      * @param array<string, mixed> $config
+     * @param string|null $prefix Dotted path of $config, used to name the key in error messages.
      * @return array<string, mixed>
      */
-    private function processYamlTags(array $config): array
+    private function processYamlTags(array $config, ?string $prefix = null): array
     {
         foreach ($config as $key => $value) {
+            $path = $prefix === null ? (string) $key : $prefix . '.' . $key;
+
             if (is_array($value)) {
-                $config[$key] = $this->processYamlTags($value);
+                $config[$key] = $this->processYamlTags($value, $path);
             } elseif ($value instanceof TaggedValue) {
-                $config[$key] = $this->resolveTag($value, (string) $key);
+                $config[$key] = $this->resolveTag($value, $path);
             }
         }
 
@@ -135,10 +138,10 @@ final class ConfigurationFile
     /**
      * Resolve a single YAML custom tag.
      */
-    private function resolveTag(TaggedValue $tagged, string $key): mixed
+    private function resolveTag(TaggedValue $tagged, string $path): mixed
     {
         return match ($tagged->getTag()) {
-            'env' => $this->resolveEnvTag($tagged->getValue(), $key),
+            'env' => $this->resolveEnvTag($tagged->getValue(), $path),
             default => $tagged->getValue(),
         };
     }
@@ -148,10 +151,12 @@ final class ConfigurationFile
      * An empty name, a list or mapping value, and the names refused by {@see EnvironmentVariable::read()}
      * raise a ConfigurationException.
      */
-    private function resolveEnvTag(mixed $value, string $key): mixed
+    private function resolveEnvTag(mixed $value, string $path): mixed
     {
         if (is_array($value)) {
-            throw new ConfigurationException(sprintf('!env tag: the key "%s" must name one variable, not a list or mapping.', $key));
+            throw new ConfigurationException(
+                sprintf('!env tag at "%s": it must name one variable, not a list or mapping.', $path),
+            );
         }
 
         $raw = (string) $value;
@@ -160,13 +165,16 @@ final class ConfigurationFile
         $default = isset($arguments[1]) ? trim($arguments[1], " \t\n\r\0\x0B\"'") : null;
 
         if ($envKey === '') {
-            throw new ConfigurationException(sprintf('!env tag: the key "%s" has an empty variable name.', $key));
+            throw new ConfigurationException(sprintf('!env tag at "%s": it has an empty variable name.', $path));
         }
 
         try {
             return EnvironmentVariable::read($envKey) ?? $default;
         } catch (\InvalidArgumentException $e) {
-            throw new ConfigurationException('!env tag: ' . $e->getMessage(), previous: $e);
+            throw new ConfigurationException(
+                sprintf('!env tag at "%s": %s', $path, $e->getMessage()),
+                previous: $e,
+            );
         }
     }
 }
