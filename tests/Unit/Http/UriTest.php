@@ -234,6 +234,15 @@ final class UriTest extends TestCase
         self::assertSame('http', (new Uri('http://'))->scheme());
     }
 
+    #[Test]
+    public function aPortWithoutAHostKeepsTheDefaultHost(): void
+    {
+        $uri = new Uri('http://:80//evil.example/x');
+
+        self::assertSame('localhost', $uri->host());
+        self::assertSame(80, $uri->port());
+    }
+
     /**
      * @return iterable<string, array{string, string}>
      */

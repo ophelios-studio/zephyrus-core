@@ -105,6 +105,15 @@ final class ForceHttpsMiddlewareTest extends TestCase
         self::assertContains('location: https://example.com:8080/path', $response->toHeaderLines());
     }
 
+    public function testRedirectNeverLeavesTheHostEmpty(): void
+    {
+        $request  = new Request('GET', 'http://:80//evil.example/x');
+        $response = $this->mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(308, $response->status);
+        self::assertContains('location: https://localhost/evil.example/x', $response->toHeaderLines());
+    }
+
     // ── inner handler not called on redirect ──────────────────────────────────
 
     public function testInnerHandlerNotCalledOnRedirect(): void

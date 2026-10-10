@@ -115,15 +115,17 @@ final readonly class Uri
                 $authority = substr($authority, $userinfoEnd + 1);
             }
 
-            if ($authority !== '') {
-                $parts['host'] = $authority;
-            }
+            $host = $authority;
 
             // Only a port that IS a port becomes one. Anything else stays
             // visible in the host rather than being silently discarded.
             if (preg_match('#^(\[[^\]]*\]|[^:]*):(\d+)$#', $authority, $portMatch) === 1) {
-                $parts['host'] = $portMatch[1];
+                $host = $portMatch[1];
                 $parts['port'] = (int) $portMatch[2];
+            }
+
+            if ($host !== '') {
+                $parts['host'] = $host;
             }
         }
 
