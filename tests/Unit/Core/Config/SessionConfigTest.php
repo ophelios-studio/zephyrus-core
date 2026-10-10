@@ -434,4 +434,12 @@ final class SessionConfigTest extends TestCase
             );
         }
     }
+
+    public function testTwoSpellingsOfOneSettingAreRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'session' sets both 'sameSite' and 'same_site': keep one.");
+
+        SessionConfig::fromArray(['sameSite' => 'Strict', 'same_site' => 'Lax']);
+    }
 }

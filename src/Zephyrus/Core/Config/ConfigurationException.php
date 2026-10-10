@@ -87,6 +87,23 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
+     * Two spellings of one setting written in the same section; field() is the first.
+     */
+    public static function conflictingKeys(string $section, string $first, string $second): self
+    {
+        $exception = new self(sprintf(
+            "Configuration section '%s' sets both %s and %s: keep one.",
+            $section,
+            self::shownField($first),
+            self::shownField($second),
+        ));
+        $exception->section = $section;
+        $exception->field = $first;
+
+        return $exception;
+    }
+
+    /**
      * The value is shown through MessageValue::describe(), so never pass a secret. It is stored in no property
      * and hidden from this call's trace frame; a caller's frame still holds it unless that parameter is marked
      * #[\SensitiveParameter]. A field longer than 64 bytes or holding anything but ASCII letters, digits and
@@ -117,9 +134,9 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The section named by invalidValue(), missingRequired(), removedField() or unknownKey(), or null for any
-     * other refusal: its configuration key (such as 'database' or 'security.headers'), or the class name of the
-     * ConfigSection whose getter refused a value.
+     * The section named by invalidValue(), missingRequired(), removedField(), unknownKey() or conflictingKeys(), or
+     * null for any other refusal: its configuration key (such as 'database' or 'security.headers'), or the class
+     * name of the ConfigSection whose getter refused a value.
      */
     public function section(): ?string
     {
@@ -127,7 +144,8 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The field named by invalidValue(), missingRequired(), removedField() or unknownKey(), as passed, or null.
+     * The field named by invalidValue(), missingRequired(), removedField(), unknownKey() or conflictingKeys(), as
+     * passed, or null.
      */
     public function field(): ?string
     {

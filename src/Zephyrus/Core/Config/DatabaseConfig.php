@@ -124,20 +124,20 @@ final readonly class DatabaseConfig
             }
         }
 
-        ConfigKeys::assertKnown('database', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('database', $values, self::SPELLINGS);
 
-        $driver   = (string) ($values['driver']   ?? 'pgsql');
-        $host     = trim((string) ($values['host']     ?? 'localhost'));
-        $port     = (int)    ($values['port']     ?? 5432);
-        $database = trim((string) ($values['database'] ?? ''));
-        $username = (string) ($values['username'] ?? '');
-        $password = (string) ($values['password'] ?? '');
-        $charset  = (string) ($values['charset']  ?? 'utf8');
-        [$sslModeKey, $sslMode] = self::optionalSetting($values, ['sslMode', 'sslmode', 'ssl_mode']);
-        [$sslRootCertKey, $sslRootCert] = self::optionalSetting($values, ['sslRootCert', 'sslrootcert', 'ssl_root_cert']);
+        $driver   = (string) ($keys->value('driver') ?? 'pgsql');
+        $host     = trim((string) ($keys->value('host') ?? 'localhost'));
+        $port     = (int) ($keys->value('port') ?? 5432);
+        $database = trim((string) ($keys->value('database') ?? ''));
+        $username = (string) ($keys->value('username') ?? '');
+        $password = (string) ($keys->value('password') ?? '');
+        $charset  = (string) ($keys->value('charset') ?? 'utf8');
+        [$sslModeKey, $sslMode] = self::optionalSetting($keys, 'sslMode');
+        [$sslRootCertKey, $sslRootCert] = self::optionalSetting($keys, 'sslRootCert');
         $columnCacheVersion = self::optionalSetting(
-            $values,
-            ['columnCacheVersion', 'column_cache_version'],
+            $keys,
+            'columnCacheVersion',
             ": quote a number such as '1.10' to keep its digits",
         )[1] ?? '';
 
@@ -280,39 +280,18 @@ final readonly class DatabaseConfig
         ) ?? '***';
     }
 
-    private static function conflictingSpellings(string $first, string $second): ConfigurationException
-    {
-        return new ConfigurationException(sprintf(
-            "Configuration section 'database' sets both '%s' and '%s': keep one.",
-            $first,
-            $second,
-        ));
-    }
-
     /**
-     * Reads an optional string from the one spelling the array contains.
+     * Reads an optional string setting.
      *
-     * @param array<string, mixed> $values
-     * @param list<string>         $spellings Accepted keys.
-     * @param string               $hint      Appended to the refusal message.
-     * @return array{string, ?string} The key read (the first spelling when none is set) and its
+     * @param string $hint Appended to the refusal message.
+     * @return array{string, ?string} The key read (the preferred spelling when none is set) and its
      *                                trimmed value, null when absent or blank.
-     * @throws ConfigurationException if two spellings are present, or the value is neither a
-     *                                string nor an integer.
+     * @throws ConfigurationException if the value is neither a string nor an integer.
      */
-    private static function optionalSetting(array $values, array $spellings, string $hint = ''): array
+    private static function optionalSetting(ConfigKeys $keys, string $property, string $hint = ''): array
     {
-        $present = array_values(array_filter($spellings, static fn (string $key): bool => array_key_exists($key, $values)));
-        if (count($present) > 1) {
-            throw self::conflictingSpellings($present[0], $present[1]);
-        }
-
-        if ($present === []) {
-            return [$spellings[0], null];
-        }
-
-        $key = $present[0];
-        $value = $values[$key];
+        $key = $keys->key($property);
+        $value = $keys->value($property);
         if ($value === null) {
             return [$key, null];
         }

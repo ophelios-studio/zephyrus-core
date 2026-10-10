@@ -27,13 +27,13 @@ final readonly class ApplicationConfig
      */
     public static function fromArray(array $values): self
     {
-        ConfigKeys::assertKnown('application', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('application', $values, self::SPELLINGS);
 
-        $environment = isset($values['environment'])
-            ? Environment::fromString((string) $values['environment'])
+        $environment = $keys->value('environment') !== null
+            ? Environment::fromString((string) $keys->value('environment'))
             : Environment::Production;
 
-        $debug = $values['debug'] ?? !$environment->isProductionLike();
+        $debug = $keys->value('debug') ?? !$environment->isProductionLike();
 
         return new self(
             environment: $environment,

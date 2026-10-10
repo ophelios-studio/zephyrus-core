@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Zephyrus\Core\Config;
 
 /**
- * Checks the keys of a configuration section against the spellings its properties accept.
+ * The properties a configuration section writes, read against the spellings each property accepts.
  *
  * A spelling such as 'csrf.enabled' names the key 'enabled' of the mapping written under 'csrf'.
  *
  * @internal
  */
-final class ConfigKeys
+final readonly class ConfigKeys
 {
     private const int MAX_SUGGESTION_DISTANCE = 2;
 
@@ -19,15 +19,87 @@ final class ConfigKeys
     private const int MAX_COMPARED_LENGTH = 64;
 
     /**
-     * Refuses a key that no property accepts, suggesting the closest accepted spelling.
+     * @param array<string, array{string, mixed}> $written   Property => [key as written, value].
+     * @param array<string, list<string>>         $spellings
+     */
+    private function __construct(
+        private array $written,
+        private array $spellings,
+    ) {
+    }
+
+    /**
+     * Reads a section, refusing a key that no property accepts and a property written under two keys.
      *
      * A mapping name holding anything but an array is left to the caller.
      *
      * @param array<array-key, mixed>     $values
      * @param array<string, list<string>> $spellings Property => accepted keys, preferred first.
+     * @throws ConfigurationException when a key is not accepted, or two keys of one property are written.
+     */
+    public static function read(string $section, array $values, array $spellings): self
+    {
+        self::assertKnown($section, $values, $spellings);
+
+        $written = [];
+        foreach ($spellings as $property => $paths) {
+            foreach ($paths as $path) {
+                $location = self::locate($values, $path);
+                if ($location === null) {
+                    continue;
+                }
+
+                if (isset($written[$property])) {
+                    throw ConfigurationException::conflictingKeys($section, $written[$property][0], $path);
+                }
+
+                $written[$property] = [$path, $location[0]];
+            }
+        }
+
+        return new self($written, $spellings);
+    }
+
+    /**
+     * Whether the property is written, even as null.
+     */
+    public function has(string $property): bool
+    {
+        return isset($this->written[$property]);
+    }
+
+    /**
+     * The property's value, or null when it is not written.
+     */
+    public function value(string $property): mixed
+    {
+        return $this->written[$property][1] ?? null;
+    }
+
+    /**
+     * The key the property is written under, or its preferred spelling when it is not written.
+     */
+    public function key(string $property): string
+    {
+        return $this->written[$property][0] ?? $this->spellings[$property][0];
+    }
+
+    /**
+     * The properties written, even as null, in the order the spellings declare them.
+     *
+     * @return list<string>
+     */
+    public function properties(): array
+    {
+        return array_keys($this->written);
+    }
+
+    /**
+     * @param array<array-key, mixed>     $values
+     * @param array<string, list<string>> $spellings
      * @throws ConfigurationException when a key is not accepted.
      */
-    public static function assertKnown(string $section, array $values, array $spellings): void
+    private static function assertKnown(string $section, array $values, array $spellings): void
     {
         $levels = self::levels($spellings);
         $mappings = array_keys(array_diff_key($levels, ['' => true]));
@@ -53,6 +125,24 @@ final class ConfigKeys
                 throw ConfigurationException::unknownKey($section, $key, $suggestion, $preferred);
             }
         }
+    }
+
+    /**
+     * The value written under a spelling, wrapped so that a written null differs from an absent key.
+     *
+     * @param array<array-key, mixed> $values
+     * @return array{mixed}|null
+     */
+    private static function locate(array $values, string $path): ?array
+    {
+        if (!str_contains($path, '.')) {
+            return array_key_exists($path, $values) ? [$values[$path]] : null;
+        }
+
+        [$mapping, $key] = explode('.', $path, 2);
+        $nested = $values[$mapping] ?? null;
+
+        return is_array($nested) && array_key_exists($key, $nested) ? [$nested[$key]] : null;
     }
 
     /**

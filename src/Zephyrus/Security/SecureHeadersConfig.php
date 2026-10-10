@@ -100,57 +100,60 @@ final readonly class SecureHeadersConfig
     /**
      * Builds the config from a key-value array, falling back to defaults() for missing keys.
      *
-     * Each key takes its camelCase or snake_case spelling; camelCase wins when both are set.
+     * Each key takes its camelCase or snake_case spelling, never both.
      * Header values are trimmed of surrounding spaces, tabs, CR and LF; a blank one is read as empty, which means
      * not emitted.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when a key is unknown, a header value is null, not a string or number, or holds
-     *         a control character other than a horizontal tab after trimming, hstsMaxAge is not an integer or a
-     *         string of digits, or hstsIncludeSubdomains is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown or written in both spellings, a header value is null,
+     *         not a string or number, or holds a control character other than a horizontal tab after trimming,
+     *         hstsMaxAge is not an integer or a string of digits, or hstsIncludeSubdomains is not a recognisable
+     *         boolean.
      */
     public static function fromArray(array $values): self
     {
-        ConfigKeys::assertKnown('security.headers', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('security.headers', $values, self::SPELLINGS);
         $defaults = self::defaults();
 
         return new self(
-            xFrameOptions: self::text($values, 'xFrameOptions', $defaults->xFrameOptions),
-            xContentTypeOptions: self::text($values, 'xContentTypeOptions', $defaults->xContentTypeOptions),
-            referrerPolicy: self::text($values, 'referrerPolicy', $defaults->referrerPolicy),
-            xssProtection: self::text($values, 'xssProtection', $defaults->xssProtection),
-            hstsMaxAge: self::hstsMaxAge($values, $defaults->hstsMaxAge),
-            hstsIncludeSubdomains: self::includeSubdomains($values, $defaults->hstsIncludeSubdomains),
-            csp: self::text($values, 'csp', $defaults->csp),
-            permissionsPolicy: self::text($values, 'permissionsPolicy', $defaults->permissionsPolicy),
+            xFrameOptions: self::text($keys, 'xFrameOptions', $defaults->xFrameOptions),
+            xContentTypeOptions: self::text($keys, 'xContentTypeOptions', $defaults->xContentTypeOptions),
+            referrerPolicy: self::text($keys, 'referrerPolicy', $defaults->referrerPolicy),
+            xssProtection: self::text($keys, 'xssProtection', $defaults->xssProtection),
+            hstsMaxAge: self::hstsMaxAge($keys, $defaults->hstsMaxAge),
+            hstsIncludeSubdomains: self::includeSubdomains($keys, $defaults->hstsIncludeSubdomains),
+            csp: self::text($keys, 'csp', $defaults->csp),
+            permissionsPolicy: self::text($keys, 'permissionsPolicy', $defaults->permissionsPolicy),
         );
     }
 
-
     /**
-     * @param array<string, mixed> $values
      * @throws ConfigurationException
      */
-    private static function includeSubdomains(array $values, bool $default): bool
+    private static function includeSubdomains(ConfigKeys $keys, bool $default): bool
     {
-        $key = self::writtenKey($values, self::SPELLINGS['hstsIncludeSubdomains']);
-
-        return $key === null ? $default : ConfigBoolean::parse('security.headers', $key, $values[$key]);
-    }
-
-    /**
-     * @param array<string, mixed> $values
-     * @throws ConfigurationException
-     */
-    private static function text(array $values, string $property, string $default): string
-    {
-        $key = self::writtenKey($values, self::SPELLINGS[$property]);
-
-        if ($key === null) {
+        if (!$keys->has('hstsIncludeSubdomains')) {
             return $default;
         }
 
-        $value = $values[$key];
+        return ConfigBoolean::parse(
+            'security.headers',
+            $keys->key('hstsIncludeSubdomains'),
+            $keys->value('hstsIncludeSubdomains'),
+        );
+    }
+
+    /**
+     * @throws ConfigurationException
+     */
+    private static function text(ConfigKeys $keys, string $property, string $default): string
+    {
+        if (!$keys->has($property)) {
+            return $default;
+        }
+
+        $key = $keys->key($property);
+        $value = $keys->value($property);
 
         if (!is_string($value) && !is_int($value) && !is_float($value)) {
             throw ConfigurationException::invalidValue(
@@ -184,18 +187,16 @@ final readonly class SecureHeadersConfig
     }
 
     /**
-     * @param array<string, mixed> $values
      * @throws ConfigurationException
      */
-    private static function hstsMaxAge(array $values, int $default): int
+    private static function hstsMaxAge(ConfigKeys $keys, int $default): int
     {
-        $key = self::writtenKey($values, self::SPELLINGS['hstsMaxAge']);
-
-        if ($key === null) {
+        if (!$keys->has('hstsMaxAge')) {
             return $default;
         }
 
-        $value = $values[$key];
+        $key = $keys->key('hstsMaxAge');
+        $value = $keys->value('hstsMaxAge');
 
         if (is_int($value)) {
             return $value;
@@ -217,22 +218,6 @@ final readonly class SecureHeadersConfig
         );
     }
 
-    /**
-     * The first spelling present in the array, whatever its value.
-     *
-     * @param array<string, mixed> $values
-     * @param list<string>         $spellings
-     */
-    private static function writtenKey(array $values, array $spellings): ?string
-    {
-        foreach ($spellings as $spelling) {
-            if (array_key_exists($spelling, $values)) {
-                return $spelling;
-            }
-        }
-
-        return null;
-    }
 
     /** The Strict-Transport-Security value, or an empty string when hstsMaxAge is 0 or less. */
     public function hstsHeaderValue(): string

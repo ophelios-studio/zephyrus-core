@@ -102,16 +102,6 @@ final class LocalizationConfigTest extends TestCase
         self::assertNull($config->localePath);
     }
 
-    public function testFromArrayNewLocalePathTakesPrecedenceOverLegacy(): void
-    {
-        $config = LocalizationConfig::fromArray([
-            'localePath' => '/new/path',
-            'jsonLocalePaths' => ['/old/path'],
-        ]);
-
-        self::assertSame('/new/path', $config->localePath);
-    }
-
     public function testFromArrayEmptyCurrencyNormalizesToNull(): void
     {
         $config = LocalizationConfig::fromArray([
@@ -302,5 +292,21 @@ final class LocalizationConfigTest extends TestCase
                 $exception->getMessage(),
             );
         }
+    }
+
+    public function testTwoSpellingsOfTheLocaleAreRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'localization' sets both 'locale' and 'default_locale': keep one.");
+
+        LocalizationConfig::fromArray(['locale' => 'fr', 'default_locale' => 'en']);
+    }
+
+    public function testTheLocalePathAndTheLegacyKeyTogetherAreRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'localization' sets both 'localePath' and 'jsonLocalePaths': keep one.");
+
+        LocalizationConfig::fromArray(['localePath' => '/app/locale', 'jsonLocalePaths' => ['/legacy/locale']]);
     }
 }

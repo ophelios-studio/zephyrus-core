@@ -99,14 +99,17 @@ final class SecureHeadersConfigTest extends TestCase
         self::assertSame('microphone=()', $config->permissionsPolicy);
     }
 
-    public function testFromArrayCamelCaseTakesPrecedenceOverSnakeCase(): void
+    public function testFromArrayRefusesBothSpellingsOfOneHeader(): void
     {
-        $config = SecureHeadersConfig::fromArray([
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            "Configuration section 'security.headers' sets both 'xFrameOptions' and 'x_frame_options': keep one.",
+        );
+
+        SecureHeadersConfig::fromArray([
             'xFrameOptions' => 'DENY',
             'x_frame_options' => 'SAMEORIGIN',
         ]);
-
-        self::assertSame('DENY', $config->xFrameOptions);
     }
 
     public function testFromArrayMissingKeysUsesDefaults(): void
@@ -214,10 +217,13 @@ final class SecureHeadersConfigTest extends TestCase
         SecureHeadersConfig::fromArray(['hstsIncludeSubdomains' => null]);
     }
 
-    public function testANullCamelCaseIncludeSubdomainsIsNotRescuedByTheSnakeCaseSpelling(): void
+    public function testANullCamelCaseIncludeSubdomainsBesideTheSnakeCaseSpellingIsRefused(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/field 'hstsIncludeSubdomains'/");
+        $this->expectExceptionMessage(
+            "Configuration section 'security.headers' sets both 'hstsIncludeSubdomains' and 'hsts_include_subdomains': "
+            . 'keep one.',
+        );
 
         SecureHeadersConfig::fromArray(['hstsIncludeSubdomains' => null, 'hsts_include_subdomains' => true]);
     }

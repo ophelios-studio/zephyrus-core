@@ -66,21 +66,6 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(512, $config->maxBodySize);
     }
 
-    public function testCamelCaseTakesPrecedenceOverSnakeCase(): void
-    {
-        $config = SecurityConfig::fromArray([
-            'forceHttps' => true,
-            'force_https' => false,
-            'csrfAutoHtml' => false,
-            'csrf_auto_html' => true,
-            'csrfExceptions' => ['#^/camel/#'],
-            'csrf_exceptions' => ['#^/snake/#'],
-        ]);
-
-        self::assertTrue($config->forceHttps);
-        self::assertFalse($config->csrfAutoHtml);
-        self::assertSame(['#^/camel/#'], $config->csrfExceptions);
-    }
 
     public function testMaxBodySizeZeroIsUnlimited(): void
     {
@@ -521,21 +506,6 @@ final class SecurityConfigTest extends TestCase
         SecurityConfig::fromArray(['trustedHeaders' => ['x-forwarded-for', '']]);
     }
 
-    public function testNestedCsrfSectionTakesPrecedenceOverFlatKeys(): void
-    {
-        $config = SecurityConfig::fromArray([
-            'csrfEnabled' => true,  // flat key
-            'csrf' => [
-                'enabled' => false,  // nested takes precedence
-                'autoHtml' => false,
-                'exceptions' => ['#^/api/#'],
-            ],
-        ]);
-
-        self::assertFalse($config->csrfEnabled);
-        self::assertFalse($config->csrfAutoHtml);
-        self::assertSame(['#^/api/#'], $config->csrfExceptions);
-    }
 
     public function testNestedCsrfSectionWithSnakeCaseKeys(): void
     {
@@ -587,10 +557,6 @@ final class SecurityConfigTest extends TestCase
         yield 'flat csrfAutoHtml written as a bool' => [
             ['csrfAutoHtml' => true],
             "field 'csrfAutoHtml' has invalid value true: ",
-        ];
-        yield 'null spelling is skipped in favour of the one that was written' => [
-            ['csrf' => ['autoHtml' => null, 'auto_html' => 'yes']],
-            "field 'csrf.auto_html' has invalid value \"yes\": ",
         ];
     }
 
@@ -780,16 +746,23 @@ final class SecurityConfigTest extends TestCase
         self::assertSame('snake-key-value', $config->encryptionKey);
     }
 
-    public function testEncryptionKeyNestedTakesPrecedenceOverFlat(): void
+    public function testANestedAndAFlatEncryptionKeyAreRefusedWithoutShowingEither(): void
     {
-        $config = SecurityConfig::fromArray([
-            'encryptionKey' => 'flat-value',
-            'encryption' => [
-                'key' => 'nested-value',
-            ],
-        ]);
+        try {
+            SecurityConfig::fromArray([
+                'encryptionKey' => 'flat-value',
+                'encryption' => [
+                    'key' => 'nested-value',
+                ],
+            ]);
 
-        self::assertSame('nested-value', $config->encryptionKey);
+            self::fail('Two spellings of the encryption key were accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' sets both 'encryption.key' and 'encryptionKey': keep one.",
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testEncryptionKeyEmptyStringNormalizesToNull(): void
@@ -1037,5 +1010,31 @@ final class SecurityConfigTest extends TestCase
                 $exception->getMessage(),
             );
         }
+    }
+
+    public function testTwoSpellingsOfForceHttpsAreRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'security' sets both 'forceHttps' and 'force_https': keep one.");
+
+        SecurityConfig::fromArray(['forceHttps' => false, 'force_https' => true]);
+    }
+
+    public function testANestedAndAFlatCsrfSettingAreRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'security' sets both 'csrf.enabled' and 'csrfEnabled': keep one.");
+
+        SecurityConfig::fromArray(['csrf' => ['enabled' => true], 'csrfEnabled' => false]);
+    }
+
+    public function testTwoSpellingsOfAHeaderSettingAreRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            "Configuration section 'security.headers' sets both 'xFrameOptions' and 'x_frame_options': keep one.",
+        );
+
+        SecurityConfig::fromArray(['headers' => ['xFrameOptions' => '', 'x_frame_options' => 'DENY']]);
     }
 }

@@ -130,4 +130,12 @@ final class CsrfConfigTest extends TestCase
             );
         }
     }
+
+    public function testFromArrayRefusesTwoSpellingsOfOneSetting(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'csrf' sets both 'bodyField' and 'body_field': keep one.");
+
+        CsrfConfig::fromArray(['bodyField' => '_token', 'body_field' => '_csrf']);
+    }
 }

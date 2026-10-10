@@ -28,7 +28,8 @@ use Zephyrus\Security\SecureHeadersConfig;
  *       key: !env ENCRYPTION_KEY
  *
  * Flat keys (csrfEnabled, csrfExceptions, encryptionKey) are still accepted at the top level,
- * and every key also accepts snake_case. Any other key is refused.
+ * and every key also accepts snake_case. Any other key, and a setting written under two of its
+ * spellings (nested or flat), is refused.
  *
  * Defaults:
  *   - forceHttps:     false. Enable it explicitly in production.
@@ -131,19 +132,18 @@ final readonly class SecurityConfig
     /**
      * Build a SecurityConfig from a plain key-value array.
      *
-     * Nested keys (csrf:, encryption:) take precedence over the flat ones.
-     *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if a key is unknown, a value is not a boolean, csrf.autoHtml is true,
-     *         allowedHosts is null or names nothing, maxBodySize is negative or not a number of bytes, or a list
-     *         entry is invalid (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders), or headers is neither
-     *         null nor a mapping, or a header setting is invalid (see SecureHeadersConfig::fromArray()).
+     * @throws ConfigurationException if a key is unknown, a setting is written under two spellings, a value is not
+     *         a boolean, csrf.autoHtml is true, allowedHosts is null or names nothing, maxBodySize is negative or not
+     *         a number of bytes, or a list entry is invalid (csrfExceptions, allowedHosts, trustedProxies,
+     *         trustedHeaders), or headers is neither null nor a mapping, or a header setting is invalid (see
+     *         SecureHeadersConfig::fromArray()).
      */
     public static function fromArray(array $values): self
     {
-        ConfigKeys::assertKnown('security', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('security', $values, self::SPELLINGS);
 
-        $headers = $values['headers'] ?? null;
+        $headers = $keys->value('headers');
         if ($headers !== null && !is_array($headers)) {
             throw ConfigurationException::invalidValue(
                 'security',
@@ -153,19 +153,13 @@ final readonly class SecurityConfig
             );
         }
 
-        $csrf = isset($values['csrf']) && is_array($values['csrf']) ? $values['csrf'] : [];
-        $encryption = isset($values['encryption']) && is_array($values['encryption']) ? $values['encryption'] : [];
-        $sections = ['values' => $values, 'csrf' => $csrf, 'encryption' => $encryption];
+        $forceHttps = self::readBool($keys, 'forceHttps', false);
+        $csrfEnabled = self::readBool($keys, 'csrfEnabled', true);
+        $csrfAutoHtml = self::readBool($keys, 'csrfAutoHtml', false);
+        $csrfExceptions = (array) ($keys->value('csrfExceptions') ?? []);
 
-        $forceHttps = self::readBool('forceHttps', $sections, false);
-        $csrfEnabled = self::readBool('csrfEnabled', $sections, true);
-        $autoHtml = self::findWritten('csrfAutoHtml', $sections);
-        $csrfAutoHtml = $autoHtml === null ? false : ConfigBoolean::parse('security', $autoHtml[0], $autoHtml[1]);
-        $csrfExceptions = (array) (self::read('csrfExceptions', $sections) ?? []);
-
-        $declaredKeys = self::declaredKeys($sections);
-        $allowedHostsValue = self::read('allowedHosts', $sections);
-        if ($allowedHostsValue === null && in_array('allowedHosts', $declaredKeys, true)) {
+        $allowedHostsValue = $keys->value('allowedHosts');
+        if ($allowedHostsValue === null && $keys->has('allowedHosts')) {
             throw ConfigurationException::invalidValue('security', 'allowedHosts', null, 'an empty list is written []');
         }
 
@@ -174,15 +168,14 @@ final readonly class SecurityConfig
             throw ConfigurationException::invalidValue('security', 'allowedHosts', $allowedHostsValue, 'set the variable to at least one entry, or remove it');
         }
 
-        $writtenMaxBodySize = self::findWritten('maxBodySize', $sections);
-        $maxBodySize = $writtenMaxBodySize === null
+        $maxBodySize = $keys->value('maxBodySize') === null
             ? 2_097_152
-            : self::byteCount($writtenMaxBodySize[0], $writtenMaxBodySize[1]);
-        $trustedProxies = self::listValue(self::read('trustedProxies', $sections));
+            : self::byteCount($keys->key('maxBodySize'), $keys->value('maxBodySize'));
+        $trustedProxies = self::listValue($keys->value('trustedProxies'));
         // An absent key takes the default set. An explicit [] is a valid, strictest setting.
-        $trustedHeaders = (array) (self::read('trustedHeaders', $sections) ?? Request::TRUSTED_HEADERS_DEFAULT);
+        $trustedHeaders = (array) ($keys->value('trustedHeaders') ?? Request::TRUSTED_HEADERS_DEFAULT);
 
-        $encryptionKey = self::read('encryptionKey', $sections);
+        $encryptionKey = $keys->value('encryptionKey');
         if (is_string($encryptionKey)) {
             $encryptionKey = trim($encryptionKey);
             if ($encryptionKey === '') {
@@ -193,12 +186,10 @@ final readonly class SecurityConfig
         }
 
         if ($csrfAutoHtml) {
-            [$written, $rawValue] = $autoHtml;
-
             throw ConfigurationException::invalidValue(
                 'security',
-                $written,
-                $rawValue,
+                $keys->key('csrfAutoHtml'),
+                $keys->value('csrfAutoHtml'),
                 'remove this line. ' . sprintf(CsrfConfig::INJECTION_REFUSAL, '_csrf_token'),
             );
         }
@@ -275,7 +266,7 @@ final readonly class SecurityConfig
             trustedProxies: array_values($trustedProxies),
             encryptionKey: $encryptionKey,
             trustedHeaders: $normalizedTrustedHeaders,
-            declaredKeys: $declaredKeys,
+            declaredKeys: $keys->properties(),
             headers: is_array($headers) ? SecureHeadersConfig::fromArray($headers) : null,
         );
     }
@@ -335,79 +326,14 @@ final readonly class SecurityConfig
     }
 
     /**
-     * The canonical names the source array mentioned, under any accepted spelling. See isDeclared().
+     * A null value reads as the default.
      *
-     * @param array<string, array<string, mixed>> $sections Source array and nested sections, by name.
-     * @return list<string>
-     */
-    private static function declaredKeys(array $sections): array
-    {
-        $declared = [];
-
-        foreach (self::SPELLINGS as $canonical => $spellings) {
-            foreach ($spellings as $path) {
-                [$section, $key] = self::location($path);
-                if (array_key_exists($key, $sections[$section])) {
-                    $declared[] = $canonical;
-                    continue 2;
-                }
-            }
-        }
-
-        return $declared;
-    }
-
-    /**
-     * @param array<string, array<string, mixed>> $sections
      * @throws ConfigurationException when the written value is not a boolean.
      */
-    private static function readBool(string $canonical, array $sections, bool $default): bool
+    private static function readBool(ConfigKeys $keys, string $property, bool $default): bool
     {
-        $written = self::findWritten($canonical, $sections);
+        $value = $keys->value($property);
 
-        return $written === null ? $default : ConfigBoolean::parse('security', $written[0], $written[1]);
-    }
-
-    /**
-     * The setting's value as `??` would pick it across its spellings, or null when no spelling wrote it.
-     *
-     * @param array<string, array<string, mixed>> $sections
-     */
-    private static function read(string $canonical, array $sections): mixed
-    {
-        return self::findWritten($canonical, $sections)[1] ?? null;
-    }
-
-    /**
-     * The first spelling that wrote a non-null value, as a path such as "csrf.auto_html",
-     * with that raw value. Null values are skipped.
-     *
-     * @param array<string, array<string, mixed>> $sections
-     * @return array{string, mixed}|null
-     */
-    private static function findWritten(string $canonical, array $sections): ?array
-    {
-        foreach (self::SPELLINGS[$canonical] as $path) {
-            [$section, $key] = self::location($path);
-            $value = $sections[$section][$key] ?? null;
-
-            if ($value !== null) {
-                return [$path, $value];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * The section and key of a spelling, the top level being 'values'.
-     *
-     * @return array{string, string}
-     */
-    private static function location(string $path): array
-    {
-        $parts = explode('.', $path, 2);
-
-        return count($parts) === 2 ? [$parts[0], $parts[1]] : ['values', $path];
+        return $value === null ? $default : ConfigBoolean::parse('security', $keys->key($property), $value);
     }
 }

@@ -132,7 +132,7 @@ final class CsrfConfig
     /**
      * Build from a plain associative array.
      *
-     * Accepted keys, in priority order when several are set (first non-null wins):
+     * Accepted keys, one spelling per setting:
      * enabled | csrf_enabled | csrfEnabled (default true);
      * bodyField | body_field (default "_csrf_token");
      * headerName | header_name (default "X-CSRF-Token");
@@ -142,29 +142,19 @@ final class CsrfConfig
      *
      * @param array<string, mixed> $config
      * @throws InvalidArgumentException when injectToken is true or an exclusion list or pattern is refused.
-     * @throws ConfigurationException when a key is unknown, or enabled or injectToken is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown or a setting is written in two spellings, or enabled or
+     *         injectToken is not a recognisable boolean.
      */
     public static function fromArray(array $config): self
     {
-        ConfigKeys::assertKnown('csrf', $config, self::SPELLINGS);
+        $keys = ConfigKeys::read('csrf', $config, self::SPELLINGS);
 
         return new self(
-            enabled: ConfigBoolean::firstSet('csrf', $config, ['enabled', 'csrf_enabled', 'csrfEnabled'], true),
-            bodyField: (string) ($config['bodyField'] ?? $config['body_field'] ?? '_csrf_token'),
-            headerName: (string) ($config['headerName'] ?? $config['header_name'] ?? 'X-CSRF-Token'),
-            injectToken: ConfigBoolean::firstSet(
-                'csrf',
-                $config,
-                ['injectToken', 'inject_token', 'csrf_auto_html', 'csrfAutoHtml'],
-                false,
-            ),
-            excludedPathPatterns: self::normalizeExcludedPathPatterns(
-                $config['excludedPathPatterns']
-                ?? $config['excluded_path_patterns']
-                ?? $config['csrf_exceptions']
-                ?? $config['csrfExceptions']
-                ?? []
-            ),
+            enabled: ConfigBoolean::firstSet('csrf', $config, self::SPELLINGS['enabled'], true),
+            bodyField: (string) ($keys->value('bodyField') ?? '_csrf_token'),
+            headerName: (string) ($keys->value('headerName') ?? 'X-CSRF-Token'),
+            injectToken: ConfigBoolean::firstSet('csrf', $config, self::SPELLINGS['injectToken'], false),
+            excludedPathPatterns: self::normalizeExcludedPathPatterns($keys->value('excludedPathPatterns') ?? []),
         );
     }
 

@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Core\Config;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\Environment;
 
 /**
@@ -133,6 +134,19 @@ final class ConfigurationYamlTest extends TestCase
             'application' => ['environment' => 'testing', 'debug' => true],
         ], sectionFactories: [
             'application' => CustomAppConfig::class,
+        ]);
+    }
+
+    public function testAnOverrideWrittenInTheOtherSpellingIsRefusedRatherThanLost(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            "Configuration section 'security.headers' sets both 'xFrameOptions' and 'x_frame_options': keep one.",
+        );
+
+        Configuration::fromYamlFiles([
+            $this->fixturesDir . '/test-config-headers-base.yml',
+            $this->fixturesDir . '/test-config-headers-override.yml',
         ]);
     }
 }

@@ -1,0 +1,3 @@
+security:
+  headers:
+    x_frame_options: DENY

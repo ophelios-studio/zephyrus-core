@@ -118,30 +118,30 @@ final readonly class SessionConfig
     /**
      * Build a SessionConfig from a plain key-value array.
      *
-     * Accepts camelCase and snake_case keys (e.g. http_only, same_site, idle_timeout).
+     * Accepts camelCase and snake_case keys (e.g. http_only, same_site, idle_timeout), one spelling per setting.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException on an unknown key, a non-boolean secure or httpOnly, an idleTimeout that is not
-     *         a positive integer within range, or any constructor rule (empty name, negative lifetime,
-     *         unknown sameSite, or a combination browsers would discard).
+     * @throws ConfigurationException on an unknown key, two spellings of one setting, a non-boolean secure or
+     *         httpOnly, an idleTimeout that is not a positive integer within range, or any constructor rule
+     *         (empty name, negative lifetime, unknown sameSite, or a combination browsers would discard).
      */
     public static function fromArray(array $values): self
     {
-        ConfigKeys::assertKnown('session', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('session', $values, self::SPELLINGS);
 
-        $rawSecure = $values['secure'] ?? null;
+        $rawSecure = $keys->value('secure');
         $auto = $rawSecure === null
             || (is_string($rawSecure) && strtolower(trim($rawSecure)) === 'auto');
 
         return new self(
-            name:       (string) ($values['name']                                 ?? 'PHPSESSID'),
-            lifetime:   (int)    ($values['lifetime']                             ?? 0),
-            httpOnly:   ConfigBoolean::firstSet('session', $values, ['httpOnly', 'http_only'], true),
+            name:       (string) ($keys->value('name') ?? 'PHPSESSID'),
+            lifetime:   (int) ($keys->value('lifetime') ?? 0),
+            httpOnly:   ConfigBoolean::firstSet('session', $values, self::SPELLINGS['httpOnly'], true),
             secure:     !$auto && ConfigBoolean::parse('session', 'secure', $rawSecure),
-            sameSite:   (string) ($values['sameSite']   ?? $values['same_site']   ?? 'Lax'),
-            cookiePath: (string) ($values['cookiePath'] ?? $values['cookie_path'] ?? '/'),
+            sameSite:   (string) ($keys->value('sameSite') ?? 'Lax'),
+            cookiePath: (string) ($keys->value('cookiePath') ?? '/'),
             secureAuto: $auto,
-            idleTimeout: self::idleTimeoutFrom($values['idleTimeout'] ?? $values['idle_timeout'] ?? null),
+            idleTimeout: self::idleTimeoutFrom($keys->value('idleTimeout')),
         );
     }
 

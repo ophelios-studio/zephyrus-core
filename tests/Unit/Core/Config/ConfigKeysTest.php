@@ -22,7 +22,7 @@ final class ConfigKeysTest extends TestCase
 
     public function testEveryAcceptedSpellingPasses(): void
     {
-        ConfigKeys::assertKnown('example', [
+        ConfigKeys::read('example', [
             'force_https' => true,
             'csrf' => ['csrf_enabled' => true],
             'password' => 'secret',
@@ -35,7 +35,7 @@ final class ConfigKeysTest extends TestCase
     public function testAMisspelledKeyIsRefusedWithTheClosestSpelling(): void
     {
         try {
-            ConfigKeys::assertKnown('example', ['forceHtps' => true], self::SPELLINGS);
+            ConfigKeys::read('example', ['forceHtps' => true], self::SPELLINGS);
 
             self::fail('A misspelled key was accepted.');
         } catch (ConfigurationException $exception) {
@@ -65,7 +65,7 @@ final class ConfigKeysTest extends TestCase
     public function testTheSuggestionMatchesAcrossCaseUnderscoresAndHyphens(string $written, string $suggested): void
     {
         try {
-            ConfigKeys::assertKnown('example', [$written => true], self::SPELLINGS);
+            ConfigKeys::read('example', [$written => true], self::SPELLINGS);
 
             self::fail('A loose spelling was accepted.');
         } catch (ConfigurationException $exception) {
@@ -76,7 +76,7 @@ final class ConfigKeysTest extends TestCase
     public function testAKeyNearNoSpellingListsTheAcceptedKeys(): void
     {
         try {
-            ConfigKeys::assertKnown('example', ['timeout' => 30], self::SPELLINGS);
+            ConfigKeys::read('example', ['timeout' => 30], self::SPELLINGS);
 
             self::fail('An unknown key was accepted.');
         } catch (ConfigurationException $exception) {
@@ -90,7 +90,7 @@ final class ConfigKeysTest extends TestCase
     public function testAKeyInsideANestedMappingIsCheckedAgainstThatMapping(): void
     {
         try {
-            ConfigKeys::assertKnown('example', ['csrf' => ['enabeld' => false]], self::SPELLINGS);
+            ConfigKeys::read('example', ['csrf' => ['enabeld' => false]], self::SPELLINGS);
 
             self::fail('A misspelled nested key was accepted.');
         } catch (ConfigurationException $exception) {
@@ -107,7 +107,7 @@ final class ConfigKeysTest extends TestCase
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage("field 'csfr' is an unknown key: did you mean \"csrf\"?");
 
-        ConfigKeys::assertKnown('example', ['csfr' => ['enabled' => false]], self::SPELLINGS);
+        ConfigKeys::read('example', ['csfr' => ['enabled' => false]], self::SPELLINGS);
     }
 
     public function testADottedTopLevelKeyIsNotReadAsANestedOne(): void
@@ -115,7 +115,7 @@ final class ConfigKeysTest extends TestCase
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage("field 'csrf.enabled' is an unknown key: did you mean \"csrfEnabled\"?");
 
-        ConfigKeys::assertKnown('example', ['csrf.enabled' => false], self::SPELLINGS);
+        ConfigKeys::read('example', ['csrf.enabled' => false], self::SPELLINGS);
     }
 
     /**
@@ -131,7 +131,7 @@ final class ConfigKeysTest extends TestCase
     #[DataProvider('nonMappingValues')]
     public function testAMappingNameHoldingNoMappingIsLeftToTheCaller(mixed $value): void
     {
-        ConfigKeys::assertKnown('example', ['csrf' => $value], self::SPELLINGS);
+        ConfigKeys::read('example', ['csrf' => $value], self::SPELLINGS);
 
         $this->addToAssertionCount(1);
     }
@@ -139,7 +139,7 @@ final class ConfigKeysTest extends TestCase
     public function testTheValueOfAnUnknownKeyStaysOutOfTheMessage(): void
     {
         try {
-            ConfigKeys::assertKnown('example', ['pasword' => 'hunter2-secret'], self::SPELLINGS);
+            ConfigKeys::read('example', ['pasword' => 'hunter2-secret'], self::SPELLINGS);
 
             self::fail('A misspelled key was accepted.');
         } catch (ConfigurationException $exception) {
@@ -171,7 +171,7 @@ final class ConfigKeysTest extends TestCase
     public function testAnUnusualKeyIsRefusedAndShownEscaped(array $values, string $expectedEnd): void
     {
         try {
-            ConfigKeys::assertKnown('example', $values, self::SPELLINGS);
+            ConfigKeys::read('example', $values, self::SPELLINGS);
 
             self::fail('An unusual key was accepted.');
         } catch (ConfigurationException $exception) {
@@ -184,7 +184,7 @@ final class ConfigKeysTest extends TestCase
         $key = str_repeat('h', 1_000_000);
 
         try {
-            ConfigKeys::assertKnown('example', [$key => 'x'], self::SPELLINGS);
+            ConfigKeys::read('example', [$key => 'x'], self::SPELLINGS);
 
             self::fail('A huge key was accepted.');
         } catch (ConfigurationException $exception) {
@@ -201,6 +201,56 @@ final class ConfigKeysTest extends TestCase
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage("field 'hp' is an unknown key: " . self::ACCEPTED);
 
-        ConfigKeys::assertKnown('example', ['hp' => 'x'], self::SPELLINGS);
+        ConfigKeys::read('example', ['hp' => 'x'], self::SPELLINGS);
+    }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed>, string}>
+     */
+    public static function twoSpellingsOfOneProperty(): iterable
+    {
+        yield 'camelCase and snake_case' => [['forceHttps' => false, 'force_https' => true], "'forceHttps' and 'force_https'"];
+        yield 'declared null and a value' => [['forceHttps' => null, 'force_https' => true], "'forceHttps' and 'force_https'"];
+        yield 'nested and flat' => [['csrf' => ['enabled' => false], 'csrfEnabled' => true], "'csrf.enabled' and 'csrfEnabled'"];
+        yield 'two nested' => [['csrf' => ['enabled' => false, 'csrf_enabled' => true]], "'csrf.enabled' and 'csrf.csrf_enabled'"];
+    }
+
+    /**
+     * @param array<array-key, mixed> $values
+     */
+    #[DataProvider('twoSpellingsOfOneProperty')]
+    public function testTwoSpellingsOfOnePropertyAreRefused(array $values, string $keys): void
+    {
+        try {
+            ConfigKeys::read('example', $values, self::SPELLINGS);
+
+            self::fail('Two spellings of one property were accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame("Configuration section 'example' sets both " . $keys . ': keep one.', $exception->getMessage());
+            self::assertSame('example', $exception->section());
+        }
+    }
+
+    public function testReadReturnsTheKeyAndValueOfEachWrittenProperty(): void
+    {
+        $keys = ConfigKeys::read('example', ['force_https' => true, 'csrf' => ['enabled' => '0'], 'host' => null], self::SPELLINGS);
+
+        self::assertSame(['forceHttps', 'csrfEnabled', 'host'], $keys->properties());
+        self::assertSame('force_https', $keys->key('forceHttps'));
+        self::assertTrue($keys->value('forceHttps'));
+        self::assertSame('csrf.enabled', $keys->key('csrfEnabled'));
+        self::assertSame('0', $keys->value('csrfEnabled'));
+        self::assertTrue($keys->has('host'));
+        self::assertNull($keys->value('host'));
+    }
+
+    public function testAnAbsentPropertyReadsAsNullUnderItsPreferredSpelling(): void
+    {
+        $keys = ConfigKeys::read('example', ['csrf' => 'not a mapping'], self::SPELLINGS);
+
+        self::assertFalse($keys->has('csrfEnabled'));
+        self::assertNull($keys->value('csrfEnabled'));
+        self::assertSame('csrf.enabled', $keys->key('csrfEnabled'));
+        self::assertSame([], $keys->properties());
     }
 }

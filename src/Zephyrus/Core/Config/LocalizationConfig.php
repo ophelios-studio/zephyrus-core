@@ -9,7 +9,7 @@ use Zephyrus\Formatting\FormatterInput;
 /**
  * Immutable localization bootstrap config.
  *
- * YAML keys (snake_case aliases accepted where listed; any other key is refused):
+ * YAML keys (aliases accepted where listed, one spelling per setting; any other key is refused):
  * - locale (defaultLocale, default_locale): translator default locale, lower-cased, so 'fr-CA' is
  *   stored as 'fr-ca'. Default 'en'.
  * - supportedLocales (supported_locales): negotiation allowlist. Trimmed, lower-cased, blanks dropped.
@@ -28,11 +28,14 @@ use Zephyrus\Formatting\FormatterInput;
  */
 final readonly class LocalizationConfig
 {
+    /** Keys that hold the legacy array form of localePath. */
+    private const array LEGACY_LOCALE_PATH_KEYS = ['jsonLocalePaths', 'json_locale_paths'];
+
     /** Accepted keys per property, preferred first; any other key is refused. */
     private const array SPELLINGS = [
         'locale' => ['locale', 'defaultLocale', 'default_locale'],
         'supportedLocales' => ['supportedLocales', 'supported_locales'],
-        'localePath' => ['localePath', 'locale_path', 'jsonLocalePaths', 'json_locale_paths'],
+        'localePath' => ['localePath', 'locale_path', ...self::LEGACY_LOCALE_PATH_KEYS],
         'timezone' => ['timezone'],
         'currency' => ['currency'],
         'dateFormat' => ['dateFormat', 'date_format'],
@@ -59,24 +62,24 @@ final readonly class LocalizationConfig
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if a key is unknown, locale or timezone is blank, or currency or
-     *         grouping_separator is invalid.
+     * @throws ConfigurationException if a key is unknown, a setting is written in two spellings, locale or timezone
+     *         is blank, or currency or grouping_separator is invalid.
      */
     public static function fromArray(array $values): self
     {
-        ConfigKeys::assertKnown('localization', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('localization', $values, self::SPELLINGS);
 
-        $locale = trim((string) ($values['locale'] ?? $values['defaultLocale'] ?? $values['default_locale'] ?? 'en'));
-        $supportedLocales = (array) ($values['supportedLocales'] ?? $values['supported_locales'] ?? []);
+        $locale = trim((string) ($keys->value('locale') ?? 'en'));
+        $supportedLocales = (array) ($keys->value('supportedLocales') ?? []);
 
-        $localePath = self::resolveLocalePath($values);
+        $localePath = self::resolveLocalePath($keys);
 
-        $timezone = trim((string) ($values['timezone'] ?? 'UTC'));
-        $currency = self::resolveCurrency($values['currency'] ?? null);
-        $dateFormat = trim((string) ($values['dateFormat'] ?? $values['date_format'] ?? 'medium'));
-        $timeFormat = trim((string) ($values['timeFormat'] ?? $values['time_format'] ?? 'short'));
-        $datetimeFormat = trim((string) ($values['datetimeFormat'] ?? $values['datetime_format'] ?? 'medium'));
-        $groupingSeparator = self::resolveGroupingSeparator($values['groupingSeparator'] ?? $values['grouping_separator'] ?? null);
+        $timezone = trim((string) ($keys->value('timezone') ?? 'UTC'));
+        $currency = self::resolveCurrency($keys->value('currency'));
+        $dateFormat = trim((string) ($keys->value('dateFormat') ?? 'medium'));
+        $timeFormat = trim((string) ($keys->value('timeFormat') ?? 'short'));
+        $datetimeFormat = trim((string) ($keys->value('datetimeFormat') ?? 'medium'));
+        $groupingSeparator = self::resolveGroupingSeparator($keys->value('groupingSeparator'));
 
         if ($locale === '') {
             throw ConfigurationException::invalidValue('localization', 'locale', $locale, 'must be non-empty');
@@ -157,19 +160,16 @@ final readonly class LocalizationConfig
 
     /**
      * Resolve the locale path from new or legacy config keys.
-     *
-     * @param array<string, mixed> $values
      */
-    private static function resolveLocalePath(array $values): ?string
+    private static function resolveLocalePath(ConfigKeys $keys): ?string
     {
-        // localePath wins over the legacy keys, even when it is blank.
-        if (isset($values['localePath']) || isset($values['locale_path'])) {
-            $path = trim((string) ($values['localePath'] ?? $values['locale_path'] ?? ''));
+        if (!in_array($keys->key('localePath'), self::LEGACY_LOCALE_PATH_KEYS, true)) {
+            $path = trim((string) ($keys->value('localePath') ?? ''));
             return $path !== '' ? $path : null;
         }
 
-        $legacyPaths = $values['jsonLocalePaths'] ?? $values['json_locale_paths'] ?? null;
-        if ($legacyPaths !== null && is_array($legacyPaths)) {
+        $legacyPaths = $keys->value('localePath');
+        if (is_array($legacyPaths)) {
             $filtered = array_values(array_filter(array_map(static function (mixed $p): string {
                 return trim((string) $p);
             }, $legacyPaths), static fn (string $p): bool => $p !== ''));
