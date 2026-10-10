@@ -12,26 +12,19 @@ use Zephyrus\Routing\RouteUrlGenerator;
 use Zephyrus\Session\SessionManager;
 
 /**
- * Lightweight application registry for global helper function access.
+ * Process-wide registry of framework services, for the global helper functions
+ * (env(), config(), session(), localize(), format(), asset(), route(), nonce()).
  *
- * Holds references to framework services so that global helper functions
- * (env(), config(), session(), localize(), format(), asset(), route(), nonce()) can
- * access them without dependency injection.
- *
- * Usage in bootstrap:
+ * Bootstrap:
  *
  *   App::setConfiguration($config);
  *   App::setSession($session);
  *   App::setFormatter(new Formatter('en_US'));
  *   App::setAsset(new Asset('/public'));
  *
- * The set*() methods can be called at any time (e.g. during ApplicationBuilder
- * wiring) and are idempotent. The get*() methods return null when the service
- * has not been set, so helpers can degrade gracefully.
- *
- * The state assumes one request per process (php-fpm, mod_php), as does the
- * PHP session. Persistent workers (RoadRunner, Swoole, FrankenPHP worker mode)
- * are not supported; reset() is a testing tool, not a between-requests hook.
+ * The get*() methods return null when the service is not set. The state assumes
+ * one request per process (php-fpm, mod_php): persistent workers (RoadRunner,
+ * Swoole, FrankenPHP worker mode) are not supported.
  */
 final class App
 {
@@ -50,8 +43,6 @@ final class App
     {
     }
 
-    // ─── Configuration ────────────────────────────────────────────────
-
     public static function setConfiguration(Configuration $configuration): void
     {
         self::$configuration = $configuration;
@@ -61,8 +52,6 @@ final class App
     {
         return self::$configuration;
     }
-
-    // ─── Session ──────────────────────────────────────────────────────
 
     public static function setSession(SessionManager $session): void
     {
@@ -74,8 +63,6 @@ final class App
         return self::$session;
     }
 
-    // ─── Formatter ────────────────────────────────────────────────────
-
     public static function setFormatter(Formatter $formatter): void
     {
         self::$formatter = $formatter;
@@ -86,8 +73,6 @@ final class App
         return self::$formatter;
     }
 
-    // ─── Asset ────────────────────────────────────────────────────────
-
     public static function setAsset(Asset $asset): void
     {
         self::$asset = $asset;
@@ -97,8 +82,6 @@ final class App
     {
         return self::$asset;
     }
-
-    // ─── URL generator ────────────────────────────────────────────────
 
     /**
      * Installs the generator used by route(); null clears it.
@@ -113,8 +96,6 @@ final class App
         return self::$urlGenerator;
     }
 
-    // ─── Translator ───────────────────────────────────────────────────
-
     public static function setTranslator(Translator $translator): void
     {
         self::$translator = $translator;
@@ -125,12 +106,8 @@ final class App
         return self::$translator;
     }
 
-    // ─── CSP Nonce ────────────────────────────────────────────────────
-
     /**
-     * Get or generate the CSP nonce for the current request.
-     *
-     * The nonce is generated once per request and reused for consistency.
+     * Returns the CSP nonce, generated on first call and reused until resetNonce().
      */
     public static function nonce(): string
     {
@@ -141,17 +118,15 @@ final class App
     }
 
     /**
-     * Reset the nonce (useful between requests in tests).
+     * Forgets the CSP nonce, so the next nonce() call generates a new one.
      */
     public static function resetNonce(): void
     {
         self::$nonce = null;
     }
 
-    // ─── Reset (testing) ──────────────────────────────────────────────
-
     /**
-     * Clear all registered services. Useful in test tearDown().
+     * Clears all registered services. Intended for test tearDown().
      */
     public static function reset(): void
     {

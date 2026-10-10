@@ -36,19 +36,12 @@ final readonly class Application
     }
 
     /**
-     * Translate $key using the locale resolved from the request's Accept-Language header
-     * and/or an explicit $requestedLocale override (URL segment, cookie, form field, …).
+     * Translates $key in the locale resolved from, in order: $requestedLocale
+     * (URL segment, cookie, form field), the Accept-Language header of $request,
+     * then the application default. With neither $request nor $requestedLocale,
+     * the translator's own default locale applies.
      *
-     * Resolution order (highest to lowest priority):
-     *   1. $requestedLocale when provided.
-     *   2. Accept-Language header from $request (q-value ordered, regional fallback).
-     *   3. Application default locale.
-     *
-     * When both $request and $requestedLocale are null the translator's own default
-     * locale is used, equivalent to calling trans() without an explicit locale.
-     *
-     * $supportedLocales, when non-empty, restricts resolution to that set and
-     * overrides the application-level supported-locale list for this call only.
+     * A non-empty $supportedLocales replaces the application allowlist for this call only.
      *
      * @param array<string, scalar|null> $parameters
      * @param string[]                   $supportedLocales Per-call allowlist override.
@@ -66,7 +59,8 @@ final readonly class Application
     }
 
     /**
-     * Resolve a locale token using the same policy as transFromRequest().
+     * Resolves the locale with the same policy as transFromRequest(). Returns
+     * null when neither $request nor $requestedLocale is given.
      *
      * @param string[] $supportedLocales Per-call allowlist override.
      */

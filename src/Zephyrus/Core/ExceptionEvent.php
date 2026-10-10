@@ -8,61 +8,30 @@ use Throwable;
 use Zephyrus\Http\Request;
 
 /**
- * Fired by HttpKernel every time a throwable is turned into an error response.
+ * Fired by HttpKernel each time a throwable is turned into an error response.
  *
- * This is the reporting seam. Since the error conversion happens INSIDE the
- * global middleware pipeline (so that error responses carry the security
- * headers), a global middleware's call to $next() RETURNS a 500 rather than
- * letting the exception propagate. A middleware written as
- * "catch, report, rethrow" therefore never sees the throwable. Without this
- * event an error reporter would go quiet with nothing to indicate it had, which
- * is the worst possible failure mode for a reporter. Listen here instead.
+ * This is the reporting seam. Error conversion happens inside the global
+ * middleware pipeline, so a middleware's $next() returns the error response
+ * rather than throwing. A middleware doing "catch, report, rethrow" never sees
+ * the throwable: report here instead.
  *
- * ## Observation only, deliberately
+ * The event is observation only. A listener cannot replace the response: use
+ * KernelBuilder::withExceptionHandler() to map an exception to a response, or
+ * ResponseEvent to change the final one. A listener that throws is logged and
+ * skipped, and the remaining listeners still run.
  *
- * A listener CANNOT replace the response. That is not an oversight. The
- * framework already has two seams for changing an error response, and adding a
- * third with its own precedence rules would make it unclear which one wins:
- *
- *   - KernelBuilder::withExceptionHandler() maps an exception class to a
- *     response, BEFORE the response is built.
- *   - ResponseEvent fires after the response is built and may replace it
- *     wholesale, error responses included.
- *
- * Keeping this event read-only means a reporter cannot break error handling by
- * accident, and a listener that throws can be swallowed safely because it had
- * no influence on the response to begin with.
- *
- * ## A listener that throws is swallowed
- *
- * HttpKernel catches anything a listener throws and carries on building the
- * response. A broken reporter must never turn a handled 404 into a dead
- * connection. Each listener is isolated: a failure is written to the error log
- * and the remaining listeners still run.
- *
- * ## Firing rules
- *
- * Fires exactly once per throwable, at the single point where the kernel
- * converts one. It never fires for a throwable that was already reported, and
- * it cannot re-enter the pipeline, so it cannot loop. A request that produces
- * two distinct throwables (a handler failing, then the exception responder
- * itself failing) fires twice, once for each, with different sources.
+ * Fires once per throwable. A request whose handler fails and whose exception
+ * responder then fails fires twice, with different sources.
  *
  * Example:
  *
  *   $dispatcher->addListener(ExceptionEvent::class, function (ExceptionEvent $e): void {
- *       // A 404 is routine; a handler blowing up is not.
  *       if ($e->isRoutingFailure()) {
  *           return;
  *       }
  *
  *       $reporter->capture($e->getException(), [
- *           // path() is the route that actually dispatched. Record the raw
- *           // target alongside it when the record is evidence: the two can
- *           // only differ for a deliberately malformed request, and that
- *           // difference is itself worth keeping.
- *           'path'    => $e->getRequest()->path(),
- *           'rawPath' => $e->getRequest()->uri()->path(),
+ *           'path'   => $e->getRequest()->path(),
  *           'method' => $e->getRequest()->method,
  *           'source' => $e->getSource(),
  *       ]);
@@ -111,11 +80,7 @@ final class ExceptionEvent extends KernelEvent
     }
 
     /**
-     * Return true when nothing matched the request, i.e. this is a 404 or a
-     * 405 rather than an application failure.
-     *
-     * Most reporters want to ignore these: a missing URL is routine traffic and
-     * reporting it drowns the real failures.
+     * Return true for a 404 or 405 (no route matched), which most reporters ignore.
      */
     public function isRoutingFailure(): bool
     {

@@ -20,10 +20,12 @@ use Zephyrus\Security\ContentSecurityPolicyMiddleware;
 use Zephyrus\Security\SecureHeadersMiddleware;
 
 /**
- * Fluent builder that assembles a ready-to-use HttpKernel from high-level
- * configuration without requiring callers to wire the internal pipeline by hand.
+ * Fluent builder assembling a ready-to-use HttpKernel from high-level
+ * configuration, without wiring the internal pipeline by hand.
  *
- * ## Typical usage
+ * Global middlewares wrap error responses as well as successful ones, so a
+ * 404, a 405 and a 500 carry the same decorations as a 200. Route middlewares
+ * only run for a route that matched.
  *
  * ```php
  * $kernel = KernelBuilder::create()
@@ -39,25 +41,6 @@ use Zephyrus\Security\SecureHeadersMiddleware;
  *
  * $response = $kernel->handle($request);
  * ```
- *
- * ## What the builder wires
- *
- * ```
- * Request
- *   └─▶ HttpKernel::handle()
- *         ├─▶ RouteDispatcher::match()             (from Router, failure deferred)
- *         ├─▶ MiddlewarePipeline::handle()         (GLOBAL middlewares, wrap everything)
- *         │     ├─▶ RouteDispatcher::dispatchMatch()
- *         │     │     ├─▶ per-route middlewares    (via registerMiddleware registry)
- *         │     │     └─▶ HandlerResolver::resolve() (ClassName@method → Response)
- *         │     │           └─▶ Controller method  (Request / scalar injection)
- *         │     └─▶ HttpExceptionResponder         (on any Throwable, INSIDE the pipeline)
- *         └─▶ HttpExceptionResponder               (backstop: a global middleware threw)
- * ```
- *
- * Global middlewares wrap error responses as well as successful ones, so a
- * 404, a 405 and a 500 all carry the security headers a 200 carries. Route
- * middlewares only run for a route that actually matched.
  */
 final class KernelBuilder
 {
@@ -105,10 +88,7 @@ final class KernelBuilder
     }
 
     /**
-     * Appends a global middleware that wraps every request before route
-     * matching middleware and the handler are executed.
-     *
-     * Multiple calls append in registration order.
+     * Appends a global middleware. Middlewares run in registration order.
      */
     public function withMiddleware(MiddlewareInterface $middleware): self
     {
@@ -119,13 +99,8 @@ final class KernelBuilder
     }
 
     /**
-     * Registers a named middleware that route definitions may reference.
-     *
-     * Routes declare middleware names via their `middlewares` list
-     * (e.g. `Router::get('/admin', '...', middlewares: ['auth'])`).
-     * Those names are resolved here at dispatch time.
-     *
-     * Registering the same name twice replaces the previous binding.
+     * Registers a middleware under a name that routes reference in their
+     * `middlewares` list. Registering the same name twice replaces the binding.
      */
     public function registerMiddleware(string $name, MiddlewareInterface $middleware): self
     {
@@ -136,11 +111,8 @@ final class KernelBuilder
     }
 
     /**
-     * Attaches an EventDispatcher so the kernel fires RequestEvent and
-     * ResponseEvent on every handled request.
-     *
-     * When omitted (default) the kernel operates without event hooks, which
-     * preserves the behaviour of previous versions.
+     * Attaches the EventDispatcher receiving RequestEvent, ExceptionEvent and
+     * ResponseEvent. Without one, the kernel fires no events.
      */
     public function withEventDispatcher(EventDispatcher $dispatcher): self
     {
@@ -151,8 +123,7 @@ final class KernelBuilder
     }
 
     /**
-     * Overrides the default controller factory (`new $class()`) with a custom
-     * callable — typically a DI container resolver.
+     * Overrides the default controller factory (`new $class()`), typically with a DI container resolver.
      *
      * @param callable(class-string): object $factory
      */
@@ -165,7 +136,9 @@ final class KernelBuilder
     }
 
     /**
-     * Gives the engine to every controller using RenderResponses, directly, through a parent or through another trait, in any call order with withControllerFactory(), replacing an engine the factory set.
+     * Injects the engine into every controller using RenderResponses, including
+     * through a parent class or another trait. Replaces an engine the factory
+     * set, whatever the order of calls with withControllerFactory().
      */
     public function withRenderEngine(RenderEngine $engine): self
     {
@@ -176,25 +149,10 @@ final class KernelBuilder
     }
 
     /**
-     * Wires a DI container as the controller factory.
+     * Shorthand for withControllerFactory(): whichever of the two is called last wins.
      *
-     * This is a convenience wrapper around withControllerFactory() for the
-     * common case of resolving controllers from a ContainerInterface (e.g.
-     * the built-in Container with auto-wiring).
-     *
-     * ```php
-     * $container = new Container();
-     * $container->singleton(UserRepository::class, fn ($c) => new UserRepository($c->get(Database::class)));
-     *
-     * $kernel = KernelBuilder::create()
-     *     ->withRouter($router)
-     *     ->withContainer($container)
-     *     ->build();
-     * ```
-     *
-     * Controllers are resolved via ContainerInterface::get(), so auto-wiring
-     * and explicit bindings both work.  For singleton controllers the same
-     * instance is reused across requests.
+     * Resolves controllers through ContainerInterface::get(), so auto-wiring and
+     * explicit bindings both apply. A singleton binding reuses its controller across requests.
      */
     public function withContainer(ContainerInterface $container): self
     {
@@ -202,12 +160,10 @@ final class KernelBuilder
     }
 
     /**
-     * Register a custom exception handler for a specific exception class.
-     *
-     * When the kernel catches an exception, registered handlers are checked
-     * before the built-in mappings (404, 405, 422, 500). The most-specific
-     * matching class wins via instanceof. The handler receives the request
-     * without the attributes set by route middlewares, see HttpKernel.
+     * Registers a handler for an exception class, checked before the built-in
+     * mappings (404, 405, 422, 500). The most specific matching class wins, by
+     * instanceof. The handler receives the request without route middleware
+     * attributes (see HttpKernel).
      *
      * @param class-string<\Throwable> $exceptionClass
      * @param callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
@@ -222,11 +178,8 @@ final class KernelBuilder
 
     /**
      * Whether a middleware of the given class is registered, globally or under a route name.
-     *
-     * Used to avoid registering a second copy, and to tell a developer that a protection
-     * is registered under a route name only. Matching is by instanceof, so a consumer that
-     * wraps a framework middleware in a decorator is not seen; see
-     * ApplicationBuilder::withAcknowledgedSecurityKeys().
+     * Matching is by instanceof: a decorator wrapping a framework middleware is not seen
+     * (see ApplicationBuilder::withAcknowledgedSecurityKeys()).
      *
      * @param class-string $class
      */
@@ -256,11 +209,8 @@ final class KernelBuilder
     }
 
     /**
-     * Whether a middleware of the given class is registered as a GLOBAL middleware.
-     *
-     * Unlike hasMiddleware(), a middleware registered only under a route name
-     * does not count: it runs for the routes that reference that name, not for
-     * every request.
+     * Whether a middleware of the given class is registered globally. Unlike
+     * hasMiddleware(), a route-named middleware does not count.
      *
      * @param class-string $class
      */
@@ -276,10 +226,7 @@ final class KernelBuilder
     }
 
     /**
-     * Assembles and returns a fully wired HttpKernel.
-     *
-     * The builder itself is unchanged after this call and may be reused to
-     * produce additional kernels (e.g. in tests).
+     * Assembles a fully wired HttpKernel. The builder is unchanged and can build again.
      *
      * @throws ConfigurationException When an enforced ContentSecurityPolicyMiddleware is registered
      *   before a SecureHeadersMiddleware that sets a csp. The check covers GLOBAL middlewares only.
@@ -297,11 +244,7 @@ final class KernelBuilder
 
         $dispatcher = new RouteDispatcher(
             routes: $router->routes(),
-            // The global middlewares are deliberately NOT handed to the
-            // dispatcher: HttpKernel runs them one layer further out so they
-            // also wrap the error responder. The dispatcher only adds the
-            // matched route's own middlewares, which keeps the execution order
-            // identical (global first, then route, then handler).
+            // Global middlewares run in HttpKernel, not here, so they also wrap error responses.
             pipeline: new MiddlewarePipeline(),
             resolver: $resolver->resolve(...),
             routeMiddlewareResolver: $namedMiddlewares !== []
@@ -321,8 +264,7 @@ final class KernelBuilder
     }
 
     /**
-     * Returns the controller factory, wrapped so that a controller using the
-     * RenderResponses trait receives the render engine.
+     * Returns the controller factory, wrapped to inject the render engine into RenderResponses controllers.
      *
      * @return (callable(class-string): object)|null
      */
@@ -348,8 +290,7 @@ final class KernelBuilder
     }
 
     /**
-     * Whether the object's class, or one of its parents, uses the RenderResponses trait,
-     * directly or through another trait.
+     * Whether the object's class or a parent uses RenderResponses, directly or through another trait.
      */
     private static function usesRenderResponses(object $controller): bool
     {
@@ -381,8 +322,8 @@ final class KernelBuilder
     }
 
     /**
-     * The outer middleware sees the inner csp already on the response and
-     * leaves it, so the csp wins and the policy registered outside is never sent.
+     * An enforced policy registered before a csp-setting SecureHeadersMiddleware
+     * would never be sent: the inner csp is already on the response when the outer one runs.
      *
      * @throws ConfigurationException
      */

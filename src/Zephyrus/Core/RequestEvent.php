@@ -7,25 +7,9 @@ namespace Zephyrus\Core;
 use Zephyrus\Http\Response;
 
 /**
- * Fired by HttpKernel immediately before route dispatching.
- *
- * A listener may short-circuit the entire dispatch pipeline by calling
- * setResponse().  When a response is set the kernel returns it directly
- * without invoking the router or executing any further listeners (propagation
- * is stopped automatically).
- *
- * Typical use-cases:
- *   - Maintenance-mode responses
- *   - IP-level or token-level access control
- *   - Full-page cache hits that bypass routing entirely
- *
- * Example:
- *
- *   $dispatcher->addListener(RequestEvent::class, function (RequestEvent $e): void {
- *       if ($e->getRequest()->headers()->get('X-Maintenance-Key') !== 'secret') {
- *           $e->setResponse(Response::text('Down for maintenance', status: 503));
- *       }
- *   });
+ * Fired by HttpKernel before routing. A listener calling setResponse() short-circuits
+ * routing: no further RequestEvent listener runs, and the response still goes through
+ * ResponseEvent.
  */
 final class RequestEvent extends KernelEvent
 {
