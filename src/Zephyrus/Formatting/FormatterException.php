@@ -71,7 +71,7 @@ final class FormatterException extends ZephyrusRuntimeException
 
     public static function invalidLocale(string $locale): self
     {
-        return new self(sprintf('Invalid locale: %s', $locale));
+        return new self(sprintf('Invalid locale: %s', MessageValue::quote($locale)));
     }
 
     /**

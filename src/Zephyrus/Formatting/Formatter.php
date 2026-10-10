@@ -87,8 +87,8 @@ final class Formatter
      *                                             In a right-to-left locale, or inside right-to-left text, only `,` `.`
      *                                             U+00A0 and U+202F keep the groups in order; a space, U+2009, `'` or
      *                                             U+2019 reverses them.
-     * @throws FormatterException if the default currency or the grouping separator is not accepted.
-     * @throws \ValueError on PHP 8.5 and later if $locale contains a NUL byte.
+     * @throws FormatterException if $locale contains a NUL byte, or the default currency or the grouping separator
+     *         is not accepted.
      */
     public function __construct(
         string $locale = 'en_US',
@@ -98,6 +98,9 @@ final class Formatter
         string $defaultDatetimePattern = 'medium',
         ?string $groupingSeparator = null,
     ) {
+        if (str_contains($locale, "\0")) {
+            throw FormatterException::invalidLocale($locale);
+        }
         $this->locale = $locale;
         $this->french = Locale::getPrimaryLanguage($locale) === 'fr';
         $this->plainNumberLocale = $this->french ? $locale : 'en';

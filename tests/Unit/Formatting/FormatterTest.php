@@ -857,6 +857,15 @@ final class FormatterTest extends TestCase
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: "\xC3\x28");
     }
+    public function testConstructorRefusesALocaleWithANulByte(): void
+    {
+        try {
+            new Formatter("en\0US");
+            self::fail('A locale holding a NUL byte must be refused.');
+        } catch (FormatterException $exception) {
+            self::assertSame('Invalid locale: "en\u0000US"', $exception->getMessage());
+        }
+    }
 
     #[DataProviderExternal(FormatterInputTest::class, 'refusedGroupingSeparators')]
     public function testGroupingSeparatorOptionRefusesAnythingOutsideTheList(string $separator): void
