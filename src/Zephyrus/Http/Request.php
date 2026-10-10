@@ -721,6 +721,10 @@ final readonly class Request
                 $trustedProxies,
             )
             : [];
+        if ($forwarded === null) {
+            $forwarded      = [];
+            $trustedHeaders = [];
+        }
 
         $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
 
@@ -915,6 +919,9 @@ final readonly class Request
      * does not write is still caller-controlled no matter who the peer is. See
      * TRUSTED_HEADERS_DEFAULT.
      *
+     * A malformed trusted Forwarded header means the client is unknown, not the
+     * proxy: null is returned rather than REMOTE_ADDR, so an allowlist denies it.
+     *
      * @param array<string, mixed>  $server
      * @param array<string, string> $headers
      * @param string[]              $trustedProxies
@@ -934,6 +941,10 @@ final readonly class Request
         }
 
         $chain = self::forwardedChain($headers, $trustedHeaders);
+        if ($chain === null) {
+            return null;
+        }
+
         if ($chain !== []) {
             if ($remoteAddr !== null) {
                 $chain[] = $remoteAddr;
@@ -979,19 +990,25 @@ final readonly class Request
      * right of it was appended by our own trusted proxies. Please do not turn
      * this back into a hard failure.
      *
-     * Either header is skipped entirely when it is not in $trustedHeaders.
+     * Either header is skipped entirely when it is not in $trustedHeaders. A malformed
+     * Forwarded header yields null, and the caller must not fall back to other headers.
      *
      * @param  array<string, string> $headers
      * @param  list<string>          $trustedHeaders
-     * @return list<string>
+     * @return list<string>|null
      */
-    private static function forwardedChain(array $headers, array $trustedHeaders): array
+    private static function forwardedChain(array $headers, array $trustedHeaders): ?array
     {
         $chain = [];
 
         $forwarded = in_array('forwarded', $trustedHeaders, true) ? ($headers['forwarded'] ?? null) : null;
         if (is_string($forwarded)) {
-            foreach (self::splitOutsideQuotes($forwarded, ',') as $element) {
+            $elements = self::splitOutsideQuotes($forwarded, ',');
+            if ($elements === null) {
+                return null;
+            }
+
+            foreach ($elements as $element) {
                 $ip = self::normalizeIp(self::parseForwardedElement($element)['for'] ?? null);
                 if ($ip !== null) {
                     $chain[] = $ip;
@@ -1151,17 +1168,18 @@ final readonly class Request
      * trusted proxy, for buildUri(). A client can prepend elements, never append
      * them, so the walk starts at the right and stops at the first element whose
      * "for" is not a trusted proxy. When every element is trusted, the first one wins.
+     * A malformed header, one whose quoted string is never closed, yields null.
      *
      * @param string[] $trustedProxies
-     * @return array{proto?: string, host?: string, port?: string}
+     * @return array{proto?: string, host?: string, port?: string}|null
      */
-    private static function parseForwardedHeader(?string $header, array $trustedProxies): array
+    private static function parseForwardedHeader(?string $header, array $trustedProxies): ?array
     {
-        if ($header === null) {
-            return [];
+        $elements = self::splitOutsideQuotes($header ?? '', ',');
+        if ($elements === null) {
+            return null;
         }
 
-        $elements   = self::splitOutsideQuotes($header, ',');
         $parameters = [];
         for ($i = count($elements) - 1; $i >= 0; $i--) {
             if (trim($elements[$i]) === '') {
@@ -1187,11 +1205,11 @@ final readonly class Request
 
     /**
      * Split on a separator that sits outside quoted strings. A backslash inside
-     * quotes escapes the next character.
+     * quotes escapes the next character. Returns null when a quoted string is left open.
      *
-     * @return list<string>
+     * @return list<string>|null
      */
-    private static function splitOutsideQuotes(string $value, string $separator): array
+    private static function splitOutsideQuotes(string $value, string $separator): ?array
     {
         $parts    = [];
         $current  = '';
@@ -1217,6 +1235,10 @@ final readonly class Request
             $current .= $char;
         }
 
+        if ($inQuotes) {
+            return null;
+        }
+
         $parts[] = $current;
 
         return $parts;
@@ -1233,7 +1255,7 @@ final readonly class Request
     {
         $parameters = [];
 
-        foreach (self::splitOutsideQuotes($element, ';') as $pair) {
+        foreach (self::splitOutsideQuotes($element, ';') ?? [] as $pair) {
             [$name, $value] = array_pad(explode('=', trim($pair), 2), 2, null);
             if ($name === null || $value === null) {
                 continue;

@@ -145,4 +145,23 @@ final class IpAllowlistGuardTest extends TestCase
 
         self::assertFalse($guard->isAuthorized($request));
     }
+
+    public function testRejectsProxyPeerWhenTrustedForwardedHeaderIsMalformed(): void
+    {
+        $guard = new IpAllowlistGuard(['10.0.0.0/8']);
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/secure',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=6.6.6.6;x="',
+            ],
+            trustedProxies: ['10.0.0.0/8'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertNull($request->clientIp());
+        self::assertFalse($guard->isAuthorized($request));
+    }
 }

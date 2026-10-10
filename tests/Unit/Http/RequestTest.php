@@ -1347,6 +1347,76 @@ final class RequestTest extends TestCase
         self::assertSame('http://legit.example.com%5C%22%2Cfor%3D10.0.0.9%3Bproto%3Dhttps/x', $request->uri()->full());
     }
 
+    #[DataProvider('forwardedHeadersEndingInsideAQuotedString')]
+    public function testFromGlobalsIgnoresForwardedHeaderThatEndsInsideAQuotedString(string $header): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => $header,
+            ],
+            trustedProxies: ['10.0.0.0/8'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://app.internal/x', $request->uri()->full());
+        self::assertNull($request->clientIp());
+    }
+
+    public static function forwardedHeadersEndingInsideAQuotedString(): iterable
+    {
+        $proxyElement = ', for=203.0.113.9;host=legit.example.com;proto=http';
+
+        yield 'proxy element appended after an open quote' => ['for=6.6.6.6;host=evil.example;proto=https;x="' . $proxyElement];
+        yield 'backslash inside the open quote' => ['for=6.6.6.6;host=evil.example;proto=https;x="\\' . $proxyElement];
+        yield 'two proxies appended after an open quote' => ['for=6.6.6.6;host=evil.example;proto=https;x="' . $proxyElement . ', for=10.0.0.2'];
+    }
+
+    public function testFromGlobalsReadsNoForwardedDataWhenTrustedForwardedHeaderIsMalformed(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.internal',
+                'REQUEST_URI'            => '/x',
+                'REMOTE_ADDR'            => '10.0.0.1',
+                'HTTP_FORWARDED'         => 'for=6.6.6.6;host=evil.example;proto=https;x="',
+                'HTTP_X_FORWARDED_FOR'   => '6.6.6.6',
+                'HTTP_X_FORWARDED_HOST'  => 'evil.example',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_REAL_IP'         => '6.6.6.6',
+            ],
+            trustedProxies: ['10.0.0.0/8'],
+            trustedHeaders: ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip'],
+        );
+
+        self::assertSame('http://app.internal/x', $request->uri()->full());
+        self::assertNull($request->clientIp());
+    }
+
+    public function testFromGlobalsStillHonoursAWellFormedTrustedForwardedHeaderOverXForwardedFor(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'        => 'GET',
+                'HTTP_HOST'             => 'app.internal',
+                'REQUEST_URI'           => '/x',
+                'REMOTE_ADDR'           => '10.0.0.1',
+                'HTTP_FORWARDED'        => 'for=6.6.6.6;host=evil.example;proto=https, for=203.0.113.9;host=legit.example.com;proto=http',
+                'HTTP_X_FORWARDED_FOR'  => '6.6.6.6',
+                'HTTP_X_FORWARDED_HOST' => 'evil.example',
+            ],
+            trustedProxies: ['10.0.0.0/8'],
+            trustedHeaders: ['forwarded', 'x-forwarded-for', 'x-forwarded-host'],
+        );
+
+        self::assertSame('http://legit.example.com/x', $request->uri()->full());
+        self::assertSame('203.0.113.9', $request->clientIp());
+    }
+
     #[DataProvider('hostValuesWithPort')]
     public function testFromGlobalsDropsAHostPortThatIsNotAPortNumber(string $host, string $expected): void
     {
