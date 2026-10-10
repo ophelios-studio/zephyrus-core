@@ -33,6 +33,8 @@ use NumberFormatter;
 final class Formatter
 {
     private string $locale;
+    private bool $french;
+    private string $plainNumberLocale;
     private ?string $defaultCurrency;
     private string $defaultDatePattern;
     private string $defaultTimePattern;
@@ -41,6 +43,9 @@ final class Formatter
 
     /** @var array<string, callable> */
     private array $customFormatters = [];
+
+    /** @var array<int, NumberFormatter> One ungrouped formatter per precision, created on first use. */
+    private array $plainNumberFormatters = [];
 
     /** @var list<string> */
     public const BUILT_IN_FORMATTERS = [
@@ -93,6 +98,8 @@ final class Formatter
         ?string $groupingSeparator = null,
     ) {
         $this->locale = $locale;
+        $this->french = Locale::getPrimaryLanguage($locale) === 'fr';
+        $this->plainNumberLocale = $this->french ? $locale : 'en';
         $this->defaultCurrency = self::currencyCode($defaultCurrency);
         $this->defaultDatePattern = $defaultDatePattern;
         $this->defaultTimePattern = $defaultTimePattern;
@@ -376,7 +383,7 @@ final class Formatter
 
         $formatted = $index === 0
             ? sprintf('%d', (int) $value)
-            : $this->plainNumber($value, $precision);
+            : $this->plainNumber($value, $precision, 'filesize');
 
         $separator = $isFrench ? self::NBSP : ' ';
         $prefix = $bytes < 0 ? '-' : '';
@@ -593,7 +600,7 @@ final class Formatter
 
     private function isFrench(): bool
     {
-        return Locale::getPrimaryLanguage($this->locale) === 'fr';
+        return $this->french;
     }
 
     private function timeUnit(string $unit, int $value): string
@@ -607,23 +614,30 @@ final class Formatter
     }
 
     /**
-     * Formats a number with the locale's decimal mark in French, a dot otherwise, and no grouping.
+     * Formats a number with exactly $precision fraction digits and no grouping.
      *
      * @throws FormatterException When ICU cannot format the value.
      */
-    private function plainNumber(float $value, int $precision): string
+    private function plainNumber(float $value, int $precision, string $type): string
     {
-        $fmt = new NumberFormatter($this->isFrench() ? $this->locale : 'en', NumberFormatter::DECIMAL);
+        $fmt = $this->plainNumberFormatters[$precision] ??= $this->newPlainNumberFormatter($precision);
+
+        $result = $fmt->format($value);
+        if ($result === false) {
+            throw FormatterException::formattingFailed($type, $fmt->getErrorMessage());
+        }
+
+        return $result;
+    }
+
+    private function newPlainNumberFormatter(int $precision): NumberFormatter
+    {
+        $fmt = new NumberFormatter($this->plainNumberLocale, NumberFormatter::DECIMAL);
         $fmt->setAttribute(NumberFormatter::GROUPING_USED, 0);
         $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, $precision);
         $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, $precision);
 
-        $result = $fmt->format($value);
-        if ($result === false) {
-            throw FormatterException::formattingFailed('filesize', $fmt->getErrorMessage());
-        }
-
-        return $result;
+        return $fmt;
     }
 
     /**
