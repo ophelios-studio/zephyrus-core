@@ -279,7 +279,7 @@ final class Rules
     {
         return Rule::of(
             function (mixed $v) use ($format): bool {
-                if (!is_string($v)) {
+                if (!is_string($v) || str_contains($v, "\0")) {
                     return false;
                 }
                 $dt = \DateTime::createFromFormat($format, $v);
@@ -296,7 +296,7 @@ final class Rules
     {
         return Rule::of(
             function (mixed $v) use ($format): bool {
-                if (!is_string($v)) {
+                if (!is_string($v) || str_contains($v, "\0")) {
                     return false;
                 }
 
@@ -1528,7 +1528,7 @@ final class Rules
     {
         return Rule::of(
             static function (mixed $v): bool {
-                if (!is_string($v) || $v === '') {
+                if (!is_string($v) || $v === '' || str_contains($v, "\0")) {
                     return false;
                 }
 

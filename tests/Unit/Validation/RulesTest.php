@@ -539,6 +539,13 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::date()->test(20240101));
     }
 
+    public function testDateFailsOnNulByteInsteadOfThrowing(): void
+    {
+        self::assertFalse(Rules::date()->test("2026-01-01\0"));
+        self::assertFalse(Rules::date()->test("\02026-01-01"));
+        self::assertFalse(Rules::date('Y')->test("2026\0"));
+    }
+
     public function testDatePassesCustomFormat(): void
     {
         self::assertTrue(Rules::date('d/m/Y')->test('29/02/2024'));
@@ -561,6 +568,12 @@ final class RulesTest extends TestCase
     }
 
     // ---- dateTime ----
+
+    public function testDateTimeFailsOnNulByteInsteadOfThrowing(): void
+    {
+        self::assertFalse(Rules::dateTime()->test("2026-01-01 00:00:00\0"));
+        self::assertFalse(Rules::dateTime()->test("\02026-01-01 00:00:00"));
+    }
 
     public function testDateTimePassesDefaultFormat(): void
     {
@@ -2147,6 +2160,12 @@ final class RulesTest extends TestCase
     {
         self::assertTrue(Rules::httpDate()->test('Mon, 23 Feb 2026 20:31:00 GMT'));
         self::assertTrue(Rules::httpDate()->test('Sun, 01 Mar 2026 00:00:00 GMT'));
+    }
+
+    public function testHttpDateFailsOnNulByteInsteadOfThrowing(): void
+    {
+        self::assertFalse(Rules::httpDate()->test("Mon, 23 Feb 2026 20:31:00 GMT\0"));
+        self::assertFalse(Rules::httpDate()->test("\0Mon, 23 Feb 2026 20:31:00 GMT"));
     }
 
     public function testHttpDateFailsMalformedValues(): void
