@@ -377,7 +377,7 @@ final class MailerAttachmentGuardTest extends TestCase
         self::assertStringContainsString('Content-Type: application/pdf', $this->sentMessage($this->inside, 'Monthly report'));
     }
 
-    public function testTheMediaTypeFallsBackToTheFileNameWhenTheFileHasNoExtension(): void
+    public function testTheMediaTypeFollowsTheSentNameWhenTheFileHasNoExtension(): void
     {
         $path = $this->root . '/export';
         file_put_contents($path, 'pdf');

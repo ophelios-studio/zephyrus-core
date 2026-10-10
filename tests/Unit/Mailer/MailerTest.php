@@ -8,6 +8,7 @@ use PHPMailer\PHPMailer\Exception as PHPMailerException;
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Mailer\Mailer;
 use Zephyrus\Mailer\MailerConfig;
@@ -667,32 +668,7 @@ final class MailerTest extends TestCase
         $mailer->attachContent('content', str_repeat('a', 256) . '.pdf');
     }
 
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function controlOrBidiCharacterNameProvider(): iterable
-    {
-        yield 'tab' => ["inv\toice.pdf"];
-        yield 'unit separator' => ["inv\x1Foice.pdf"];
-        yield 'delete' => ["inv\x7Foice.pdf"];
-        yield 'right-to-left mark' => ["inv\u{200F}oice.pdf"];
-        yield 'right-to-left override' => ["inv\u{202E}fdp.exe"];
-        yield 'left-to-right isolate' => ["inv\u{2066}oice.pdf"];
-        yield 'right-to-left isolate' => ["inv\u{2067}oice.pdf"];
-        yield 'pop directional isolate' => ["inv\u{2069}oice.pdf"];
-        yield 'NUL byte' => ["inv\0oice.pdf"];
-        yield 'carriage return' => ["inv\roice.pdf"];
-        yield 'line feed' => ["inv\noice.pdf"];
-        yield 'trailing NUL byte' => ["invoice.pdf\0"];
-        yield 'trailing line feed' => ["invoice.pdf\n"];
-        yield 'C1 control' => ["inv\u{0085}oice.pdf"];
-        yield 'C1 control at the top of the range' => ["inv\u{009F}oice.pdf"];
-        yield 'Arabic letter mark' => ["inv\u{061C}oice.pdf"];
-        yield 'line separator' => ["inv\u{2028}oice.pdf"];
-        yield 'paragraph separator' => ["inv\u{2029}oice.pdf"];
-    }
-
-    #[DataProvider('controlOrBidiCharacterNameProvider')]
+    #[DataProviderExternal(MailerAttachmentGuardTest::class, 'controlOrBidiCharacterNameProvider')]
     public function testAControlOrBidiCharacterInTheDisplayNameIsRefusedByAttachContent(string $name): void
     {
         $mailer = new Mailer($this->config);
