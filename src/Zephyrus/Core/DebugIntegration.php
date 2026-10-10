@@ -18,54 +18,22 @@ use Tracy\Dumper\Value;
 use Zephyrus\Core\Config\ConfigSection;
 
 /**
- * Wires Tracy Debugger integration based on application configuration.
+ * Wires the Tracy debugger and decides which clients may see its rendered output.
  *
- * ## Why this file is careful
+ * The Bluescreen shows stack trace arguments, $_SERVER, $_ENV and $_COOKIE, so it must never reach every client.
+ * Tracy runs in Debugger::Detect mode: a client receives the Bluescreen only when it is
  *
- * Tracy has two very different jobs behind one switch. In DEVELOPMENT mode it
- * renders the Bluescreen: a full HTML page carrying the exception, the stack
- * trace WITH argument values, $_SERVER, $_ENV, $_COOKIE and every object
- * reachable from the frames. In PRODUCTION mode it logs and shows nothing.
+ *   - the loopback address, and the request did not arrive through a proxy, or
+ *   - presenting the `tracy-debug` cookie whose value matches a `secret@ip` allowlist entry, or
+ *   - listed in the allowlist passed as $allowedClients.
  *
- * This class used to hardcode Debugger::Development. That decision was made
- * once, at boot, for EVERY client, so the Bluescreen went to whoever managed to
- * trigger a 500 -- an anonymous caller on the public internet included. Tracy's
- * enable() also sets zend.exception_ignore_args to 0, which puts real argument
- * values (an encryption key, an SMTP password, a reset token) into every stack
- * trace the process produces from then on, and forces display_errors off, so
- * anything the application had hardened is overwritten either way.
- *
- * That is not a hypothetical. An operator diagnosing a live incident routinely
- * sets APP_ENV=dev and APP_DEBUG=true on a PRODUCTION tier for a few minutes.
- * During that window the old behaviour handed the tier's live secrets to any
- * client who could reach a 500.
- *
- * So the mode is now Debugger::Detect, and the client has to earn the
- * Bluescreen:
- *
- *   - it is the loopback address (a developer on their own machine), which
- *     Tracy only grants when the request did NOT arrive through a proxy, or
- *   - it presents the `tracy-debug` cookie whose value matches an allowlist
- *     entry given as `secret@ip`, or
- *   - its address is in the allowlist passed to $allowedClients.
- *
- * Every other client gets the production behaviour: logged, not rendered. The
- * debugger is still ENABLED in both cases, so errors still reach the log
- * directory and the notification email; only the rendering audience changed.
- *
- * ## The second half of this fix lives in ApplicationBuilder
- *
- * DebugIntegration decides WHO sees the debugger. ApplicationBuilder decides
- * whether a production-like environment may turn it on at all; see
- * ApplicationBuilder::build(). The two are deliberately independent, so an
- * operator who deliberately acknowledges debug on production still does not
- * broadcast it to the world.
+ * Every other client gets logs and notifications only. With debug on, the debugger stays enabled for every client, so
+ * errors still reach the log directory and the notification email. Whether debug is enabled at all is decided by
+ * ApplicationBuilder::build(). Debugger::enable() sets zend.exception_ignore_args=0 for the whole process, so every
+ * trace, logged ones included, carries real argument values.
  *
  * Usage (typically automatic via ApplicationBuilder):
  *
- *   DebugIntegration::initialize(debug: true);
- *   DebugIntegration::initialize(debug: true, logDirectory: '/var/log/app');
- *   DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.4']);
  *   DebugIntegration::initialize(debug: true, allowedClients: 'mysecret@203.0.113.4');
  */
 final class DebugIntegration
@@ -106,9 +74,9 @@ final class DebugIntegration
     ];
 
     /**
-     * Class properties masked by Tracy's Class::$property form. Tracy's own "POST (preview)" still shows the request body.
-     * Exception and Error traces are masked whole, arguments included; the bluescreen's stack section is unchanged.
-     * Dump the object itself: dump((array) $object) exposes private properties under mangled keys that no exporter can mask.
+     * Class properties masked by Tracy's Class::$property form. Tracy's "POST (preview)" still shows the request body.
+     * Exception and Error traces are masked whole, arguments included; the Bluescreen stack section is unchanged.
+     * Dump the object itself: dump((array) $object) exposes private properties under mangled keys no exporter can mask.
      */
     public const array SENSITIVE_PROPERTIES = [
         'Zephyrus\Http\RequestBody::$raw',
@@ -124,21 +92,19 @@ final class DebugIntegration
     ];
 
     /**
-     * Name patterns the Bluescreen scrubber masks, and every renderer for a variable a closure captures.
+     * Name patterns masked by the Bluescreen scrubber and by the closure capture renderer.
      *
-     * Elsewhere dump() and the debug bar apply only the exact names (SENSITIVE_KEYS,
-     * SENSITIVE_PROPERTIES and the session name). The pattern skips int, float,
-     * bool and null values; exact names mask any value. To mask a numeric secret, which the pattern
-     * skips, add its name to Debugger::getBlueScreen()->keysToHide and Debugger::$keysToHide.
+     * dump() and the debug bar use only the exact names (SENSITIVE_KEYS, SENSITIVE_PROPERTIES, the session name),
+     * which mask any value. The pattern skips int, float, bool and null, so a numeric secret must be added to
+     * Debugger::getBlueScreen()->keysToHide and Debugger::$keysToHide by name.
      */
     public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
     /**
      * Initialize Tracy Debugger if debug mode is enabled.
      *
-     * When debug is false, Tracy is never enabled, so none of its ini_set()
-     * calls run. productionMode is still set to true, because Tracy's dump()
-     * prints unless it is true, and it defaults to null.
+     * When debug is false, Tracy is never enabled, so none of its ini_set() calls run. productionMode is still
+     * set to true, because Tracy's dump() prints unless it is true, and it defaults to null.
      *
      * An application Closure or ConfigSection exporter in Dumper::$objectExporters
      * must be registered after this call, or it is replaced.
@@ -170,10 +136,8 @@ final class DebugIntegration
         // Tracy re-detects only when productionMode is null: a debug-off boot set it.
         Debugger::$productionMode = null;
 
-        // Debugger::Detect is null, and Tracy reads a string or an array as the
-        // allowlist for the very same detection. Passing $allowedClients
-        // straight through therefore keeps ONE code path: with or without an
-        // allowlist, the client still has to match something.
+        // Tracy reads a string or array passed in place of Detect as the allowlist
+        // for the same detection, so with or without one the client must still match.
         Debugger::enable(
             $allowedClients ?? Debugger::Detect,
             $logDirectory,
@@ -198,11 +162,9 @@ final class DebugIntegration
     }
 
     /**
-     * Teach Tracy the framework's own secret-bearing key names and how to render config sections, closures, array iterators, array objects and PHPMailer objects.
+     * Registers the framework's secret key names and the exporters for config sections, closures, array iterators and objects, and PHPMailer.
      *
-     * Both registries are written because they feed different renderers:
-     * Debugger::$keysToHide reaches dump() and the debug bar, while the
-     * Bluescreen keeps its own list.
+     * Both keysToHide registries are written: dump() and the debug bar read one, the Bluescreen keeps the other.
      */
     private static function hideFrameworkSecrets(?string $sessionName): void
     {

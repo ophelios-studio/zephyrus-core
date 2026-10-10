@@ -27,11 +27,7 @@ use Zephyrus\Security\MaxBodySizeMiddleware;
 final class ApplicationBuilder
 {
     /**
-     * The line written to the error log when debug is forced off.
-     *
-     * It names the two settings, the consequence and the escape hatch, and it
-     * carries no value of any kind, because it is written on a production tier
-     * where the log is itself a place secrets must not reach.
+     * Error log line written when debug is forced off. It carries no configuration value: production logs must not hold secrets.
      */
     public const string PRODUCTION_DEBUG_REFUSED =
         'Zephyrus: application.debug is true while application.environment is production-like. '
@@ -78,17 +74,24 @@ final class ApplicationBuilder
 
     /**
      * @param array<string, mixed> $configuration
+     * @throws ConfigurationException when a section value is invalid.
      */
     public static function fromConfigurationArray(array $configuration): self
     {
         return self::create()->withConfigurationArray($configuration);
     }
 
+    /**
+     * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
+     */
     public static function fromConfigurationFile(string $path): self
     {
         return self::create()->withConfigurationFile($path);
     }
 
+    /**
+     * @throws ConfigurationException when a declared security setting is not wired.
+     */
     public static function buildFromConfiguration(Configuration $configuration): Application
     {
         return self::fromConfiguration($configuration)->build();
@@ -96,12 +99,17 @@ final class ApplicationBuilder
 
     /**
      * @param array<string, mixed> $configuration
+     * @throws ConfigurationException when a section value is invalid or a declared security setting is not wired.
      */
     public static function buildFromConfigurationArray(array $configuration): Application
     {
         return self::fromConfigurationArray($configuration)->build();
     }
 
+    /**
+     * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value, or a
+     *                                declared security setting is not wired.
+     */
     public static function buildFromConfigurationFile(string $path): Application
     {
         return self::fromConfigurationFile($path)->build();
@@ -109,6 +117,8 @@ final class ApplicationBuilder
 
     /**
      * @param string[] $paths
+     * @throws ConfigurationException when a path is invalid or a file is missing, unreadable, invalid or holds an
+     *                                invalid value.
      */
     public static function fromConfigurationFiles(array $paths): self
     {
@@ -117,6 +127,8 @@ final class ApplicationBuilder
 
     /**
      * @param string[] $paths
+     * @throws ConfigurationException when a path is invalid or an existing file is unreadable, invalid or holds an
+     *                                invalid value.
      */
     public static function fromOptionalConfigurationFiles(array $paths): self
     {
@@ -125,6 +137,8 @@ final class ApplicationBuilder
 
     /**
      * @param string[] $paths
+     * @throws ConfigurationException when a path is invalid or a file is missing, unreadable, invalid or holds an
+     *                                invalid value, or a declared security setting is not wired.
      */
     public static function buildFromConfigurationFiles(array $paths): Application
     {
@@ -133,12 +147,17 @@ final class ApplicationBuilder
 
     /**
      * @param string[] $paths
+     * @throws ConfigurationException when a path is invalid or an existing file is unreadable, invalid or holds an
+     *                                invalid value, or a declared security setting is not wired.
      */
     public static function buildFromOptionalConfigurationFiles(array $paths): Application
     {
         return self::fromOptionalConfigurationFiles($paths)->build();
     }
 
+    /**
+     * Sets the router. Without one, every request is answered with 404.
+     */
     public function withRouter(Router $router): self
     {
         $clone = clone $this;
@@ -147,6 +166,10 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Appends a global middleware, run in registration order. The security middlewares must be mounted here
+     * for build() to count them as enforced.
+     */
     public function withMiddleware(MiddlewareInterface $middleware): self
     {
         $clone = clone $this;
@@ -155,6 +178,9 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Binds a middleware name that routes can reference. Registering the same name again replaces the binding.
+     */
     public function registerMiddleware(string $name, MiddlewareInterface $middleware): self
     {
         $clone = clone $this;
@@ -163,6 +189,10 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Sets the dispatcher that receives the kernel's RequestEvent, ExceptionEvent and ResponseEvent.
+     * Without one, no events fire.
+     */
     public function withEventDispatcher(EventDispatcher $dispatcher): self
     {
         $clone = clone $this;
@@ -172,6 +202,8 @@ final class ApplicationBuilder
     }
 
     /**
+     * Sets how controller classes are instantiated.
+     *
      * @param callable(class-string): object $factory
      */
     public function withControllerFactory(callable $factory): self
@@ -183,7 +215,8 @@ final class ApplicationBuilder
     }
 
     /**
-     * Gives the engine to every controller using RenderResponses, directly, through a parent or through another trait, in any call order with withControllerFactory(), replacing an engine the factory set.
+     * Shares an application-built engine with every controller using RenderResponses, in any order with withControllerFactory().
+     * It replaces an engine the factory set.
      */
     public function withRenderEngine(RenderEngine $engine): self
     {
@@ -193,6 +226,10 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Resolves controllers through the container, so auto-wiring and explicit bindings both work.
+     * Shorthand for withControllerFactory(): whichever of the two is called last wins.
+     */
     public function withContainer(ContainerInterface $container): self
     {
         $clone = clone $this;
@@ -220,6 +257,9 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Sets the translation loader and default locale. The last loader-setting call wins, including withConfiguration().
+     */
     public function withLocaleLoader(LocaleLoaderInterface $loader, string $defaultLocale = 'en'): self
     {
         $clone = clone $this;
@@ -229,6 +269,11 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Loads JSON catalogs from one directory. Files are read lazily: an unreadable or invalid file
+     * throws LocalizationException when its locale is loaded, not here. A missing directory or file
+     * gives an empty catalog (keys are returned as is).
+     */
     public function withJsonLocales(string $basePath, string $defaultLocale = 'en'): self
     {
         return $this->withLocaleLoader(new JsonLocaleLoader($basePath), $defaultLocale);
@@ -271,8 +316,7 @@ final class ApplicationBuilder
     }
 
     /**
-     * Restrict locale resolution (in transFromRequest) to this explicit list.
-     * If not set (empty), every normalized Accept-Language candidate is accepted.
+     * Restricts locale resolution (transFromRequest) to this list. An empty list accepts every normalized Accept-Language candidate.
      *
      * @param string[] $locales
      */
@@ -285,13 +329,10 @@ final class ApplicationBuilder
     }
 
     /**
-     * Apply a LocalizationConfig to the builder.
+     * Applies a LocalizationConfig: loader, default locale and supported locales.
      *
-     * @param LocalizationConfig $config   The localization configuration section.
-     * @param string|null        $basePath Optional project root used to resolve
-     *                                     a relative locale_path. When provided,
-     *                                     a non-absolute locale_path is prefixed
-     *                                     with this directory.
+     * @param LocalizationConfig $config
+     * @param string|null        $basePath Prefixed to a relative locale_path when given.
      */
     public function withLocalizationConfig(LocalizationConfig $config, ?string $basePath = null): self
     {
@@ -319,20 +360,16 @@ final class ApplicationBuilder
     }
 
     /**
-     * Apply a full typed Configuration tree to application bootstrap.
+     * Applies a full Configuration tree.
      *
-     * Wiring scope:
-     * - localization section (locale loader, supported locales)
-     * - application.debug → Tracy Debugger initialization (in build())
-     * - localization.timezone → date_default_timezone_set() (in build())
+     * Called after withJsonLocales(), it replaces the loader and the translations.
      *
-     * NOTHING in the `security:` section is wired from here, on purpose; see
-     * assertSecurityConfigurationIsWired(), which refuses to boot rather than
-     * letting a declared protection sit inert.
+     * Wired here: the localization section (loader, supported locales). Wired in build(): application.debug
+     * (Tracy) and localization.timezone. Nothing in `security:` is wired, on purpose: build() refuses to boot
+     * when a declared protection is not mounted, rather than letting it sit inert.
      *
      * @param Configuration $configuration The full application configuration.
-     * @param string|null   $basePath      Optional project root for resolving
-     *                                     relative paths (e.g. locale_path).
+     * @param string|null   $basePath      Prefixed to a relative locale_path when given.
      */
     public function withConfiguration(Configuration $configuration, ?string $basePath = null): self
     {
@@ -343,9 +380,10 @@ final class ApplicationBuilder
     }
 
     /**
-     * Parse and apply a root configuration array in one call.
+     * Parses and applies a root configuration array.
      *
      * @param array<string, mixed> $configuration
+     * @throws ConfigurationException when a section value is invalid.
      */
     public function withConfigurationArray(array $configuration): self
     {
@@ -353,7 +391,9 @@ final class ApplicationBuilder
     }
 
     /**
-     * Load and apply a root configuration file.
+     * Loads and applies a root configuration file.
+     *
+     * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
      */
     public function withConfigurationFile(string $path): self
     {
@@ -361,9 +401,10 @@ final class ApplicationBuilder
     }
 
     /**
-     * Load, merge, and apply multiple configuration files.
+     * Loads, merges and applies configuration files.
      *
      * @param string[] $paths
+     * @throws ConfigurationException when a path is invalid or a file is missing, unreadable, invalid or holds an invalid value.
      */
     public function withConfigurationFiles(array $paths): self
     {
@@ -371,9 +412,10 @@ final class ApplicationBuilder
     }
 
     /**
-     * Load, merge, and apply multiple configuration files while ignoring missing files.
+     * Like withConfigurationFiles(), but missing files are skipped.
      *
      * @param string[] $paths
+     * @throws ConfigurationException when a path is invalid or an existing file is unreadable, invalid or holds an invalid value.
      */
     public function withOptionalConfigurationFiles(array $paths): self
     {
@@ -381,18 +423,13 @@ final class ApplicationBuilder
     }
 
     /**
-     * Declare that a security setting is enforced somewhere build() cannot see.
+     * Declares security settings enforced where build() cannot see them, so build() does not refuse them.
      *
-     * The check in build() knows about the middlewares registered on this
-     * builder and nothing else, so it is wrong in exactly one direction: an
-     * application enforcing HTTPS at its load balancer, capping the body size
-     * in nginx, or wrapping a framework middleware in a decorator instead of
-     * extending it, is doing the right thing and would still be refused. This
-     * is how such an application says so, once, in the bootstrap, where the
-     * next reader can see the claim.
+     * build() only knows the middlewares mounted on this builder. A setting enforced by a load balancer, by the web
+     * server or by a decorator around a framework middleware must be acknowledged here.
      *
-     * Names may be given short ("maxBodySize") or qualified
-     * ("security.maxBodySize"); both forms mean the same setting.
+     * Accepted names: forceHttps, allowedHosts, csrf and maxBodySize, short or qualified ("security.maxBodySize").
+     * Any other name is ignored.
      *
      * @param string[] $keys
      */
@@ -413,21 +450,11 @@ final class ApplicationBuilder
     }
 
     /**
-     * Permit application.debug to stay ON in a production-like environment.
+     * Lets application.debug stay on in a production-like environment (production or staging).
      *
-     * Without this, build() FORCES debug off whenever
-     * `application.environment` is production or staging and
-     * `application.debug` is true, and writes one loud line to the error log
-     * saying so. See build() for why forcing off beat refusing to boot.
-     *
-     * This is the escape hatch for the operator who genuinely means it, and it
-     * is deliberately a line of BOOTSTRAP CODE rather than a config key: a
-     * config key is exactly what gets flipped on a live tier at 3am and
-     * forgotten, which is the situation this guard exists for.
-     *
-     * Acknowledging does NOT broadcast the debugger. DebugIntegration still
-     * runs Tracy in Detect mode, so a remote client sees nothing unless it is
-     * on the allowlist passed to withDebugClientAllowlist().
+     * Without it, build() forces debug off and logs PRODUCTION_DEBUG_REFUSED. This is bootstrap code on purpose,
+     * not a config key: config is what gets flipped on a live tier and forgotten. Acknowledging does not broadcast
+     * the debugger: remote clients still see nothing unless they are on withDebugClientAllowlist().
      */
     public function withProductionDebugAcknowledged(bool $acknowledged = true): self
     {
@@ -440,14 +467,10 @@ final class ApplicationBuilder
     /**
      * Name the clients allowed to receive the rendered debugger output.
      *
-     * Each entry is an address, or `secret@address` matched against the
-     * `tracy-debug` cookie. Exact addresses only: Tracy does not accept ranges.
-     * A bare gateway address admits anyone who can reach the published port.
+     * Each entry is an exact address, or `secret@address` matched against the `tracy-debug` cookie.
+     * Tracy accepts no ranges. A bare gateway address admits anyone who can reach the published port.
      *
-     * Behind Docker, REMOTE_ADDR is the bridge gateway, not your machine, so
-     * Tracy does not grant loopback. Pass `secret@<gateway-ip>` (find the
-     * address with `docker network inspect <net>`), then set the cookie
-     * `tracy-debug=<secret>`.
+     * Behind Docker, loopback is not granted: use `secret@<gateway-ip>` and set the cookie `tracy-debug=<secret>`.
      *
      * @param string|string[]|null $clients
      */
@@ -460,12 +483,7 @@ final class ApplicationBuilder
     }
 
     /**
-     * The debug flag build() will actually act on, with no side effect.
-     *
-     * Exposed so the production guard is assertable without booting Tracy in
-     * the test process: enabling Tracy is global, irreversible for the rest of
-     * the process, and installs error handlers, so a test that had to observe
-     * it through Debugger::isEnabled() could only ever run in isolation.
+     * Returns the debug flag build() acts on, without enabling Tracy, which is global and irreversible per process.
      */
     public function isDebugEnabledForBoot(): bool
     {
@@ -487,12 +505,8 @@ final class ApplicationBuilder
     }
 
     /**
-     * Turn the wiring check off wholesale.
-     *
-     * Prefer withAcknowledgedSecurityKeys(): it keeps the check live for every
-     * OTHER setting, including ones added to the framework later. This exists
-     * for a bootstrap that legitimately cannot enumerate them, and it is the
-     * blunt instrument.
+     * Turns the security wiring check off entirely. Prefer withAcknowledgedSecurityKeys(), which keeps the check
+     * live for every other setting, including ones added to the framework later.
      */
     public function withoutSecurityWiringCheck(): self
     {
@@ -503,42 +517,15 @@ final class ApplicationBuilder
     }
 
     /**
-     * Refuse to boot when a declared security setting enforces nothing.
+     * Refuses to boot when a declared security setting asks for a protection that no mounted middleware enforces.
      *
-     * ## Why this throws instead of wiring the middleware itself
+     * The security section is never wired from configuration: registering the middlewares here would give
+     * applications that mount their own a second CSRF or header middleware. Checked: forceHttps, a non-empty
+     * allowedHosts and a finite maxBodySize, each only when declared, and csrfEnabled when any csrf key is
+     * declared; a protection counts as enforced only when its middleware is mounted with withMiddleware().
+     * Not checked: trustedProxies, trustedHeaders and encryptionKey, which are consumed outside the builder.
      *
-     * The whole `security:` block was inert. withConfiguration() wires
-     * localization, application.debug and the timezone; KernelBuilder::build()
-     * never reads Configuration at all. So forceHttps, csrfEnabled,
-     * allowedHosts and maxBodySize were parsed, type-validated, range-checked,
-     * unit-tested, echoed by Configuration::toArray() and connected to nothing:
-     * a configuration declaring all four protections ON served a plain-HTTP,
-     * forged-Host, tokenless 5 MiB POST.
-     *
-     * The obvious repair, wiring them here, is the dangerous one. Applications
-     * already register their own CsrfMiddleware and their own security-header
-     * middleware from their own bootstrap; a framework that started registering
-     * them too would give those applications TWO CSRF middlewares on every
-     * request. That is a worse outage than the silence, and it is the exact
-     * class of breakage this whole review exists to stop. So the framework
-     * still wires nothing, and instead refuses to start while naming the gap.
-     *
-     * ## What is checked, and what deliberately is not
-     *
-     * Only a setting the source file actually DECLARED (see
-     * SecurityConfig::isDeclared()) and that asks for a protection: forceHttps
-     * true, a non-empty allowedHosts, CSRF enabled, a finite maxBodySize.
-     * A protection counts only when it is mounted with withMiddleware(). Disabling
-     * something inert is harmless and is never reported.
-     *
-     * trustedProxies, trustedHeaders and encryptionKey are NOT checked. They
-     * are consumed outside the builder entirely, by Request::fromGlobals() and
-     * by whatever constructs Cryptography, so the builder cannot observe
-     * whether an application passed them, and guessing would refuse correctly
-     * wired applications at boot. That is a real, stated limit of this check
-     * rather than an oversight.
-     *
-     * @throws ConfigurationException
+     * @throws ConfigurationException when a declared protection is not mounted and not acknowledged.
      */
     private function assertSecurityConfigurationIsWired(SecurityConfig $security): void
     {
@@ -616,48 +603,23 @@ final class ApplicationBuilder
     }
 
     /**
-     * Assemble the application.
+     * Assembles the application.
      *
-     * ## Why debug on production is FORCED OFF rather than refused
+     * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
+     * unless withProductionDebugAcknowledged() is called. Refusing to boot instead would turn a diagnostic
+     * attempt into an outage. Even when acknowledged, DebugIntegration shows the debugger only to loopback,
+     * the `tracy-debug` cookie holder, or withDebugClientAllowlist() addresses.
      *
-     * `application.environment: production` plus `application.debug: true` used
-     * to boot silently and hand the debugger to every client. Two repairs were
-     * available and they are not equivalent.
-     *
-     * Refusing to boot is the stricter one, and it is the wrong one HERE. The
-     * operator who sets this combination is, in practice, mid-incident: they
-     * have a production tier misbehaving and they are trying to see why. A
-     * refusal converts their diagnostic attempt into an outage of the very
-     * service they were diagnosing, and it does it at the worst possible
-     * moment. Worse, it teaches the escape hatch as a reflex: once
-     * "acknowledge it or the site is down" is the rule, the acknowledgement
-     * goes into the bootstrap permanently and the guard is gone for good.
-     *
-     * Forcing debug off keeps the tier serving, removes the leak, and costs
-     * the operator only the thing that was unsafe. The failure mode it
-     * introduces is silence, which is the failure mode this whole review
-     * exists to eliminate, so it is bought back with a loud, unconditional
-     * error_log line on every boot (PRODUCTION_DEBUG_REFUSED) naming both
-     * settings and the escape hatch.
-     *
-     * The escape hatch is withProductionDebugAcknowledged(). It is a line of
-     * code in the bootstrap and not a config key, on purpose: config is what
-     * gets edited on a live tier and forgotten.
-     *
-     * And it is not the only line of defence. Even when acknowledged,
-     * DebugIntegration runs Tracy in Detect mode, so the rendered debugger
-     * still only reaches loopback, the `tracy-debug` cookie holder, or an
-     * address named by withDebugClientAllowlist().
+     * @throws ConfigurationException when a declared security setting is not wired, or an enforced
+     *                                Content-Security-Policy middleware is shadowed by a SecureHeadersMiddleware csp.
      */
     public function build(): Application
     {
-        // Refuse a security configuration nothing enforces BEFORE any side
-        // effect (debugger, timezone, App:: statics) has happened.
+        // Runs before any side effect (debugger, timezone, App statics).
         if ($this->configuration !== null) {
             $this->assertSecurityConfigurationIsWired($this->configuration->security);
         }
 
-        // Wire debug mode (Tracy) and timezone before anything else
         if ($this->configuration !== null) {
             $debug = $this->isDebugEnabledForBoot();
 

@@ -12,8 +12,11 @@ use Zephyrus\Core\Config\EnvironmentVariable;
 final class ApplicationBootstrap
 {
     /**
+     * Builds from the required files and the optional files that exist.
+     *
      * @param string[] $requiredConfigFiles
      * @param string[] $optionalConfigFiles
+     * @throws ConfigurationException when a file is missing, unreadable or invalid, or a declared security setting is not wired.
      */
     public static function fromConfigFiles(
         array $requiredConfigFiles = [],
@@ -33,12 +36,16 @@ final class ApplicationBootstrap
 
     /**
      * @param array<string, mixed> $configuration
+     * @throws ConfigurationException when a section value is invalid or a declared security setting is not wired.
      */
     public static function fromConfigurationArray(array $configuration): Application
     {
         return ApplicationBuilder::buildFromConfigurationArray($configuration);
     }
 
+    /**
+     * @throws ConfigurationException when the file is missing, unreadable or invalid, or a declared security setting is not wired.
+     */
     public static function fromConfigurationFile(string $path): Application
     {
         return ApplicationBuilder::buildFromConfigurationFile($path);
@@ -52,6 +59,8 @@ final class ApplicationBootstrap
      * - APP_CONFIG_BASE  (default: 'app')
      * - APP_ENV          (optional environment suffix)
      * - APP_CONFIG_EXTRA (comma-separated extra optional names)
+     *
+     * @throws ConfigurationException as fromConfigDirectory().
      */
     public static function fromEnvironment(): Application
     {
@@ -88,6 +97,9 @@ final class ApplicationBootstrap
      *
      * A null $environment falls back to APP_ENV; pass an empty string to disable
      * environment-specific optional loading.
+     *
+     * @throws ConfigurationException on an empty or invalid directory, base or extra name, when the files cannot be
+     *                                loaded, or when a declared security setting is not wired.
      */
     public static function fromConfigDirectory(
         string $configDir,
@@ -107,6 +119,8 @@ final class ApplicationBootstrap
      * Build an application from pre-resolved required/optional path groups.
      *
      * @param array{required: string, optional?: string[]} $paths
+     * @throws ConfigurationException on an empty required path or a malformed optional entry, when the files cannot
+     *                                be loaded, or when a declared security setting is not wired.
      */
     public static function fromResolvedPaths(array $paths): Application
     {
@@ -130,6 +144,7 @@ final class ApplicationBootstrap
      * Resolve required + optional config file paths for a conventional config directory.
      *
      * @return array{required: string, optional: string[]}
+     * @throws ConfigurationException on an empty directory or base name, or a name containing a path separator.
      */
     public static function configPathsForDirectory(
         string $configDir,
@@ -173,18 +188,8 @@ final class ApplicationBootstrap
     }
 
     /**
-     * Reject a path separator in the environment name.
-     *
-     * $baseName and every extraOptionalNames entry were already checked for
-     * '/' and '\\'; $environment, which is APP_ENV and therefore the one of
-     * the three that most often comes from outside the file, was not. The
-     * asymmetry was not exploitable -- the mandatory `<baseName>.` prefix means
-     * any traversal has to start inside an existing directory component and
-     * every variant tried resolved to no file -- but a guard that covers two of
-     * three inputs is a guard nobody can reason about. It now covers all three.
-     *
-     * An empty or blank value is fine and simply disables environment-specific
-     * loading, exactly as before.
+     * Trims the environment name and rejects path separators. APP_ENV comes from outside the file, so it is checked
+     * as strictly as the base name. An empty value disables environment-specific loading.
      */
     private static function normalizeEnvironmentName(string $environment): string
     {
