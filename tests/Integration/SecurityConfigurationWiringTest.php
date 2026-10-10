@@ -10,6 +10,7 @@ use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -928,22 +929,27 @@ final class SecurityConfigurationWiringTest extends TestCase
         );
     }
 
-    public function testRebuildingTheDisabledInstanceAmongSeveralBootsAndKeepsTheExcludedPathChecked(): void
+    public function testRebuildingTheDisabledInstanceFromTheConfigurationBootsAndExemptsOnlyTheDeclaredPath(): void
     {
-        $protected = new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults());
+        $security = ['csrf' => ['enabled' => true, 'exceptions' => ['#^/webhooks/#']]];
+        $router = (new Router())
+            ->post('/webhooks/payment', WiringController::class . '@handle')
+            ->post('/profile', WiringController::class . '@handle');
         $application = ApplicationBuilder::create()
-            ->withConfigurationArray(['security' => ['csrf' => ['enabled' => true]]])
-            ->withRouter(new Router())
-            ->withMiddleware($protected)
-            ->withMiddleware(new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+            ->withConfigurationArray(['security' => $security])
+            ->withRouter($router)
+            ->withMiddleware(new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#']),
+            ))
+            ->withMiddleware(new CsrfMiddleware(
+                new WiringTokenManager(),
+                CsrfConfig::fromSecurityConfig(SecurityConfig::fromArray($security)),
+            ))
             ->build();
 
-        self::assertInstanceOf(Application::class, $application);
-        $response = $protected->process(
-            Request::fromArray('POST', '/z/'),
-            static fn (): Response => Response::text('HANDLED'),
-        );
-        self::assertSame(403, $response->status);
+        self::assertSame(200, $application->handle(Request::fromArray('POST', '/webhooks/payment'))->status);
+        self::assertSame(403, $application->handle(Request::fromArray('POST', '/profile'))->status);
     }
 
     public function testADisabledCsrfMiddlewareWhoseExclusionsAreDeclaredOnlySaysToRebuildIt(): void
@@ -1070,6 +1076,14 @@ final class SecurityConfigurationWiringTest extends TestCase
 // ===========================================================================
 // Fixtures
 // ===========================================================================
+
+final class WiringController
+{
+    public function handle(): Response
+    {
+        return Response::text('HANDLED');
+    }
+}
 
 final class WiringTokenManager implements CsrfTokenManagerInterface
 {
