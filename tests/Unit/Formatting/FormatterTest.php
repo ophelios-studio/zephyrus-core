@@ -592,6 +592,65 @@ final class FormatterTest extends TestCase
         self::assertSame([], $this->formatter->getCustomFormatterNames());
     }
 
+    public function testHasAcceptsEveryBuiltInNameIgnoringCase(): void
+    {
+        foreach (Formatter::BUILT_IN_FORMATTERS as $builtIn) {
+            self::assertTrue($this->formatter->has($builtIn), $builtIn);
+            self::assertTrue($this->formatter->has(strtoupper($builtIn)), $builtIn);
+        }
+    }
+
+    public function testHasAcceptsCustomNamesExactly(): void
+    {
+        $this->formatter->register('phone', fn (string $n) => $n);
+
+        self::assertTrue($this->formatter->has('phone'));
+        self::assertFalse($this->formatter->has('Phone'));
+    }
+
+    public function testHasAcceptsACustomOverrideOfABuiltInName(): void
+    {
+        $this->formatter->register('MONEY', fn () => 'override');
+
+        self::assertTrue($this->formatter->has('money'));
+        self::assertTrue($this->formatter->has('Money'));
+    }
+
+    public function testHasRejectsUnknownNamesAndNearMisses(): void
+    {
+        foreach (['', 'phone', ' money', "money\0", 'money ', 'moneys'] as $name) {
+            self::assertFalse($this->formatter->has($name), var_export($name, true));
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function dispatchableNames(): iterable
+    {
+        yield 'custom' => ['phone', true];
+        yield 'custom name is case-sensitive' => ['Phone', false];
+        yield 'built-in' => ['decimal', true];
+        yield 'built-in, other case' => ['DECIMAL', true];
+        yield 'unknown' => ['nope', false];
+        yield 'empty' => ['', false];
+        yield 'accessor is not a formatter' => ['getLocale', false];
+    }
+
+    #[DataProvider('dispatchableNames')]
+    public function testHasAgreesWithFormatDispatch(string $name, bool $expected): void
+    {
+        $this->formatter->register('phone', fn () => 'ok');
+
+        self::assertSame($expected, $this->formatter->has($name));
+
+        if (!$expected) {
+            $this->expectException(FormatterException::class);
+        }
+
+        self::assertIsString($this->formatter->format($name, 1.5));
+    }
+
     public function testGetCustomFormatterNamesReturnsRegisteredNames(): void
     {
         $this->formatter->register('phone', fn (string $n) => $n);

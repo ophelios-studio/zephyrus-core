@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 use Zephyrus\Core\App;
-use Zephyrus\Formatting\Formatter;
 
 final class Translator
 {
@@ -318,22 +317,11 @@ final class Translator
         }
 
         $isCustom = $formatter->hasCustomFormatter($pipeName);
-        if (!$isCustom && !$this->isBuiltInFormatter($pipeName)) {
+        if (!$formatter->has($pipeName)) {
             throw LocalizationException::unknownPipe($pipeName, $key);
         }
 
         return $formatter->format($pipeName, $isCustom ? $value : $this->castPipeValue($value));
-    }
-
-    private function isBuiltInFormatter(string $pipeName): bool
-    {
-        foreach (Formatter::BUILT_IN_FORMATTERS as $builtIn) {
-            if (strcasecmp($builtIn, $pipeName) === 0) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

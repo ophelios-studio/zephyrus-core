@@ -421,6 +421,14 @@ final class Formatter
     }
 
     /**
+     * Check whether format() can apply this name, as a custom or a built-in formatter.
+     */
+    public function has(string $name): bool
+    {
+        return $this->resolveCustomFormatter($name) !== null || $this->builtInName($name) !== null;
+    }
+
+    /**
      * Get the names of all registered custom formatters.
      *
      * @return string[]
