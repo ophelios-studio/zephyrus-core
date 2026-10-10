@@ -75,7 +75,7 @@ final class ApplicationBuilder
         return new self();
     }
 
-    public static function fromConfiguration(Configuration $configuration): self
+    public static function fromConfiguration(#[\SensitiveParameter] Configuration $configuration): self
     {
         return self::create()->withConfiguration($configuration);
     }
@@ -84,7 +84,7 @@ final class ApplicationBuilder
      * @param array<string, mixed> $configuration
      * @throws ConfigurationException when a section value is invalid.
      */
-    public static function fromConfigurationArray(array $configuration): self
+    public static function fromConfigurationArray(#[\SensitiveParameter] array $configuration): self
     {
         return self::create()->withConfigurationArray($configuration);
     }
@@ -100,7 +100,7 @@ final class ApplicationBuilder
     /**
      * @throws ConfigurationException when a declared security setting is not wired.
      */
-    public static function buildFromConfiguration(Configuration $configuration): Application
+    public static function buildFromConfiguration(#[\SensitiveParameter] Configuration $configuration): Application
     {
         return self::fromConfiguration($configuration)->build();
     }
@@ -109,7 +109,7 @@ final class ApplicationBuilder
      * @param array<string, mixed> $configuration
      * @throws ConfigurationException when a section value is invalid or a declared security setting is not wired.
      */
-    public static function buildFromConfigurationArray(array $configuration): Application
+    public static function buildFromConfigurationArray(#[\SensitiveParameter] array $configuration): Application
     {
         return self::fromConfigurationArray($configuration)->build();
     }
@@ -379,8 +379,10 @@ final class ApplicationBuilder
      * @param Configuration $configuration The full application configuration.
      * @param string|null   $basePath      Prefixed to a relative locale_path when given.
      */
-    public function withConfiguration(Configuration $configuration, ?string $basePath = null): self
-    {
+    public function withConfiguration(
+        #[\SensitiveParameter] Configuration $configuration,
+        ?string $basePath = null,
+    ): self {
         $clone = $this->withLocalizationConfig($configuration->localization, $basePath);
         $clone->configuration = $configuration;
 
@@ -393,7 +395,7 @@ final class ApplicationBuilder
      * @param array<string, mixed> $configuration
      * @throws ConfigurationException when a section value is invalid.
      */
-    public function withConfigurationArray(array $configuration): self
+    public function withConfigurationArray(#[\SensitiveParameter] array $configuration): self
     {
         return $this->withConfiguration(Configuration::fromArray($configuration));
     }
@@ -573,7 +575,7 @@ final class ApplicationBuilder
      * @throws ConfigurationException when a declared protection is not mounted, or mounted with another value,
      *                                and not acknowledged.
      */
-    private function assertSecurityConfigurationIsWired(SecurityConfig $security): void
+    private function assertSecurityConfigurationIsWired(#[\SensitiveParameter] SecurityConfig $security): void
     {
         if (!$this->securityWiringCheckEnabled) {
             return;

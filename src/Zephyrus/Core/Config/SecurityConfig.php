@@ -151,7 +151,7 @@ final readonly class SecurityConfig
      *         or headers is neither null nor a mapping, or a header setting is invalid (see
      *         SecureHeadersConfig::fromArray()).
      */
-    public static function fromArray(array $values): self
+    public static function fromArray(#[\SensitiveParameter] array $values): self
     {
         $keys = ConfigKeys::read(
             'security',

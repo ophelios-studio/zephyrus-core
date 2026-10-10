@@ -38,7 +38,7 @@ final class ApplicationBootstrap
      * @param array<string, mixed> $configuration
      * @throws ConfigurationException when a section value is invalid or a declared security setting is not wired.
      */
-    public static function fromConfigurationArray(array $configuration): Application
+    public static function fromConfigurationArray(#[\SensitiveParameter] array $configuration): Application
     {
         return ApplicationBuilder::buildFromConfigurationArray($configuration);
     }

@@ -1102,4 +1102,23 @@ final class SecurityConfigTest extends TestCase
             );
         }
     }
+
+    public function testARefusalKeepsTheEncryptionKeyOutOfTheTrace(): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            SecurityConfig::fromArray(['forceHtps' => true, 'encryption' => ['key' => 'k3y-material']]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertArrayHasKey('args', $e->getTrace()[0], 'Control: the trace must carry arguments.');
+            foreach ($e->getTrace() as $frame) {
+                if (str_starts_with($frame['class'] ?? '', 'Zephyrus\\Core\\')) {
+                    self::assertStringNotContainsString('k3y-material', print_r($frame['args'] ?? [], true));
+                }
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+    }
 }
