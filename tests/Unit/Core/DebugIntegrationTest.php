@@ -323,6 +323,7 @@ final class DebugIntegrationTest extends TestCase
     public function testDumpMasksATraceArgumentRenderedByAStringCast(string $case): void
     {
         ini_set('zend.exception_ignore_args', '0');
+        ini_set('zend.exception_string_param_max_len', '15');
         DebugIntegration::initialize(debug: true);
         $secret = 'tok-' . bin2hex(random_bytes(4));
 
@@ -334,6 +335,7 @@ final class DebugIntegrationTest extends TestCase
             $text = Dumper::toText($exception, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide, Dumper::TRUNCATE => PHP_INT_MAX]);
         }
 
+        self::assertSame('15', ini_get('zend.exception_string_param_max_len'), 'Control: the string cast must render 15 characters of each argument.');
         self::assertStringContainsString($secret, $logged, 'Control: the string cast must carry the trace argument.');
         self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered a trace argument from a string cast.');
         self::assertStringNotContainsString($secret, $text, 'toText() rendered a trace argument from a string cast.');
