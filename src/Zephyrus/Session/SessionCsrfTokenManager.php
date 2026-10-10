@@ -11,6 +11,8 @@ use Zephyrus\Security\CsrfTokenManagerInterface;
  *
  * The token is generated lazily by getToken() and reused for the lifetime of the session.
  * Call regenerate() together with SessionManager::regenerate() after a login or privilege change.
+ * A refused token is forged, or the session is gone, or another sign-in rotated it; check whether the
+ * person is still signed in to tell the last two apart.
  *
  *   $csrfManager = new SessionCsrfTokenManager($sessionManager);
  *   $kernel = KernelBuilder::create()
