@@ -26,6 +26,7 @@ final class RouteCache
 
     private const REASON_MISSING_FILE = 'missing-file';
     private const REASON_INVALID_METADATA = 'invalid-metadata';
+    private const REASON_INVALID_PAYLOAD = 'invalid-payload';
     private const REASON_EXPIRED = 'expired';
     private const REASON_STALE_ROUTES = 'stale-routes';
     private const REASON_FRESH = 'fresh';
@@ -65,18 +66,7 @@ final class RouteCache
      */
     public function isFresh(RouteCollection $routes): bool
     {
-        $meta = $this->metadata();
-        if ($meta === null) {
-            return false;
-        }
-
-        try {
-            $this->load();
-        } catch (RouteCacheException) {
-            return false;
-        }
-
-        return hash_equals($meta['routes_hash'], $this->computeRoutesHash($routes->all()));
+        return $this->diagnose($routes, null, null)['fresh'];
     }
 
     /**
@@ -88,9 +78,8 @@ final class RouteCache
             return null;
         }
 
-        try {
-            $decoded = $this->readPayload();
-        } catch (RouteCacheException) {
+        $decoded = $this->decodeFile();
+        if (is_string($decoded)) {
             return null;
         }
 
@@ -132,13 +121,7 @@ final class RouteCache
             return null;
         }
 
-        $currentTime = $now ?? time();
-
-        if ($generatedAt > $currentTime) {
-            return null;
-        }
-
-        return $currentTime - $generatedAt;
+        return self::ageOf($generatedAt, $now ?? time());
     }
 
     /**
@@ -148,20 +131,11 @@ final class RouteCache
      */
     public function expiresAt(int $maxAgeSeconds): ?int
     {
-        if ($maxAgeSeconds < 0) {
-            throw new RouteCacheException('Route cache max age must be zero or greater');
-        }
+        self::assertMaxAge($maxAgeSeconds);
 
         $generatedAt = $this->generatedAt();
-        if ($generatedAt === null) {
-            return null;
-        }
 
-        if ($maxAgeSeconds > PHP_INT_MAX - $generatedAt) {
-            return PHP_INT_MAX;
-        }
-
-        return $generatedAt + $maxAgeSeconds;
+        return $generatedAt === null ? null : self::expiryOf($generatedAt, $maxAgeSeconds);
     }
 
     /**
@@ -169,19 +143,16 @@ final class RouteCache
      */
     public function isExpired(int $maxAgeSeconds, ?int $now = null): bool
     {
-        $expiresAt = $this->expiresAt($maxAgeSeconds);
-        if ($expiresAt === null) {
+        self::assertMaxAge($maxAgeSeconds);
+
+        $generatedAt = $this->generatedAt();
+        if ($generatedAt === null) {
             return true;
         }
 
         $currentTime = $now ?? time();
-        $generatedAt = $this->generatedAt();
 
-        if ($generatedAt !== null && $generatedAt > $currentTime) {
-            return true;
-        }
-
-        return $currentTime > $expiresAt;
+        return $generatedAt > $currentTime || $currentTime > self::expiryOf($generatedAt, $maxAgeSeconds);
     }
 
     /**
@@ -189,11 +160,7 @@ final class RouteCache
      */
     public function isFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
-        if ($this->isExpired($maxAgeSeconds, $now)) {
-            return false;
-        }
-
-        return $this->isFresh($routes);
+        return $this->inspect($routes, $maxAgeSeconds, $now)['fresh'];
     }
 
     /**
@@ -201,18 +168,11 @@ final class RouteCache
      */
     public function ensureFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): void
     {
-        if ($maxAgeSeconds < 0) {
-            throw new RouteCacheException('Route cache max age must be zero or greater');
-        }
+        self::assertMaxAge($maxAgeSeconds);
 
-        $this->load();
-
-        if ($this->isExpired($maxAgeSeconds, $now)) {
-            throw $this->refuse('expired');
-        }
-
-        if (!$this->isFresh($routes)) {
-            throw $this->refuse('routes that differ from the current routes');
+        $state = $this->diagnose($routes, $maxAgeSeconds, $now);
+        if (!$state['fresh']) {
+            throw $this->refuse($state['problem'] ?? 'a state that cannot be used');
         }
     }
 
@@ -221,7 +181,7 @@ final class RouteCache
      */
     public function canUseWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
-        return $this->inspect($routes, $maxAgeSeconds, $now)['reason'] === self::REASON_FRESH;
+        return $this->isFreshWithin($routes, $maxAgeSeconds, $now);
     }
 
     /**
@@ -236,16 +196,15 @@ final class RouteCache
      *   reason: string,
      *   age: ?int,
      *   expires_at: ?int,
-     *   generated_at: ?int
+     *   generated_at: ?int,
+     *   problem: ?string
      * }
      */
     public function inspect(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): array
     {
-        if ($maxAgeSeconds < 0) {
-            throw new RouteCacheException('Route cache max age must be zero or greater');
-        }
+        self::assertMaxAge($maxAgeSeconds);
 
-        return $this->evaluateState($routes, $maxAgeSeconds, $now);
+        return $this->diagnose($routes, $maxAgeSeconds, $now);
     }
 
     /**
@@ -332,9 +291,7 @@ final class RouteCache
      */
     public function warmIfStale(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
-        if ($maxAgeSeconds < 0) {
-            throw new RouteCacheException('Route cache max age must be zero or greater');
-        }
+        self::assertMaxAge($maxAgeSeconds);
 
         if ($this->isFreshWithin($routes, $maxAgeSeconds, $now)) {
             return false;
@@ -357,75 +314,81 @@ final class RouteCache
             throw $this->refuse('not been written');
         }
 
-        $decoded = $this->readPayload();
+        $decoded = $this->decodeFile();
+        if (is_string($decoded)) {
+            throw $this->refuse($decoded);
+        }
 
         $problem = $this->payloadFailure($decoded);
         if ($problem !== null) {
             throw $this->refuse($problem);
         }
 
-        $routesPayload = $decoded['routes'];
-        $collection = new RouteCollection();
+        $routes = $this->buildRoutes($decoded['routes']);
 
-        foreach ($routesPayload as $entry) {
-            if (!is_array($entry)) {
-                throw $this->refuse('a route entry that is not an object');
-            }
+        return is_string($routes) ? throw $this->refuse($routes) : $routes;
+    }
 
-            foreach (['method', 'path', 'handler'] as $requiredKey) {
-                if (!array_key_exists($requiredKey, $entry) || !is_string($entry[$requiredKey])) {
-                    throw $this->refuse(sprintf('a route entry without a valid "%s"', $requiredKey));
-                }
-            }
-
-            $this->assertValidMethodPathAndHandler(
-                $entry['method'],
-                $entry['path'],
-                $entry['handler'],
-            );
-
-            $constraints = $entry['constraints'] ?? [];
-            $middlewares = $entry['middlewares'] ?? [];
-            $name = $entry['name'] ?? null;
-            $excludedMiddlewares = $entry[self::EXCLUDED_MIDDLEWARES_KEY] ?? [];
-
-            if (!is_array($constraints) || !is_array($middlewares) || ($name !== null && !is_string($name))) {
-                throw $this->refuse('a route entry with invalid optional fields');
-            }
-
-            if (!is_array($excludedMiddlewares)) {
-                throw $this->refuse('a route entry with an invalid excluded middlewares list');
-            }
-
-            $this->assertValidConstraints($constraints);
-            $this->assertAllStrings($middlewares, 'middlewares');
-            $this->assertValidRouteName($name);
-            $this->assertValidExcludedMiddlewares($excludedMiddlewares);
-
-            try {
-                $route = Route::define(
-                    method: $entry['method'],
-                    path: $entry['path'],
-                    handler: $entry['handler'],
-                    constraints: $constraints,
-                    middlewares: $middlewares,
-                    name: $name,
-                    excludedMiddlewares: $excludedMiddlewares,
-                );
-            } catch (RouteSignatureException | RouteMiddlewareException $exception) {
-                throw $this->refuse('a route entry that is rejected: ' . $exception->getMessage(), $exception);
-            }
-
-            $collection->add($route);
+    /**
+     * Reads the file once and decides everything: the routes are built exactly as load() builds them, so
+     * a cache that load() refuses is never fresh. $maxAgeSeconds null skips the age checks.
+     *
+     * @return array{
+     *   exists: bool,
+     *   metadata_valid: bool,
+     *   fresh: bool,
+     *   expired: bool,
+     *   reason: string,
+     *   age: ?int,
+     *   expires_at: ?int,
+     *   generated_at: ?int,
+     *   problem: ?string
+     * }
+     */
+    private function diagnose(RouteCollection $routes, ?int $maxAgeSeconds, ?int $now): array
+    {
+        if (!$this->has()) {
+            return self::state(false, false, self::REASON_MISSING_FILE, 'not been written');
         }
 
-        try {
-            $collection->assertNoDuplicateRouteNames();
-        } catch (RouteSignatureException $exception) {
-            throw $this->refuse('a route table that is rejected: ' . $exception->getMessage(), $exception);
+        $decoded = $this->decodeFile();
+        if (is_string($decoded)) {
+            return self::state(true, false, self::REASON_INVALID_METADATA, $decoded);
         }
 
-        return $collection;
+        $problem = $this->payloadFailure($decoded);
+        if ($problem !== null) {
+            $reason = $this->metadataFailure($decoded['meta'] ?? null) === null
+                ? self::REASON_INVALID_PAYLOAD
+                : self::REASON_INVALID_METADATA;
+
+            return self::state(true, false, $reason, $problem);
+        }
+
+        $meta = $decoded['meta'];
+        $generatedAt = $meta['generated_at'];
+        $currentTime = $now ?? time();
+        $age = self::ageOf($generatedAt, $currentTime);
+        $expiresAt = $maxAgeSeconds === null ? null : self::expiryOf($generatedAt, $maxAgeSeconds);
+
+        $built = $this->buildRoutes($decoded['routes']);
+        if (is_string($built)) {
+            return self::state(true, true, self::REASON_INVALID_PAYLOAD, $built, $age, $expiresAt, $generatedAt);
+        }
+
+        if ($maxAgeSeconds !== null && $generatedAt > $currentTime) {
+            return self::state(true, true, self::REASON_EXPIRED, 'a generation timestamp in the future', $age, $expiresAt, $generatedAt, expired: true);
+        }
+
+        if ($expiresAt !== null && $currentTime > $expiresAt) {
+            return self::state(true, true, self::REASON_EXPIRED, 'expired', $age, $expiresAt, $generatedAt, expired: true);
+        }
+
+        if (!hash_equals($meta['routes_hash'], $this->computeRoutesHash($routes->all()))) {
+            return self::state(true, true, self::REASON_STALE_ROUTES, 'routes that differ from the current routes', $age, $expiresAt, $generatedAt);
+        }
+
+        return self::state(true, true, self::REASON_FRESH, null, $age, $expiresAt, $generatedAt);
     }
 
     /**
@@ -437,79 +400,51 @@ final class RouteCache
      *   reason: string,
      *   age: ?int,
      *   expires_at: ?int,
-     *   generated_at: ?int
+     *   generated_at: ?int,
+     *   problem: ?string
      * }
      */
-    private function evaluateState(RouteCollection $routes, int $maxAgeSeconds, ?int $now): array
-    {
-        if (!$this->has()) {
-            return [
-                'exists' => false,
-                'metadata_valid' => false,
-                'fresh' => false,
-                'expired' => true,
-                'reason' => self::REASON_MISSING_FILE,
-                'age' => null,
-                'expires_at' => null,
-                'generated_at' => null,
-            ];
-        }
-
-        $meta = $this->metadata();
-        if ($meta === null) {
-            return [
-                'exists' => true,
-                'metadata_valid' => false,
-                'fresh' => false,
-                'expired' => true,
-                'reason' => self::REASON_INVALID_METADATA,
-                'age' => null,
-                'expires_at' => null,
-                'generated_at' => null,
-            ];
-        }
-
-        $age = $this->age($now);
-        $expiresAt = $this->expiresAt($maxAgeSeconds);
-        $expired = $this->isExpired($maxAgeSeconds, $now);
-
-        if ($expired) {
-            return [
-                'exists' => true,
-                'metadata_valid' => true,
-                'fresh' => false,
-                'expired' => true,
-                'reason' => self::REASON_EXPIRED,
-                'age' => $age,
-                'expires_at' => $expiresAt,
-                'generated_at' => $meta['generated_at'],
-            ];
-        }
-
-        $fresh = $this->isFresh($routes);
-        if (!$fresh) {
-            return [
-                'exists' => true,
-                'metadata_valid' => true,
-                'fresh' => false,
-                'expired' => false,
-                'reason' => self::REASON_STALE_ROUTES,
-                'age' => $age,
-                'expires_at' => $expiresAt,
-                'generated_at' => $meta['generated_at'],
-            ];
-        }
-
+    private static function state(
+        bool $exists,
+        bool $metadataValid,
+        string $reason,
+        ?string $problem,
+        ?int $age = null,
+        ?int $expiresAt = null,
+        ?int $generatedAt = null,
+        bool $expired = false,
+    ): array {
         return [
-            'exists' => true,
-            'metadata_valid' => true,
-            'fresh' => true,
-            'expired' => false,
-            'reason' => self::REASON_FRESH,
+            'exists' => $exists,
+            'metadata_valid' => $metadataValid,
+            'fresh' => $reason === self::REASON_FRESH,
+            'expired' => $expired || !$metadataValid,
+            'reason' => $reason,
             'age' => $age,
             'expires_at' => $expiresAt,
-            'generated_at' => $meta['generated_at'],
+            'generated_at' => $generatedAt,
+            'problem' => $problem,
         ];
+    }
+
+    private static function ageOf(int $generatedAt, int $now): ?int
+    {
+        return $generatedAt > $now ? null : $now - $generatedAt;
+    }
+
+    private static function expiryOf(int $generatedAt, int $maxAgeSeconds): int
+    {
+        return $maxAgeSeconds > PHP_INT_MAX - $generatedAt ? PHP_INT_MAX : $generatedAt + $maxAgeSeconds;
+    }
+
+    /**
+     * @throws RouteCacheException When $maxAgeSeconds is negative.
+     */
+    private static function assertMaxAge(int $maxAgeSeconds): void
+    {
+        if ($maxAgeSeconds < 0) {
+            throw new RouteCacheException('Route cache max age must be zero or greater');
+        }
     }
 
     /**
@@ -566,7 +501,7 @@ final class RouteCache
 
     /**
      * @param array<mixed> $decoded
-     * @return string|null The problem that load() would refuse, or null when the payload passes.
+     * @return string|null The structure, metadata, count or hash problem, or null when the payload passes those checks.
      */
     private function payloadFailure(array $decoded): ?string
     {
@@ -653,84 +588,162 @@ final class RouteCache
     }
 
     /**
-     * @return array<mixed>
+     * @return array<mixed>|string The decoded payload, or the problem with the file contents.
      */
-    private function readPayload(): array
+    private function decodeFile(): array|string
     {
         $contents = @file_get_contents($this->cacheFile);
-
         if ($contents === false) {
-            throw $this->refuse('contents that cannot be read');
+            return 'contents that cannot be read';
         }
 
         try {
             $decoded = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
-            throw $this->refuse('contents that are not valid JSON', $exception);
+        } catch (JsonException) {
+            return 'contents that are not valid JSON';
         }
 
-        if (!is_array($decoded)) {
-            throw $this->refuse('contents that do not decode to an object');
+        return is_array($decoded) ? $decoded : 'contents that do not decode to an object';
+    }
+
+    /**
+     * @param array<mixed> $routesPayload
+     * @return RouteCollection|string The routes, or the problem with an entry or with the table.
+     */
+    private function buildRoutes(array $routesPayload): RouteCollection|string
+    {
+        $collection = new RouteCollection();
+
+        foreach ($routesPayload as $entry) {
+            $route = $this->routeFromEntry($entry);
+            if (is_string($route)) {
+                return $route;
+            }
+
+            $collection->add($route);
         }
 
-        return $decoded;
+        try {
+            $collection->assertNoDuplicateRouteNames();
+        } catch (RouteSignatureException $exception) {
+            return 'a route table that is rejected: ' . $exception->getMessage();
+        }
+
+        return $collection;
+    }
+
+    private function routeFromEntry(mixed $entry): Route|string
+    {
+        if (!is_array($entry)) {
+            return 'a route entry that is not an object';
+        }
+
+        foreach (['method', 'path', 'handler'] as $requiredKey) {
+            if (!array_key_exists($requiredKey, $entry) || !is_string($entry[$requiredKey])) {
+                return sprintf('a route entry without a valid "%s"', $requiredKey);
+            }
+        }
+
+        $problem = $this->methodPathAndHandlerFailure($entry['method'], $entry['path'], $entry['handler']);
+        if ($problem !== null) {
+            return $problem;
+        }
+
+        $constraints = $entry['constraints'] ?? [];
+        $middlewares = $entry['middlewares'] ?? [];
+        $name = $entry['name'] ?? null;
+        $excludedMiddlewares = $entry[self::EXCLUDED_MIDDLEWARES_KEY] ?? [];
+
+        if (!is_array($constraints) || !is_array($middlewares) || ($name !== null && !is_string($name))) {
+            return 'a route entry with invalid optional fields';
+        }
+
+        if (!is_array($excludedMiddlewares)) {
+            return 'a route entry with an invalid excluded middlewares list';
+        }
+
+        $problem = $this->constraintsFailure($constraints)
+            ?? $this->allStringsFailure($middlewares, 'middlewares')
+            ?? $this->routeNameFailure($name)
+            ?? $this->excludedMiddlewaresFailure($excludedMiddlewares);
+        if ($problem !== null) {
+            return $problem;
+        }
+
+        try {
+            return Route::define(
+                method: $entry['method'],
+                path: $entry['path'],
+                handler: $entry['handler'],
+                constraints: $constraints,
+                middlewares: $middlewares,
+                name: $name,
+                excludedMiddlewares: $excludedMiddlewares,
+            );
+        } catch (RouteSignatureException | RouteMiddlewareException $exception) {
+            return 'a route entry that is rejected: ' . $exception->getMessage();
+        }
     }
 
     /**
      * @param array<mixed> $constraints
      */
-    private function assertValidConstraints(array $constraints): void
+    private function constraintsFailure(array $constraints): ?string
     {
         foreach ($constraints as $parameter => $pattern) {
             if (!is_string($parameter) || !is_string($pattern)) {
-                throw $this->refuse('a route entry with an invalid constraints map');
+                return 'a route entry with an invalid constraints map';
             }
         }
+
+        return null;
     }
 
     /**
      * @param array<mixed> $middlewares
      */
-    private function assertValidExcludedMiddlewares(array $middlewares): void
+    private function excludedMiddlewaresFailure(array $middlewares): ?string
     {
         if (!array_is_list($middlewares)) {
-            throw $this->refuse('a route entry with an invalid excluded middlewares list');
+            return 'a route entry with an invalid excluded middlewares list';
         }
 
-        $this->assertAllStrings($middlewares, 'excluded middlewares');
+        return $this->allStringsFailure($middlewares, 'excluded middlewares');
     }
 
     /**
      * @param array<mixed> $values
      */
-    private function assertAllStrings(array $values, string $label): void
+    private function allStringsFailure(array $values, string $label): ?string
     {
         foreach ($values as $value) {
             if (!is_string($value)) {
-                throw $this->refuse(sprintf('a route entry with an invalid %s list', $label));
+                return sprintf('a route entry with an invalid %s list', $label);
             }
         }
+
+        return null;
     }
 
-    private function assertValidMethodPathAndHandler(string $method, string $path, string $handler): void
+    private function methodPathAndHandlerFailure(string $method, string $path, string $handler): ?string
     {
         if (preg_match('/^[A-Z]+$/D', $method) !== 1) {
-            throw $this->refuse('a route entry with an invalid HTTP method format');
+            return 'a route entry with an invalid HTTP method format';
         }
 
         if ($path === '' || !str_starts_with($path, '/')) {
-            throw $this->refuse('a route entry with an invalid route path');
+            return 'a route entry with an invalid route path';
         }
 
         if ($handler === '' || !str_contains($handler, '@')) {
-            throw $this->refuse('a route entry with an invalid handler format');
+            return 'a route entry with an invalid handler format';
         }
+
+        return null;
     }
 
-    private function assertValidRouteName(?string $name): void
+    private function routeNameFailure(?string $name): ?string
     {
-        if ($name !== null && trim($name) === '') {
-            throw $this->refuse('a route entry with an invalid route name');
-        }
+        return $name !== null && trim($name) === '' ? 'a route entry with an invalid route name' : null;
     }
 }

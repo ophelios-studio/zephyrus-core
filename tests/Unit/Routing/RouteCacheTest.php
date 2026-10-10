@@ -1399,6 +1399,96 @@ final class RouteCacheTest extends TestCase
         $this->assertRefused(static fn (): mixed => $cache->load(), 'Duplicate route names detected: users.show');
     }
 
+    public function testInspectReportsAnEditedRoutesSectionAsAnInvalidPayload(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $payload = json_decode((string) file_get_contents($this->cacheFile), true, 512, JSON_THROW_ON_ERROR);
+        $payload['routes'][0]['handler'] = 'AdminController@show';
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        $state = $cache->inspect($routes, 60);
+
+        self::assertSame('invalid-payload', $state['reason']);
+        self::assertSame('a routes hash that does not match its routes section', $state['problem']);
+        self::assertFalse($state['fresh']);
+        self::assertFalse($cache->canUseWithin($routes, 60));
+    }
+
+    public function testInspectReportsARehashedBadEntryAsAnInvalidPayload(): void
+    {
+        $entries = [['method' => 'get', 'path' => '/health', 'handler' => 'HealthController@show']];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+        $state = $cache->inspect(new RouteCollection(), 60, 1700000000);
+
+        self::assertSame('invalid-payload', $state['reason']);
+        self::assertSame('a route entry with an invalid HTTP method format', $state['problem']);
+        self::assertTrue($state['metadata_valid']);
+        self::assertFalse($state['fresh']);
+        self::assertSame(1700000000, $state['generated_at']);
+    }
+
+    public function testALiveTableWithDuplicateNamesIsNeverFresh(): void
+    {
+        $live = new RouteCollection();
+        $live->add(Route::define('GET', '/users/1', 'UserController@showOne', name: 'users.show'));
+        $live->add(Route::define('GET', '/users/2', 'UserController@showTwo', name: 'users.show'));
+
+        $entries = [
+            ['method' => 'GET', 'path' => '/users/1', 'handler' => 'UserController@showOne', 'constraints' => [], 'middlewares' => [], 'name' => 'users.show'],
+            ['method' => 'GET', 'path' => '/users/2', 'handler' => 'UserController@showTwo', 'constraints' => [], 'middlewares' => [], 'name' => 'users.show'],
+        ];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertFalse($cache->isFresh($live));
+        self::assertFalse($cache->canUseWithin($live, 60, 1700000000));
+        $this->assertRefused(static fn (): mixed => $cache->ensureFreshWithin($live, 60, 1700000000), 'Duplicate route names detected: users.show');
+    }
+
+    public function testEnsureFreshWithinNamesAGenerationTimestampInTheFuture(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/health', 'HealthController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $generatedAt = $cache->generatedAt();
+        self::assertNotNull($generatedAt);
+        $now = $generatedAt - 120;
+
+        self::assertTrue($cache->isFresh($routes));
+        self::assertFalse($cache->canUseWithin($routes, 300, $now));
+        self::assertSame('a generation timestamp in the future', $cache->inspect($routes, 300, $now)['problem']);
+        $this->assertRefused(static fn (): mixed => $cache->ensureFreshWithin($routes, 300, $now), 'a generation timestamp in the future');
+    }
+
+    public function testInspectReportsNoProblemForAFreshCache(): void
+    {
+        $routes = new RouteCollection();
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        self::assertNull($cache->inspect($routes, 60)['problem']);
+    }
+
+    public function testRoutesSectionThatIsAnObjectIsRefusedAsNotAList(): void
+    {
+        $section = ['GET' => []];
+        $meta = ['route_count' => 1, 'routes_hash' => hash('sha256', json_encode($section, JSON_THROW_ON_ERROR))] + self::metadataFor([]);
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => $section], JSON_THROW_ON_ERROR));
+
+        $this->assertLoadRefused(new RouteCache($this->cacheFile), 'a routes section that is not a list');
+    }
+
     public function testSaveAndWarmRefuseDuplicateRouteNamesWithoutWritingTheFile(): void
     {
         $routes = new RouteCollection();
