@@ -86,7 +86,7 @@ final class Formatter
      *                                             the locale's decimal or monetary decimal sign.
      *                                             In a right-to-left locale, or inside right-to-left text, only `,` `.`
      *                                             U+00A0 and U+202F keep the groups in order; a space, U+2009, `'` or
-     *                                             U+2019 reverses them.
+     *                                             U+2019 can reverse them.
      * @throws FormatterException if $locale contains a NUL byte, or the default currency or the grouping separator
      *         is not accepted.
      */

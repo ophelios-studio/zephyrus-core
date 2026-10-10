@@ -24,7 +24,7 @@ use Zephyrus\Formatting\FormatterInput;
  * - groupingSeparator (grouping_separator): thousands separator. Null keeps the locale default,
  *   '' disables grouping. Otherwise one of `,` `.` `'` U+2019, a space, U+00A0, U+202F or U+2009.
  *   In a right-to-left locale, or inside right-to-left text, only `,` `.` U+00A0 and U+202F keep the
- *   groups in order; a space, U+2009, `'` or U+2019 reverses them.
+ *   groups in order; a space, U+2009, `'` or U+2019 can reverse them.
  */
 final readonly class LocalizationConfig
 {

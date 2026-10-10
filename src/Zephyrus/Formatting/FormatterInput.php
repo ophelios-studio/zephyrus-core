@@ -10,7 +10,7 @@ namespace Zephyrus\Formatting;
  *
  * A grouping separator is one of `,` `.` `'` U+2019, a space, U+00A0, U+202F or U+2009, or '' to turn
  * grouping off. In a right-to-left locale, or inside right-to-left text, only `,` `.` U+00A0 and U+202F
- * keep the groups in order; a space, U+2009, `'` or U+2019 reverses them.
+ * keep the groups in order; a space, U+2009, `'` or U+2019 can reverse them.
  *
  * @internal
  */
