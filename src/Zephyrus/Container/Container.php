@@ -208,9 +208,21 @@ final class Container implements ContainerInterface
                 continue;
             }
 
+            $name = $param->getName();
+
+            if ($type === null) {
+                throw new ContainerException(
+                    "Cannot auto-wire parameter \${$name} of [{$className}]: no type hint and no default value."
+                );
+            }
+
+            $typeName = $type instanceof ReflectionNamedType && $type->isBuiltin()
+                ? "built-in type {$type}"
+                : "type {$type}";
+
             throw new ContainerException(
-                "Cannot auto-wire parameter \${$param->getName()} of [{$className}]: "
-                . "no type hint and no default value."
+                "Cannot auto-wire parameter \${$name} of [{$className}]: it has the {$typeName}, "
+                . "which the container cannot provide, and no default value."
             );
         }
 

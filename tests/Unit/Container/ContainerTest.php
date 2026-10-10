@@ -274,6 +274,18 @@ final class ContainerTest extends TestCase
         self::assertSame(0, $calls);
     }
 
+    public function testAutoWireNamesBuiltInTypeThatCannotBeProvided(): void
+    {
+        try {
+            $this->container->get(ServiceWithUnresolvableParam::class);
+            self::fail('An unprovidable scalar parameter must be refused.');
+        } catch (ContainerException $e) {
+            self::assertStringContainsString('parameter $dsn of [' . ServiceWithUnresolvableParam::class . ']', $e->getMessage());
+            self::assertStringContainsString('built-in type string', $e->getMessage());
+            self::assertStringNotContainsString('no type hint', $e->getMessage());
+        }
+    }
+
     /**
      * Runs $callback with a counting autoloader registered and returns the number of calls.
      */
