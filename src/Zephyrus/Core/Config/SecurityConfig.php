@@ -59,7 +59,8 @@ use Zephyrus\Security\CsrfConfig;
  *   - csrf.autoHtml and its aliases are not settings: omit them. A value that
  *     casts to true is REJECTED at boot.
  *   - Each trustedProxies entry must be '*', a valid IP address or a valid CIDR range.
- *     IPv4-mapped ranges (::ffff:a.b.c.d/N) below /96 are REJECTED.
+ *     IPv6 ranges below /96 that embed an IPv4 address (::ffff:a.b.c.d/N, ::a.b.c.d/N,
+ *     64:ff9b::a.b.c.d/N) are REJECTED.
  *   - Each trustedHeaders entry must name a header Request can actually read;
  *     an unknown name is REJECTED rather than ignored, because silently dropping
  *     a typo would leave an operator believing they trust a header they do not.
@@ -237,7 +238,7 @@ final readonly class SecurityConfig
                 default => IpRange::invalidEntryReason($proxy),
             };
             if ($reason !== null && is_string($proxy) && str_contains($proxy, ',')) {
-                $reason .= '; one entry per list item, a comma-separated value is not accepted';
+                $reason .= '; use list items or one comma-separated string, not a comma inside one item';
             }
             if ($reason !== null) {
                 throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", self::shownValue($proxy), $reason);

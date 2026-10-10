@@ -98,6 +98,14 @@ final class IpRangeTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
+    public function testInvalidEntryReasonNamesTheMappedFormForMappedRanges(): void
+    {
+        self::assertStringContainsString('::ffff:10.0.0.0/104', IpRange::invalidEntryReason('::ffff:10.0.0.0/8') ?? '');
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
     public static function ipv6RangesEmbeddingIpv4(): iterable
     {
         yield 'ipv4 compatible' => ['::10.0.0.0/8'];

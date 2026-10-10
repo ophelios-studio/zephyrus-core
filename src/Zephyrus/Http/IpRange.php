@@ -7,13 +7,12 @@ namespace Zephyrus\Http;
 /**
  * Shared parser for IP addresses and CIDR ranges, used by trusted proxy and IP
  * allowlist matching. Anything it cannot parse is a non-match, never a match.
- * Debugger client lists are matched by Tracy, see DebugIntegration.
  */
 final class IpRange
 {
     private const int SHOWN_LENGTH = 64;
 
-    private const string MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
+    private const string MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8, or ::ffff:10.0.0.0/104 for peers seen in mapped form';
 
     private const string EMBEDDED_REFUSAL = 'an IPv6 range shorter than /96 that embeds an IPv4 address covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
 
@@ -78,7 +77,9 @@ final class IpRange
     }
 
     /**
-     * Why an IP address or CIDR range cannot be matched, or null when it can.
+     * Why an IP address or CIDR range cannot be matched, or null when it can. A short
+     * IPv4-mapped range such as ::ffff:10.0.0.0/8 is masked to ::/8, so it covers ::1
+     * and every mapped address.
      */
     public static function invalidEntryReason(string $entry): ?string
     {

@@ -291,7 +291,7 @@ final class AllowedHostsMiddlewareTest extends TestCase
      */
     public static function entriesWithADedicatedReason(): iterable
     {
-        yield 'comma-separated list' => ['a.example.com,b.example.com', 'one entry per list item'];
+        yield 'comma-separated list' => ['a.example.com,b.example.com', 'use list items or one comma-separated string'];
         yield 'leading space' => [' example.com', 'remove the spaces'];
         yield 'trailing space' => ['example.com ', 'remove the spaces'];
         yield 'host with port' => ['example.com:8080', 'ports are not matched: list "example.com" only'];

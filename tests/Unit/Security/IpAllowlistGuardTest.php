@@ -117,7 +117,7 @@ final class IpAllowlistGuardTest extends TestCase
     public function testConstructorRefusesShortIpv4MappedRangeWithTheIpv4Form(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('an IPv4-mapped IPv6 range shorter than /96');
+        $this->expectExceptionMessage('or ::ffff:10.0.0.0/104 for peers seen in mapped form');
 
         new IpAllowlistGuard(['::ffff:10.0.0.0/8']);
     }
