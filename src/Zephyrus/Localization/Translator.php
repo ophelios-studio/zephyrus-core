@@ -306,14 +306,29 @@ final class Translator
     }
 
     /**
+     * @param list<string> $customNames
+     * @return list<string>
+     */
+    private function validPipeNames(array $customNames): array
+    {
+        return array_values(array_unique([...self::TEXT_PIPES, ...Formatter::BUILT_IN_FORMATTERS, ...$customNames]));
+    }
+
+    private function isBuiltInFormatterName(string $pipeName): bool
+    {
+        return in_array(strtolower($pipeName), array_map(strtolower(...), Formatter::BUILT_IN_FORMATTERS), true);
+    }
+
+    /**
      * Delegate an unknown pipe to the Formatter registered in App.
      *
      * Supports both built-in Formatter methods (money, date, decimal, …) and
      * custom formatters registered via Formatter::register().
      *
-     * A name no formatter answers to, or any formatter pipe while no Formatter is
-     * set in App, throws LocalizationException. A custom formatter's own exception
-     * propagates unchanged.
+     * A name no formatter answers to throws LocalizationException, and so does a
+     * built-in formatter name while no Formatter is set in App. A custom formatter's
+     * own exception propagates unchanged. An empty value skips a known formatter pipe,
+     * so a following default applies.
      *
      * @throws LocalizationException
      */
@@ -321,16 +336,20 @@ final class Translator
     {
         $formatter = App::getFormatter();
         if ($formatter === null) {
+            if (!$this->isBuiltInFormatterName($pipeName)) {
+                throw LocalizationException::unknownPipe($pipeName, $key, $this->validPipeNames([]));
+            }
+
             throw LocalizationException::formatterRequired($pipeName, $key);
         }
 
         $isCustom = $formatter->hasCustomFormatter($pipeName);
         if (!$formatter->has($pipeName)) {
-            throw LocalizationException::unknownPipe($pipeName, $key, [
-                ...self::TEXT_PIPES,
-                ...Formatter::BUILT_IN_FORMATTERS,
-                ...$formatter->getCustomFormatterNames(),
-            ]);
+            throw LocalizationException::unknownPipe(
+                $pipeName,
+                $key,
+                $this->validPipeNames($formatter->getCustomFormatterNames()),
+            );
         }
 
         if ($value === '') {

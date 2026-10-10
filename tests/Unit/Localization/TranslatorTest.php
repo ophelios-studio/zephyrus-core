@@ -91,7 +91,7 @@ final class TranslatorTest extends TestCase
         $translator = $this->buildTranslator();
 
         $this->expectException(LocalizationException::class);
-        $this->expectExceptionMessage('App::setFormatter()');
+        $this->expectExceptionMessage('Unknown pipe "noop"');
         $translator->trans('messages.pipe_unknown', ['name' => 'alice']);
     }
 
@@ -427,10 +427,10 @@ final class TranslatorTest extends TestCase
         $translator = $this->buildTranslator();
 
         try {
-            $translator->trans('SSN: {ssn|mask}', ['ssn' => '123456789']);
+            $translator->trans('SSN: {ssn|money}', ['ssn' => '123456789']);
             self::fail('A formatter pipe without a Formatter must not render the raw value.');
         } catch (LocalizationException $e) {
-            self::assertStringContainsString('"mask"', $e->getMessage());
+            self::assertStringContainsString('"money"', $e->getMessage());
             self::assertStringContainsString('App::setFormatter()', $e->getMessage());
             self::assertStringNotContainsString('123456789', $e->getMessage());
         }
@@ -722,6 +722,38 @@ final class TranslatorTest extends TestCase
         $this->expectException(LocalizationException::class);
         try {
             $translator->trans('{v|mony|default:N/D}', ['v' => null]);
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testMisspelledTextPipeWithoutFormatterIsAnUnknownPipe(): void
+    {
+        App::reset();
+
+        $this->expectException(LocalizationException::class);
+        $this->expectExceptionMessage('Unknown pipe "lowr"');
+        $this->buildTranslator()->trans('{v|lowr}', ['v' => 'ALICE']);
+    }
+
+    public function testBuiltInFormatterPipeNameIsMatchedIgnoringCaseWithoutFormatter(): void
+    {
+        App::reset();
+
+        $this->expectException(LocalizationException::class);
+        $this->expectExceptionMessage('needs a Formatter');
+        $this->buildTranslator()->trans('{v|MONEY}', ['v' => '19.99']);
+    }
+
+    public function testUnknownPipeMessageListsTruncateOnce(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        try {
+            $this->buildTranslator()->trans('{v|nope}', ['v' => 'x']);
+            self::fail('Expected a LocalizationException.');
+        } catch (LocalizationException $exception) {
+            self::assertSame(1, substr_count($exception->getMessage(), 'truncate'));
         } finally {
             App::reset();
         }
