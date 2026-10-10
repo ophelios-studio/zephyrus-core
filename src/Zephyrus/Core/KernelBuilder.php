@@ -215,28 +215,19 @@ final class KernelBuilder
     }
 
     /**
-     * Whether a middleware of the given class is already registered, globally
-     * or under a route-middleware name.
+     * Whether a middleware of the given class is registered, globally or under a route name.
      *
-     * This exists so that a caller can ask "is this protection wired?" WITHOUT
-     * the builder ever wiring one itself. ApplicationBuilder uses it to refuse
-     * a consumer can use it to avoid registering a second copy of something it
-     * already registers. ApplicationBuilder checks hasGlobalMiddleware() instead.
-     *
-     * Matching is by instanceof. The framework's own security middlewares are
-     * final, so in practice that means the exact class: a consumer that WRAPS
-     * one in a delegating decorator is invisible here, which is a real limit
-     * and the reason an explicit escape hatch exists. See
+     * Used to avoid registering a second copy, and to tell a developer that a protection
+     * is registered under a route name only. Matching is by instanceof, so a consumer that
+     * wraps a framework middleware in a decorator is not seen; see
      * ApplicationBuilder::withAcknowledgedSecurityKeys().
      *
      * @param class-string $class
      */
     public function hasMiddleware(string $class): bool
     {
-        foreach ($this->globalMiddlewares as $middleware) {
-            if ($middleware instanceof $class) {
-                return true;
-            }
+        if ($this->hasGlobalMiddleware($class)) {
+            return true;
         }
 
         foreach ($this->namedRouteMiddlewares as $middleware) {
