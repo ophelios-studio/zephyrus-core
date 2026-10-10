@@ -355,6 +355,47 @@ final class RouteCollectionTest extends TestCase
         self::assertSame([], $collection->allowedMethodsForPath('/projects'));
     }
 
+    public function testRoutesForPathReturnsEveryRouteWhosePatternMatchesWhateverTheMethod(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/projects', 'ProjectController@index'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('PUT', '/users/{id}', 'UserController@update'));
+
+        $routes = $collection->routesForPath('/users/42');
+
+        self::assertCount(2, $routes);
+        self::assertSame(['GET', 'PUT'], [$routes[0]->method, $routes[1]->method]);
+        self::assertSame('/users/{id}', $routes[0]->path);
+        self::assertSame('/users/{id}', $routes[1]->path);
+    }
+
+    public function testRoutesForPathReturnsEmptyListWhenNothingMatches(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        self::assertSame([], $collection->routesForPath('/projects'));
+        self::assertSame([], (new RouteCollection())->routesForPath('/users'));
+    }
+
+    public function testRoutesForPathIgnoresTrailingSlashAndHonoursConstraints(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9]+']));
+
+        self::assertCount(1, $collection->routesForPath('/users/42/'));
+        self::assertSame([], $collection->routesForPath('/users/abc'));
+    }
+
+    public function testRoutesForPathRefusesInvalidUtf8WithoutMatching(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        self::assertSame([], $collection->routesForPath("/users/\xC3\x28"));
+    }
+
     public function testHandlersReturnsRegisteredHandlersInOrder(): void
     {
         $collection = new RouteCollection();

@@ -334,9 +334,11 @@ final class RouteCollection
     }
 
     /**
-     * @return array<int, string>
+     * Every route whose pattern matches the path, whatever its method.
+     *
+     * @return list<Route>
      */
-    public function allowedMethodsForPath(string $path): array
+    public function routesForPath(string $path): array
     {
         $normalizedPath = $this->normalizePath($path);
 
@@ -344,13 +346,20 @@ final class RouteCollection
             return [];
         }
 
+        return array_values(array_filter(
+            $this->routes,
+            fn (Route $route): bool => $this->extractParameters($route, $normalizedPath) !== null,
+        ));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function allowedMethodsForPath(string $path): array
+    {
         $allowedMethods = [];
 
-        foreach ($this->routes as $route) {
-            if ($this->extractParameters($route, $normalizedPath) === null) {
-                continue;
-            }
-
+        foreach ($this->routesForPath($path) as $route) {
             $allowedMethods[] = $route->method;
 
             if ($route->method === 'GET') {
