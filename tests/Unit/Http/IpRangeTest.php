@@ -26,6 +26,10 @@ final class IpRangeTest extends TestCase
         yield 'ipv6 bare address' => ['::1'];
         yield 'ipv6 uppercase bare address' => ['2001:DB8::1'];
         yield 'ipv6 expanded bare address' => ['0:0:0:0:0:0:0:1'];
+        yield 'ipv4 mapped range at /96' => ['::ffff:10.0.0.0/96'];
+        yield 'ipv4 mapped range at /120' => ['::ffff:10.0.0.0/120'];
+        yield 'ipv4 mapped full prefix' => ['::ffff:10.0.0.1/128'];
+        yield 'ipv4 mapped bare address' => ['::ffff:10.0.0.1'];
     }
 
     /**
@@ -59,6 +63,29 @@ final class IpRangeTest extends TestCase
         yield 'hostname' => ['example.com'];
         yield 'octet out of range' => ['999.1.1.1'];
         yield 'leading space' => [' 10.0.0.1'];
+        yield 'ipv4 mapped range at /95' => ['::ffff:10.0.0.0/95'];
+        yield 'ipv4 mapped range at /8' => ['::ffff:10.0.0.0/8'];
+        yield 'ipv4 mapped range at /0' => ['::ffff:0.0.0.0/0'];
+        yield 'ipv4 mapped range in hex' => ['::ffff:a00:0/8'];
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function ipv4MappedRanges(): iterable
+    {
+        yield 'short mapped range' => ['::ffff:10.0.0.0/8', true];
+        yield 'mapped range at the boundary' => ['::ffff:10.0.0.0/95', true];
+        yield 'mapped range at /96' => ['::ffff:10.0.0.0/96', false];
+        yield 'plain ipv4 range' => ['10.0.0.0/8', false];
+        yield 'plain ipv6 range' => ['2001:db8::/32', false];
+        yield 'empty' => ['', false];
+    }
+
+    #[DataProvider('ipv4MappedRanges')]
+    public function testIsIpv4MappedBelow96FlagsOnlyShortMappedRanges(string $range, bool $expected): void
+    {
+        self::assertSame($expected, IpRange::isIpv4MappedBelow96($range));
     }
 
     #[DataProvider('validRanges')]
@@ -117,6 +144,11 @@ final class IpRangeTest extends TestCase
         yield 'overflowing prefix fails closed' => ['10.0.0.0/' . str_repeat('9', 309), '203.0.113.9', false];
         yield 'overflowing ipv6 prefix fails closed' => ['2001:db8::/' . str_repeat('9', 309), '2001:db8::1', false];
         yield 'empty range fails closed' => ['', '10.0.0.1', false];
+        yield 'ipv4 mapped short range does not cover loopback' => ['::ffff:10.0.0.0/8', '::1', false];
+        yield 'ipv4 mapped short range does not cover mapped peer' => ['::ffff:10.0.0.0/8', '::ffff:10.1.2.3', false];
+        yield 'ipv4 mapped short range does not cover ipv4 peer' => ['::ffff:0.0.0.0/0', '10.0.0.1', false];
+        yield 'ipv4 mapped range at /96 matches mapped peer' => ['::ffff:10.0.0.0/96', '::ffff:10.1.2.3', true];
+        yield 'ipv4 mapped full prefix matches itself' => ['::ffff:10.0.0.1/128', '::ffff:10.0.0.1', true];
     }
 
     #[DataProvider('membership')]

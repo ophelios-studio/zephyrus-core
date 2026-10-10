@@ -10,6 +10,8 @@ namespace Zephyrus\Http;
  */
 final class IpRange
 {
+    public const string IPV4_MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
+
     /**
      * Whether the value is an IP address or a CIDR range this class can match against.
      */
@@ -53,9 +55,33 @@ final class IpRange
     }
 
     /**
+     * Whether the range is an IPv4-mapped IPv6 range (::ffff:a.b.c.d/N) with N below 96.
+     * Such a range covers ::/8-style spans of IPv6 space, not the IPv4 range it names.
+     */
+    public static function isIpv4MappedBelow96(string $range): bool
+    {
+        $parsed = self::split($range);
+
+        return $parsed !== null && self::isShortIpv4Mapped($parsed[0], $parsed[1]);
+    }
+
+    /**
      * @return array{string, int}|null Binary network address and prefix length in bits.
      */
     private static function parse(string $range): ?array
+    {
+        $parsed = self::split($range);
+        if ($parsed === null || self::isShortIpv4Mapped($parsed[0], $parsed[1])) {
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * @return array{string, int}|null
+     */
+    private static function split(string $range): ?array
     {
         if (str_contains($range, "\0")) {
             return null;
@@ -89,6 +115,11 @@ final class IpRange
         }
 
         return [$binary, $prefix];
+    }
+
+    private static function isShortIpv4Mapped(string $binary, int $prefix): bool
+    {
+        return $prefix < 96 && strlen($binary) === 16 && substr($binary, 0, 12) === str_repeat("\0", 10) . "\xff\xff";
     }
 
     /**

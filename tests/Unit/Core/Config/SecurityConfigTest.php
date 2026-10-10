@@ -246,6 +246,22 @@ final class SecurityConfigTest extends TestCase
         SecurityConfig::fromArray(['trustedProxies' => [$entry]]);
     }
 
+    public function testIpv4MappedTrustedProxyShorterThan96IsRefusedWithTheIpv4Form(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('IPv4-mapped IPv6 range shorter than /96');
+        $this->expectExceptionMessage('such as 10.0.0.0/8');
+
+        SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/8']]);
+    }
+
+    public function testIpv4MappedTrustedProxyAtSlash96IsAccepted(): void
+    {
+        $config = SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/96']]);
+
+        self::assertSame(['::ffff:10.0.0.0/96'], $config->trustedProxies);
+    }
+
     public function testCommaSeparatedTrustedProxiesAskForOneEntryPerListItem(): void
     {
         $this->expectException(ConfigurationException::class);
