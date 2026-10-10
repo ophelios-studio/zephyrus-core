@@ -425,7 +425,7 @@ final class RouteCacheTest extends TestCase
             'meta' => [
                 'version' => 2,
                 'routes_hash' => hash('sha256', json_encode([], JSON_THROW_ON_ERROR)),
-                'route_count' => count([]),
+                'route_count' => 0,
                 'generated_at' => 1700000000,
             ],
             'routes' => [],
@@ -951,12 +951,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -982,12 +977,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1097,20 +1087,6 @@ final class RouteCacheTest extends TestCase
     }
 
     /**
-     * @param array<int, array<string, mixed>> $routes
-     * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}
-     */
-    private function metadataFor(array $routes): array
-    {
-        return [
-            'version' => 1,
-            'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-            'route_count' => count($routes),
-            'generated_at' => 1700000000,
-        ];
-    }
-
-    /**
      * @param array<string, mixed> $meta
      */
     private function assertFileRefusedByFreshnessAndLoad(array $meta, string $problem): void
@@ -1159,12 +1135,7 @@ final class RouteCacheTest extends TestCase
         $routes = ['not-an-array-entry'];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1183,12 +1154,7 @@ final class RouteCacheTest extends TestCase
         $routes = [['method' => 'GET', 'path' => '/health']]; // missing 'handler'
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1215,12 +1181,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1246,12 +1207,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1277,12 +1233,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1308,12 +1259,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1339,12 +1285,7 @@ final class RouteCacheTest extends TestCase
         ]];
 
         $payload = [
-            'meta' => [
-                'version' => 1,
-                'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
-                'route_count' => count($routes),
-                'generated_at' => 1700000000,
-            ],
+            'meta' => $this->metadataFor($routes),
             'routes' => $routes,
         ];
 
@@ -1431,5 +1372,19 @@ final class RouteCacheTest extends TestCase
         } finally {
             @rmdir($cacheDirectory);
         }
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $routes
+     * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}
+     */
+    private function metadataFor(array $routes): array
+    {
+        return [
+            'version' => 1,
+            'routes_hash' => hash('sha256', json_encode($routes, JSON_THROW_ON_ERROR)),
+            'route_count' => count($routes),
+            'generated_at' => 1700000000,
+        ];
     }
 }
