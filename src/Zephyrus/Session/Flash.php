@@ -28,6 +28,8 @@ final class Flash
 
     /**
      * @param string|string[] $message
+     *
+     * @throws SessionException when a manager is registered and no session is active.
      */
     public static function success(string|array $message): void
     {
@@ -36,6 +38,8 @@ final class Flash
 
     /**
      * @param string|string[] $message
+     *
+     * @throws SessionException when a manager is registered and no session is active.
      */
     public static function error(string|array $message): void
     {
@@ -44,6 +48,8 @@ final class Flash
 
     /**
      * @param string|string[] $message
+     *
+     * @throws SessionException when a manager is registered and no session is active.
      */
     public static function warning(string|array $message): void
     {
@@ -52,6 +58,8 @@ final class Flash
 
     /**
      * @param string|string[] $message
+     *
+     * @throws SessionException when a manager is registered and no session is active.
      */
     public static function info(string|array $message): void
     {
@@ -62,6 +70,8 @@ final class Flash
      * Read all flash messages and clear them from the session.
      *
      * Returns an object with the array properties success, error, warning and info.
+     *
+     * @throws SessionException when a manager is registered, no session is active and a message is stored.
      */
     public static function readAll(): stdClass
     {
@@ -86,6 +96,8 @@ final class Flash
 
     /**
      * Clear all flash messages without reading them.
+     *
+     * @throws SessionException when a manager is registered, no session is active and a message is stored.
      */
     public static function clearAll(): void
     {

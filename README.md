@@ -187,7 +187,7 @@ $router = $router
 
 Only a matched route skips: a 404 or 405 still runs every global middleware. Route middlewares named with `#[Middleware]` are not affected. The framework security middlewares (`ForceHttpsMiddleware`, `AllowedHostsMiddleware`, `CsrfMiddleware`, `MaxBodySizeMiddleware`, `SecureHeadersMiddleware`, `ContentSecurityPolicyMiddleware`) cannot be skipped, nor can a parent of one: the route registration throws a `RouteMiddlewareException`. To exempt a path from the CSRF check, use `security.csrf.exceptions`.
 
-Excluding `AuthGuardMiddleware` skips every guard mounted globally: mount a guard that must stay on that route under a name, or in a middleware class of your own. A consumer's wrapper around a security middleware is not recognised, so excluding the wrapper skips the security middleware inside it. A route that skips `SessionMiddleware` has no session: no CSRF-protected form (the token it renders is never saved), no flash message, no signed-in user.
+Excluding `AuthGuardMiddleware` skips every guard mounted globally: mount a guard that must stay on that route under a name, or in a middleware class of your own. A consumer's wrapper around a security middleware is not recognised, so excluding the wrapper skips the security middleware inside it. A route that skips `SessionMiddleware` has no session: no CSRF-protected form, no flash message, no signed-in user. A `SessionManager` without an active session throws a `SessionException` on a write: `set()`, `remove()` and `flash()` when the key is present, `regenerate()`, and `getToken()` when it mints a token. With no manager registered, `session()` and the `Flash` writes are ignored instead. So an error page that mints a CSRF token on a path that never reached `SessionMiddleware` fails with that exception.
 
 ### Request
 
@@ -271,8 +271,6 @@ $response->send();
 ```php
 <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf->getToken(), ENT_QUOTES, 'UTF-8') ?>">
 ```
-
-Writing to the session without a started one, for instance on a route that skips `SessionMiddleware`, throws a `SessionException` instead of silently dropping the value.
 
 A refused browser form post (an `Accept` header listing `text/html`) gets a plain-text 403 that tells the person to reload the page. Every other client gets a JSON 403. To answer refusals yourself, pass a callback that returns a `Response`, or `null` to keep the default:
 

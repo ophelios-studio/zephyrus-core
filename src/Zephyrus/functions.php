@@ -85,12 +85,12 @@ if (!function_exists('config')) {
 
 if (!function_exists('session')) {
     /**
-     * Read a session value, or set several at once from an array (returning null). Without a session manager, reads return $default and writes are ignored.
+     * Read a session value, or set several at once from an array (returning null). Without a registered session manager, reads return $default and writes are ignored.
      *
      * @param string|array<string, mixed> $key     Session key, or key-value pairs to set.
      * @param mixed                       $default Default when reading a missing key.
      *
-     * @throws \Zephyrus\Session\SessionException when writing and the session manager has no active session.
+     * @throws \Zephyrus\Session\SessionException when a manager is registered and writing finds no active session.
      */
     function session(string|array $key, mixed $default = null): mixed
     {
