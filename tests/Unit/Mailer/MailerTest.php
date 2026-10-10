@@ -667,6 +667,16 @@ final class MailerTest extends TestCase
         $mailer->attachContent('content', str_repeat('a', 256) . '.pdf');
     }
 
+    public function testAnEncodedWordInTheDisplayNameIsRefusedByAttachContent(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('contains "=?", an encoded word; pass a plain file name');
+
+        $mailer->attachContent('content', '=?utf-8?Q?=2E=2E=2F=2E=2E=2Fevil.exe?=');
+    }
+
     public function testAnEmptyDisplayNameIsRefusedByAttachContentWithOneMessage(): void
     {
         $mailer = new Mailer($this->config);

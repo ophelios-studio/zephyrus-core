@@ -224,6 +224,24 @@ final class MailerAttachmentGuardTest extends TestCase
         self::assertSame('invoice.pdf', $mailer->getPhpMailer()->getAttachments()[0][2]);
     }
 
+    public static function encodedWordDisplayNameProvider(): iterable
+    {
+        yield 'encoded dot dot slash' => ['=?utf-8?Q?=2E=2E=2F=2E=2E=2Fevil.exe?='];
+        yield 'encoded word in the middle' => ['report=?utf-8?Q?x?=.pdf'];
+        yield 'bare equals and question mark' => ['a=?b'];
+    }
+
+    #[DataProvider('encodedWordDisplayNameProvider')]
+    public function testAnEncodedWordInTheDisplayNameIsRefusedByAttach(string $name): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('contains "=?", an encoded word; pass a plain file name');
+
+        $mailer->attach($this->inside, $name);
+    }
+
     public function testAPathSeparatorInTheDisplayNameIsRefused(): void
     {
         $mailer = new Mailer($this->config);

@@ -194,7 +194,7 @@ final class Mailer
      *                                 relative path still resolves against the working
      *                                 directory, which is rarely what a caller means.
      * @param string      $name        Display name (default: original filename). May not
-     *                                 contain a NUL byte, a line break or a path separator,
+     *                                 contain a NUL byte, a line break, a path separator or "=?",
      *                                 exceed 255 bytes, have surrounding spaces, nor be blank,
      *                                 "0", "." or "..": it lands in a MIME header and is what
      *                                 the recipient's client writes to disk.
@@ -242,7 +242,7 @@ final class Mailer
      * @param string      $content  The file contents.
      * @param string      $name     Display name the recipient's client writes to disk: at most 255
      *                              bytes and unchanged by trimming or by dropping a trailing dot;
-     *                              not blank, "0", "." or "..", without NUL, CR, LF or a path separator.
+     *                              not blank, "0", "." or "..", without NUL, CR, LF, a path separator or "=?".
      * @param string|null $mimeType Media type as type/subtype (at most 127 bytes), optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
@@ -319,6 +319,14 @@ final class Mailer
                 'display name',
                 $name,
                 'contains a NUL byte, a line break or a path separator; pass a bare file name',
+            );
+        }
+
+        if (str_contains($name, '=?')) {
+            throw MailerException::attachmentRejected(
+                'display name',
+                $name,
+                'contains "=?", an encoded word; pass a plain file name',
             );
         }
 
