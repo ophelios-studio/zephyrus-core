@@ -154,15 +154,6 @@ final readonly class DatabaseConfig
             );
         }
 
-        if (!preg_match('/^[a-zA-Z0-9_]+$/D', $charset)) {
-            throw ConfigurationException::invalidValue(
-                'database',
-                'charset',
-                $charset,
-                'must contain only alphanumeric characters and underscores',
-            );
-        }
-
         if ($driver !== 'pgsql') {
             throw ConfigurationException::invalidValue(
                 'database',
