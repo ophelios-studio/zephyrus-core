@@ -135,9 +135,20 @@ final class MailerException extends ZephyrusRuntimeException
         return sprintf('"%s..." (%d bytes)', self::escaped($cut), strlen($value));
     }
 
+    /**
+     * Invisible and direction-changing characters, escaped as \u{XXXX} in messages.
+     */
+    private const string INVISIBLE_CHARACTER_PATTERN = '~[\x{80}-\x{9F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2028}\x{2029}\x{2066}-\x{2069}]~u';
+
     private static function escaped(string $value): string
     {
-        return addcslashes(mb_scrub($value, 'UTF-8'), "\\\0..\37\177");
+        $escaped = addcslashes(mb_scrub($value, 'UTF-8'), "\\\0..\37\177");
+
+        return preg_replace_callback(
+            self::INVISIBLE_CHARACTER_PATTERN,
+            static fn (array $match): string => sprintf('\u{%04X}', mb_ord($match[0], 'UTF-8')),
+            $escaped,
+        ) ?? '';
     }
 
     public static function configurationMissing(string $detail): self

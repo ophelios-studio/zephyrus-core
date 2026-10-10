@@ -80,6 +80,32 @@ final class MailerExceptionTest extends TestCase
         self::assertSame('550 jane.tremblay@example.test mailbox unavailable', $exception->transportMessage());
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function refusedCharacterProvider(): iterable
+    {
+        yield 'C1 control' => ["\u{0085}", '\u{0085}'];
+        yield 'Arabic letter mark' => ["\u{061C}", '\u{061C}'];
+        yield 'left-to-right mark' => ["\u{200E}", '\u{200E}'];
+        yield 'right-to-left mark' => ["\u{200F}", '\u{200F}'];
+        yield 'line separator' => ["\u{2028}", '\u{2028}'];
+        yield 'paragraph separator' => ["\u{2029}", '\u{2029}'];
+        yield 'right-to-left override' => ["\u{202E}", '\u{202E}'];
+        yield 'left-to-right isolate' => ["\u{2066}", '\u{2066}'];
+        yield 'pop directional isolate' => ["\u{2069}", '\u{2069}'];
+    }
+
+    #[DataProvider('refusedCharacterProvider')]
+    public function testARefusedCharacterIsEscapedInTheMessageNotEchoed(string $character, string $escaped): void
+    {
+        $message = MailerException::attachmentRejected('display name', 'invoice' . $character . 'fdp.exe', 'is refused')
+            ->getMessage();
+
+        self::assertStringContainsString('"invoice' . $escaped . 'fdp.exe"', $message);
+        self::assertStringNotContainsString($character, $message);
+    }
+
     private function captureVarDump(object $value): string
     {
         ob_start();

@@ -270,6 +270,19 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer->attach($this->inside, $name);
     }
 
+    public function testABidiOverrideInTheRejectedNameIsNotEchoedRaw(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        try {
+            $mailer->attach($this->inside, "invoice\u{202E}fdp.exe");
+            self::fail('A display name with a bidi override must be refused.');
+        } catch (MailerException $exception) {
+            self::assertStringContainsString('\u{202E}', $exception->getMessage());
+            self::assertStringNotContainsString("\u{202E}", $exception->getMessage());
+        }
+    }
+
     public function testAPlainDisplayNameWithSpacesAndAccentsIsAcceptedByAttach(): void
     {
         $mailer = new Mailer($this->config);
