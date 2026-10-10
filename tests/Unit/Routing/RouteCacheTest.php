@@ -1060,6 +1060,42 @@ final class RouteCacheTest extends TestCase
         yield 'generated_at' => ['generated_at', 'Route cache payload contains invalid metadata generation timestamp'];
     }
 
+    public function testLoadRefusesRoutesHashWithTrailingNewline(): void
+    {
+        $meta = $this->metadataFor([]);
+        $meta['routes_hash'] .= "\n";
+
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache payload contains invalid metadata hash format');
+
+        $cache->load();
+    }
+
+    public function testLoadRefusesHttpMethodWithTrailingNewline(): void
+    {
+        $routes = [[
+            'method' => "GET\n",
+            'path' => '/health',
+            'handler' => 'HealthController@show',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => null,
+        ]];
+
+        file_put_contents($this->cacheFile, json_encode(['meta' => $this->metadataFor($routes), 'routes' => $routes], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('Route cache entry contains invalid HTTP method format');
+
+        $cache->load();
+    }
+
     /**
      * @param array<int, array<string, mixed>> $routes
      * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}

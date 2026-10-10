@@ -363,7 +363,7 @@ final class RouteCache
             throw new RouteCacheException('Route cache payload contains unsupported metadata version');
         }
 
-        if (!preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash'])) {
+        if (!preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash'])) {
             throw new RouteCacheException('Route cache payload contains invalid metadata hash format');
         }
 
@@ -600,7 +600,7 @@ final class RouteCache
             return false;
         }
 
-        if (!is_string($meta['routes_hash']) || preg_match('/^[a-f0-9]{64}$/', $meta['routes_hash']) !== 1) {
+        if (!is_string($meta['routes_hash']) || preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash']) !== 1) {
             return false;
         }
 
@@ -669,7 +669,7 @@ final class RouteCache
 
     private function assertValidMethodPathAndHandler(string $method, string $path, string $handler): void
     {
-        if (preg_match('/^[A-Z]+$/', $method) !== 1) {
+        if (preg_match('/^[A-Z]+$/D', $method) !== 1) {
             throw new RouteCacheException('Route cache entry contains invalid HTTP method format');
         }
 
