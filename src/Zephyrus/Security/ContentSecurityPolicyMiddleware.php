@@ -63,7 +63,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
     ) {
         $this->policy = $policy instanceof ContentSecurityPolicy
             ? $policy->toHeaderValue()
-            : trim($policy);
+            : trim($policy, SecureHeadersConfig::TRIMMED_CHARACTERS);
 
         if (!Response::isValidHeaderValue($this->policy)) {
             throw new InvalidArgumentException(sprintf(

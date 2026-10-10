@@ -7,10 +7,12 @@ namespace Zephyrus\Tests\Unit\Security;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Security\ContentSecurityPolicy;
 use Zephyrus\Security\ContentSecurityPolicyMiddleware;
+use Zephyrus\Security\SecureHeadersConfig;
 
 final class ContentSecurityPolicyMiddlewareTest extends TestCase
 {
@@ -144,6 +146,41 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
         yield 'DEL' => ["default-src 'self'\x7F"];
         yield 'NUL in the middle' => ["default-src 'self'\0 img-src *"];
         yield 'carriage return' => ["default-src 'self'\r\nSet-Cookie: s=1"];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function policiesEndingWithAControlTheConfigKeeps(): iterable
+    {
+        yield 'vertical tab' => ["default-src 'self'\v"];
+        yield 'NUL' => ["default-src 'self'\0"];
+    }
+
+    #[DataProvider('policiesEndingWithAControlTheConfigKeeps')]
+    public function testARawPolicyIsRefusedLikeTheSameCspInTheConfig(string $policy): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['csp' => $policy]);
+            self::fail('The config must refuse the policy.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('must not contain a control character', $exception->getMessage());
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+
+        new ContentSecurityPolicyMiddleware($policy);
+    }
+
+    public function testARawPolicyIsTrimmedLikeTheSameCspInTheConfig(): void
+    {
+        $policy = " \t default-src 'self'\r\n";
+        $middleware = new ContentSecurityPolicyMiddleware($policy);
+
+        $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => Response::text('ok'));
+
+        self::assertSame("default-src 'self'", SecureHeadersConfig::fromArray(['csp' => $policy])->csp);
+        self::assertSame("default-src 'self'", $response->headers['content-security-policy']);
     }
 
     public function testRefusalNamesTheEnforcedHeaderAndTheWayOut(): void

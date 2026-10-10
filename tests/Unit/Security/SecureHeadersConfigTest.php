@@ -462,6 +462,34 @@ final class SecureHeadersConfigTest extends TestCase
         self::assertSame("default-src 'self'", $config->csp);
     }
 
+    public function testANewlineInsideTheCspSuggestsAFoldedYamlBlock(): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['csp' => "default-src 'self';\nimg-src 'self'\n"]);
+            self::fail('A newline inside the policy must be refused.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security.headers' field 'csp' has invalid value \"default-src 'self';\\nimg-src "
+                . "'self'\": must not contain a control character; write the policy on one line or use a folded block (>).",
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testANewlineInsideAnotherHeaderGetsNoFoldedBlockHint(): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['permissionsPolicy' => "camera=()\ngeolocation=()"]);
+            self::fail('A newline inside the header value must be refused.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security.headers' field 'permissionsPolicy' has invalid value "
+                . '"camera=()\ngeolocation=()": must not contain a control character.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testAControlCharacterStillRefusedInAValueThatEndsWithANewline(): void
     {
         try {

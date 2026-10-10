@@ -26,6 +26,13 @@ use Zephyrus\Http\Response;
  */
 final readonly class SecureHeadersConfig
 {
+    /**
+     * Characters trimmed from both ends of a header value.
+     *
+     * @internal
+     */
+    public const string TRIMMED_CHARACTERS = " \t\r\n";
+
     /** Accepted spellings per property, in order of preference; any other key is refused. */
     private const array SPELLINGS = [
         'xFrameOptions' => ['xFrameOptions', 'x_frame_options'],
@@ -182,7 +189,7 @@ final readonly class SecureHeadersConfig
             );
         }
 
-        $text = trim((string) $value, " \t\r\n");
+        $text = trim((string) $value, self::TRIMMED_CHARACTERS);
 
         if ($text === '') {
             return '';
@@ -193,7 +200,10 @@ final readonly class SecureHeadersConfig
                 'security.headers',
                 $key,
                 $text,
-                'must not contain a control character',
+                'must not contain a control character'
+                . ($property === 'csp' && strpbrk($text, "\r\n") !== false
+                    ? '; write the policy on one line or use a folded block (>)'
+                    : ''),
             );
         }
 
