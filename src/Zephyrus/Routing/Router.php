@@ -69,8 +69,7 @@ final class Router
 
     /**
      * Registers a route; group names in $middlewares are expanded at this point.
-     * Routes match in registration order, so a static route must be registered before
-     * a parameterised route that could match the same path.
+     * Routes without a parameter are tried first, parameterised ones in registration order.
      *
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares

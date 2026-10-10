@@ -250,7 +250,7 @@ final class RouteCollection
         $count = 0;
 
         foreach ($this->routes as $route) {
-            if (!str_contains($route->path, '{')) {
+            if ($this->isStaticRoute($route)) {
                 $count++;
             }
         }
@@ -337,7 +337,8 @@ final class RouteCollection
     }
 
     /**
-     * Every route whose pattern matches the path, whatever its method.
+     * Every route whose pattern matches the path, whatever its method, in match order (static first).
+     * A path holding a control character matches nothing.
      *
      * @return list<Route>
      */
@@ -580,10 +581,13 @@ final class RouteCollection
     /**
      * Whether the raw request path holds a control byte or DEL, or is not valid UTF-8.
      *
-     * Checked before normalizePath(), because parse_url() rewrites control bytes to "_" rather than failing.
+     * Only the part before "?" or "#" is checked, and before normalizePath(), because parse_url() rewrites
+     * control bytes to "_" rather than failing.
      */
     private static function isRefusedRawPath(string $path): bool
     {
+        $path = substr($path, 0, strcspn($path, '?#'));
+
         return preg_match('/[\x00-\x1F\x7F]/', $path) === 1 || !self::isWellFormedValue($path);
     }
 
