@@ -120,7 +120,8 @@ final class DebugIntegration
      *
      * Elsewhere dump() and the debug bar apply only the exact names (SENSITIVE_KEYS,
      * SENSITIVE_PROPERTIES and the session name). The pattern skips int, float,
-     * bool and null values; exact names mask any value.
+     * bool and null values; exact names mask any value. To mask a numeric secret under a name the
+     * pattern skips, add the name to Debugger::getBlueScreen()->keysToHide and Debugger::$keysToHide.
      */
     public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
