@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -452,17 +453,40 @@ final class CsrfMiddlewareTest extends TestCase
     public function testCsrfConfigRejectsAutomaticTokenInjection(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('automatic token injection was removed');
-        $this->expectExceptionMessage('"_csrf_token"');
+        $this->expectExceptionMessage('a hidden "_csrf_token" field');
 
         new CsrfConfig(injectToken: true);
     }
 
-    public function testCsrfConfigFromArrayRejectsAutomaticTokenInjectionAliases(): void
+    public function testCsrfConfigRefusalMessageEndsWithOnePeriod(): void
+    {
+        try {
+            new CsrfConfig(injectToken: true);
+            self::fail('Automatic token injection must be refused.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertStringEndsWith('CsrfTokenManagerInterface::getToken().', $e->getMessage());
+            self::assertStringNotContainsString('..', $e->getMessage());
+        }
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function injectTokenAliases(): iterable
+    {
+        yield 'injectToken' => [['injectToken' => true]];
+        yield 'inject_token' => [['inject_token' => true]];
+        yield 'csrfAutoHtml' => [['csrfAutoHtml' => true]];
+        yield 'csrf_auto_html' => [['csrf_auto_html' => true]];
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    #[DataProvider('injectTokenAliases')]
+    public function testCsrfConfigFromArrayRejectsAutomaticTokenInjectionAliases(array $config): void
     {
         $this->expectException(\InvalidArgumentException::class);
 
-        CsrfConfig::fromArray(['csrf_auto_html' => true]);
+        CsrfConfig::fromArray($config);
     }
 
     public function testCsrfConfigAcceptsInjectTokenFalse(): void

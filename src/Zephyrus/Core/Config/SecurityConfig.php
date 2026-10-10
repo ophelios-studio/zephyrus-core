@@ -7,6 +7,7 @@ namespace Zephyrus\Core\Config;
 use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
 use Zephyrus\Security\AllowedHostsMiddleware;
+use Zephyrus\Security\CsrfConfig;
 
 /**
  * Immutable configuration section for HTTP security behaviour.
@@ -22,7 +23,6 @@ use Zephyrus\Security\AllowedHostsMiddleware;
  *     trustedHeaders: [x-forwarded-for, x-forwarded-host, x-forwarded-proto, x-forwarded-port]
  *     csrf:
  *       enabled: true
- *       autoHtml: false
  *       exceptions: []
  *     encryption:
  *       key: !env ENCRYPTION_KEY
@@ -31,7 +31,6 @@ use Zephyrus\Security\AllowedHostsMiddleware;
  *   security:
  *     forceHttps: true
  *     csrfEnabled: true
- *     csrfAutoHtml: false
  *     csrfExceptions: []
  *     allowedHosts: []
  *     maxBodySize: 2097152
@@ -54,8 +53,8 @@ use Zephyrus\Security\AllowedHostsMiddleware;
  *   - maxBodySize must be 0 or greater.
  *   - Each allowedHost entry must be a non-empty string.
  *   - Each csrfExceptions entry must be a non-empty string.
- *   - csrf.autoHtml (or any alias of csrfAutoHtml) must be false or absent:
- *     automatic token injection was removed, so true is REJECTED at boot.
+ *   - csrf.autoHtml and its aliases are not settings: omit them. A value that
+ *     casts to true is REJECTED at boot.
  *   - Each trustedProxies entry must be '*', a valid IP address or a valid CIDR range.
  *   - Each trustedHeaders entry must name a header Request can actually read;
  *     an unknown name is REJECTED rather than ignored, because silently dropping
@@ -63,10 +62,12 @@ use Zephyrus\Security\AllowedHostsMiddleware;
  */
 final readonly class SecurityConfig
 {
+    private const int SHOWN_VALUE_MAX_LENGTH = 64;
+
     /**
      * @param bool     $forceHttps      Redirect plain-HTTP requests to HTTPS.
      * @param bool     $csrfEnabled     Enable CSRF token verification on mutating requests.
-     * @param bool     $csrfAutoHtml    @deprecated Must be false; true is refused at boot.
+     * @param bool     $csrfAutoHtml    Always false; a true value is refused at boot.
      * @param string[] $csrfExceptions  Regex path patterns excluded from CSRF validation.
      * @param string[] $allowedHosts    Restrict accepted Host headers; empty allows all.
      * @param int      $maxBodySize     Maximum request body in bytes (0 = unlimited).
@@ -86,6 +87,7 @@ final readonly class SecurityConfig
     public function __construct(
         public bool $forceHttps,
         public bool $csrfEnabled,
+        /** @deprecated since 0.14, will be removed in 0.15. Leave it unset: true is refused at boot. */
         public bool $csrfAutoHtml,
         public array $csrfExceptions,
         public array $allowedHosts,
@@ -179,13 +181,16 @@ final readonly class SecurityConfig
             $encryptionKey = null;
         }
 
+        $sections = ['values' => $values, 'csrf' => $csrf, 'encryption' => $encryption];
+
         if ($csrfAutoHtml) {
+            [$written, $rawValue] = self::writtenSpelling('csrfAutoHtml', $sections);
+
             throw ConfigurationException::invalidValue(
                 'security',
-                'csrfAutoHtml',
-                'true',
-                'automatic token injection was removed because it cannot follow the browser\'s HTML parsing '
-                    . 'and could send the token to another site; add a hidden "_csrf_token" field to your form templates',
+                $written,
+                self::rawValueForMessage($rawValue),
+                'remove this line. ' . sprintf(CsrfConfig::INJECTION_REFUSAL, '_csrf_token'),
             );
         }
 
@@ -266,58 +271,90 @@ final readonly class SecurityConfig
             trustedProxies: array_values($trustedProxies),
             encryptionKey: $encryptionKey,
             trustedHeaders: $normalizedTrustedHeaders,
-            declaredKeys: self::declaredKeys($values, $csrf, $encryption),
+            declaredKeys: self::declaredKeys($sections),
         );
     }
+
+    /**
+     * The spellings fromArray() reads each setting from, in the order it prefers
+     * them: [section, key], where section 'values' is the top level.
+     */
+    private const SPELLINGS = [
+        'forceHttps'     => [['values', 'forceHttps'], ['values', 'force_https']],
+        'csrfEnabled'    => [
+            ['csrf', 'enabled'], ['csrf', 'csrf_enabled'], ['values', 'csrfEnabled'], ['values', 'csrf_enabled'],
+        ],
+        'csrfAutoHtml'   => [
+            ['csrf', 'autoHtml'], ['csrf', 'auto_html'], ['values', 'csrfAutoHtml'], ['values', 'csrf_auto_html'],
+        ],
+        'csrfExceptions' => [
+            ['csrf', 'exceptions'], ['csrf', 'csrf_exceptions'], ['values', 'csrfExceptions'], ['values', 'csrf_exceptions'],
+        ],
+        'allowedHosts'   => [['values', 'allowedHosts'], ['values', 'allowed_hosts']],
+        'maxBodySize'    => [['values', 'maxBodySize'], ['values', 'max_body_size']],
+        'trustedProxies' => [['values', 'trustedProxies'], ['values', 'trusted_proxies']],
+        'trustedHeaders' => [['values', 'trustedHeaders'], ['values', 'trusted_headers']],
+        'encryptionKey'  => [['encryption', 'key'], ['values', 'encryptionKey'], ['values', 'encryption_key']],
+    ];
 
     /**
      * The canonical names the source array actually mentioned, under any of the
      * aliases fromArray() accepts. See isDeclared().
      *
-     * @param array<string, mixed> $values
-     * @param array<string, mixed> $csrf
-     * @param array<string, mixed> $encryption
+     * @param array<string, array<string, mixed>> $sections Source array and nested sections, by name.
      * @return list<string>
      */
-    private static function declaredKeys(array $values, array $csrf, array $encryption): array
+    private static function declaredKeys(array $sections): array
     {
-        $aliases = [
-            'forceHttps'     => [['forceHttps', 'force_https'], []],
-            'csrfEnabled'    => [['csrfEnabled', 'csrf_enabled'], ['enabled', 'csrf_enabled']],
-            'csrfAutoHtml'   => [['csrfAutoHtml', 'csrf_auto_html'], ['autoHtml', 'auto_html']],
-            'csrfExceptions' => [['csrfExceptions', 'csrf_exceptions'], ['exceptions', 'csrf_exceptions']],
-            'allowedHosts'   => [['allowedHosts', 'allowed_hosts'], []],
-            'maxBodySize'    => [['maxBodySize', 'max_body_size'], []],
-            'trustedProxies' => [['trustedProxies', 'trusted_proxies'], []],
-            'trustedHeaders' => [['trustedHeaders', 'trusted_headers'], []],
-        ];
-
         $declared = [];
 
-        foreach ($aliases as $canonical => [$flatKeys, $nestedKeys]) {
-            foreach ($flatKeys as $key) {
-                if (array_key_exists($key, $values)) {
+        foreach (self::SPELLINGS as $canonical => $spellings) {
+            foreach ($spellings as [$section, $key]) {
+                if (array_key_exists($key, $sections[$section])) {
                     $declared[] = $canonical;
                     continue 2;
                 }
             }
-
-            foreach ($nestedKeys as $key) {
-                if (array_key_exists($key, $csrf)) {
-                    $declared[] = $canonical;
-                    continue 2;
-                }
-            }
-        }
-
-        if (
-            array_key_exists('key', $encryption)
-            || array_key_exists('encryptionKey', $values)
-            || array_key_exists('encryption_key', $values)
-        ) {
-            $declared[] = 'encryptionKey';
         }
 
         return $declared;
+    }
+
+    /**
+     * The spelling that supplied the value fromArray() used, as a path such as
+     * "csrf.auto_html", with its raw value. A null spelling is skipped, as fromArray() does.
+     *
+     * @param array<string, array<string, mixed>> $sections
+     * @return array{string, mixed}
+     */
+    private static function writtenSpelling(string $canonical, array $sections): array
+    {
+        foreach (self::SPELLINGS[$canonical] as [$section, $key]) {
+            $value = $sections[$section][$key] ?? null;
+
+            if ($value !== null) {
+                return [$section === 'values' ? $key : $section . '.' . $key, $value];
+            }
+        }
+
+        return [$canonical, null];
+    }
+
+    private static function rawValueForMessage(mixed $value): string
+    {
+        return match (true) {
+            is_string($value) => '"' . self::shownString($value) . '"',
+            is_bool($value) => $value ? 'true' : 'false',
+            is_scalar($value) => (string) $value,
+            default => get_debug_type($value),
+        };
+    }
+
+    /** Cuts a written string to the shown length, with invalid UTF-8 replaced and control characters escaped. */
+    private static function shownString(string $value): string
+    {
+        $valid = mb_scrub($value, 'UTF-8');
+
+        return addcslashes(mb_strcut($valid, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8'), "\\\0..\37\177");
     }
 }

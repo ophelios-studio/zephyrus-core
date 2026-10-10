@@ -61,7 +61,7 @@ use function trim;
  * building the object directly with named arguments is the documented usage
  * and would otherwise skip the check entirely.
  *
- * Forms must carry the token themselves. Automatic injection was removed, so
+ * Forms must carry the token themselves. Automatic injection is not supported, so
  * every state-changing form needs a hidden input named after bodyField:
  *
  *   <input type="hidden" name="_csrf_token" value="…">
@@ -83,6 +83,13 @@ use function trim;
 final class CsrfConfig
 {
     /**
+     * Refusal sentence for automatic token injection, without its final period. The %s placeholder is the body field name.
+     */
+    public const string INJECTION_REFUSAL = 'Automatic token injection is not supported because it cannot follow '
+        . 'the browser\'s HTML parsing and could send the token to another site. Add a hidden "%s" field to your '
+        . 'form templates, filled with the escaped value of CsrfTokenManagerInterface::getToken()';
+
+    /**
      * PCRE patterns for paths that skip CSRF validation, each one validated.
      *
      * @var list<string>
@@ -92,7 +99,7 @@ final class CsrfConfig
     /**
      * @param string $bodyField            Name of the HTML hidden-field / POST body key.
      * @param string $headerName           HTTP header accepted as an alternative token source.
-     * @param bool   $injectToken          @deprecated Must be false; true is refused.
+     * @param bool   $injectToken          Must be false: true is refused.
      * @param array<mixed> $excludedPathPatterns Anchored PCRE patterns; see the class docblock.
      * @param bool   $enabled              Enable CSRF token validation on mutating requests.
      * @throws InvalidArgumentException when $injectToken is true.
@@ -100,16 +107,13 @@ final class CsrfConfig
     public function __construct(
         public readonly string $bodyField            = '_csrf_token',
         public readonly string $headerName           = 'X-CSRF-Token',
+        /** @deprecated since 0.14, will be removed in 0.15. Leave it unset: true is refused. */
         public readonly bool   $injectToken          = false,
         array                  $excludedPathPatterns = [],
         public readonly bool   $enabled              = true,
     ) {
         if ($injectToken) {
-            throw new InvalidArgumentException(sprintf(
-                'CSRF automatic token injection was removed because it cannot follow the browser\'s HTML parsing '
-                . 'and could send the token to another site. Add a hidden "%s" field to your form templates instead.',
-                $bodyField,
-            ));
+            throw new InvalidArgumentException(sprintf(self::INJECTION_REFUSAL, $bodyField) . '.');
         }
 
         $this->excludedPathPatterns = self::normalizeExcludedPathPatterns($excludedPathPatterns);

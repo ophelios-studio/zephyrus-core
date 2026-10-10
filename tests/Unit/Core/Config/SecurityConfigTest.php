@@ -395,9 +395,116 @@ final class SecurityConfigTest extends TestCase
     public function testAutomaticTokenInjectionIsRefusedAtBoot(array $values): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('automatic token injection was removed');
+        $this->expectExceptionMessage('Automatic token injection is not supported');
 
         SecurityConfig::fromArray($values);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, string}> */
+    public static function autoHtmlRefusalSources(): iterable
+    {
+        yield 'nested auto_html written as a string' => [
+            ['csrf' => ['auto_html' => 'false']],
+            "field 'csrf.auto_html' has invalid value '\"false\"'",
+        ];
+        yield 'nested autoHtml written as a bool' => [
+            ['csrf' => ['autoHtml' => true]],
+            "field 'csrf.autoHtml' has invalid value 'true'",
+        ];
+        yield 'flat csrf_auto_html written as a string' => [
+            ['csrf_auto_html' => 'false'],
+            "field 'csrf_auto_html' has invalid value '\"false\"'",
+        ];
+        yield 'flat csrfAutoHtml written as a bool' => [
+            ['csrfAutoHtml' => true],
+            "field 'csrfAutoHtml' has invalid value 'true'",
+        ];
+        yield 'null spelling is skipped in favour of the one that was written' => [
+            ['csrf' => ['autoHtml' => null, 'auto_html' => 'false']],
+            "field 'csrf.auto_html' has invalid value '\"false\"'",
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('autoHtmlRefusalSources')]
+    public function testAutoHtmlRefusalNamesTheKeyWrittenAndItsRawValue(array $values, string $expected): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage($expected);
+
+        SecurityConfig::fromArray($values);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>, string, string}> */
+    public static function shownValueCases(): iterable
+    {
+        yield 'long value is cut at 64 bytes' => [
+            ['csrf' => ['auto_html' => str_repeat('a', 200)]],
+            str_repeat('a', 64),
+            str_repeat('a', 65),
+        ];
+        yield 'line feed is escaped' => [
+            ['csrf' => ['auto_html' => "on\nforged"]],
+            'on\\nforged',
+            "\n",
+        ];
+        yield 'multibyte value is cut on a character boundary' => [
+            ['csrf' => ['auto_html' => str_repeat("\u{e9}", 40)]],
+            str_repeat("\u{e9}", 32),
+            str_repeat("\u{e9}", 33),
+        ];
+        yield 'invalid UTF-8 is replaced' => [
+            ['csrf' => ['auto_html' => "ok\xffend"]],
+            'ok?end',
+            "\xff",
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('shownValueCases')]
+    public function testAutoHtmlRefusalBoundsAndEscapesTheShownValue(array $values, string $shown, string $hidden): void
+    {
+        try {
+            SecurityConfig::fromArray($values);
+            self::fail('The automatic injection spelling must be refused.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString($shown, $e->getMessage());
+            self::assertStringNotContainsString($hidden, $e->getMessage());
+        }
+    }
+
+    public function testAutoHtmlRefusalTellsTheOperatorToRemoveTheLine(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches('/remove this line.*CsrfTokenManagerInterface::getToken\(\)\.$/s');
+
+        SecurityConfig::fromArray(['csrf' => ['autoHtml' => true]]);
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function autoHtmlRefusalMessageSources(): iterable
+    {
+        yield 'nested auto_html' => [['csrf' => ['auto_html' => true]]];
+        yield 'flat csrfAutoHtml' => [['csrfAutoHtml' => true]];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('autoHtmlRefusalMessageSources')]
+    public function testAutoHtmlRefusalMessageEndsWithOnePeriod(array $values): void
+    {
+        try {
+            SecurityConfig::fromArray($values);
+            self::fail('The automatic injection spelling must be refused.');
+        } catch (ConfigurationException $e) {
+            self::assertStringEndsWith('CsrfTokenManagerInterface::getToken().', $e->getMessage());
+            self::assertStringNotContainsString('..', $e->getMessage());
+        }
     }
 
     public function testCsrfAutoHtmlFalseIsAccepted(): void
