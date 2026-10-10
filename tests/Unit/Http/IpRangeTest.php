@@ -89,14 +89,11 @@ final class IpRangeTest extends TestCase
     }
 
     #[DataProvider('ipv4MappedRanges')]
-    public function testInvalidEntryReasonRefusesOnlyShortMappedRangesWithTheMappedReason(string $range, bool $expected): void
+    public function testInvalidEntryReasonUsesTheMappedReasonOnlyBelowSlash96(string $range, bool $expected): void
     {
         self::assertSame($expected, str_contains(IpRange::invalidEntryReason($range) ?? '', 'shorter than /96'));
     }
 
-    /**
-     * @return iterable<string, array{string}>
-     */
     public function testInvalidEntryReasonNamesTheMappedFormForMappedRanges(): void
     {
         self::assertStringContainsString('::ffff:10.0.0.0/104', IpRange::invalidEntryReason('::ffff:10.0.0.0/8') ?? '');

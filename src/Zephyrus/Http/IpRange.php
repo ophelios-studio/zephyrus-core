@@ -79,9 +79,7 @@ final class IpRange
     }
 
     /**
-     * Why an IP address or CIDR range cannot be matched, or null when it can. A short
-     * IPv4-mapped range such as ::ffff:10.0.0.0/8 is masked to ::/8, so it covers ::1
-     * and every mapped address.
+     * Why an IP address or CIDR range cannot be matched, or null when it can.
      */
     public static function invalidEntryReason(string $entry): ?string
     {

@@ -55,6 +55,7 @@ use Zephyrus\Security\CsrfConfig;
  *     trustedProxies also accept one comma-separated string, such as from !env.
  *     A string naming nothing is an empty trustedProxies (no proxy is trusted) but
  *     is REJECTED for allowedHosts, where an empty list would allow every host.
+ *     A declared null allowedHosts (an unset !env without default) is REJECTED for the same reason.
  *   - Each csrfExceptions entry must be a non-empty string.
  *   - csrf.autoHtml and its aliases are not settings: omit them. A value that
  *     casts to true is REJECTED at boot.
