@@ -72,7 +72,7 @@ final class RouteCache
         }
 
         $meta = $decoded['meta'] ?? null;
-        if (!$this->isValidMetaForFreshness($meta)) {
+        if ($this->metadataFailure($meta) !== null) {
             return false;
         }
 
@@ -101,7 +101,7 @@ final class RouteCache
 
         $meta = $decoded['meta'] ?? null;
 
-        return $this->isValidMetaForFreshness($meta) ? $meta : null;
+        return $this->metadataFailure($meta) === null ? $meta : null;
     }
 
     public function generatedAt(): ?int
@@ -351,28 +351,9 @@ final class RouteCache
         }
 
         $meta = $decoded['meta'] ?? null;
-        if ($meta === null) {
-            throw new RouteCacheException('Route cache payload missing metadata section, rebuild the cache with save() or warm()');
-        }
-
-        if (!is_array($meta) || !isset($meta['routes_hash']) || !is_string($meta['routes_hash'])) {
-            throw new RouteCacheException('Route cache payload contains invalid metadata');
-        }
-
-        if (!array_key_exists('version', $meta) || !is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION) {
-            throw new RouteCacheException('Route cache payload contains unsupported metadata version');
-        }
-
-        if (!preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash'])) {
-            throw new RouteCacheException('Route cache payload contains invalid metadata hash format');
-        }
-
-        if (!array_key_exists('route_count', $meta) || !is_int($meta['route_count'])) {
-            throw new RouteCacheException('Route cache payload contains invalid metadata route count');
-        }
-
-        if (!array_key_exists('generated_at', $meta) || !is_int($meta['generated_at'])) {
-            throw new RouteCacheException('Route cache payload contains invalid metadata generation timestamp');
+        $refusal = $this->metadataFailure($meta);
+        if ($refusal !== null) {
+            throw new RouteCacheException($refusal);
         }
 
         $routesPayload = $decoded['routes'];
@@ -585,26 +566,35 @@ final class RouteCache
 
     /**
      * @param mixed $meta
+     * @return string|null The refusal message, or null when the metadata is valid.
      */
-    private function isValidMetaForFreshness(mixed $meta): bool
+    private function metadataFailure(mixed $meta): ?string
     {
-        if (!is_array($meta)) {
-            return false;
+        if ($meta === null) {
+            return 'Route cache payload missing metadata section, rebuild the cache with save() or warm()';
         }
 
-        if (!isset($meta['version'], $meta['routes_hash'], $meta['route_count'])) {
-            return false;
+        if (!is_array($meta) || !is_string($meta['routes_hash'] ?? null)) {
+            return 'Route cache payload contains invalid metadata';
         }
 
-        if (!is_int($meta['version']) || $meta['version'] !== self::METADATA_VERSION) {
-            return false;
+        if (($meta['version'] ?? null) !== self::METADATA_VERSION) {
+            return 'Route cache payload contains unsupported metadata version';
         }
 
-        if (!is_string($meta['routes_hash']) || preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash']) !== 1) {
-            return false;
+        if (preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash']) !== 1) {
+            return 'Route cache payload contains invalid metadata hash format';
         }
 
-        return is_int($meta['route_count']) && $meta['route_count'] >= 0;
+        if (!is_int($meta['route_count'] ?? null) || $meta['route_count'] < 0) {
+            return 'Route cache payload contains invalid metadata route count';
+        }
+
+        if (!is_int($meta['generated_at'] ?? null)) {
+            return 'Route cache payload contains invalid metadata generation timestamp';
+        }
+
+        return null;
     }
 
     /**

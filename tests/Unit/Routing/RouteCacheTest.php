@@ -508,6 +508,35 @@ final class RouteCacheTest extends TestCase
         self::assertFalse($cache->isFresh($routes));
     }
 
+    public function testFreshnessAndLoadRefuseMetadataWithoutGeneratedAt(): void
+    {
+        $meta = $this->metadataFor([]);
+        unset($meta['generated_at']);
+
+        $this->assertFileRefusedByFreshnessAndLoad($meta, 'Route cache payload contains invalid metadata generation timestamp');
+    }
+
+    public function testFreshnessAndLoadRefuseMetadataWithStringGeneratedAt(): void
+    {
+        $meta = $this->metadataFor([]);
+        $meta['generated_at'] = '1700000000';
+
+        $this->assertFileRefusedByFreshnessAndLoad($meta, 'Route cache payload contains invalid metadata generation timestamp');
+    }
+
+    public function testFreshnessRefusesRoutesHashWithTrailingNewline(): void
+    {
+        $meta = $this->metadataFor([]);
+        $meta['routes_hash'] .= "\n";
+
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->metadata());
+        self::assertFalse($cache->isFresh(new RouteCollection()));
+    }
+
     public function testIsFreshWithinReturnsTrueWhenFreshAndWithinAgeWindow(): void
     {
         $routes = new RouteCollection();
@@ -1108,6 +1137,29 @@ final class RouteCacheTest extends TestCase
             'route_count' => count($routes),
             'generated_at' => 1700000000,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     */
+    private function assertFileRefusedByFreshnessAndLoad(array $meta, string $expectedMessage): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->metadata());
+        self::assertFalse($cache->isFresh(new RouteCollection()));
+
+        try {
+            $cache->load();
+        } catch (RouteCacheException $exception) {
+            self::assertSame($expectedMessage, $exception->getMessage());
+
+            return;
+        }
+
+        self::fail('load() accepted a cache file that the freshness check refuses');
     }
 
     public function testLoadThrowsWhenMetaRoutesHashIsNotString(): void
