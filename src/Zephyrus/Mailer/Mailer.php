@@ -55,8 +55,11 @@ final class Mailer
 
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
-    /** Longest media type and display name: PHPMailer folds header lines over 998 bytes unindented. */
+    /** Longest display name: PHPMailer folds header lines over 998 bytes unindented. */
     private const int MAX_HEADER_VALUE_BYTES = 255;
+
+    /** Longest media type: the Content-Type line also carries the encoded display name. */
+    private const int MAX_MEDIA_TYPE_BYTES = 127;
 
     public function __construct(MailerConfig $config, ?RenderEngine $renderEngine = null)
     {
@@ -240,7 +243,7 @@ final class Mailer
      * @param string      $name     Display name the recipient's client writes to disk: at most 255
      *                              bytes and unchanged by trimming or by dropping a trailing dot;
      *                              not blank, "0", "." or "..", without NUL, CR, LF or a path separator.
-     * @param string|null $mimeType Media type as type/subtype (at most 255 bytes), optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
+     * @param string|null $mimeType Media type as type/subtype (at most 127 bytes), optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
      */
@@ -248,8 +251,8 @@ final class Mailer
     {
         $this->assertDisplayName($name, true);
 
-        if ($mimeType !== null && strlen($mimeType) > self::MAX_HEADER_VALUE_BYTES) {
-            throw MailerException::attachmentRejected('media type', $mimeType, 'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes');
+        if ($mimeType !== null && strlen($mimeType) > self::MAX_MEDIA_TYPE_BYTES) {
+            throw MailerException::attachmentRejected('media type', $mimeType, 'is longer than ' . self::MAX_MEDIA_TYPE_BYTES . ' bytes');
         }
 
         if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {

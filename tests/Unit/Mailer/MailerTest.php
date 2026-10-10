@@ -620,11 +620,11 @@ final class MailerTest extends TestCase
         yield 'upper case reserved parameter' => ['application/pdf; NAME=evil.exe'];
     }
 
-    public function testAMediaTypeOf255BytesIsAccepted(): void
+    public function testAMediaTypeOf127BytesIsAccepted(): void
     {
         $prefix = 'text/plain; charset="';
-        $mimeType = $prefix . str_repeat('a', 255 - strlen($prefix) - 1) . '"';
-        self::assertSame(255, strlen($mimeType));
+        $mimeType = $prefix . str_repeat('a', 127 - strlen($prefix) - 1) . '"';
+        self::assertSame(127, strlen($mimeType));
 
         $mailer = new Mailer($this->config);
         $mailer->attachContent('content', 'notes.txt', $mimeType);
@@ -632,14 +632,18 @@ final class MailerTest extends TestCase
         self::assertSame($mimeType, $mailer->getPhpMailer()->getAttachments()[0][4]);
     }
 
-    public function testAMediaTypeLongerThan255BytesIsRefused(): void
+    public function testAMediaTypeOf128BytesIsRefused(): void
     {
+        $prefix = 'text/plain; charset="';
+        $mimeType = $prefix . str_repeat('a', 128 - strlen($prefix) - 1) . '"';
+        self::assertSame(128, strlen($mimeType));
+
         $mailer = new Mailer($this->config);
 
         $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('is longer than 255 bytes');
+        $this->expectExceptionMessage('is longer than 127 bytes');
 
-        $mailer->attachContent('content', 'notes.txt', 'text/plain; charset="' . str_repeat('a', 1023) . '"');
+        $mailer->attachContent('content', 'notes.txt', $mimeType);
     }
 
     public function testADisplayNameOf255BytesIsAcceptedByAttachContent(): void
