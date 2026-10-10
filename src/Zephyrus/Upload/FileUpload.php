@@ -112,7 +112,7 @@ final readonly class FileUpload
     }
 
     /**
-     * @param array{name?: mixed, type?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $entry
+     * @param array{name?: mixed, type?: mixed, tmp_name: mixed, error: mixed, size?: mixed} $entry
      * @param list<int|string> $path
      * @param list<FileUpload> $entries
      */
