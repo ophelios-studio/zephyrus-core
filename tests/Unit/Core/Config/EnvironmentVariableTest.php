@@ -315,15 +315,15 @@ final class EnvironmentVariableTest extends TestCase
     public static function refusalSources(): iterable
     {
         foreach ([
-            'QUERY_STRING' => ['QUERY_STRING', 'CGI or php-fpm'],
-            'PHP_AUTH_PW' => ['PHP_AUTH_PW', 'CGI or php-fpm'],
+            'QUERY_STRING' => ['QUERY_STRING', 'the web server'],
+            'PHP_AUTH_PW' => ['PHP_AUTH_PW', 'the web server'],
             'SERVER_SIGNATURE' => ['SERVER_SIGNATURE', 'Apache'],
             'HTTP2' => ['HTTP2', 'Apache mod_http2'],
             'H2_PUSH_POLICY' => ['H2_PUSH_POLICY', 'Apache mod_http2'],
             'ORIG_SCRIPT_FILENAME' => ['ORIG_SCRIPT_FILENAME', 'php-fpm'],
             'SSL_CLIENT_S_DN' => ['SSL_CLIENT_S_DN', 'Apache mod_ssl'],
             'HTTP_ZEPHYRUS_TEST' => ['HTTP_ZEPHYRUS_TEST', 'the client request headers'],
-            'REDIRECT_ZEPHYRUS_TEST' => ['REDIRECT_ZEPHYRUS_TEST', 'Apache mod_rewrite'],
+            'REDIRECT_ZEPHYRUS_TEST' => ['REDIRECT_ZEPHYRUS_TEST', 'Apache internal redirects'],
         ] as $label => [$name, $source]) {
             yield $label => [$name, $source];
         }
@@ -335,7 +335,7 @@ final class EnvironmentVariableTest extends TestCase
         $_ENV[$name] = 'client';
 
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage($source);
+        $this->expectExceptionMessage('by ' . $source . ', so');
 
         EnvironmentVariable::read($name);
     }

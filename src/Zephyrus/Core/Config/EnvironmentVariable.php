@@ -10,12 +10,12 @@ namespace Zephyrus\Core\Config;
 final class EnvironmentVariable
 {
     /**
-     * Exact names, grouped by the source that sets them per request.
+     * Exact names, grouped by the source that can set them per request.
      *
      * @var array<string, list<string>>
      */
     private const REFUSED_NAMES = [
-        'CGI or php-fpm' => [
+        'the web server' => [
             'AUTH_TYPE', 'CONTENT_LENGTH', 'CONTENT_TYPE', 'GATEWAY_INTERFACE', 'PATH_INFO',
             'PATH_TRANSLATED', 'QUERY_STRING', 'REMOTE_ADDR', 'REMOTE_HOST', 'REMOTE_IDENT',
             'REMOTE_PORT', 'REMOTE_USER', 'REQUEST_METHOD', 'SCRIPT_NAME', 'SERVER_NAME',
@@ -29,13 +29,13 @@ final class EnvironmentVariable
     ];
 
     /**
-     * Prefixes, mapped to the source that sets names starting with them per request.
+     * Prefixes, mapped to the source that can set names starting with them per request.
      *
      * @var array<string, string>
      */
     private const REFUSED_PREFIXES = [
         'HTTP_' => 'the client request headers',
-        'REDIRECT_' => 'Apache mod_rewrite',
+        'REDIRECT_' => 'Apache internal redirects',
         'ORIG_' => 'php-fpm',
         'SSL_' => 'Apache mod_ssl',
         'H2_' => 'Apache mod_http2',
@@ -65,7 +65,7 @@ final class EnvironmentVariable
         foreach (self::REFUSED_NAMES as $source => $names) {
             if (in_array($upper, $names, true)) {
                 throw new \InvalidArgumentException(sprintf(
-                    '%s: set per request by %s, so it is never read as configuration; rename the variable.',
+                    '%s: can be set per request by %s, so it is never read as configuration; rename the variable.',
                     $name,
                     $source,
                 ));
@@ -75,7 +75,7 @@ final class EnvironmentVariable
         foreach (self::REFUSED_PREFIXES as $prefix => $source) {
             if (str_starts_with($upper, $prefix)) {
                 throw new \InvalidArgumentException(sprintf(
-                    '%s: names starting with %s are set per request by %s, so they are never read as configuration; rename the variable.',
+                    '%s: names starting with %s can be set per request by %s, so they are never read as configuration; rename the variable.',
                     $name,
                     $prefix,
                     $source,
