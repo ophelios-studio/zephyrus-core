@@ -167,13 +167,13 @@ final class MailerTest extends TestCase
     {
         $renderEngine = $this->createMock(RenderEngine::class);
         $renderEngine->method('render')
-            ->with('emails/welcome', ['name' => 'David'])
-            ->willReturn('<h1>Welcome, David!</h1>');
+            ->with('emails/welcome', ['name' => 'Ada'])
+            ->willReturn('<h1>Welcome, Ada!</h1>');
 
         $mailer = new Mailer($this->config, $renderEngine);
-        $mailer->template('emails/welcome', ['name' => 'David']);
+        $mailer->template('emails/welcome', ['name' => 'Ada']);
 
-        self::assertSame('<h1>Welcome, David!</h1>', $mailer->getPhpMailer()->Body);
+        self::assertSame('<h1>Welcome, Ada!</h1>', $mailer->getPhpMailer()->Body);
     }
 
     public function testTemplateAfterTextKeepsTheTextPart(): void
