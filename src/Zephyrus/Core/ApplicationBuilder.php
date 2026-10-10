@@ -12,6 +12,7 @@ use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Event\EventDispatcher;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Localization\FallbackLocaleLoader;
@@ -467,12 +468,12 @@ final class ApplicationBuilder
             return $short;
         }
 
-        $message = 'Unknown security key ' . self::quoted([$key]) . '. Accepted names: '
+        $message = 'Unknown security key ' . MessageValue::quote($key) . '. Accepted names: '
             . implode(', ', self::ACKNOWLEDGEABLE_SECURITY_KEYS) . ', each short or prefixed with "security.".';
         $spelling = self::looseSpelling(str_starts_with(strtolower($key), 'security.') ? substr($key, 9) : $key);
         foreach (self::ACKNOWLEDGEABLE_SECURITY_KEYS as $accepted) {
             if ($spelling === self::looseSpelling($accepted)) {
-                $message .= ' Did you mean ' . self::quoted([$accepted]) . '?';
+                $message .= ' Did you mean ' . MessageValue::quote($accepted) . '?';
                 break;
             }
         }
@@ -778,10 +779,10 @@ final class ApplicationBuilder
 
         $clauses = [];
         if ($extra !== []) {
-            $clauses[] = $heldVerb . ' ' . self::quoted($extra) . ', which ' . $setting . ' does not list';
+            $clauses[] = $heldVerb . ' ' . MessageValue::quoteList($extra) . ', which ' . $setting . ' does not list';
         }
         if ($missing !== []) {
-            $clauses[] = $lackedVerb . ' ' . self::quoted($missing) . ', which ' . $setting . ' lists';
+            $clauses[] = $lackedVerb . ' ' . MessageValue::quoteList($missing) . ', which ' . $setting . ' lists';
         }
 
         if (!$sole) {
@@ -811,35 +812,8 @@ final class ApplicationBuilder
             return 'is disabled; ' . $rebuild;
         }
 
-        return 'is disabled and excludes ' . self::quoted($extra) . '; declare ' . (count($extra) === 1 ? 'it' : 'them') . ' in security.csrf.exceptions, then '
+        return 'is disabled and excludes ' . MessageValue::quoteList($extra) . '; declare ' . (count($extra) === 1 ? 'it' : 'them') . ' in security.csrf.exceptions, then '
             . $rebuild;
-    }
-
-    /**
-     * The values as comma-separated JSON strings.
-     *
-     * @param list<string> $values
-     */
-    private static function quoted(array $values): string
-    {
-        // JSON-escaped, with DEL, C1 and bidi format characters escaped too, so none reaches a log line raw.
-        return implode(', ', array_map(
-            static fn (string $value): string => self::escapeDeleteAndC1(json_encode(
-                $value,
-                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR,
-            )),
-            $values,
-        ));
-    }
-
-    /** Escapes DEL, the C1 controls and the bidi format characters, which json_encode leaves raw, as \uXXXX. */
-    private static function escapeDeleteAndC1(string $json): string
-    {
-        return preg_replace_callback(
-            '/[\x{7f}\x{80}-\x{9f}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u',
-            static fn (array $match): string => sprintf('\\u%04x', mb_ord($match[0])),
-            $json,
-        ) ?? $json;
     }
 
     /**

@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
-use Zephyrus\Http\IpRange;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Http\Request;
 use Zephyrus\Security\SecureHeadersConfig;
 
@@ -168,21 +168,21 @@ final class SecurityConfigTest extends TestCase
      */
     public static function refusedSnakeCaseMaxBodySizes(): iterable
     {
-        yield 'unit suffix' => ['8MB', "'8MB'"];
-        yield 'bool' => [true, "'bool'"];
-        yield 'float' => [1e7, "'float'"];
-        yield 'array' => [[1], "'array'"];
-        yield 'negative integer' => [-5, "'-5'"];
+        yield 'unit suffix' => ['8MB', '"8MB"'];
+        yield 'bool' => [true, 'true'];
+        yield 'float' => [1e7, '10000000.0'];
+        yield 'array' => [[1], 'array'];
+        yield 'negative integer' => [-5, '-5'];
     }
 
     #[DataProvider('refusedSnakeCaseMaxBodySizes')]
-    public function testMaxBodySizeRefusalNamesTheKeyAsWrittenAndShowsTheTypeHonestly(mixed $value, string $shown): void
+    public function testMaxBodySizeRefusalNamesTheKeyAsWrittenAndShowsTheValue(mixed $value, string $shown): void
     {
         try {
             SecurityConfig::fromArray(['max_body_size' => $value]);
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
-            self::assertStringContainsString("'security' field 'max_body_size' has invalid value " . $shown, $e->getMessage());
+            self::assertStringContainsString("'security' field 'max_body_size' has invalid value " . $shown . ': ', $e->getMessage());
         }
     }
 
@@ -221,7 +221,7 @@ final class SecurityConfigTest extends TestCase
             self::fail('An empty csrf exception entry was accepted.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'security' field 'csrfExceptions[0]' has invalid value '': "
+                "Configuration section 'security' field 'csrfExceptions[0]' has invalid value null: "
                 . 'each entry must be a non-empty string; quote a pattern that starts with "#" in YAML.',
                 $exception->getMessage(),
             );
@@ -253,7 +253,7 @@ final class SecurityConfigTest extends TestCase
             self::fail('An empty csrf exception entry was accepted.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'security' field 'csrfExceptions[0]' has invalid value '': "
+                "Configuration section 'security' field 'csrfExceptions[0]' has invalid value \"\": "
                 . 'each entry must be a non-empty string.',
                 $exception->getMessage(),
             );
@@ -349,7 +349,7 @@ final class SecurityConfigTest extends TestCase
     public function testThrowsForMalformedTrustedProxyEntry(string $entry): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'trustedProxies[0]' has invalid value '" . IpRange::shownEntry($entry) . "'");
+        $this->expectExceptionMessage("field 'trustedProxies[0]' has invalid value " . MessageValue::quote($entry) . ': ');
 
         SecurityConfig::fromArray(['trustedProxies' => [$entry]]);
     }
@@ -357,7 +357,7 @@ final class SecurityConfigTest extends TestCase
     public function testIpv4MappedTrustedProxyShorterThan96IsRefusedWithTheIpv4Form(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("has invalid value '::ffff:10.0.0.0/8': an IPv4-mapped IPv6 range shorter than /96");
+        $this->expectExceptionMessage("has invalid value \"::ffff:10.0.0.0/8\": an IPv4-mapped IPv6 range shorter than /96");
 
         SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/8']]);
     }
@@ -365,7 +365,7 @@ final class SecurityConfigTest extends TestCase
     public function testIpv4MappedTrustedProxyAtSlash96WithHostBitsIsRefused(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("has invalid value '::ffff:10.0.0.0/96': ::ffff:10.0.0.0/96 covers every IPv4 address; write ::ffff:10.0.0.0/128 for one IPv6 peer or 10.0.0.0/32 for one IPv4 peer");
+        $this->expectExceptionMessage("has invalid value \"::ffff:10.0.0.0/96\": ::ffff:10.0.0.0/96 covers every IPv4 address; write ::ffff:10.0.0.0/128 for one IPv6 peer or 10.0.0.0/32 for one IPv4 peer");
 
         SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/96']]);
     }
@@ -416,7 +416,7 @@ final class SecurityConfigTest extends TestCase
     public function testTrustedProxiesStringValidatesEachEntry(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'trustedProxies[1]' has invalid value 'bogus'");
+        $this->expectExceptionMessage("field 'trustedProxies[1]' has invalid value \"bogus\": ");
 
         SecurityConfig::fromArray(['trustedProxies' => '10.0.0.1, bogus']);
     }
@@ -574,23 +574,23 @@ final class SecurityConfigTest extends TestCase
     {
         yield 'nested auto_html written as a string' => [
             ['csrf' => ['auto_html' => 'yes']],
-            "field 'csrf.auto_html' has invalid value '\"yes\"'",
+            "field 'csrf.auto_html' has invalid value \"yes\": ",
         ];
         yield 'nested autoHtml written as a bool' => [
             ['csrf' => ['autoHtml' => true]],
-            "field 'csrf.autoHtml' has invalid value 'true'",
+            "field 'csrf.autoHtml' has invalid value true: ",
         ];
         yield 'flat csrf_auto_html written as a string' => [
             ['csrf_auto_html' => 'yes'],
-            "field 'csrf_auto_html' has invalid value '\"yes\"'",
+            "field 'csrf_auto_html' has invalid value \"yes\": ",
         ];
         yield 'flat csrfAutoHtml written as a bool' => [
             ['csrfAutoHtml' => true],
-            "field 'csrfAutoHtml' has invalid value 'true'",
+            "field 'csrfAutoHtml' has invalid value true: ",
         ];
         yield 'null spelling is skipped in favour of the one that was written' => [
             ['csrf' => ['autoHtml' => null, 'auto_html' => 'yes']],
-            "field 'csrf.auto_html' has invalid value '\"yes\"'",
+            "field 'csrf.auto_html' has invalid value \"yes\": ",
         ];
     }
 
@@ -626,7 +626,7 @@ final class SecurityConfigTest extends TestCase
         ];
         yield 'invalid UTF-8 is replaced' => [
             ['csrf' => ['auto_html' => "ok\xffend"]],
-            'ok?end',
+            "ok\u{FFFD}end",
             "\xff",
         ];
     }
@@ -651,10 +651,11 @@ final class SecurityConfigTest extends TestCase
      */
     public static function refusedListEntryCases(): iterable
     {
-        yield 'huge trusted proxy is cut' => ['trustedProxies', str_repeat('9', 5 * 1024 * 1024), str_repeat('9', 64) . '...(5242880 bytes)'];
-        yield 'huge allowed host is cut' => ['allowedHosts', str_repeat('h', 5 * 1024 * 1024), str_repeat('h', 64) . '...(5242880 bytes)'];
-        yield 'trusted proxy line feed is escaped' => ['trustedProxies', "10.0.0.1\n10.0.0.2", '10.0.0.1\n10.0.0.2'];
-        yield 'allowed host control byte is escaped' => ['allowedHosts', "a\x7fb", 'a\177b'];
+        yield 'huge trusted proxy is cut' => ['trustedProxies', str_repeat('9', 5 * 1024 * 1024), '"' . str_repeat('9', 64) . '..." (5242880 bytes)'];
+        yield 'huge allowed host is cut' => ['allowedHosts', str_repeat('h', 5 * 1024 * 1024), '"' . str_repeat('h', 64) . '..." (5242880 bytes)'];
+        yield 'trusted proxy line feed is escaped' => ['trustedProxies', "10.0.0.1\n10.0.0.2", '"10.0.0.1\n10.0.0.2"'];
+        yield 'allowed host control byte is escaped' => ['allowedHosts', "a\x7fb", '"a\u007fb"'];
+        yield 'allowed host bidi override is escaped' => ['allowedHosts', "a\u{202E}b", '"a\u202eb"'];
     }
 
     #[DataProvider('refusedListEntryCases')]
@@ -664,7 +665,7 @@ final class SecurityConfigTest extends TestCase
             SecurityConfig::fromArray([$setting => [$entry]]);
             self::fail('The entry must be refused.');
         } catch (ConfigurationException $e) {
-            self::assertStringContainsString("'" . $shown . "'", $e->getMessage());
+            self::assertStringContainsString('has invalid value ' . $shown . ': ', $e->getMessage());
             self::assertLessThan(1024, strlen($e->getMessage()));
         }
     }
@@ -841,7 +842,7 @@ final class SecurityConfigTest extends TestCase
     public function testDeclaredNullAllowedHostsIsRefused(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'allowedHosts' has invalid value 'null'");
+        $this->expectExceptionMessage("field 'allowedHosts' has invalid value null: ");
 
         SecurityConfig::fromArray(['allowedHosts' => null]);
     }
@@ -854,7 +855,7 @@ final class SecurityConfigTest extends TestCase
     public function testAllowedHostsStringValidatesEachEntry(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'allowedHosts[1]' has invalid value 'bad host'");
+        $this->expectExceptionMessage("field 'allowedHosts[1]' has invalid value \"bad host\": ");
 
         SecurityConfig::fromArray(['allowedHosts' => 'a.example, bad host']);
     }
@@ -879,7 +880,7 @@ final class SecurityConfigTest extends TestCase
     public function testMalformedAllowedHostEntryFailsAtBootWithTheFix(string $entry, string $fix): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'allowedHosts[0]' has invalid value '" . IpRange::shownEntry($entry) . "'");
+        $this->expectExceptionMessage("field 'allowedHosts[0]' has invalid value " . MessageValue::quote($entry) . ': ');
         $this->expectExceptionMessage($fix);
 
         SecurityConfig::fromArray(['allowedHosts' => [$entry]]);

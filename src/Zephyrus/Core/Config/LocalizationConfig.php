@@ -101,13 +101,12 @@ final readonly class LocalizationConfig
         }
 
         if (!is_string($value)) {
-            throw ConfigurationException::invalidValue('localization', 'grouping_separator', get_debug_type($value), 'must be a string');
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $value, 'must be a string');
         }
 
-        $display = addcslashes($value, "\x00..\x1F\x7F");
         $refusal = FormatterInput::groupingSeparatorRefusal($value);
         if ($refusal !== null) {
-            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, $refusal);
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $value, $refusal);
         }
 
         return $value;
@@ -125,7 +124,7 @@ final readonly class LocalizationConfig
         }
 
         if (!is_string($value)) {
-            throw ConfigurationException::invalidValue('localization', 'currency', get_debug_type($value), 'must be a string');
+            throw ConfigurationException::invalidValue('localization', 'currency', $value, 'must be a string');
         }
 
         $currency = trim($value);
@@ -134,8 +133,7 @@ final readonly class LocalizationConfig
         }
 
         if (!FormatterInput::isCurrencyCode($currency)) {
-            $display = addcslashes($currency, "\x00..\x1F\x7F..\xFF");
-            throw ConfigurationException::invalidValue('localization', 'currency', $display, FormatterInput::CURRENCY_CODE_RULE);
+            throw ConfigurationException::invalidValue('localization', 'currency', $currency, FormatterInput::CURRENCY_CODE_RULE);
         }
 
         return $currency;

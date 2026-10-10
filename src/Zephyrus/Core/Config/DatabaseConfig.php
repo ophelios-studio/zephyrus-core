@@ -274,7 +274,7 @@ final readonly class DatabaseConfig
             throw ConfigurationException::invalidValue(
                 'database',
                 $key,
-                get_debug_type($value),
+                $value,
                 'must be a string or an integer' . $hint,
             );
         }

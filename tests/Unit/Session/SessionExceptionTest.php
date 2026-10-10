@@ -57,4 +57,12 @@ final class SessionExceptionTest extends TestCase
         self::assertNull($exception->getPrevious());
         self::assertNull($exception->phpReason());
     }
+
+    public function testAKeyRefusalEscapesDeleteC1AndBidiCharacters(): void
+    {
+        self::assertSame(
+            "Session key must be a non-empty string. Got \"a\\u007f\\u0085\\u202e\".",
+            SessionException::invalidKey("a\x7f\u{0085}\u{202E}")->getMessage(),
+        );
+    }
 }

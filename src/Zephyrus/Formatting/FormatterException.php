@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Formatting;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -53,10 +54,7 @@ final class FormatterException extends ZephyrusRuntimeException
             'Currency required: locale %s has no native currency. '
             . 'Pass a currency to money(), or set localization.currency in the configuration '
             . '(defaultCurrency when you build the Formatter yourself).',
-            (string) json_encode(
-                $locale,
-                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
-            ),
+            MessageValue::quote($locale),
         ));
     }
 

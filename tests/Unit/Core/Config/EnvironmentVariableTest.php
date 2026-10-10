@@ -345,4 +345,42 @@ final class EnvironmentVariableTest extends TestCase
     {
         self::assertNull(EnvironmentVariable::read('ZEPHYRUS_TEST_ABSENT_NAME'));
     }
+
+    public function testANameRefusalEscapesTheName(): void
+    {
+        try {
+            EnvironmentVariable::read("A\x7f=");
+            self::fail('A name holding "=" must be refused.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame("\"A\\u007f=\": names must not contain a NUL byte or \"=\".", $e->getMessage());
+        }
+    }
+
+    public function testAnExactNameRefusalQuotesTheNameAsGiven(): void
+    {
+        try {
+            EnvironmentVariable::read('remote_addr');
+            self::fail('A request variable name must be refused.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                '"remote_addr": can be set per request by the web server or PHP, so it is never read as '
+                . 'configuration; rename the variable.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAPrefixRefusalQuotesTheName(): void
+    {
+        try {
+            EnvironmentVariable::read("HTTP_\x1b[2K");
+            self::fail('A name starting with HTTP_ must be refused.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                "\"HTTP_\\u001b[2K\": names starting with HTTP_ can be set per request by the client request headers, "
+                . 'so they are never read as configuration; rename the variable.',
+                $e->getMessage(),
+            );
+        }
+    }
 }

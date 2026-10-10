@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core\Config;
 
 use Throwable;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Security\SecureHeadersConfig;
 
 /**
@@ -285,9 +286,9 @@ final class EnvironmentContract
         // secret. Secrets use requireBase64Bytes, which never echoes its value.
         if (self::matchAllowed($value, $allowed, (bool) $rule['caseSensitive']) === null) {
             return sprintf(
-                '%s="%s" is not a recognised value. Use one of: %s.',
+                '%s=%s is not a recognised value. Use one of: %s.',
                 $name,
-                $value,
+                MessageValue::quote($value),
                 implode(', ', $allowed),
             );
         }

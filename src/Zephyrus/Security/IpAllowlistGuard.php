@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Security;
 
 use InvalidArgumentException;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
 
@@ -23,8 +24,8 @@ final class IpAllowlistGuard implements AuthGuardInterface
             $reason = IpRange::invalidEntryReason($entry);
             if ($reason !== null) {
                 throw new InvalidArgumentException(sprintf(
-                    'Allowed IP "%s": %s.',
-                    IpRange::shownEntry($entry),
+                    'Allowed IP %s: %s.',
+                    MessageValue::quote($entry),
                     $reason,
                 ));
             }

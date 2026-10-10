@@ -7,7 +7,6 @@ namespace Zephyrus\Security;
 use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigurationException;
-use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Response;
 
 /**
@@ -129,8 +128,8 @@ final readonly class SecureHeadersConfig
             if (!self::isKnownKey((string) $key)) {
                 throw ConfigurationException::invalidValue(
                     'security.headers',
-                    IpRange::shownEntry((string) $key),
-                    self::shownValue($value),
+                    (string) $key,
+                    $value,
                     'unknown key, the accepted keys are ' . implode(', ', array_keys(self::SPELLINGS)),
                 );
             }
@@ -177,7 +176,7 @@ final readonly class SecureHeadersConfig
             throw ConfigurationException::invalidValue(
                 'security.headers',
                 $key,
-                self::shownValue($value),
+                $value,
                 'must be a string or a number'
                 . ($value === null || $value === false ? "; use '' to omit the header" : ''),
             );
@@ -193,7 +192,7 @@ final readonly class SecureHeadersConfig
             throw ConfigurationException::invalidValue(
                 'security.headers',
                 $key,
-                self::shownValue($text),
+                $text,
                 'must not contain a control character',
             );
         }
@@ -230,7 +229,7 @@ final readonly class SecureHeadersConfig
         throw ConfigurationException::invalidValue(
             'security.headers',
             $key,
-            self::shownValue($value),
+            $value,
             'must be a whole number of seconds, or a string of digits',
         );
     }
@@ -252,18 +251,6 @@ final readonly class SecureHeadersConfig
         return null;
     }
 
-    /** A value for a message: strings escaped and bounded, scalars as written, anything else by type. */
-    private static function shownValue(mixed $value): string
-    {
-        return match (true) {
-            is_string($value) => IpRange::shownEntry($value),
-            is_bool($value) => $value ? 'true' : 'false',
-            is_float($value) => var_export($value, true),
-            is_scalar($value) => (string) $value,
-            $value === null => 'null',
-            default => get_debug_type($value),
-        };
-    }
 
     /** The Strict-Transport-Security value, or an empty string when hstsMaxAge is 0 or less. */
     public function hstsHeaderValue(): string

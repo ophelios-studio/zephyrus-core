@@ -419,4 +419,14 @@ final class EnvironmentContractTest extends TestCase
             'stderr' => $stderr,
         ];
     }
+
+    public function testRequireOneOfEscapesTheRefusedValue(): void
+    {
+        $contract = EnvironmentContract::create()->requireOneOf('APP_ENV', ['dev', 'production']);
+
+        self::assertSame(
+            ["APP_ENV=\"prod\\u001b[2K\" is not a recognised value. Use one of: dev, production."],
+            $contract->violations(['APP_ENV' => "prod\x1b[2K"]),
+        );
+    }
 }

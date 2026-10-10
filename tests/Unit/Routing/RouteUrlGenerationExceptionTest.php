@@ -57,4 +57,20 @@ final class RouteUrlGenerationExceptionTest extends TestCase
         $e = RouteUrlGenerationException::signatureUnavailable();
         self::assertStringContainsString('RouteSignature', $e->getMessage());
     }
+
+    public function testEachParameterRefusalEscapesItsValues(): void
+    {
+        self::assertSame(
+            "Missing route parameter \"i\\u001bd\" for route \"users.show\"",
+            RouteUrlGenerationException::missingParameter("i\x1bd", 'users.show')->getMessage(),
+        );
+        self::assertSame(
+            "Unexpected route parameter \"x\\u007f\" for route \"users.show\"",
+            RouteUrlGenerationException::unexpectedParameter("x\x7f", 'users.show')->getMessage(),
+        );
+        self::assertSame(
+            "Route parameter \"id\\u0085\" for route \"users.show\": must be numeric",
+            RouteUrlGenerationException::constraintViolation("id\u{0085}", 'users.show', 'must be numeric')->getMessage(),
+        );
+    }
 }

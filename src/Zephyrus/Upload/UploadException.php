@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Upload;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -35,22 +36,25 @@ final class UploadException extends ZephyrusRuntimeException
 
     public static function pathTraversalDetected(string $segment): self
     {
-        return new self(sprintf('Path traversal attempt detected in upload path segment: "%s".', $segment));
+        return new self(sprintf(
+            'Path traversal attempt detected in upload path segment: %s.',
+            MessageValue::quote($segment),
+        ));
     }
 
     public static function invalidTargetName(string $name): self
     {
-        return new self(sprintf('Invalid upload target filename: "%s".', $name));
+        return new self(sprintf('Invalid upload target filename: %s.', MessageValue::quote($name)));
     }
 
     public static function directoryCreationFailed(string $dir): self
     {
-        return new self(sprintf('Unable to create upload directory: %s', $dir));
+        return new self(sprintf('Unable to create upload directory: %s', self::path($dir)));
     }
 
     public static function moveFileFailed(string $src, string $dst): self
     {
-        return new self(sprintf('Unable to move uploaded file from "%s" to "%s".', $src, $dst));
+        return new self(sprintf('Unable to move uploaded file from %s to %s.', self::path($src), self::path($dst)));
     }
 
     /**
@@ -59,33 +63,33 @@ final class UploadException extends ZephyrusRuntimeException
     public static function notAnUploadedFile(string $path): self
     {
         return new self(sprintf(
-            'Refusing to move "%s": it is not a genuine PHP upload. '
+            'Refusing to move %s: it is not a genuine PHP upload. '
             . 'Inject a $fileMover when storing files that did not arrive over HTTP.',
-            $path,
+            self::path($path),
         ));
     }
 
     public static function unreadableSource(string $path): self
     {
-        return new self(sprintf('Upload temporary file "%s" is missing or unreadable.', $path));
+        return new self(sprintf('Upload temporary file %s is missing or unreadable.', self::path($path)));
     }
 
     public static function mimeTypeSniffFailed(string $path): self
     {
-        return new self(sprintf('Unable to determine the real MIME type of "%s".', $path));
+        return new self(sprintf('Unable to determine the real MIME type of %s.', self::path($path)));
     }
 
     public static function destinationAlreadyExists(string $path): self
     {
         return new self(sprintf(
-            'Refusing to overwrite the existing file "%s". Pass $overwriteExisting to allow replacement.',
-            $path,
+            'Refusing to overwrite the existing file %s. Pass $overwriteExisting to allow replacement.',
+            self::path($path),
         ));
     }
 
     public static function destinationNotContained(string $path): self
     {
-        return new self(sprintf('Upload destination "%s" resolves outside the destination root.', $path));
+        return new self(sprintf('Upload destination %s resolves outside the destination root.', self::path($path)));
     }
 
     /**
@@ -94,8 +98,8 @@ final class UploadException extends ZephyrusRuntimeException
     public static function extensionNotAllowed(string $extension, array $allowedExtensions): self
     {
         return new self(sprintf(
-            'Upload extension "%s" is not allowed. Allowed extensions: %s',
-            $extension,
+            'Upload extension %s is not allowed. Allowed extensions: %s',
+            MessageValue::quote($extension),
             implode(', ', $allowedExtensions),
         ));
     }
@@ -106,8 +110,8 @@ final class UploadException extends ZephyrusRuntimeException
     public static function mimeTypeNotAllowed(string $mimeType, array $allowedMimeTypes): self
     {
         return new self(sprintf(
-            'Upload MIME type "%s" is not allowed. Allowed MIME types: %s',
-            $mimeType,
+            'Upload MIME type %s is not allowed. Allowed MIME types: %s',
+            MessageValue::quote($mimeType),
             implode(', ', $allowedMimeTypes),
         ));
     }
@@ -119,5 +123,11 @@ final class UploadException extends ZephyrusRuntimeException
             $sizeBytes,
             $maxSizeBytes,
         ));
+    }
+
+    /** A path quoted with its end kept when cut, since the file name is the part that tells paths apart. */
+    private static function path(string $path): string
+    {
+        return MessageValue::quote($path, keepEnd: true);
     }
 }

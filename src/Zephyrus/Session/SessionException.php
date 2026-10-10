@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Session;
 
 use Zephyrus\Data\Database;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
 
 /**
@@ -17,7 +18,7 @@ final class SessionException extends ZephyrusException
 {
     public static function invalidKey(string $key): self
     {
-        return new self(sprintf('Session key must be a non-empty string. Got %s.', self::quoteKey($key)));
+        return new self(sprintf('Session key must be a non-empty string. Got %s.', MessageValue::quote($key)));
     }
 
     public static function saveHandlerRefused(?\ErrorException $phpWarning = null): self
@@ -78,7 +79,7 @@ final class SessionException extends ZephyrusException
     public static function databaseUnavailable(string $table, \Throwable $previous): self
     {
         return new self(
-            sprintf('Session database for table %s could not be resolved.', self::quoteKey($table)),
+            sprintf('Session database for table %s could not be resolved.', MessageValue::quote($table)),
             0,
             $previous,
         );
@@ -88,7 +89,7 @@ final class SessionException extends ZephyrusException
     {
         return new self(sprintf(
             'Session database for table %s could not be resolved: the Closure returned %s instead of a %s.',
-            self::quoteKey($table),
+            MessageValue::quote($table),
             $type,
             Database::class,
         ));
@@ -105,7 +106,7 @@ final class SessionException extends ZephyrusException
 
     public static function noActiveSessionForWrite(string $key): self
     {
-        return self::noActiveSession(sprintf('write %s to the session', self::quoteKey($key)));
+        return self::noActiveSession(sprintf('write %s to the session', MessageValue::quote($key)));
     }
 
     public static function notActiveForDestruction(): self
@@ -125,12 +126,6 @@ final class SessionException extends ZephyrusException
         $warning = $this->getPrevious();
 
         return $warning instanceof \ErrorException ? $warning->getMessage() : null;
-    }
-
-    /** A key quoted as a JSON string, so control bytes in it cannot forge a log line. */
-    private static function quoteKey(string $key): string
-    {
-        return (string) json_encode($key, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     private static function withReason(string $message, ?\ErrorException $phpWarning): self

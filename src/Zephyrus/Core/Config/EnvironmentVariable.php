@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Zephyrus\Exceptions\MessageValue;
+
 /**
  * Reads configuration values from $_ENV and the process environment.
  */
@@ -56,7 +58,7 @@ final class EnvironmentVariable
         if (strpbrk($name, "\0=") !== false) {
             throw new \InvalidArgumentException(sprintf(
                 '%s: names must not contain a NUL byte or "=".',
-                json_encode($name, JSON_INVALID_UTF8_SUBSTITUTE),
+                MessageValue::quote($name),
             ));
         }
 
@@ -66,7 +68,7 @@ final class EnvironmentVariable
             if (in_array($upper, $names, true)) {
                 throw new \InvalidArgumentException(sprintf(
                     '%s: can be set per request by %s, so it is never read as configuration; rename the variable.',
-                    $name,
+                    MessageValue::quote($name),
                     $source,
                 ));
             }
@@ -76,7 +78,7 @@ final class EnvironmentVariable
             if (str_starts_with($upper, $prefix)) {
                 throw new \InvalidArgumentException(sprintf(
                     '%s: names starting with %s can be set per request by %s, so they are never read as configuration; rename the variable.',
-                    $name,
+                    MessageValue::quote($name),
                     $prefix,
                     $source,
                 ));

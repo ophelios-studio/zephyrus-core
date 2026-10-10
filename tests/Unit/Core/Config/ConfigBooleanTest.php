@@ -92,7 +92,11 @@ final class ConfigBooleanTest extends TestCase
             ConfigBoolean::parse('security', 'flag', str_repeat('y', 100));
             self::fail('A value that is not a boolean must be refused.');
         } catch (ConfigurationException $exception) {
-            self::assertStringContainsString('...(100 bytes)', $exception->getMessage());
+            self::assertSame(
+                "Configuration section 'security' field 'flag' has invalid value \"" . str_repeat('y', 64)
+                . "...\" (100 bytes): is not a boolean; use true/false, 1/0, on/off or yes/no.",
+                $exception->getMessage(),
+            );
         }
     }
 

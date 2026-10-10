@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-use Zephyrus\Http\IpRange;
-
 /**
  * Strict reader for boolean configuration values.
  *
@@ -48,7 +46,7 @@ final class ConfigBoolean
         throw ConfigurationException::invalidValue(
             $section,
             $key,
-            self::shown($value),
+            $value,
             'is not a boolean; use true/false, 1/0, on/off or yes/no',
         );
     }
@@ -69,14 +67,5 @@ final class ConfigBoolean
         }
 
         return $default;
-    }
-
-    private static function shown(mixed $value): string
-    {
-        if (is_string($value)) {
-            return IpRange::shownEntry($value);
-        }
-
-        return is_scalar($value) ? var_export($value, true) : get_debug_type($value);
     }
 }

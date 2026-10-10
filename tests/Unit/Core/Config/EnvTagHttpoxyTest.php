@@ -135,7 +135,7 @@ final class EnvTagHttpoxyTest extends TestCase
     public function testARefusedEnvTagNamesItsFullPathWhenTheLastSegmentIsAmbiguous(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('!env tag at "mailer.host": HTTP_PROXY: ');
+        $this->expectExceptionMessage('!env tag at "mailer.host": "HTTP_PROXY": ');
 
         $this->resolveYaml("database:\n  host: localhost\nmailer:\n  host: !env HTTP_PROXY\n");
     }
@@ -170,5 +170,15 @@ final class EnvTagHttpoxyTest extends TestCase
         $this->expectExceptionMessage('!env tag at "app.value": it must name one variable, not a list or mapping');
 
         $this->resolve($tag);
+    }
+
+    public function testARefusedEnvTagEscapesItsPath(): void
+    {
+        try {
+            $this->resolveYaml("app:\n  \"bad\\e[2K\": !env \"\"\n");
+            self::fail('An !env tag with an empty name must be refused.');
+        } catch (ConfigurationException $e) {
+            self::assertSame("!env tag at \"app.bad\\u001b[2K\": it has an empty variable name.", $e->getMessage());
+        }
     }
 }

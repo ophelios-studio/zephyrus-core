@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing;
 
 use JsonException;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Routing\Exception\RouteCacheException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
@@ -662,7 +663,7 @@ final class RouteCache
         if ($duplicates !== []) {
             return sprintf(
                 'duplicate route names %s; give each route a unique name',
-                implode(', ', array_map(static fn (int|string $name): string => self::encodeForMessage((string) $name), $duplicates)),
+                MessageValue::quoteList(array_map(strval(...), $duplicates)),
             );
         }
 
@@ -678,17 +679,7 @@ final class RouteCache
             return sprintf(' at entry %d', $index);
         }
 
-        return sprintf(' at entry %d %s', $index, self::encodeForMessage([$entry['method'] ?? null, $entry['path'] ?? null]));
-    }
-
-    /**
-     * JSON-encodes a value for a message. Raw DEL is escaped too, since JSON leaves it unescaped.
-     */
-    private static function encodeForMessage(mixed $value): string
-    {
-        $json = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
-
-        return $json === false ? '(unencodable)' : str_replace("\x7f", '\u007f', $json);
+        return sprintf(' at entry %d [%s]', $index, MessageValue::quoteList([$entry['method'] ?? null, $entry['path'] ?? null]));
     }
 
     private function routeFromEntry(mixed $entry): Route|string
@@ -740,7 +731,7 @@ final class RouteCache
                 excludedMiddlewares: $excludedMiddlewares,
             );
         } catch (RouteSignatureException | RouteMiddlewareException $exception) {
-            return 'a route the router refuses: ' . self::encodeForMessage($exception->getMessage());
+            return 'a route the router refuses: ' . MessageValue::escapeControls($exception->getMessage());
         }
     }
 

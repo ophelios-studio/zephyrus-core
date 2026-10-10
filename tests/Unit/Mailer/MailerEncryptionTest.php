@@ -53,6 +53,22 @@ final class MailerEncryptionTest extends TestCase
         MailerConfig::fromArray(['smtp' => ['encryption' => $value]]);
     }
 
+    public function testTheRefusalShowsTheValueOnceAndEscaped(): void
+    {
+        try {
+            MailerConfig::fromArray(['smtp' => ['encryption' => "tl\x1b[8ms"]]);
+            self::fail('An unrecognised encryption value must be refused.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'smtp.encryption' has invalid value \"tl\\u001b[8ms\": must be "
+                . "one of 'tls', 'ssl' or '' (empty, meaning no encryption at all); PHPMailer matches this value with "
+                . 'a strict identity, so this value would have silently fallen back to opportunistic STARTTLS and '
+                . 'sent the credentials in cleartext against a server that does not advertise it.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     /**
      * @return array<string, array{0: string, 1: string}>
      */

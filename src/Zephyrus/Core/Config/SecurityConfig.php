@@ -152,7 +152,7 @@ final readonly class SecurityConfig
             throw ConfigurationException::invalidValue(
                 'security',
                 'headers',
-                self::rawValueForMessage($headers),
+                $headers,
                 'the security.headers section must be a mapping of header settings, such as xFrameOptions and csp',
             );
         }
@@ -170,12 +170,12 @@ final readonly class SecurityConfig
         $declaredKeys = self::declaredKeys($sections);
         $allowedHostsValue = self::read('allowedHosts', $sections);
         if ($allowedHostsValue === null && in_array('allowedHosts', $declaredKeys, true)) {
-            throw ConfigurationException::invalidValue('security', 'allowedHosts', 'null', 'an empty list is written []');
+            throw ConfigurationException::invalidValue('security', 'allowedHosts', null, 'an empty list is written []');
         }
 
         $allowedHosts = self::listValue($allowedHostsValue);
         if ($allowedHosts === [] && is_string($allowedHostsValue)) {
-            throw ConfigurationException::invalidValue('security', 'allowedHosts', self::shownValue($allowedHostsValue), 'set the variable to at least one entry, or remove it');
+            throw ConfigurationException::invalidValue('security', 'allowedHosts', $allowedHostsValue, 'set the variable to at least one entry, or remove it');
         }
 
         $writtenMaxBodySize = self::findWritten('maxBodySize', $sections);
@@ -202,7 +202,7 @@ final readonly class SecurityConfig
             throw ConfigurationException::invalidValue(
                 'security',
                 $written,
-                self::rawValueForMessage($rawValue),
+                $rawValue,
                 'remove this line. ' . sprintf(CsrfConfig::INJECTION_REFUSAL, '_csrf_token'),
             );
         }
@@ -212,7 +212,7 @@ final readonly class SecurityConfig
                 throw ConfigurationException::invalidValue(
                     'security',
                     "csrfExceptions[$i]",
-                    self::shownValue($pattern),
+                    $pattern,
                     'each entry must be a non-empty string'
                         . ($pattern === null ? '; quote a pattern that starts with "#" in YAML' : ''),
                 );
@@ -224,7 +224,7 @@ final readonly class SecurityConfig
                 ? AllowedHostsMiddleware::invalidEntryReason($host)
                 : 'each entry must be a host name string';
             if ($reason !== null) {
-                throw ConfigurationException::invalidValue('security', "allowedHosts[$i]", self::shownValue($host), $reason);
+                throw ConfigurationException::invalidValue('security', "allowedHosts[$i]", $host, $reason);
             }
         }
 
@@ -238,7 +238,7 @@ final readonly class SecurityConfig
                 $reason .= '; use list items, not a comma inside one item';
             }
             if ($reason !== null) {
-                throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", self::shownValue($proxy), $reason);
+                throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", $proxy, $reason);
             }
         }
 
@@ -248,7 +248,7 @@ final readonly class SecurityConfig
                 throw ConfigurationException::invalidValue(
                     'security',
                     "trustedHeaders[$i]",
-                    self::shownValue($header),
+                    $header,
                     'each entry must be a non-empty string',
                 );
             }
@@ -258,7 +258,7 @@ final readonly class SecurityConfig
                 throw ConfigurationException::invalidValue(
                     'security',
                     "trustedHeaders[$i]",
-                    self::shownValue($header),
+                    $header,
                     'unknown forwarding header, supported names are '
                         . implode(', ', Request::TRUSTED_HEADERS_SUPPORTED),
                 );
@@ -310,7 +310,7 @@ final readonly class SecurityConfig
         throw ConfigurationException::invalidValue(
             'security',
             $written,
-            is_string($value) ? self::shownValue($value) : get_debug_type($value),
+            $value,
             'must be a number of bytes, for example 2097152 (no unit suffix)',
         );
     }
@@ -399,25 +399,5 @@ final readonly class SecurityConfig
         }
 
         return null;
-    }
-
-    private static function rawValueForMessage(mixed $value): string
-    {
-        return match (true) {
-            is_string($value) => '"' . IpRange::shownEntry($value) . '"',
-            is_bool($value) => $value ? 'true' : 'false',
-            is_scalar($value) => (string) $value,
-            default => get_debug_type($value),
-        };
-    }
-
-    /** A list entry for a message: strings bounded and escaped, other non-scalars by type. */
-    private static function shownValue(mixed $value): mixed
-    {
-        return match (true) {
-            is_string($value) => IpRange::shownEntry($value),
-            is_scalar($value), $value === null => $value,
-            default => get_debug_type($value),
-        };
     }
 }

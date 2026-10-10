@@ -254,19 +254,19 @@ final class SessionConfigTest extends TestCase
     public static function invalidIdleTimeoutProvider(): array
     {
         return [
-            'zero'              => [0, "'0'"],
-            'zero string'       => ['0', "'0'"],
-            'negative'          => [-60, "'-60'"],
-            'negative string'   => ['-60', "'-60'"],
-            'unit suffix'       => ['30m', "'30m'"],
-            'decimal string'    => ['1.9', "'1.9'"],
-            'float'             => [1.9, "'1.9'"],
-            'boolean'           => [true, "'true'"],
-            'word'              => ['abc', "'abc'"],
-            'empty string'      => ['', "''"],
-            'padded'            => [' 1800', "' 1800'"],
-            'all zeros'         => ['000', "'000'"],
-            'array'             => [[1800], "'array'"],
+            'zero'              => [0, '0'],
+            'zero string'       => ['0', '"0"'],
+            'negative'          => [-60, '-60'],
+            'negative string'   => ['-60', '"-60"'],
+            'unit suffix'       => ['30m', '"30m"'],
+            'decimal string'    => ['1.9', '"1.9"'],
+            'float'             => [1.9, '1.9'],
+            'boolean'           => [true, 'true'],
+            'word'              => ['abc', '"abc"'],
+            'empty string'      => ['', '""'],
+            'padded'            => [' 1800', '" 1800"'],
+            'all zeros'         => ['000', '"000"'],
+            'array'             => [[1800], 'array'],
         ];
     }
 
@@ -274,7 +274,7 @@ final class SessionConfigTest extends TestCase
     public function testThrowsForAnIdleTimeoutThatIsNotAPositiveWholeNumber(mixed $value, string $shown): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("'idleTimeout' has invalid value {$shown}");
+        $this->expectExceptionMessage("'idleTimeout' has invalid value {$shown}: ");
 
         SessionConfig::fromArray(['idle_timeout' => $value]);
     }
@@ -287,7 +287,7 @@ final class SessionConfigTest extends TestCase
     public function testAnIdleTimeoutBeyondTheIntegerRangeIsReportedAsTooLarge(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("'99999999999999999999': is too large");
+        $this->expectExceptionMessage('"99999999999999999999": is too large');
 
         SessionConfig::fromArray(['idle_timeout' => '99999999999999999999']);
     }
@@ -323,7 +323,7 @@ final class SessionConfigTest extends TestCase
     public function testDirectConstructionAlsoRefusesAnIdleTimeoutThatOverflowsTheExpiryColumn(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/invalid value '\\d+': must be at most \\d+ seconds [^:]*INTEGER[^:]*\\.\\z/");
+        $this->expectExceptionMessageMatches("/invalid value \\d+: must be at most \\d+ seconds [^:]*INTEGER[^:]*\\.\\z/");
 
         new SessionConfig('APP', 0, true, false, 'Lax', '/', idleTimeout: PHP_INT_MAX);
     }
@@ -405,5 +405,19 @@ final class SessionConfigTest extends TestCase
         $this->expectExceptionMessage("field 'httpOnly' has invalid value");
 
         SessionConfig::fromArray(['httpOnly' => 'maybe']);
+    }
+
+    public function testTheHostPrefixPathRefusalDoesNotRepeatTheName(): void
+    {
+        try {
+            SessionConfig::fromArray(['name' => "__Host-s\x1b[2K", 'cookiePath' => '/app', 'secure' => true]);
+            self::fail('A __Host- cookie on another path must be refused.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'session' field 'cookiePath' has invalid value \"/app\": must be \"/\" when the "
+                . 'session name has the __Host- prefix.',
+                $e->getMessage(),
+            );
+        }
     }
 }

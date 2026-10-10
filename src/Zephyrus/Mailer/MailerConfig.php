@@ -113,13 +113,10 @@ final class MailerConfig extends ConfigSection
                 'mailer',
                 'smtp.encryption',
                 $value,
-                sprintf(
-                    "must be one of 'tls', 'ssl' or '' (empty, meaning no encryption at all); "
-                    . "PHPMailer matches this value with a strict identity, so '%s' would have "
-                    . 'silently fallen back to opportunistic STARTTLS and sent the credentials in '
-                    . 'cleartext against a server that does not advertise it',
-                    $value,
-                ),
+                "must be one of 'tls', 'ssl' or '' (empty, meaning no encryption at all); "
+                . 'PHPMailer matches this value with a strict identity, so this value would have '
+                . 'silently fallen back to opportunistic STARTTLS and sent the credentials in '
+                . 'cleartext against a server that does not advertise it',
             );
         }
 

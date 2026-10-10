@@ -85,15 +85,15 @@ final class MailerExceptionTest extends TestCase
      */
     public static function refusedCharacterProvider(): iterable
     {
-        yield 'C1 control' => ["\u{0085}", '\u{0085}'];
-        yield 'Arabic letter mark' => ["\u{061C}", '\u{061C}'];
-        yield 'left-to-right mark' => ["\u{200E}", '\u{200E}'];
-        yield 'right-to-left mark' => ["\u{200F}", '\u{200F}'];
-        yield 'line separator' => ["\u{2028}", '\u{2028}'];
-        yield 'paragraph separator' => ["\u{2029}", '\u{2029}'];
-        yield 'right-to-left override' => ["\u{202E}", '\u{202E}'];
-        yield 'left-to-right isolate' => ["\u{2066}", '\u{2066}'];
-        yield 'pop directional isolate' => ["\u{2069}", '\u{2069}'];
+        yield 'C1 control' => ["\u{0085}", '\u0085'];
+        yield 'Arabic letter mark' => ["\u{061C}", '\u061c'];
+        yield 'left-to-right mark' => ["\u{200E}", '\u200e'];
+        yield 'right-to-left mark' => ["\u{200F}", '\u200f'];
+        yield 'line separator' => ["\u{2028}", '\u2028'];
+        yield 'paragraph separator' => ["\u{2029}", '\u2029'];
+        yield 'right-to-left override' => ["\u{202E}", '\u202e'];
+        yield 'left-to-right isolate' => ["\u{2066}", '\u2066'];
+        yield 'pop directional isolate' => ["\u{2069}", '\u2069'];
     }
 
     #[DataProvider('refusedCharacterProvider')]
@@ -126,7 +126,7 @@ final class MailerExceptionTest extends TestCase
         $message = MailerException::attachmentRejected('path', str_repeat("\x80", 100), 'is refused')->getMessage();
 
         self::assertSame(
-            'Attachment rejected: path "...' . str_repeat('?', 61) . '" (100 bytes) is refused.',
+            'Attachment rejected: path "...' . str_repeat("\u{FFFD}", 61) . '" (100 bytes) is refused.',
             $message,
         );
     }
@@ -187,7 +187,7 @@ final class MailerExceptionTest extends TestCase
     public function testAttachmentRejectedShowsControlCharactersEscaped(): void
     {
         self::assertSame(
-            'Attachment rejected: path "a\\000b\\r\\nc\\\\" contains a NUL byte.',
+            'Attachment rejected: path "a\\u0000b\\r\\nc\\\\" contains a NUL byte.',
             MailerException::attachmentRejected('path', "a\0b\r\nc\\", 'contains a NUL byte')->getMessage(),
         );
     }
@@ -282,7 +282,7 @@ final class MailerExceptionTest extends TestCase
     public function testAttachmentRejectedNeverSplitsAnEscapeSequence(): void
     {
         self::assertSame(
-            'Attachment rejected: path "...' . str_repeat('\\001', 64) . '" (72 bytes) contains a NUL byte.',
+            'Attachment rejected: path "...' . str_repeat('\\u0001', 64) . '" (72 bytes) contains a NUL byte.',
             MailerException::attachmentRejected('path', 'ab' . str_repeat("\x01", 70), 'contains a NUL byte')->getMessage(),
         );
     }

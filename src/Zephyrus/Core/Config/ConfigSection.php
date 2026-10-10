@@ -303,7 +303,7 @@ abstract class ConfigSection
         return ConfigurationException::invalidValue(
             static::class,
             $key,
-            is_scalar($value) ? (string) $value : get_debug_type($value),
+            $value,
             $reason,
         );
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
 
 /**
@@ -15,6 +16,8 @@ use Zephyrus\Exceptions\ZephyrusException;
  */
 final class ConfigurationException extends ZephyrusException
 {
+    private const string PLAIN_FIELD_PATTERN = '/\A[A-Za-z0-9._\-\[\]]{1,64}\z/';
+
     /** Absolute path set by the file factories, kept out of the message. Null when none. */
     private ?string $path = null;
 
@@ -25,15 +28,18 @@ final class ConfigurationException extends ZephyrusException
         );
     }
 
-    /** The value is echoed in the message, so never pass a secret. */
+    /**
+     * The raw value is shown through MessageValue::describe(), so never pass a secret. A field longer than 64 bytes
+     * or holding anything but ASCII letters, digits and . _ - [ ] is shown through MessageValue::quote().
+     */
     public static function invalidValue(string $section, string $field, mixed $value, string $reason): self
     {
         return new self(
             sprintf(
-                "Configuration section '%s' field '%s' has invalid value '%s': %s.",
+                "Configuration section '%s' field %s has invalid value %s: %s.",
                 $section,
-                $field,
-                $value,
+                preg_match(self::PLAIN_FIELD_PATTERN, $field) === 1 ? "'" . $field . "'" : MessageValue::quote($field),
+                MessageValue::describe($value),
                 $reason,
             ),
         );

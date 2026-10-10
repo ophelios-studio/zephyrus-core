@@ -6,6 +6,7 @@ namespace Zephyrus\Core\Config;
 
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
+use Zephyrus\Exceptions\MessageValue;
 
 /**
  * Parses a YAML configuration file with support for the custom !env tag.
@@ -155,7 +156,10 @@ final class ConfigurationFile
     {
         if (is_array($value)) {
             throw new ConfigurationException(
-                sprintf('!env tag at "%s": it must name one variable, not a list or mapping.', $path),
+                sprintf(
+                    '!env tag at %s: it must name one variable, not a list or mapping.',
+                    MessageValue::quote($path),
+                ),
             );
         }
 
@@ -165,14 +169,16 @@ final class ConfigurationFile
         $default = isset($arguments[1]) ? trim($arguments[1], " \t\n\r\0\x0B\"'") : null;
 
         if ($envKey === '') {
-            throw new ConfigurationException(sprintf('!env tag at "%s": it has an empty variable name.', $path));
+            throw new ConfigurationException(
+                sprintf('!env tag at %s: it has an empty variable name.', MessageValue::quote($path)),
+            );
         }
 
         try {
             return EnvironmentVariable::read($envKey) ?? $default;
         } catch (\InvalidArgumentException $e) {
             throw new ConfigurationException(
-                sprintf('!env tag at "%s": %s', $path, $e->getMessage()),
+                sprintf('!env tag at %s: %s', MessageValue::quote($path), $e->getMessage()),
                 previous: $e,
             );
         }

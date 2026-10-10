@@ -528,7 +528,7 @@ final class DatabaseConfigTest extends TestCase
     public function testThrowsForNonScalarColumnCacheVersion(mixed $version): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/columnCacheVersion' has invalid value '(array|stdClass)'/");
+        $this->expectExceptionMessageMatches("/columnCacheVersion' has invalid value (array|stdClass): /");
 
         DatabaseConfig::fromArray([
             'database' => 'db',
@@ -551,7 +551,7 @@ final class DatabaseConfigTest extends TestCase
     public function testThrowsForFloatOrBooleanColumnCacheVersionAndAsksForQuotes(mixed $version): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/columnCacheVersion' has invalid value '(float|bool)': .*quote/");
+        $this->expectExceptionMessageMatches("/columnCacheVersion' has invalid value (1\\.1|true|false): .*quote/");
 
         DatabaseConfig::fromArray([
             'database' => 'db',
@@ -563,7 +563,7 @@ final class DatabaseConfigTest extends TestCase
     public function testThrowsForSslModeThatIsAnArray(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/sslMode' has invalid value 'array'/");
+        $this->expectExceptionMessageMatches("/sslMode' has invalid value array: /");
 
         DatabaseConfig::fromArray([
             'database' => 'db',
@@ -575,7 +575,7 @@ final class DatabaseConfigTest extends TestCase
     public function testThrowsForSslRootCertThatIsAnArray(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessageMatches("/sslRootCert' has invalid value 'array'/");
+        $this->expectExceptionMessageMatches("/sslRootCert' has invalid value array: /");
 
         DatabaseConfig::fromArray([
             'database'    => 'db',

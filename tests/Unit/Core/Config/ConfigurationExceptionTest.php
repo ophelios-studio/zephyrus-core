@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Exceptions\ZephyrusException;
@@ -23,12 +24,57 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertStringContainsString('host', $e->getMessage());
     }
 
-    public function testInvalidValue(): void
+    public function testInvalidValueQuotesAStringValue(): void
     {
         $e = ConfigurationException::invalidValue('session', 'sameSite', 'bad', 'must be Strict, Lax, or None');
-        self::assertStringContainsString('session', $e->getMessage());
-        self::assertStringContainsString('sameSite', $e->getMessage());
-        self::assertStringContainsString('bad', $e->getMessage());
+
+        self::assertSame(
+            "Configuration section 'session' field 'sameSite' has invalid value \"bad\": must be Strict, Lax, or None.",
+            $e->getMessage(),
+        );
+    }
+
+    public function testInvalidValueEscapesControlAndBidiCharactersOfTheValue(): void
+    {
+        $e = ConfigurationException::invalidValue('security', 'allowedHosts[0]', "a\x1b[31m\u{202E}\x7f", 'not a host');
+
+        self::assertSame(
+            "Configuration section 'security' field 'allowedHosts[0]' has invalid value \"a\\u001b[31m\\u202e\\u007f\": not a host.",
+            $e->getMessage(),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function nonStringValues(): iterable
+    {
+        yield 'int' => [-1, '-1'];
+        yield 'float' => [1.0, '1.0'];
+        yield 'bool' => [false, 'false'];
+        yield 'null' => [null, 'null'];
+        yield 'array' => [['a'], 'array'];
+    }
+
+    #[DataProvider('nonStringValues')]
+    public function testInvalidValueShowsANonStringByItsValueOrType(mixed $value, string $shown): void
+    {
+        $e = ConfigurationException::invalidValue('session', 'lifetime', $value, 'must be 0 or greater');
+
+        self::assertSame(
+            "Configuration section 'session' field 'lifetime' has invalid value $shown: must be 0 or greater.",
+            $e->getMessage(),
+        );
+    }
+
+    public function testInvalidValueQuotesAFieldNameThatIsNotAPlainKey(): void
+    {
+        $e = ConfigurationException::invalidValue('security.headers', "csp\0\u{202E}x", 'x', 'unknown key');
+
+        self::assertSame(
+            "Configuration section 'security.headers' field \"csp\\u0000\\u202ex\" has invalid value \"x\": unknown key.",
+            $e->getMessage(),
+        );
     }
 
     /**

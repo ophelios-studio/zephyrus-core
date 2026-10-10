@@ -561,4 +561,22 @@ final class UploaderTest extends TestCase
             self::assertCount(1, $stored ?: []);
         }
     }
+
+    public function test_store_refusal_escapes_the_client_extension(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload("report.p\x1b[8mdf", 'application/pdf', $this->makeTempFile($this->pdfBytes()), 20);
+
+        try {
+            (new Uploader($dest, allowedExtensions: ['pdf'], fileMover: $this->fileMover()))->store($file);
+            self::fail('An extension outside the allowlist must be refused.');
+        } catch (UploadException $e) {
+            self::assertSame(
+                "Upload extension \"p\\u001b[8mdf\" is not allowed. Allowed extensions: pdf",
+                $e->getMessage(),
+            );
+        } finally {
+            $this->removeDir($dest);
+        }
+    }
 }

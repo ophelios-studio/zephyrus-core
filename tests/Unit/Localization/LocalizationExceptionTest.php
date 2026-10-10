@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Localization;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 use Zephyrus\Localization\LocalizationException;
@@ -105,5 +106,47 @@ final class LocalizationExceptionTest extends TestCase
 
         self::assertStringContainsString('locale', $e->getMessage());
         self::assertNull($e->path());
+    }
+
+    /**
+     * @return iterable<string, array{LocalizationException, string}>
+     */
+    public static function refusalsNamingAValue(): iterable
+    {
+        yield 'unreadable file' => [
+            LocalizationException::unreadableFile("/srv/locale/fr\x1b.json"),
+            "Unable to read locale file \"locale/fr\\u001b.json\".",
+        ];
+        yield 'invalid json' => [
+            LocalizationException::invalidJson("/srv/locale/fr\x7f.json"),
+            "Invalid JSON in locale file \"locale/fr\\u007f.json\"",
+        ];
+        yield 'unknown pipe' => [
+            LocalizationException::unknownPipe("up\x1b", "Hi {n|up\x1b}", ['upper']),
+            "Unknown pipe \"up\\u001b\" in translation key \"Hi {n|up\\u001b}\". Valid pipes: upper. Add a formatter "
+            . 'with Formatter::register().',
+        ];
+        yield 'formatter required' => [
+            LocalizationException::formatterRequired('money', "Price\u{202E}"),
+            "Pipe \"money\" in translation key \"Price\\u202e\" needs a Formatter: call App::setFormatter() first.",
+        ];
+        yield 'formatter pipe failed' => [
+            LocalizationException::formatterPipeFailed('money', "Price\r\n", new \RuntimeException('x')),
+            "Unable to apply pipe \"money\" in translation key \"Price\\r\\n\".",
+        ];
+        yield 'invalid format' => [
+            LocalizationException::invalidFormat("/srv/locale/fr\u{0085}.json"),
+            "Locale file \"locale/fr\\u0085.json\" must decode to an object.",
+        ];
+        yield 'unreadable directory' => [
+            LocalizationException::unreadableDirectory("fr\x1b"),
+            "Unable to read locale catalog directory \"fr\\u001b\".",
+        ];
+    }
+
+    #[DataProvider('refusalsNamingAValue')]
+    public function testARefusalShowsItsValuesEscaped(LocalizationException $exception, string $message): void
+    {
+        self::assertSame($message, $exception->getMessage());
     }
 }

@@ -227,36 +227,6 @@ final class IpRangeTest extends TestCase
         yield 'ipv4 mapped full prefix matches itself' => ['::ffff:10.0.0.1/128', '::ffff:10.0.0.1', true];
     }
 
-    /**
-     * @return iterable<string, array{string, string}>
-     */
-    public static function shownEntries(): iterable
-    {
-        yield 'short entry is shown whole' => ['10.0.0.1', '10.0.0.1'];
-        yield 'empty entry is shown as empty' => ['', ''];
-        yield 'long entry is cut at 64 bytes' => [str_repeat('a', 70), str_repeat('a', 64) . '...(70 bytes)'];
-        yield 'multibyte entry is cut on a character boundary' => [
-            str_repeat("\u{e9}", 40),
-            str_repeat("\u{e9}", 32) . '...(80 bytes)',
-        ];
-        yield 'line feed is escaped' => ["a\nb", 'a\\nb'];
-        yield 'nul byte is escaped' => ["a\0b", 'a\\000b'];
-        yield 'invalid UTF-8 is replaced' => ["ok\xffend", 'ok?end'];
-    }
-
-    #[DataProvider('shownEntries')]
-    public function testShownEntryBoundsAndEscapesTheEntry(string $entry, string $expected): void
-    {
-        self::assertSame($expected, IpRange::shownEntry($entry));
-    }
-
-    public function testShownEntryOfAHugeValueStaysSmall(): void
-    {
-        $shown = IpRange::shownEntry(str_repeat('x', 5 * 1024 * 1024));
-
-        self::assertSame(str_repeat('x', 64) . '...(5242880 bytes)', $shown);
-    }
-
     public function testNulInputIsRefusedWhateverItsPosition(): void
     {
         self::assertFalse(IpRange::isValid("\0"));

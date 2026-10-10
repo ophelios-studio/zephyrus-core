@@ -114,6 +114,33 @@ final class IpAllowlistGuardTest extends TestCase
         new IpAllowlistGuard(["10.0.0.1\n10.0.0.2"]);
     }
 
+    public function testConstructorMessageEscapesC1AndBidiCharactersInTheEntry(): void
+    {
+        try {
+            new IpAllowlistGuard(["10.0.0.1\u{0085}\u{202E}\x7f"]);
+            self::fail('An entry holding control characters must be refused.');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Allowed IP "10.0.0.1\u0085\u202e\u007f": not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testConstructorMessageCutsALongEntryAndGivesItsLength(): void
+    {
+        try {
+            new IpAllowlistGuard([str_repeat('x', 70)]);
+            self::fail('A 70-byte entry must be refused.');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Allowed IP "' . str_repeat('x', 64) . '..." (70 bytes): not an IP address or a CIDR range such as '
+                . '10.0.0.0/8 or 2001:db8::/32.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testConstructorRefusesShortIpv4MappedRangeWithTheIpv4Form(): void
     {
         $this->expectException(InvalidArgumentException::class);

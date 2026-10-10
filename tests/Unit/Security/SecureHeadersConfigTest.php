@@ -289,7 +289,7 @@ final class SecureHeadersConfigTest extends TestCase
     public function testAFloatHstsMaxAgeIsShownWithItsDecimalForm(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("invalid value '1.0'");
+        $this->expectExceptionMessage('invalid value 1.0:');
 
         SecureHeadersConfig::fromArray(['hstsMaxAge' => 1.0]);
     }
@@ -324,7 +324,12 @@ final class SecureHeadersConfigTest extends TestCase
 
             self::fail('An unknown key containing a NUL byte was accepted.');
         } catch (ConfigurationException $exception) {
-            self::assertStringNotContainsString("\0", $exception->getMessage());
+            self::assertSame(
+                "Configuration section 'security.headers' field \"csp\\u0000x\" has invalid value \"default-src 'self'\": "
+                . 'unknown key, the accepted keys are xFrameOptions, xContentTypeOptions, referrerPolicy, xssProtection, '
+                . 'hstsMaxAge, hstsIncludeSubdomains, csp, permissionsPolicy.',
+                $exception->getMessage(),
+            );
         }
     }
 
@@ -464,7 +469,7 @@ final class SecureHeadersConfigTest extends TestCase
             self::fail('A control character must be refused.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'security.headers' field 'csp' has invalid value 'default-src\\001 'self'': "
+                "Configuration section 'security.headers' field 'csp' has invalid value \"default-src\\u0001 'self'\": "
                 . 'must not contain a control character.',
                 $exception->getMessage(),
             );

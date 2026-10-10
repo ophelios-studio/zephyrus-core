@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
@@ -249,7 +250,7 @@ final class LocalizationConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString("field 'currency'", $exception->getMessage());
             self::assertStringContainsString('three ASCII letters, for example CAD', $exception->getMessage());
-            self::assertSame(1, preg_match('/^[\x20-\x7E]*$/D', $exception->getMessage()));
+            self::assertSame(0, preg_match('/[\p{Cc}\p{Cf}]/u', $exception->getMessage()));
         }
     }
 
@@ -264,14 +265,28 @@ final class LocalizationConfigTest extends TestCase
         }
     }
 
-    public function testTheRefusalMessageDoesNotEchoAControlCharacter(): void
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function escapedGroupingSeparators(): iterable
+    {
+        yield 'NUL byte' => ["A\0B", '"A\\u0000B"'];
+        yield 'C1 control' => ["\u{0085}", '"\\u0085"'];
+        yield 'invalid UTF-8' => ["\xC3\x28", "\"\u{FFFD}(\""];
+    }
+
+    #[DataProvider('escapedGroupingSeparators')]
+    public function testTheRefusalMessageEscapesTheGroupingSeparator(string $separator, string $shown): void
     {
         try {
-            LocalizationConfig::fromArray(['grouping_separator' => "A\0B"]);
+            LocalizationConfig::fromArray(['grouping_separator' => $separator]);
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $exception) {
-            self::assertStringNotContainsString("\0", $exception->getMessage());
-            self::assertStringContainsString('A\\000B', $exception->getMessage());
+            self::assertSame(
+                "Configuration section 'localization' field 'grouping_separator' has invalid value " . $shown
+                . ": must be one of , . ' U+2019, a space, U+00A0, U+202F or U+2009, or empty to turn grouping off.",
+                $exception->getMessage(),
+            );
         }
     }
 }

@@ -81,6 +81,14 @@ final class ApplicationBuilderTest extends TestCase
         yield 'unrelated' => ['trustedProxies', 'Unknown security key "trustedProxies". ' . $accepted];
         yield 'empty' => ['', 'Unknown security key "". ' . $accepted];
         yield 'nul byte' => ["csrf\0", 'Unknown security key "csrf\u0000". ' . $accepted];
+        yield 'zero width space and byte order mark' => [
+            "csrf\u{200B}\u{FEFF}",
+            'Unknown security key "csrf\\u200b\\ufeff". ' . $accepted,
+        ];
+        yield 'long' => [
+            str_repeat('k', 70),
+            'Unknown security key "' . str_repeat('k', 64) . '..." (70 bytes). ' . $accepted,
+        ];
     }
 
     public function testEveryAcceptedAcknowledgedSecurityKeyNameSilencesItsRefusal(): void

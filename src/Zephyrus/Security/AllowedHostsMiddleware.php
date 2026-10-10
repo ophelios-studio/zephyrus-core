@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Exceptions\MessageValue;
 
 use function explode;
 use function filter_var;
@@ -61,8 +62,8 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
             $host = self::normalizeEntry($entry);
             if ($reason !== null || $host === null) {
                 throw new InvalidArgumentException(sprintf(
-                    'Allowed host "%s": %s.',
-                    $entry,
+                    'Allowed host %s: %s.',
+                    MessageValue::quote($entry),
                     $reason ?? 'not a usable host',
                 ));
             }

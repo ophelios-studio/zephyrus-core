@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Localization;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -20,7 +21,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function unreadableFile(string $path): self
     {
         return self::withPath(
-            sprintf('Unable to read locale file "%s".', self::catalogRelativeName($path)),
+            sprintf('Unable to read locale file %s.', self::catalogRelativeName($path)),
             $path,
         );
     }
@@ -30,7 +31,7 @@ final class LocalizationException extends ZephyrusRuntimeException
      */
     public static function invalidJson(string $path, ?\Throwable $previous = null): self
     {
-        $message = sprintf('Invalid JSON in locale file "%s"', self::catalogRelativeName($path));
+        $message = sprintf('Invalid JSON in locale file %s', self::catalogRelativeName($path));
         if ($previous !== null) {
             $message .= ': ' . $previous->getMessage();
         }
@@ -46,9 +47,9 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function unknownPipe(string $pipe, string $key, array $validPipes): self
     {
         return new self(sprintf(
-            'Unknown pipe "%s" in translation key "%s". Valid pipes: %s. Add a formatter with Formatter::register().',
-            $pipe,
-            $key,
+            'Unknown pipe %s in translation key %s. Valid pipes: %s. Add a formatter with Formatter::register().',
+            MessageValue::quote($pipe),
+            MessageValue::quote($key),
             implode(', ', $validPipes),
         ));
     }
@@ -59,9 +60,9 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function formatterRequired(string $pipe, string $key): self
     {
         return new self(sprintf(
-            'Pipe "%s" in translation key "%s" needs a Formatter: call App::setFormatter() first.',
-            $pipe,
-            $key,
+            'Pipe %s in translation key %s needs a Formatter: call App::setFormatter() first.',
+            MessageValue::quote($pipe),
+            MessageValue::quote($key),
         ));
     }
 
@@ -70,13 +71,20 @@ final class LocalizationException extends ZephyrusRuntimeException
      */
     public static function formatterPipeFailed(string $pipe, string $key, \Throwable $previous): self
     {
-        return new self(sprintf('Unable to apply pipe "%s" in translation key "%s".', $pipe, $key), previous: $previous);
+        return new self(
+            sprintf(
+                'Unable to apply pipe %s in translation key %s.',
+                MessageValue::quote($pipe),
+                MessageValue::quote($key),
+            ),
+            previous: $previous,
+        );
     }
 
     public static function invalidFormat(string $path): self
     {
         return self::withPath(
-            sprintf('Locale file "%s" must decode to an object.', self::catalogRelativeName($path)),
+            sprintf('Locale file %s must decode to an object.', self::catalogRelativeName($path)),
             $path,
         );
     }
@@ -87,7 +95,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function unreadableDirectory(string $name, ?\Throwable $previous = null): self
     {
         return new self(
-            sprintf('Unable to read locale catalog directory "%s".', $name),
+            sprintf('Unable to read locale catalog directory %s.', MessageValue::quote($name)),
             previous: $previous,
         );
     }
@@ -101,7 +109,8 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * Shows the parent segment so "fr/legal.json" and "en/legal.json" differ; a root-level file gets no separator.
+     * The file name quoted with its parent segment so "fr/legal.json" and "en/legal.json" differ; a root-level
+     * file gets no separator.
      */
     private static function catalogRelativeName(string $path): string
     {
@@ -109,10 +118,10 @@ final class LocalizationException extends ZephyrusRuntimeException
         $parent = basename(dirname($path));
 
         if ($parent === '' || $parent === '.' || $parent === DIRECTORY_SEPARATOR) {
-            return $file;
+            return MessageValue::quote($file, keepEnd: true);
         }
 
-        return $parent . '/' . $file;
+        return MessageValue::quote($parent . '/' . $file, keepEnd: true);
     }
 
     private static function withPath(string $message, string $path, ?\Throwable $previous = null): self

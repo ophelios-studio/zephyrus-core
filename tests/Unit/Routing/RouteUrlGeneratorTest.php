@@ -231,7 +231,9 @@ final class RouteUrlGeneratorTest extends TestCase
         $generator = new RouteUrlGenerator($routes);
 
         $this->expectException(RouteUrlGenerationException::class);
-        $this->expectExceptionMessage('Route parameter "id" value "abc" does not satisfy constraint "\\d+" for route "users.show"');
+        $this->expectExceptionMessage(
+            'Route parameter "id" for route "users.show": value "abc" does not satisfy constraint "\\d+"',
+        );
 
         $generator->generate('users.show', ['id' => 'abc']);
     }
@@ -244,7 +246,7 @@ final class RouteUrlGeneratorTest extends TestCase
         $generator = new RouteUrlGenerator($routes);
 
         $this->expectException(RouteUrlGenerationException::class);
-        $this->expectExceptionMessage('Invalid constraint pattern "[0-9+" for parameter "id" on route "users.show"');
+        $this->expectExceptionMessage('Route parameter "id" for route "users.show": invalid constraint pattern "[0-9+"');
 
         $generator->generate('users.show', ['id' => '42']);
     }
@@ -385,5 +387,34 @@ final class RouteUrlGeneratorTest extends TestCase
         $url = $generator->generate('docs.show', ['slug' => 'routing'], fragment: '#');
 
         self::assertSame('/docs/routing', $url);
+    }
+
+    public function testAConstraintRefusalEscapesTheValue(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+'], name: 'users.show'));
+
+        try {
+            (new RouteUrlGenerator($routes))->generate('users.show', ['id' => "1\x1b[2K"]);
+            self::fail('A value outside the constraint must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame(
+                "Route parameter \"id\" for route \"users.show\": value \"1\\u001b[2K\" does not satisfy constraint \"\\d+\"",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAnUnexpectedParameterRefusalEscapesItsName(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', name: 'users.show'));
+
+        try {
+            (new RouteUrlGenerator($routes))->generate('users.show', ['id' => '1', "x\u{202E}" => 'y']);
+            self::fail('A parameter the route does not declare must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame("Unexpected route parameter \"x\\u202e\" for route \"users.show\"", $e->getMessage());
+        }
     }
 }

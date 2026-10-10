@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Mailer;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -23,21 +24,6 @@ final class MailerException extends ZephyrusRuntimeException
     ) {
         parent::__construct($message, previous: $previous);
     }
-
-    /**
-     * Longest refused value copied into an attachment rejection message.
-     */
-    private const SHOWN_VALUE_MAX_LENGTH = 64;
-
-    /**
-     * A UTF-8 character is at most 4 bytes, so a character boundary lies within 3 bytes of any cut.
-     */
-    private const int MAX_BOUNDARY_WALK = 3;
-
-    /**
-     * C1 controls, U+061C, U+2028, U+2029 and the bidi controls, escaped as \u{XXXX} in messages.
-     */
-    private const string ESCAPED_CHARACTER_PATTERN = '~[\x{80}-\x{9F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2028}\x{2029}\x{2066}-\x{2069}]~u';
 
     /**
      * The transport did not accept the message. Its reply is only available from transportMessage().
@@ -99,7 +85,7 @@ final class MailerException extends ZephyrusRuntimeException
     public static function attachmentNotFound(string $path): self
     {
         return new self(
-            sprintf('Attachment not found: %s', self::quotedValue($path, true)),
+            sprintf('Attachment not found: %s', MessageValue::quote($path, keepEnd: true)),
             MailerFailure::AttachmentNotFound,
         );
     }
@@ -108,10 +94,8 @@ final class MailerException extends ZephyrusRuntimeException
      * The attachment, its display name, its media type or its directory was refused.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value, escaped for the message: invalid UTF-8 becomes "?",
-     *                        C0 controls, DEL and backslashes are C-escaped (\n, \001); C1, bidi and
-     *                        line separator characters become \u{XXXX}. Values over 64 bytes are cut
-     *                        (paths keep their end, other values their start).
+     * @param string $value   The refused value, shown through MessageValue::quote(). Values over 64 bytes
+     *                        are cut (paths keep their end, other values their start).
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
@@ -119,45 +103,11 @@ final class MailerException extends ZephyrusRuntimeException
         $isPath = in_array($subject, ['path', 'directory'], true);
 
         return new self(
-            sprintf('Attachment rejected: %s %s %s.', $subject, self::quotedValue($value, $isPath), $reason),
+            sprintf('Attachment rejected: %s %s %s.', $subject, MessageValue::quote($value, keepEnd: $isPath), $reason),
             MailerFailure::AttachmentRejected,
         );
     }
 
-    /**
-     * Quote a value for a message, escaped and cut as attachmentRejected() documents.
-     */
-    private static function quotedValue(string $value, bool $keepEnd): string
-    {
-        if (strlen($value) <= self::SHOWN_VALUE_MAX_LENGTH) {
-            return '"' . self::escaped($value) . '"';
-        }
-
-        if ($keepEnd) {
-            $start = strlen($value) - self::SHOWN_VALUE_MAX_LENGTH;
-            $limit = $start + self::MAX_BOUNDARY_WALK;
-            while ($start < $limit && (ord($value[$start]) & 0xC0) === 0x80) {
-                ++$start;
-            }
-
-            return sprintf('"...%s" (%d bytes)', self::escaped(substr($value, $start)), strlen($value));
-        }
-
-        $cut = mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8');
-
-        return sprintf('"%s..." (%d bytes)', self::escaped($cut), strlen($value));
-    }
-
-    private static function escaped(string $value): string
-    {
-        $escaped = addcslashes(mb_scrub($value, 'UTF-8'), "\\\0..\37\177");
-
-        return preg_replace_callback(
-            self::ESCAPED_CHARACTER_PATTERN,
-            static fn (array $match): string => sprintf('\u{%04X}', mb_ord($match[0], 'UTF-8')),
-            $escaped,
-        ) ?? '';
-    }
 
     /**
      * The mailer was used without the configuration it needs.

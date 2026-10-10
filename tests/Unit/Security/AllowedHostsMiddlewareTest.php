@@ -399,4 +399,18 @@ final class AllowedHostsMiddlewareTest extends TestCase
         self::assertSame(400, $response->status);
         self::assertStringNotContainsString('reached', $response->body);
     }
+
+    public function testTheRefusalEscapesTheEntry(): void
+    {
+        try {
+            new AllowedHostsMiddleware(["exa\x7fmple.com"]);
+            self::fail('A host holding a control character must be refused.');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                "Allowed host \"exa\\u007fmple.com\": must be a host name, an IP literal, or a wildcard over a host "
+                . 'name such as *.example.com.',
+                $e->getMessage(),
+            );
+        }
+    }
 }

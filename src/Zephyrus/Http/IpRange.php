@@ -12,8 +12,6 @@ namespace Zephyrus\Http;
  */
 final class IpRange
 {
-    private const int SHOWN_LENGTH = 64;
-
     private const string MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8, or ::ffff:10.0.0.0/104 for peers seen in mapped form';
 
     private const string EMBEDDED_REFUSAL = 'an IPv6 range shorter than /96 that embeds an IPv4 address covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
@@ -57,22 +55,6 @@ final class IpRange
         return (ord($ipBinary[$fullBytes]) & $mask) === (ord($networkBinary[$fullBytes]) & $mask);
     }
 
-    /**
-     * An entry for an error message: at most 64 bytes, then its byte count when cut, control characters escaped.
-     *
-     * @internal
-     */
-    public static function shownEntry(string $entry): string
-    {
-        $shown = addcslashes(
-            mb_strcut(mb_scrub($entry, 'UTF-8'), 0, self::SHOWN_LENGTH, 'UTF-8'),
-            "\\\0..\37\177",
-        );
-
-        return strlen($entry) > self::SHOWN_LENGTH
-            ? sprintf('%s...(%d bytes)', $shown, strlen($entry))
-            : $shown;
-    }
 
     /** Why an address or range cannot be matched, or null when it can. */
     public static function invalidEntryReason(string $entry): ?string

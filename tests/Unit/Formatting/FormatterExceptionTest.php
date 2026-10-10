@@ -62,6 +62,16 @@ final class FormatterExceptionTest extends TestCase
         );
     }
 
+    public function testCurrencyRequiredEscapesDeleteC1AndBidiCharactersOfTheLocale(): void
+    {
+        $message = FormatterException::currencyRequired("fr\x7f\u{0085}\u{202E}")->getMessage();
+
+        self::assertStringStartsWith(
+            'Currency required: locale "fr\\u007f\\u0085\\u202e" has no native currency.',
+            $message,
+        );
+    }
+
     public function testInvalidLocale(): void
     {
         $exception = FormatterException::invalidLocale('xx_YY');

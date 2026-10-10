@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 
@@ -45,11 +46,7 @@ final readonly class RouteUrlGenerator
                 $name = $matches[1];
 
                 if (!array_key_exists($name, $parameters)) {
-                    throw new RouteUrlGenerationException(sprintf(
-                        'Missing route parameter "%s" for route "%s"',
-                        $name,
-                        $routeName,
-                    ));
+                    throw RouteUrlGenerationException::missingParameter($name, $routeName);
                 }
 
                 $value = (string) $parameters[$name];
@@ -97,11 +94,7 @@ final readonly class RouteUrlGenerator
     {
         foreach ($parameters as $name => $_value) {
             if (!in_array($name, $placeholders, true)) {
-                throw new RouteUrlGenerationException(sprintf(
-                    'Unexpected route parameter "%s" for route "%s"',
-                    $name,
-                    $routeName,
-                ));
+                throw RouteUrlGenerationException::unexpectedParameter((string) $name, $routeName);
             }
         }
     }
@@ -116,22 +109,19 @@ final readonly class RouteUrlGenerator
         // The D modifier must match RouteCollection::compileConstraintRegex(): without it "$" accepts a trailing newline.
         $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
         if (@preg_match($regex, '') === false) {
-            throw new RouteUrlGenerationException(sprintf(
-                'Invalid constraint pattern "%s" for parameter "%s" on route "%s"',
-                $pattern,
+            throw RouteUrlGenerationException::constraintViolation(
                 $name,
                 $routeName,
-            ));
+                sprintf('invalid constraint pattern "%s"', $pattern),
+            );
         }
 
         if (preg_match($regex, $value) !== 1) {
-            throw new RouteUrlGenerationException(sprintf(
-                'Route parameter "%s" value "%s" does not satisfy constraint "%s" for route "%s"',
+            throw RouteUrlGenerationException::constraintViolation(
                 $name,
-                $value,
-                $pattern,
                 $routeName,
-            ));
+                sprintf('value %s does not satisfy constraint "%s"', MessageValue::quote($value), $pattern),
+            );
         }
     }
 

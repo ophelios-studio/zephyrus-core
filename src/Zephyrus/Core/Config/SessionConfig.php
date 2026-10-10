@@ -157,11 +157,7 @@ final readonly class SessionConfig
         throw ConfigurationException::invalidValue(
             'session',
             'idleTimeout',
-            match (true) {
-                is_string($value) => $value,
-                is_scalar($value) => var_export($value, true),
-                default => get_debug_type($value),
-            },
+            $value,
             self::IDLE_TIMEOUT_RULE,
         );
     }
@@ -210,7 +206,7 @@ final readonly class SessionConfig
                     'session',
                     'cookiePath',
                     $this->cookiePath,
-                    sprintf('must be "/" for the __Host- prefixed name "%s"', $this->name),
+                    'must be "/" when the session name has the __Host- prefix',
                 );
             }
 

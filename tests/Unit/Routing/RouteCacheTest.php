@@ -1358,7 +1358,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid handler format at entry 0 ["GET","/health"]');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid handler format at entry 0 ["GET", "/health"]');
     }
 
     public function testLoadThrowsWhenRouteNameIsBlankString(): void
@@ -1473,7 +1473,7 @@ final class RouteCacheTest extends TestCase
 
         $this->assertExactRefusal(
             fn (): mixed => (new RouteCache($this->cacheFile))->load(),
-            'a route with an invalid handler format at entry 0 ["GET","/x\u001b\u0085\u202e\u007f"]',
+            'a route with an invalid handler format at entry 0 ["GET", "/x\u001b\u0085\u202e\u007f"]',
         );
     }
 
@@ -1510,14 +1510,14 @@ final class RouteCacheTest extends TestCase
     {
         yield 'placeholder name' => [
             ['method' => 'GET', 'path' => "/{a\x1b\u{202E}\u{0085}\x7f}", 'handler' => 'A@b'],
-            '"Invalid route parameter name \"a\u001b\u202e\u0085\u007f\" on route \"/{a\u001b\u202e\u0085\u007f}\": a placeholder must match /^[A-Za-z_][A-Za-z0-9_]*$/D"',
-            '["GET","/{a\u001b\u202e\u0085\u007f}"]',
+            'Invalid route parameter name "a\u001b\u202e\u0085\u007f" on route "/{a\u001b\u202e\u0085\u007f}": a placeholder must match /^[A-Za-z_][A-Za-z0-9_]*$/D',
+            '["GET", "/{a\u001b\u202e\u0085\u007f}"]',
         ];
 
         yield 'excluded middleware' => [
             ['method' => 'GET', 'path' => '/x', 'handler' => 'A@b', 'excluded_middlewares' => ["X\x1b\u{202E}\u{0085}\x7f"]],
-            '"Route \"GET /x\" cannot skip \"X\u001b\u202e\u0085\u007f\": it does not exist or does not implement Zephyrus\\\\Http\\\\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class"',
-            '["GET","/x"]',
+            'Route "GET /x" cannot skip "X\u001b\u202e\u0085\u007f": it does not exist or does not implement Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            '["GET", "/x"]',
         ];
     }
 
@@ -1555,7 +1555,7 @@ final class RouteCacheTest extends TestCase
         $state = $cache->inspect(new RouteCollection(), 60, 1700000000);
 
         self::assertSame('invalid-payload', $state['reason']);
-        self::assertSame('a route with an invalid HTTP method format at entry 0 ["get","/health"]', $state['problem']);
+        self::assertSame('a route with an invalid HTTP method format at entry 0 ["get", "/health"]', $state['problem']);
         self::assertTrue($state['metadata_valid']);
         self::assertFalse($state['fresh']);
         self::assertSame(1700000000, $state['generated_at']);
