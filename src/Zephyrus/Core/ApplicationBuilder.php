@@ -253,9 +253,10 @@ final class ApplicationBuilder
      * before the built-in mappings (404, 405, 422, 500). The most-specific
      * matching class wins via instanceof. The handler receives the request
      * without the attributes set by route middlewares, see HttpKernel.
+     * Returning null declines: the built-in mapping applies.
      *
      * @param class-string<\Throwable> $exceptionClass
-     * @param callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
+     * @param callable(\Throwable, \Zephyrus\Http\Request): ?\Zephyrus\Http\Response $handler
      */
     public function withExceptionHandler(string $exceptionClass, callable $handler): self
     {
