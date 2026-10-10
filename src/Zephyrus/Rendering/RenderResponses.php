@@ -14,7 +14,8 @@ use Zephyrus\Http\Response;
  *
  * The trait requires a `RenderEngine` to be supplied, through
  * `setRenderEngine()`. `ApplicationBuilder::withRenderEngine()` calls it for
- * every controller that uses this trait.
+ * every controller using this trait, directly, through a parent or through
+ * another trait.
  *
  * Usage:
  *

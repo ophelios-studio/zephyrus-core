@@ -40,9 +40,6 @@ use Zephyrus\Http\Request;
  * connection. Each listener is isolated: a failure is written to the error log
  * and the remaining listeners still run.
  *
- * This is the hook for an error alerting listener. It fires once per throwable,
- * including when the exception responder itself fails.
- *
  * ## Firing rules
  *
  * Fires exactly once per throwable, at the single point where the kernel

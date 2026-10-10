@@ -181,6 +181,9 @@ final class ApplicationBuilder
         return $clone;
     }
 
+    /**
+     * Gives the engine to every controller using RenderResponses, directly, through a parent or through another trait, in any call order with withControllerFactory(), replacing an engine the factory set.
+     */
     public function withRenderEngine(RenderEngine $engine): self
     {
         $clone = clone $this;
@@ -188,6 +191,7 @@ final class ApplicationBuilder
 
         return $clone;
     }
+
     public function withContainer(ContainerInterface $container): self
     {
         $clone = clone $this;

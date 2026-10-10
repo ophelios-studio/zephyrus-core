@@ -157,10 +157,7 @@ final class KernelBuilder
     }
 
     /**
-     * Sets the render engine given to every controller that uses the RenderResponses trait.
-     *
-     * The engine is applied after the controller factory (the default one or the one
-     * set with withControllerFactory()), so the order of the two calls does not matter.
+     * Gives the engine to every controller using RenderResponses, directly, through a parent or through another trait, in any call order with withControllerFactory(), replacing an engine the factory set.
      */
     public function withRenderEngine(RenderEngine $engine): self
     {
@@ -373,6 +370,7 @@ final class KernelBuilder
 
         return false;
     }
+
     /**
      * The outer middleware sees the inner csp already on the response and
      * leaves it, so the csp wins and the policy registered outside is never sent.
