@@ -325,7 +325,7 @@ final class ConfigurationTest extends TestCase
         self::assertArrayHasKey('security', $export);
         self::assertArrayHasKey('localization', $export);
         self::assertArrayHasKey('database', $export);
-        self::assertArrayHasKey('csrfAutoHtml', $export['security']);
+        self::assertArrayNotHasKey('csrfAutoHtml', $export['security']);
         self::assertArrayHasKey('csrfExceptions', $export['security']);
         self::assertSame('fr', $export['localization']['locale']);
         self::assertArrayHasKey('timezone', $export['localization']);
