@@ -211,9 +211,7 @@ final class SessionManager
             return;
         }
 
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            throw SessionException::noActiveSession('regenerate the session id');
-        }
+        $this->assertSessionActive('regenerate the session id');
 
         if (!self::quietly(static fn (): bool => session_regenerate_id($deleteOld), $phpWarning)) {
             throw SessionException::regenerationRefused($phpWarning);
@@ -295,6 +293,8 @@ final class SessionManager
 
     /**
      * Store a value in the session.
+     *
+     * @throws SessionException when no session is active.
      */
     public function set(string $key, mixed $value): void
     {
@@ -304,6 +304,8 @@ final class SessionManager
             $this->overrideStorage[$key] = $value;
             return;
         }
+
+        $this->assertSessionActive(sprintf('write "%s" to the session', $key));
 
         $_SESSION[$key] = $value;
     }
@@ -322,15 +324,23 @@ final class SessionManager
 
     /**
      * Remove a key from the session. No-op when the key does not exist.
+     *
+     * @throws SessionException when the key exists and no session is active.
      */
     public function remove(string $key): void
     {
         $this->assertValidKey($key);
 
+        if (!$this->has($key)) {
+            return;
+        }
+
         if ($this->overrideStorage !== null) {
             unset($this->overrideStorage[$key]);
             return;
         }
+
+        $this->assertSessionActive(sprintf('write "%s" to the session', $key));
 
         unset($_SESSION[$key]);
     }
@@ -347,6 +357,8 @@ final class SessionManager
 
     /**
      * Read a value and immediately remove it from the session, for one-time messages across a redirect.
+     *
+     * @throws SessionException when no session is active.
      */
     public function flash(string $key, mixed $default = null): mixed
     {
@@ -360,6 +372,13 @@ final class SessionManager
     {
         if ($key === '') {
             throw SessionException::invalidKey($key);
+        }
+    }
+
+    private function assertSessionActive(string $operation): void
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            throw SessionException::noActiveSession($operation);
         }
     }
 

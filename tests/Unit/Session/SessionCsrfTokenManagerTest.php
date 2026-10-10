@@ -33,6 +33,16 @@ final class SessionCsrfTokenManagerTest extends TestCase
             : new SessionCsrfTokenManager($session);
     }
 
+    public function testGetTokenThrowsWhenNoSessionIsStarted(): void
+    {
+        $manager = new SessionCsrfTokenManager(new SessionManager());
+
+        $this->expectException(SessionException::class);
+        $this->expectExceptionMessageMatches('/^Cannot write "_csrf_token" to the session: no session is active\./');
+
+        $manager->getToken();
+    }
+
     // ── implements interface ──────────────────────────────────────────────────
 
     public function testImplementsCsrfTokenManagerInterface(): void

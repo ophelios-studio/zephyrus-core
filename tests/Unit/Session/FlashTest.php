@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Session;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Session\Flash;
+use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
 
 final class FlashTest extends TestCase
@@ -127,5 +128,26 @@ final class FlashTest extends TestCase
         $flash = Flash::readAll();
 
         $this->assertSame([], $flash->success);
+    }
+
+    public function testReadAllAndClearAllPassOnEmptyInactiveSession(): void
+    {
+        App::setSession(new SessionManager());
+
+        $flash = Flash::readAll();
+        Flash::clearAll();
+
+        $this->assertSame([], $flash->success);
+        $this->assertSame([], $flash->info);
+    }
+
+    public function testWriteThrowsWhenManagerRegisteredButNoSessionActive(): void
+    {
+        App::setSession(new SessionManager());
+
+        $this->expectException(SessionException::class);
+        $this->expectExceptionMessageMatches('/^Cannot write "_flash_success" to the session: no session is active\./');
+
+        Flash::success('Saved.');
     }
 }

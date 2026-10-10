@@ -277,6 +277,106 @@ final class SessionManagerTest extends TestCase
 
         $session->set('', 'value');
     }
+
+    // ── writes without a started session ──────────────────────────────────────
+
+    public function testSetThrowsWhenNoSessionIsStarted(): void
+    {
+        $session = new SessionManager();
+
+        $this->expectException(SessionException::class);
+        $this->expectExceptionMessageMatches('/^Cannot write "user" to the session: no session is active\./');
+
+        $session->set('user', 'alice');
+    }
+
+    public function testRemoveOfAbsentKeyPassesWithoutActiveSession(): void
+    {
+        $session = new SessionManager();
+
+        $session->remove('user');
+
+        self::assertFalse($session->has('user'));
+    }
+
+    public function testRemoveOfPresentKeyThrowsWithoutActiveSession(): void
+    {
+        $_SESSION = ['user' => 'alice'];
+
+        try {
+            $session = new SessionManager();
+
+            try {
+                $session->remove('user');
+                self::fail('Removing a present key without an active session must throw.');
+            } catch (SessionException $exception) {
+                self::assertSame(
+                    'Cannot write "user" to the session: no session is active. Run SessionMiddleware on this route, '
+                    . 'or call start(); in a test, pass an array to new SessionManager([]).',
+                    $exception->getMessage(),
+                );
+            }
+        } finally {
+            unset($_SESSION);
+        }
+    }
+
+    public function testFlashReadPassesWithoutActiveSession(): void
+    {
+        $session = new SessionManager();
+
+        self::assertSame('fallback', $session->flash('notice', 'fallback'));
+    }
+
+    public function testFlashOfPresentKeyThrowsWithoutActiveSession(): void
+    {
+        $_SESSION = ['notice' => 'saved'];
+
+        try {
+            $session = new SessionManager();
+
+            $this->expectException(SessionException::class);
+            $this->expectExceptionMessageMatches('/^Cannot write "notice" to the session: no session is active\./');
+
+            $session->flash('notice');
+        } finally {
+            unset($_SESSION);
+        }
+    }
+
+    public function testSetRefusalNamesTheKeyAndTheFix(): void
+    {
+        $session = new SessionManager();
+
+        try {
+            $session->set('user', 'alice');
+            self::fail('Writing without an active session must throw.');
+        } catch (SessionException $exception) {
+            self::assertSame(
+                'Cannot write "user" to the session: no session is active. Run SessionMiddleware on this route, '
+                . 'or call start(); in a test, pass an array to new SessionManager([]).',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testRegenerateRefusalDoesNotNameAKey(): void
+    {
+        $session = new SessionManager();
+
+        $this->expectException(SessionException::class);
+        $this->expectExceptionMessageMatches('/^Cannot regenerate the session id: no session is active\./');
+
+        $session->regenerate();
+    }
+
+    public function testGetReturnsDefaultWhenNoSessionIsStarted(): void
+    {
+        $session = new SessionManager();
+
+        self::assertSame('fallback', $session->get('user', 'fallback'));
+        self::assertFalse($session->has('user'));
+    }
 }
 
 /** Minimal handler used to prove setHandler() records without registering. */

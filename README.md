@@ -272,6 +272,8 @@ $response->send();
 <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf->getToken(), ENT_QUOTES, 'UTF-8') ?>">
 ```
 
+Writing to the session without a started one, for instance on a route that skips `SessionMiddleware`, throws a `SessionException` instead of silently dropping the value.
+
 A refused browser form post (an `Accept` header listing `text/html`) gets a plain-text 403 that tells the person to reload the page. Every other client gets a JSON 403. To answer refusals yourself, pass a callback that returns a `Response`, or `null` to keep the default:
 
 ```php

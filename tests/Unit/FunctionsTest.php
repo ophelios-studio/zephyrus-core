@@ -16,6 +16,7 @@ use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\RouteUrlGenerator;
+use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
 
 final class FunctionsTest extends TestCase
@@ -243,6 +244,15 @@ final class FunctionsTest extends TestCase
     public function testSessionWriteReturnsNullWhenNoSessionSet(): void
     {
         self::assertNull(session(['key' => 'value']));
+    }
+
+    public function testSessionWriteThrowsWhenManagerHasNoStartedSession(): void
+    {
+        App::setSession(new SessionManager());
+
+        $this->expectException(SessionException::class);
+
+        session(['key' => 'value']);
     }
 
     // ─── localize() / i18n() ──────────────────────────────────────────

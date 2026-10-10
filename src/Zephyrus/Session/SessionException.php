@@ -76,7 +76,11 @@ final class SessionException extends ZephyrusException
 
     public static function noActiveSession(string $operation): self
     {
-        return new self(sprintf('Cannot %s: no session is active. Call start() first.', $operation));
+        return new self(sprintf(
+            'Cannot %s: no session is active. Run SessionMiddleware on this route, or call start(); '
+            . 'in a test, pass an array to new SessionManager([]).',
+            $operation,
+        ));
     }
 
     public static function notActiveForDestruction(): self

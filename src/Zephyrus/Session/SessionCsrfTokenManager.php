@@ -32,6 +32,8 @@ final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
 
     /**
      * Return the session's CSRF token, generating and storing a 64-character hex token when none is usable.
+     *
+     * @throws SessionException when a new token must be stored and no session is active.
      */
     public function getToken(): string
     {
@@ -78,6 +80,8 @@ final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
 
     /**
      * Discard the current token so the next getToken() call generates a fresh one.
+     *
+     * @throws SessionException when no session is active.
      */
     public function regenerate(): void
     {
