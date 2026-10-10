@@ -757,16 +757,20 @@ final readonly class Request
     }
 
     /**
-     * Returns the host unchanged when it is a host name or bracketed IP literal with
-     * an optional numeric port. Any other value is percent-encoded whole.
+     * Returns the host unchanged when it is a host name or bracketed IP literal, with
+     * its port only when portNumber() accepts it. Any other value is percent-encoded whole.
      */
     private static function authorityHost(string $host): string
     {
-        if (preg_match('/^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9._~-]+)(:[0-9]+)?$/D', $host) === 1) {
-            return $host;
+        if (preg_match('/^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9._~-]+)(?::([0-9]+))?$/D', $host, $matches) !== 1) {
+            return rawurlencode($host);
         }
 
-        return rawurlencode($host);
+        if (isset($matches[2]) && self::portNumber($matches[2]) === null) {
+            return $matches[1];
+        }
+
+        return $host;
     }
 
     /**

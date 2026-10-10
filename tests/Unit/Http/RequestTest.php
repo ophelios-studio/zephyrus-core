@@ -1347,6 +1347,36 @@ final class RequestTest extends TestCase
         self::assertSame('http://legit.example.com%5C%22%2Cfor%3D10.0.0.9%3Bproto%3Dhttps/x', $request->uri()->full());
     }
 
+    #[DataProvider('hostValuesWithPort')]
+    public function testFromGlobalsDropsAHostPortThatIsNotAPortNumber(string $host, string $expected): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.internal',
+                'REQUEST_URI'            => '/x',
+                'REMOTE_ADDR'            => '10.0.0.1',
+                'HTTP_X_FORWARDED_HOST'  => $host,
+                'HTTP_X_FORWARDED_PROTO' => 'http',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame($expected, $request->uri()->full());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function hostValuesWithPort(): iterable
+    {
+        yield 'port zero' => ['legit.example.com:0', 'http://legit.example.com/x'];
+        yield 'port above the range' => ['legit.example.com:99999', 'http://legit.example.com/x'];
+        yield 'leading zero' => ['legit.example.com:08', 'http://legit.example.com/x'];
+        yield 'valid port kept' => ['legit.example.com:8443', 'http://legit.example.com:8443/x'];
+        yield 'upper bound kept' => ['legit.example.com:65535', 'http://legit.example.com:65535/x'];
+    }
+
     #[DataProvider('forwardedHeadersWithEmptyElements')]
     public function testFromGlobalsSkipsEmptyForwardedElementsWhenWalkingFromTheRight(string $header): void
     {
