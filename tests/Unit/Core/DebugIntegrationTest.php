@@ -406,7 +406,7 @@ final class DebugIntegrationTest extends TestCase
         $user = self::marker('user');
 
         try {
-            self::throwWithIterator(new $class(['password' => $secret, 'username' => $user]));
+            self::throwWithWrapper(new $class(['password' => $secret, 'username' => $user]));
         } catch (\RuntimeException $exception) {
             $html = self::blueScreenHtml($exception);
         }
@@ -561,6 +561,209 @@ final class DebugIntegrationTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{class-string<\ArrayIterator|\ArrayObject>}>
+     */
+    public static function objectWrapperClassProvider(): iterable
+    {
+        yield 'ArrayIterator' => [\ArrayIterator::class];
+        yield 'ArrayObject' => [\ArrayObject::class];
+    }
+
+    /**
+     * @param class-string<\ArrayIterator|\ArrayObject> $class
+     */
+    #[DataProvider('objectWrapperClassProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksAProtectedPropertyTheApplicationListsInAWrappedObject(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        Debugger::$keysToHide[] = ApiVault::class . '::$apiValue';
+        $secret = self::marker('api-value');
+        $user = self::marker('user');
+        $wrapper = new $class(new ApiVault($user, $secret, self::marker('signing')));
+
+        $html = Dumper::toHtml($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must dump an unlisted property.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered a protected property listed in keysToHide.");
+        }
+    }
+
+    /**
+     * @param class-string<\ArrayIterator|\ArrayObject> $class
+     */
+    #[DataProvider('objectWrapperClassProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksAPrivatePropertyTheApplicationListsInAWrappedObject(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        Debugger::$keysToHide[] = ApiVault::class . '::$signingValue';
+        $secret = self::marker('signing');
+        $user = self::marker('user');
+        $wrapper = new $class(new ApiVault($user, self::marker('api-value'), $secret));
+
+        $html = Dumper::toHtml($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must dump an unlisted property.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered a private property listed in keysToHide.");
+        }
+    }
+
+    /**
+     * @param class-string<\ArrayIterator|\ArrayObject> $class
+     */
+    #[DataProvider('objectWrapperClassProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksAProtectedPropertyListedInAnObjectNestedInAWrapper(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        Debugger::$keysToHide[] = ApiVault::class . '::$apiValue';
+        $secret = self::marker('api-value');
+        $user = self::marker('user');
+        $outer = new \ArrayIterator(['inner' => new $class(new ApiVault($user, $secret, self::marker('signing')))]);
+
+        $html = Dumper::toHtml($outer, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($outer, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must dump an unlisted property.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered a protected property of a nested wrapper.");
+        }
+    }
+
+    /**
+     * @param class-string<\ArrayIterator|\ArrayObject> $class
+     */
+    #[DataProvider('objectWrapperClassProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpShowsOnlyTheSafeSettingsOfAPhpMailerInAWrapper(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $recipient = self::marker('recipient') . '@example.com';
+        $token = self::marker('reset-token');
+        $mailer = new Mailer(MailerConfig::fromArray(['smtp' => ['host' => 'smtp.example.test']]));
+        $mailer->to($recipient)->html($token);
+        $wrapper = new $class($mailer->getPhpMailer());
+
+        $html = Dumper::toHtml($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString('smtp.example.test', $output, "Control: $label must show the SMTP host.");
+            self::assertStringNotContainsString($recipient, $output, "$label rendered a PHPMailer recipient in a wrapper.");
+            self::assertStringNotContainsString($token, $output, "$label rendered the HTML body of a PHPMailer in a wrapper.");
+        }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpTerminatesWhenAWrappedObjectReferencesItsWrapper(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $holder = new \stdClass();
+        $container = new \ArrayObject($holder);
+        $holder->container = $container;
+
+        $html = Dumper::toHtml($container, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($container, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        self::assertStringContainsString('RECURSION', $html, 'toHtml() must stop at the reference back to the wrapper.');
+        self::assertStringContainsString('RECURSION', $text, 'toText() must stop at the reference back to the wrapper.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpTerminatesWhenTwoWrappersWrapEachOther(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $first = new \stdClass();
+        $second = new \stdClass();
+        $firstContainer = new \ArrayObject($first);
+        $secondContainer = new \ArrayIterator($second);
+        $first->peer = $secondContainer;
+        $second->peer = $firstContainer;
+
+        $html = Dumper::toHtml($firstContainer, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($firstContainer, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        self::assertStringContainsString('ArrayIterator', $html, 'toHtml() completes and renders the second wrapper.');
+        self::assertStringContainsString('RECURSION', $text, 'toText() must stop when two wrappers reference each other.');
+    }
+
+    /**
+     * @return iterable<string, array{class-string<\ArrayIterator|\ArrayObject>}>
+     */
+    public static function overriddenSerializeWrapperProvider(): iterable
+    {
+        yield 'ArrayIterator refusing to serialize' => [RefusingArrayIterator::class];
+        yield 'ArrayObject refusing to serialize' => [RefusingArrayObject::class];
+        yield 'ArrayIterator with another serialized shape' => [ReshapingArrayIterator::class];
+        yield 'ArrayObject with another serialized shape' => [ReshapingArrayObject::class];
+        yield 'ArrayIterator flattening its storage' => [FlatteningArrayIterator::class];
+        yield 'ArrayObject flattening its storage' => [FlatteningArrayObject::class];
+        yield 'ArrayIterator ignoring setFlags()' => [SilentFlagsArrayIterator::class];
+        yield 'ArrayObject ignoring setFlags()' => [SilentFlagsArrayObject::class];
+        yield 'ArrayIterator refusing count()' => [ThrowingCountArrayIterator::class];
+        yield 'ArrayObject refusing count()' => [ThrowingCountArrayObject::class];
+        yield 'ArrayIterator refusing getFlags()' => [ThrowingFlagsArrayIterator::class];
+        yield 'ArrayObject refusing getFlags()' => [ThrowingFlagsArrayObject::class];
+    }
+
+    /**
+     * @param class-string<\ArrayIterator|\ArrayObject> $class
+     */
+    #[DataProvider('overriddenSerializeWrapperProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksAProtectedPropertyOfAWrapperWithOverriddenSerialize(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        Debugger::$keysToHide[] = ApiVault::class . '::$apiValue';
+        $secret = self::marker('api-value');
+        $user = self::marker('user');
+        $wrapper = new $class(new ApiVault($user, $secret, self::marker('signing')));
+
+        $html = Dumper::toHtml($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must render the storage of the wrapper.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered a protected property through an overridden serialize().");
+        }
+    }
+
+    /**
+     * @param class-string<\ArrayIterator|\ArrayObject> $class
+     */
+    #[DataProvider('overriddenSerializeWrapperProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenRendersAWrapperWithOverriddenSerialize(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        Debugger::getBlueScreen()->keysToHide[] = ApiVault::class . '::$apiValue';
+        $secret = self::marker('api-value');
+        $user = self::marker('user');
+
+        try {
+            self::throwWithWrapper(new $class(new ApiVault($user, $secret, self::marker('signing'))));
+        } catch (\RuntimeException $exception) {
+            $html = self::blueScreenHtml($exception);
+        }
+
+        self::assertStringContainsString($user, $html, 'Control: the bluescreen must render the storage of the wrapper.');
+        self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered a protected property through an overridden serialize().');
+    }
+
     private static function exceptionCarrying(string $message, string $secret): \RuntimeException
     {
         try {
@@ -585,7 +788,7 @@ final class DebugIntegrationTest extends TestCase
         throw new \RuntimeException('delivery refused');
     }
 
-    private static function throwWithIterator(\ArrayIterator $iterator): never
+    private static function throwWithWrapper(\ArrayIterator|\ArrayObject $wrapper): never
     {
         throw new \RuntimeException('boom');
     }
@@ -1020,5 +1223,109 @@ final class CredentialHolder
 {
     public function __construct(private string $password, protected string $token, public string $username)
     {
+    }
+}
+
+final class ApiVault
+{
+    public function __construct(
+        public string $username,
+        protected string $apiValue,
+        private string $signingValue,
+    ) {
+    }
+}
+
+final class RefusingArrayIterator extends \ArrayIterator
+{
+    public function __serialize(): array
+    {
+        throw new \LogicException('Serialization is refused.');
+    }
+}
+
+final class RefusingArrayObject extends \ArrayObject
+{
+    public function __serialize(): array
+    {
+        throw new \LogicException('Serialization is refused.');
+    }
+}
+
+final class ReshapingArrayIterator extends \ArrayIterator
+{
+    public function __serialize(): array
+    {
+        return ['shape' => 'other'];
+    }
+}
+
+final class ReshapingArrayObject extends \ArrayObject
+{
+    public function __serialize(): array
+    {
+        return ['shape' => 'other'];
+    }
+}
+
+final class FlatteningArrayIterator extends \ArrayIterator
+{
+    public function __serialize(): array
+    {
+        return [0, $this->getArrayCopy(), []];
+    }
+}
+
+final class FlatteningArrayObject extends \ArrayObject
+{
+    public function __serialize(): array
+    {
+        return [0, $this->getArrayCopy(), []];
+    }
+}
+
+final class SilentFlagsArrayIterator extends \ArrayIterator
+{
+    public function setFlags(int $flags): void
+    {
+    }
+}
+
+final class SilentFlagsArrayObject extends \ArrayObject
+{
+    public function setFlags(int $flags): void
+    {
+    }
+}
+
+final class ThrowingCountArrayIterator extends \ArrayIterator
+{
+    public function count(): int
+    {
+        throw new \LogicException('Counting is refused.');
+    }
+}
+
+final class ThrowingCountArrayObject extends \ArrayObject
+{
+    public function count(): int
+    {
+        throw new \LogicException('Counting is refused.');
+    }
+}
+
+final class ThrowingFlagsArrayIterator extends \ArrayIterator
+{
+    public function getFlags(): int
+    {
+        throw new \LogicException('Flags are refused.');
+    }
+}
+
+final class ThrowingFlagsArrayObject extends \ArrayObject
+{
+    public function getFlags(): int
+    {
+        throw new \LogicException('Flags are refused.');
     }
 }

@@ -9,6 +9,7 @@ use ArrayObject;
 use Closure;
 use PHPMailer\PHPMailer\PHPMailer;
 use ReflectionFunction;
+use ReflectionMethod;
 use SensitiveParameterValue;
 use Tracy\Debugger;
 use Tracy\Dumper;
@@ -268,7 +269,7 @@ final class DebugIntegration
     }
 
     /**
-     * Render an ArrayIterator's elements as a storage property, so masking applies to them.
+     * Render an ArrayIterator with its storage, an array or a wrapped object, as a private property.
      *
      * @param ArrayIterator<array-key, mixed> $iterator
      */
@@ -278,7 +279,7 @@ final class DebugIntegration
     }
 
     /**
-     * Render an ArrayObject's elements as a storage property, so masking applies to them.
+     * Render an ArrayObject with its storage, an array or a wrapped object, as a private property.
      *
      * @param ArrayObject<array-key, mixed> $container
      */
@@ -293,43 +294,26 @@ final class DebugIntegration
      */
     private static function exposeArrayContainer(ArrayIterator|ArrayObject $container, string $storageClass, Value $value, Describer $describer): void
     {
-        $flags = $container->getFlags();
-        $container->setFlags(ArrayObject::STD_PROP_LIST);
+        $flags = self::invokeSplMethod($container, $storageClass, 'getFlags');
+        self::invokeSplMethod($container, $storageClass, 'setFlags', ArrayObject::STD_PROP_LIST);
         Exposer::exposeObject($container, $value, $describer);
-        $container->setFlags($flags);
+        self::invokeSplMethod($container, $storageClass, 'setFlags', $flags);
 
-        $describer->addPropertyTo($value, 'storage', self::withBareKeys($container->getArrayCopy(), $describer), Value::PropertyPrivate, null, $storageClass);
-        $value->value .= ' (' . count($container) . ')';
+        // Index 1 is the storage: the wrapped object, the array, or null when the object wraps itself.
+        $storage = self::invokeSplMethod($container, $storageClass, '__serialize')[1];
+        $describer->addPropertyTo($value, 'storage', $storage, Value::PropertyPrivate, null, $storageClass);
+        $value->value .= ' (' . self::invokeSplMethod($container, $storageClass, 'count') . ')';
     }
 
     /**
-     * Strip the class or wildcard prefix PHP puts on the keys of a wrapped object's non-public properties.
+     * Call the SPL implementation of a method, so a subclass override cannot change what the dump reads.
      *
-     * A property listed as Class::$name in keysToHide is marked sensitive before its prefix is lost.
-     *
-     * @param array<array-key, mixed> $entries
-     * @return array<array-key, mixed>
+     * @param ArrayIterator<array-key, mixed>|ArrayObject<array-key, mixed> $container
+     * @param class-string $storageClass
      */
-    private static function withBareKeys(array $entries, Describer $describer): array
+    private static function invokeSplMethod(ArrayIterator|ArrayObject $container, string $storageClass, string $method, mixed ...$arguments): mixed
     {
-        $bare = [];
-        foreach ($entries as $key => $entry) {
-            if (!is_string($key) || !str_starts_with($key, "\0")) {
-                $bare[$key] = $entry;
-                continue;
-            }
-
-            $separator = (int) strrpos($key, "\0");
-            $class = substr($key, 1, $separator - 1);
-            $name = substr($key, $separator + 1);
-            if (isset($describer->keysToHide[strtolower($class . '::$' . $name)])) {
-                $entry = new SensitiveParameterValue($entry);
-            }
-
-            $bare[$name] = $entry;
-        }
-
-        return $bare;
+        return (new ReflectionMethod($storageClass, $method))->invoke($container, ...$arguments);
     }
 
     /**
