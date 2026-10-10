@@ -34,11 +34,9 @@ final readonly class ApplicationConfig
             ? Environment::fromString((string) $keys->value('environment'))
             : Environment::Production;
 
-        $debug = $keys->has('debug') ? $keys->value('debug') : !$environment->isProductionLike();
-
         return new self(
             environment: $environment,
-            debug: ConfigBoolean::parse('application', 'debug', $debug),
+            debug: $keys->boolean('debug', !$environment->isProductionLike()),
         );
     }
 }

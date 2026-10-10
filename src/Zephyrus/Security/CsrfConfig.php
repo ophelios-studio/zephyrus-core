@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Zephyrus\Security;
 
 use InvalidArgumentException;
-use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
@@ -150,10 +149,10 @@ final class CsrfConfig
         $keys = ConfigKeys::read('csrf', $config, self::SPELLINGS);
 
         return new self(
-            enabled: ConfigBoolean::firstSet('csrf', $config, self::SPELLINGS['enabled'], true),
+            enabled: $keys->boolean('enabled', true),
             bodyField: (string) ($keys->value('bodyField') ?? '_csrf_token'),
             headerName: (string) ($keys->value('headerName') ?? 'X-CSRF-Token'),
-            injectToken: ConfigBoolean::firstSet('csrf', $config, self::SPELLINGS['injectToken'], false),
+            injectToken: $keys->boolean('injectToken', false),
             excludedPathPatterns: self::normalizeExcludedPathPatterns($keys->value('excludedPathPatterns') ?? []),
         );
     }

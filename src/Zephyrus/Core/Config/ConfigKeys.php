@@ -23,6 +23,7 @@ final readonly class ConfigKeys
      * @param array<string, list<string>>         $spellings
      */
     private function __construct(
+        private string $section,
         private array $written,
         private array $spellings,
     ) {
@@ -57,7 +58,7 @@ final readonly class ConfigKeys
             }
         }
 
-        return new self($written, $spellings);
+        return new self($section, $written, $spellings);
     }
 
     /**
@@ -82,6 +83,18 @@ final readonly class ConfigKeys
     public function key(string $property): string
     {
         return $this->written[$property][0] ?? $this->spellings[$property][0];
+    }
+
+    /**
+     * The property read as a boolean, or the default when it is not written.
+     *
+     * @throws ConfigurationException when the written value, null included, is not a recognisable boolean.
+     */
+    public function boolean(string $property, bool $default): bool
+    {
+        return $this->has($property)
+            ? ConfigBoolean::parse($this->section, $this->key($property), $this->value($property))
+            : $default;
     }
 
     /**
@@ -156,7 +169,7 @@ final readonly class ConfigKeys
         $levels = [];
         foreach ($spellings as $property => $paths) {
             foreach ($paths as $path) {
-                $mapping = str_contains($path, '.') ? strstr($path, '.', true) : '';
+                $mapping = str_contains($path, '.') ? explode('.', $path, 2)[0] : '';
                 $levels[$mapping][$path] = $property;
             }
         }

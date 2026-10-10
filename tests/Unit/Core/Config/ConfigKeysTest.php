@@ -254,6 +254,46 @@ final class ConfigKeysTest extends TestCase
         self::assertSame([], $keys->properties());
     }
 
+    public function testBooleanReadsTheWrittenValueOrTheDefault(): void
+    {
+        $keys = ConfigKeys::read('example', ['force_https' => '0', 'csrf' => ['enabled' => 'yes']], self::SPELLINGS);
+
+        self::assertFalse($keys->boolean('forceHttps', true));
+        self::assertTrue($keys->boolean('csrfEnabled', false));
+        self::assertTrue(ConfigKeys::read('example', [], self::SPELLINGS)->boolean('forceHttps', true));
+    }
+
+    /**
+     * @return iterable<string, array{array<array-key, mixed>, string, string}>
+     */
+    public static function refusedBooleans(): iterable
+    {
+        yield 'declared null' => [['force_https' => null], 'forceHttps', "field 'force_https' has invalid value null"];
+        yield 'empty string' => [['forceHttps' => ''], 'forceHttps', "field 'forceHttps' has invalid value \"\""];
+        yield 'nested word' => [['csrf' => ['enabled' => 'maybe']], 'csrfEnabled', "field 'csrf.enabled' has invalid value \"maybe\""];
+    }
+
+    /**
+     * @param array<array-key, mixed> $values
+     */
+    #[DataProvider('refusedBooleans')]
+    public function testBooleanRefusesAValueThatIsNotABooleanUnderTheKeyAsWritten(
+        array $values,
+        string $property,
+        string $refusal,
+    ): void {
+        try {
+            ConfigKeys::read('example', $values, self::SPELLINGS)->boolean($property, true);
+
+            self::fail('A value that is not a boolean was read as one.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'example' " . $refusal . ': is not a boolean; use true/false, 1/0, on/off or yes/no.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     /**
      * @param array<array-key, mixed> $values
      */

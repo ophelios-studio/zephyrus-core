@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Zephyrus\Security;
 
 use InvalidArgumentException;
-use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\Response;
@@ -121,27 +120,12 @@ final readonly class SecureHeadersConfig
             referrerPolicy: self::text($keys, 'referrerPolicy', $defaults->referrerPolicy),
             xssProtection: self::text($keys, 'xssProtection', $defaults->xssProtection),
             hstsMaxAge: self::hstsMaxAge($keys, $defaults->hstsMaxAge),
-            hstsIncludeSubdomains: self::includeSubdomains($keys, $defaults->hstsIncludeSubdomains),
+            hstsIncludeSubdomains: $keys->boolean('hstsIncludeSubdomains', $defaults->hstsIncludeSubdomains),
             csp: self::text($keys, 'csp', $defaults->csp),
             permissionsPolicy: self::text($keys, 'permissionsPolicy', $defaults->permissionsPolicy),
         );
     }
 
-    /**
-     * @throws ConfigurationException
-     */
-    private static function includeSubdomains(ConfigKeys $keys, bool $default): bool
-    {
-        if (!$keys->has('hstsIncludeSubdomains')) {
-            return $default;
-        }
-
-        return ConfigBoolean::parse(
-            'security.headers',
-            $keys->key('hstsIncludeSubdomains'),
-            $keys->value('hstsIncludeSubdomains'),
-        );
-    }
 
     /**
      * @throws ConfigurationException

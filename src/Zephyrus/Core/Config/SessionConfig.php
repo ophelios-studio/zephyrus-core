@@ -136,8 +136,8 @@ final readonly class SessionConfig
         return new self(
             name:       (string) ($keys->value('name') ?? 'PHPSESSID'),
             lifetime:   (int) ($keys->value('lifetime') ?? 0),
-            httpOnly:   ConfigBoolean::firstSet('session', $values, self::SPELLINGS['httpOnly'], true),
-            secure:     !$auto && ConfigBoolean::parse('session', 'secure', $rawSecure),
+            httpOnly:   $keys->boolean('httpOnly', true),
+            secure:     !$auto && $keys->boolean('secure', false),
             sameSite:   (string) ($keys->value('sameSite') ?? 'Lax'),
             cookiePath: (string) ($keys->value('cookiePath') ?? '/'),
             secureAuto: $auto,

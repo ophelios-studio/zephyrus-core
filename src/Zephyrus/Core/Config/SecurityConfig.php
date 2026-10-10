@@ -154,9 +154,9 @@ final readonly class SecurityConfig
             );
         }
 
-        $forceHttps = self::readBool($keys, 'forceHttps', false);
-        $csrfEnabled = self::readBool($keys, 'csrfEnabled', true);
-        $csrfAutoHtml = self::readBool($keys, 'csrfAutoHtml', false);
+        $forceHttps = $keys->boolean('forceHttps', false);
+        $csrfEnabled = $keys->boolean('csrfEnabled', true);
+        $csrfAutoHtml = $keys->boolean('csrfAutoHtml', false);
         $csrfExceptions = (array) ($keys->value('csrfExceptions') ?? []);
 
         $allowedHostsValue = $keys->value('allowedHosts');
@@ -326,13 +326,4 @@ final readonly class SecurityConfig
         return $entries;
     }
 
-    /**
-     * @throws ConfigurationException when the written value, null included, is not a boolean.
-     */
-    private static function readBool(ConfigKeys $keys, string $property, bool $default): bool
-    {
-        return $keys->has($property)
-            ? ConfigBoolean::parse('security', $keys->key($property), $keys->value($property))
-            : $default;
-    }
 }
