@@ -51,8 +51,12 @@ final class FormatterException extends ZephyrusRuntimeException
     {
         return new self(sprintf(
             'Currency required: locale %s has no native currency. '
-            . 'Pass a currency to money() or set a default currency.',
-            $locale,
+            . 'Pass a currency to money(), or set localization.currency in the configuration '
+            . '(defaultCurrency when you build the Formatter yourself).',
+            (string) json_encode(
+                $locale,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
+            ),
         ));
     }
 

@@ -139,10 +139,19 @@ final class FormatterLocaleTest extends TestCase
     #[DataProvider('regionlessLocales')]
     public function testMoneyWithoutCurrencyThrowsForALocaleWithoutANativeCurrency(string $locale): void
     {
-        $this->expectException(FormatterException::class);
-        $this->expectExceptionMessageMatches('/Pass a currency to money\(\) or set a default currency/');
-
-        (new Formatter($locale))->money(19.99);
+        try {
+            (new Formatter($locale))->money(19.99);
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
+            self::assertSame(
+                sprintf(
+                    'Currency required: locale "%s" has no native currency. Pass a currency to money(), or set '
+                    . 'localization.currency in the configuration (defaultCurrency when you build the Formatter yourself).',
+                    $locale,
+                ),
+                $exception->getMessage(),
+            );
+        }
     }
 
     #[DataProvider('regionlessLocales')]

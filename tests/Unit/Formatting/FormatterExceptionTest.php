@@ -51,6 +51,17 @@ final class FormatterExceptionTest extends TestCase
         self::assertSame('Invalid currency code: it must be three ASCII letters, for example CAD.', $message);
     }
 
+    public function testCurrencyRequiredNamesTheCurrencySettingsAndEscapesTheLocale(): void
+    {
+        $message = FormatterException::currencyRequired("fr\r\nforged")->getMessage();
+
+        self::assertSame(
+            'Currency required: locale "fr\r\nforged" has no native currency. Pass a currency to money(), or set '
+            . 'localization.currency in the configuration (defaultCurrency when you build the Formatter yourself).',
+            $message,
+        );
+    }
+
     public function testInvalidLocale(): void
     {
         $exception = FormatterException::invalidLocale('xx_YY');
