@@ -10,39 +10,13 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 /**
  * Raised when a PDO-level database operation fails.
  *
- * Use the named factory methods to create descriptive instances without
- * catching raw PDOExceptions throughout application code.
- *
- * WHY THE MESSAGE IS TERSE
- *
- * A driver error message is not a safe string, and native prepares do not make
- * it one. Measured against PostgreSQL 16:
- *
- *   DETAIL:  Key (email)=(jane@example.com) already exists.
- *   CONTEXT: unnamed portal parameter $1 = 'jane@example.com'
- *
- * The first is emitted for any unique or foreign-key violation, including one
- * deferred to COMMIT, the second for any parameter PostgreSQL fails to coerce.
- * That message then travels wherever exceptions travel: logs, alert emails,
- * debug error pages. queryExecutionFailed() and transactionExecutionFailed()
- * therefore keep the SQLSTATE (a condition code, never a value) in the message
- * and in sqlState(), and hold the driver text in driverMessage() (and the
- * statement in sql()), where a caller must ask for them and can scrub them first.
- *
- * There is deliberately no switch that restores the detailed message: a
- * process-wide flag would put row values back into every sink that prints an
- * exception, production included. Diagnosis reads driverMessage() on purpose.
- *
- * queryFailed() and connectionFailed() print what their caller passes.
- * Database::fromConfig() passes the driver's connect error, which names the
- * server and user but holds no row data.
+ * Driver messages can echo row values (PostgreSQL's DETAIL line, for example,
+ * prints `Key (email)=(jane@example.com) already exists.`), so the factories
+ * keep them out of the message: read them through sql() and driverMessage().
+ * No flag restores them in the message, so every sink that prints exceptions stays safe.
  */
 final class DatabaseException extends ZephyrusRuntimeException
 {
-    /**
-     * The statement that failed, and the driver's own error text. Held as fields
-     * rather than folded into the message so that reaching them is an explicit act.
-     */
     private ?string $sql = null;
     private ?string $driverMessage = null;
     private ?string $sqlState = null;
@@ -61,9 +35,6 @@ final class DatabaseException extends ZephyrusRuntimeException
         return new self("Query failed [{$sql}]: {$reason}", previous: $previous);
     }
 
-    /**
-     * The message holds no SQL text.
-     */
     public static function lastInsertIdRefused(): self
     {
         return new self(
@@ -71,9 +42,6 @@ final class DatabaseException extends ZephyrusRuntimeException
         );
     }
 
-    /**
-     * The message holds no SQL text.
-     */
     public static function returningYieldedNoColumn(): self
     {
         return new self(
@@ -82,9 +50,6 @@ final class DatabaseException extends ZephyrusRuntimeException
         );
     }
 
-    /**
-     * The message holds no SQL text.
-     */
     public static function returningNotSingleColumn(int $columns): self
     {
         return new self(
@@ -92,9 +57,6 @@ final class DatabaseException extends ZephyrusRuntimeException
         );
     }
 
-    /**
-     * The message holds no SQL text.
-     */
     public static function returningRequired(): self
     {
         return new self(
@@ -103,9 +65,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * Wrap a failure raised by the driver while executing a statement. The
-     * statement and the driver text stay off the message; sql() and
-     * driverMessage() return them.
+     * Wraps a driver failure raised while executing $sql; the SQL and driver text stay out of the message.
      */
     public static function queryExecutionFailed(string $sql, #[\SensitiveParameter] PDOException $previous): self
     {
@@ -122,9 +82,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * Wrap a failure raised by the driver at one stage of a transaction (begin,
-     * commit, savepoint, release savepoint). The driver text stays off the
-     * message; driverMessage() returns it.
+     * Wraps a driver failure at a transaction stage (begin, commit, savepoint, release savepoint).
      */
     public static function transactionExecutionFailed(string $stage, #[\SensitiveParameter] PDOException $previous): self
     {
@@ -139,7 +97,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * Map a failed transaction probe to transactionAborted() for 25P02, else to transactionExecutionFailed().
+     * Maps a failed transaction probe to transactionAborted() on SQLSTATE 25P02, else to transactionExecutionFailed().
      */
     public static function transactionProbeFailed(string $stage, #[\SensitiveParameter] PDOException $previous): self
     {
@@ -149,9 +107,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * A statement failed inside a transaction level and its exception was caught,
-     * so the level was rolled back instead of committed or released. 25P02 is
-     * the SQLSTATE PostgreSQL itself reports for the aborted transaction.
+     * A statement failed inside a transaction level whose exception was caught, so the level was rolled back.
      */
     public static function transactionAborted(string $stage): self
     {
@@ -166,11 +122,8 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * The five-character SQLSTATE the driver reported, for branching on the failure
-     * kind (for example 23505 for a unique violation on PostgreSQL) without parsing
-     * the message. Null unless the instance came from queryExecutionFailed(),
-     * transactionExecutionFailed() or transactionAborted(). Note that PDO reports a connection lost
-     * mid-session as HY000, not 08006.
+     * The five-character SQLSTATE reported by the driver, or null when the instance has none.
+     * PDO reports a connection lost mid-session as HY000, not 08006.
      */
     public function sqlState(): ?string
     {
@@ -178,8 +131,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * The statement that failed, when this instance came from queryExecutionFailed().
-     * It may contain values if the caller built the SQL with inlined literals.
+     * The failed statement, set by queryExecutionFailed(). It may contain values if the caller inlined literals.
      */
     public function sql(): ?string
     {
@@ -187,9 +139,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * The driver's own error text, when this instance came from
-     * queryExecutionFailed() or transactionExecutionFailed(). It can contain real
-     * column values (see the class docblock); scrub it before writing it to any sink.
+     * The driver's error text. It can contain row values: scrub it before writing it to any sink.
      */
     public function driverMessage(): ?string
     {
@@ -197,8 +147,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * The PDOException is deliberately not chained: a handler that walks the
-     * chain (Tracy, a JSON error renderer) would print the driver text.
+     * The PDOException is not chained: handlers that walk the chain would print the driver text.
      */
     private static function fromDriverError(string $message, string $sqlState, #[\SensitiveParameter] PDOException $previous): self
     {
@@ -210,9 +159,7 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * PDO reports the SQLSTATE in errorInfo[0] and, for exceptions it raises
-     * itself, in the exception code. Neither is guaranteed present (a connection
-     * that died mid-statement reports HY000 or nothing at all).
+     * Reads the SQLSTATE from errorInfo, then from the exception code; HY000 when neither holds one.
      */
     private static function extractSqlState(#[\SensitiveParameter] PDOException $e): string
     {
