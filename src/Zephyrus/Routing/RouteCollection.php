@@ -47,7 +47,7 @@ final class RouteCollection
     }
 
     /**
-     * Names the last added route.
+     * Names the last added route (what Router::name() calls).
      *
      * @throws \LogicException When the collection is empty.
      */
@@ -67,7 +67,8 @@ final class RouteCollection
     }
 
     /**
-     * Adds global middlewares the last added route skips, keeping the ones it already skips.
+     * Adds global middlewares the last added route skips, keeping the ones it already skips
+     * (what Router::withoutMiddleware() calls).
      *
      * @param array<int, string> $middlewares Global middleware classes or interfaces.
      * @throws \LogicException When the collection is empty.
@@ -371,7 +372,7 @@ final class RouteCollection
 
     /**
      * Every route whose pattern matches the path, whatever its method, in match order (static first).
-     * A path holding a control character matches nothing.
+     * Expects the raw request target: a path holding a control character or not valid UTF-8 matches nothing.
      *
      * @return list<Route>
      */
@@ -478,6 +479,7 @@ final class RouteCollection
      * Routes without a parameter are tried before parameterised ones, each group in registration
      * order, and the first route matching both path and method wins. A 405 is raised only when a
      * route matches the path but none accepts the method; a GET route also accepts HEAD.
+     * Expects the raw request target, not Request::path(), which has already rewritten control bytes.
      *
      * @throws RouteNotFoundException When no route matches, or the path is not valid UTF-8 or contains a control character.
      * @throws MethodNotAllowedException When the path matches but no route accepts the method.

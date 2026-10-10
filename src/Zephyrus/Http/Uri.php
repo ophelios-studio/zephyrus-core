@@ -141,7 +141,11 @@ final readonly class Uri
         return $this->queryString;
     }
 
-    /** Whether the path as written holds a control character or DEL, which path() has already rewritten to "_". */
+    /**
+     * Whether the path as written holds a control character or DEL.
+     *
+     * path() shows such a byte as "_", except when parse_url() refused the URL: the path is then kept as written.
+     */
     public function pathHasControlCharacter(): bool
     {
         return preg_match('/[\x00-\x1F\x7F]/', self::rawPath($this->url)) === 1;

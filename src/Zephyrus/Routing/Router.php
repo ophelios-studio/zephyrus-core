@@ -116,7 +116,8 @@ final class Router
      * @param class-string ...$middlewares Global middleware classes or interfaces.
      * @throws \LogicException When no route has been added yet.
      * @throws RouteMiddlewareException When a name is a middleware group, is not a middleware, or would skip a
-     *                                  framework security middleware.
+     *                                  framework security middleware, or when middleware groups reference each
+     *                                  other in a cycle.
      */
     public function withoutMiddleware(string ...$middlewares): self
     {
@@ -606,7 +607,7 @@ final class Router
     }
 
     /**
-     * @return array<int, string>
+     * @return list<int|string>
      */
     public function duplicateRouteNames(): array
     {
