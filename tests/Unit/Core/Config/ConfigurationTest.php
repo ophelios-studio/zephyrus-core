@@ -477,6 +477,17 @@ final class ConfigurationTest extends TestCase
         Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']], ['_database' => MailerConfig::class]);
     }
 
+    public function testFromArrayNamesTheBuiltInSectionAFactoryCollidesWith(): void
+    {
+        try {
+            Configuration::fromArray([], ['_database' => MailerConfig::class]);
+            self::fail('A factory keyed by a spelling of a built-in name must be refused.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertStringContainsString('"_database" collides with the built-in section "database"', $e->getMessage());
+            self::assertStringContainsString('$configuration->database', $e->getMessage());
+        }
+    }
+
     public function testFromArrayRefusesAFactoryKeyedByListIndexNamingTheIndex(): void
     {
         $this->expectException(\InvalidArgumentException::class);

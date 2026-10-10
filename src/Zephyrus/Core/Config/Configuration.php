@@ -65,8 +65,10 @@ final readonly class Configuration
             $normalizedName = self::normalizeKey($name);
             if (in_array($normalizedName, self::BUILT_IN_SECTIONS, true)) {
                 throw new \InvalidArgumentException(sprintf(
-                    'Section factory "%s" targets a built-in typed property and cannot be registered.',
+                    'Section factory "%s" collides with the built-in section "%s"; read it with $configuration->%s instead.',
                     $name,
+                    $normalizedName,
+                    $normalizedName,
                 ));
             }
 
