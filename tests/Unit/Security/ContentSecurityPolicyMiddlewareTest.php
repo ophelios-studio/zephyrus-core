@@ -97,7 +97,7 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
     public function testBlankRouteContentSecurityPolicyGetsTheConfiguredPolicy(string $blank): void
     {
         $policy = ContentSecurityPolicy::create()->withDirective('default-src', ["'self'"]);
-        $inner = Response::text('ok')->withHeader('Content-Security-Policy', $blank);
+        $inner = new Response('ok', 200, ['Content-Security-Policy' => $blank]);
         $middleware = new ContentSecurityPolicyMiddleware($policy);
 
         $response = $middleware->process($this->makeRequest(), fn (Request $request): Response => $inner);

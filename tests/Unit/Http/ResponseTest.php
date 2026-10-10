@@ -648,4 +648,85 @@ final class ResponseTest extends TestCase
 
         self::assertSame($expected, $response->hasNonBlankHeader('x-TEST'));
     }
+
+    // -------------------------------------------------------------------------
+    // Header value validation
+    // -------------------------------------------------------------------------
+
+    #[DataProvider('controlCharacterValues')]
+    public function testWithHeaderRefusesControlCharacterInValue(string $value): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Response::text('ok')->withHeader('X-Test', $value);
+    }
+
+    #[DataProvider('controlCharacterValues')]
+    public function testWithHeadersRefusesControlCharacterInValue(string $value): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Response::text('ok')->withHeaders(['X-Test' => $value]);
+    }
+
+    #[DataProvider('controlCharacterValues')]
+    public function testRedirectRefusesControlCharacterInUrl(string $value): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        Response::redirect('/home' . $value);
+    }
+
+    public function testControlCharacterRefusalNamesTheHeaderButNotTheValue(): void
+    {
+        try {
+            Response::text('ok')->withHeader('X-Injected', "a\r\nSet-Cookie: s=1");
+            self::fail('A value with a CRLF must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertStringContainsString('X-Injected', $exception->getMessage());
+            self::assertStringContainsString('control character', $exception->getMessage());
+            self::assertStringNotContainsString('Set-Cookie', $exception->getMessage());
+        }
+    }
+
+    #[DataProvider('allowedValues')]
+    public function testWithHeaderAcceptsTabAndObsTextInValue(string $value): void
+    {
+        $response = Response::text('ok')->withHeader('X-Test', $value);
+
+        self::assertSame($value, $response->getHeader('X-Test'));
+    }
+
+    public function testWithHeadersAcceptsTabAndObsTextInValue(): void
+    {
+        $response = Response::text('ok')->withHeaders(['X-Tab' => "a\tb", 'X-Name' => 'café']);
+
+        self::assertSame("a\tb", $response->headers['x-tab']);
+        self::assertSame('café', $response->headers['x-name']);
+    }
+
+    public function testConstructorStoresHeaderValuesWithoutValidation(): void
+    {
+        $response = new Response(headers: ['X-Raw' => "a\r\nb"]);
+
+        self::assertSame("a\r\nb", $response->headers['x-raw']);
+    }
+
+    public static function controlCharacterValues(): iterable
+    {
+        yield 'carriage return' => ["a\rb"];
+        yield 'line feed' => ["a\nb"];
+        yield 'CRLF injection' => ["a\r\nSet-Cookie: s=1"];
+        yield 'NUL byte' => ["a\0b"];
+        yield 'SOH' => ["a\x01b"];
+        yield 'backspace' => ["a\x08b"];
+        yield 'unit separator' => ["a\x1Fb"];
+        yield 'DEL' => ["a\x7Fb"];
+    }
+
+    public static function allowedValues(): iterable
+    {
+        yield 'horizontal tab' => ["a\tb"];
+        yield 'UTF-8 text' => ['café'];
+    }
 }

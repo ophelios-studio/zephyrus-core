@@ -17,6 +17,9 @@ final readonly class Response
      */
     private const LOCAL_PATH_PATTERN = '#^/(?![/\\\\])[^\x00-\x1F\x7F\\\\]*+$#D';
 
+    /** RFC 9110 allows HTAB as the only control character in a field value. */
+    private const HEADER_VALUE_FORBIDDEN_PATTERN = '/[\x00-\x08\x0A-\x1F\x7F]/D';
+
     private const STATUS_PHRASES = [
         100 => 'Continue',
         101 => 'Switching Protocols',
@@ -101,9 +104,13 @@ final readonly class Response
      * Redirects to $url with an empty body. Never pass user input here: use localRedirect().
      *
      * Default status 302. 301 and 308 are cacheable, 303 suits redirect-after-POST, 307 and 308 keep the method.
+     *
+     * @throws InvalidArgumentException When $url holds a control character other than HTAB.
      */
     public static function redirect(string $url, int $status = 302): self
     {
+        self::assertValidHeaderValue('location', $url);
+
         return new self(body: '', status: $status, headers: ['location' => $url]);
     }
 
@@ -131,13 +138,15 @@ final readonly class Response
     }
 
     /**
-     * Returns a copy with the header set. The name is validated, the value is emitted as given.
+     * Returns a copy with the header set. The name and the value are validated.
      *
      * @throws InvalidArgumentException When $name is not a valid header name.
+     * @throws InvalidArgumentException When $value holds a control character other than HTAB.
      */
     public function withHeader(string $name, string $value): self
     {
         self::assertValidHeaderName($name);
+        self::assertValidHeaderValue($name, $value);
 
         $headers = $this->headers;
         $headers[strtolower($name)] = $value;
@@ -154,12 +163,14 @@ final readonly class Response
      *
      * @param array<string, string> $headers
      * @throws InvalidArgumentException When any name is not a valid header name.
+     * @throws InvalidArgumentException When any value holds a control character other than HTAB.
      */
     public function withHeaders(array $headers): self
     {
         $normalized = $this->headers;
         foreach ($headers as $name => $value) {
             self::assertValidHeaderName($name);
+            self::assertValidHeaderValue($name, $value);
             $normalized[strtolower($name)] = $value;
         }
 
@@ -180,6 +191,21 @@ final readonly class Response
         if (preg_match(self::HEADER_NAME_PATTERN, $name) !== 1) {
             throw new InvalidArgumentException(sprintf(
                 'Invalid HTTP header name "%s": a field name may only contain RFC 9110 token characters.',
+                $name,
+            ));
+        }
+    }
+
+    /**
+     * Refuses a control character other than HTAB. Not checked in the constructor, which error responses use.
+     *
+     * @throws InvalidArgumentException
+     */
+    private static function assertValidHeaderValue(string $name, string $value): void
+    {
+        if (preg_match(self::HEADER_VALUE_FORBIDDEN_PATTERN, $value) === 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid value for HTTP header "%s": it contains a control character other than HTAB.',
                 $name,
             ));
         }

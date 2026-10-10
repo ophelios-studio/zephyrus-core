@@ -320,7 +320,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
     public function testBlankRouteValueGetsTheConfiguredDefault(string $blank): void
     {
         $mw = new SecureHeadersMiddleware(SecureHeadersConfig::defaults());
-        $inner = Response::text('ok')->withHeader('X-Frame-Options', $blank);
+        $inner = new Response('ok', 200, ['X-Frame-Options' => $blank]);
 
         $response = $mw->process($this->makeRequest(), fn (Request $r): Response => $inner);
 
