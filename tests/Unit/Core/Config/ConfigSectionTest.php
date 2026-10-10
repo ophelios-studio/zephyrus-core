@@ -111,6 +111,38 @@ final class ConfigSectionTest extends TestCase
         self::assertFalse($section->has('missing'));
     }
 
+    public function testHasReportsAnExplicitNullAsPresent(): void
+    {
+        $section = new class(['api_key' => null]) extends ConfigSection {
+        };
+
+        self::assertTrue($section->has('apiKey'));
+        self::assertNull($section->get('apiKey'));
+    }
+
+    public function testHasResolvesDottedKeysAndTreatsAMissingPathAsAbsent(): void
+    {
+        $section = new class([
+            'smtp' => ['host' => 'mail.example.test', 'password' => null],
+            'api' => null,
+        ]) extends ConfigSection {
+        };
+
+        self::assertTrue($section->has('smtp.host'));
+        self::assertTrue($section->has('smtp.password'));
+        self::assertFalse($section->has('smtp.port'));
+        self::assertFalse($section->has('api.token'));
+        self::assertFalse($section->has('smtp.host.deeper'));
+    }
+
+    public function testHasTreatsAnEmptyKeyAsAbsent(): void
+    {
+        $section = new class(['name' => 'Test']) extends ConfigSection {
+        };
+
+        self::assertFalse($section->has(''));
+    }
+
     public function testNormalizesSnakeCaseKeys(): void
     {
         $section = new class([

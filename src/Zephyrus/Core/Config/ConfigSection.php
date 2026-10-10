@@ -289,9 +289,14 @@ abstract class ConfigSection
         return is_array($value) ? $value : $default;
     }
 
+    /**
+     * Whether the key is set, even when its value is an explicit null.
+     */
     public function has(string $key): bool
     {
-        return $this->get($key) !== null;
+        $absent = new \stdClass();
+
+        return $this->get($key, $absent) !== $absent;
     }
 
     /**
