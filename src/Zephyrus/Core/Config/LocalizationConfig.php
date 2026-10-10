@@ -15,6 +15,7 @@ namespace Zephyrus\Core\Config;
  * - dateFormat: default ICU pattern or preset for Formatter::date() (default 'medium').
  * - timeFormat: default ICU pattern or preset for Formatter::time() (default 'short').
  * - datetimeFormat: default ICU pattern or preset for Formatter::datetime() (default 'medium').
+ * - groupingSeparator: thousands separator for money/decimal/percent/ordinal (null keeps the locale default, '' disables grouping).
  */
 final readonly class LocalizationConfig
 {
@@ -30,6 +31,7 @@ final readonly class LocalizationConfig
         public string $dateFormat = 'medium',
         public string $timeFormat = 'short',
         public string $datetimeFormat = 'medium',
+        public ?string $groupingSeparator = null,
     ) {
     }
 
@@ -51,6 +53,9 @@ final readonly class LocalizationConfig
         $dateFormat = trim((string) ($values['dateFormat'] ?? $values['date_format'] ?? 'medium'));
         $timeFormat = trim((string) ($values['timeFormat'] ?? $values['time_format'] ?? 'short'));
         $datetimeFormat = trim((string) ($values['datetimeFormat'] ?? $values['datetime_format'] ?? 'medium'));
+        $groupingSeparator = isset($values['groupingSeparator']) || isset($values['grouping_separator'])
+            ? (string) ($values['groupingSeparator'] ?? $values['grouping_separator'])
+            : null;
 
         if ($locale === '') {
             throw ConfigurationException::invalidValue('localization', 'locale', $locale, 'must be non-empty');
@@ -79,6 +84,7 @@ final readonly class LocalizationConfig
             dateFormat: $dateFormat !== '' ? $dateFormat : 'medium',
             timeFormat: $timeFormat !== '' ? $timeFormat : 'short',
             datetimeFormat: $datetimeFormat !== '' ? $datetimeFormat : 'medium',
+            groupingSeparator: $groupingSeparator,
         );
     }
 

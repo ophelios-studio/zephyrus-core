@@ -662,6 +662,7 @@ final class ApplicationBuilder
             defaultDatePattern: $localizationConfig?->dateFormat ?? 'medium',
             defaultTimePattern: $localizationConfig?->timeFormat ?? 'short',
             defaultDatetimePattern: $localizationConfig?->datetimeFormat ?? 'medium',
+            groupingSeparator: $localizationConfig?->groupingSeparator,
         );
 
         if ($this->configuration !== null) {

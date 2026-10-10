@@ -30,6 +30,13 @@ final class FormatterExceptionTest extends TestCase
         self::assertSame($previous, $exception->getPrevious());
     }
 
+    public function testInvalidGroupingSeparatorStatesTheRules(): void
+    {
+        $message = FormatterException::invalidGroupingSeparator()->getMessage();
+        self::assertStringContainsString('at most 4 bytes', $message);
+        self::assertStringContainsString('decimal separator', $message);
+    }
+
     public function testInvalidLocale(): void
     {
         $exception = FormatterException::invalidLocale('xx_YY');

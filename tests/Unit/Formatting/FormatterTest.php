@@ -599,6 +599,96 @@ final class FormatterTest extends TestCase
         self::assertSame(['phone', 'slug'], $this->formatter->getCustomFormatterNames());
     }
 
+    public function testFrenchCanadianGroupingKeepsTheIcuDefault(): void
+    {
+        $formatter = new Formatter('fr_CA', 'CAD');
+
+        self::assertSame("1\u{00A0}234\u{00A0}567,89", $formatter->decimal(1234567.89));
+        self::assertStringContainsString("1\u{00A0}234\u{00A0}567", $formatter->money(1234567.89));
+        self::assertStringContainsString("123\u{00A0}456\u{00A0}789", $formatter->percent(1234567.89));
+    }
+
+    public function testGroupingSeparatorOptionAppliesToEveryGroupedOutput(): void
+    {
+        $narrow = "\u{202F}";
+        $formatter = new Formatter('fr_CA', 'CAD', groupingSeparator: $narrow);
+
+        self::assertSame("1{$narrow}234{$narrow}567,89", $formatter->decimal(1234567.89));
+        self::assertStringContainsString("1{$narrow}234{$narrow}567", $formatter->money(1234567.89));
+        self::assertStringContainsString("123{$narrow}456{$narrow}789", $formatter->percent(1234567.89));
+        self::assertSame("1{$narrow}234e", $formatter->ordinal(1234));
+    }
+
+    public function testOrdinalGroupingReplacementKeepsPunctuationAroundTheNumber(): void
+    {
+        $formatter = new Formatter('de_DE', groupingSeparator: "\u{202F}");
+
+        self::assertSame("1\u{202F}234\u{202F}567.", $formatter->ordinal(1234567));
+        self::assertSame('1,234th', (new Formatter('en_US'))->ordinal(1234));
+    }
+
+    public function testEmptyGroupingSeparatorDisablesGrouping(): void
+    {
+        $formatter = new Formatter('en_US', 'USD', groupingSeparator: '');
+
+        self::assertSame('1234567.89', $formatter->decimal(1234567.89));
+        self::assertSame('$1234567.89', $formatter->money(1234567.89));
+        self::assertSame('123456789%', $formatter->percent(1234567.89));
+        self::assertSame('1234th', $formatter->ordinal(1234));
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheDecimalSeparator(): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('fr_CA', groupingSeparator: ',');
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenItContainsADigit(): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: '1');
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenItContainsANonAsciiDigit(): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: "\u{0661}");
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenLongerThanFourBytes(): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: 'ABCDE');
+    }
+
+    public function testGroupingSeparatorOptionAcceptsTheFourByteBoundary(): void
+    {
+        $formatter = new Formatter('en_US', groupingSeparator: "\u{2009}'");
+
+        self::assertSame("1\u{2009}'234th", $formatter->ordinal(1234));
+    }
+
+    public function testEnglishCanadianGroupingIsUnchanged(): void
+    {
+        $formatter = new Formatter('en_CA');
+
+        self::assertSame('1,234,567.89', $formatter->decimal(1234567.89));
+    }
+
+    public function testGroupingSeparatorOptionAppliesToEveryLocale(): void
+    {
+        $thin = "\u{2009}";
+
+        $english = new Formatter('en_US', 'USD', groupingSeparator: $thin);
+        self::assertSame("1{$thin}234{$thin}567.89", $english->decimal(1234567.89));
+        self::assertStringContainsString("1{$thin}234{$thin}567", $english->money(1234567.89));
+        self::assertStringContainsString("123{$thin}456{$thin}789", $english->percent(1234567.89));
+
+        $french = new Formatter('fr_CA', 'CAD', groupingSeparator: '.');
+        self::assertSame('1.234.567,89', $french->decimal(1234567.89));
+        self::assertStringContainsString('1.234.567', $french->money(1234567.89));
+    }
+
     // ─── French Locale ────────────────────────────────────────────────
 
     // ─── Default Date/Time Patterns ─────────────────────────────────

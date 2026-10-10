@@ -36,6 +36,7 @@ final class Formatter
     private string $defaultDatePattern;
     private string $defaultTimePattern;
     private string $defaultDatetimePattern;
+    private ?string $groupingSeparator;
 
     /** @var array<string, callable> */
     private array $customFormatters = [];
@@ -56,6 +57,11 @@ final class Formatter
      *                                             ICU pattern (e.g. 'yyyy-MM-dd').
      * @param string      $defaultTimePattern      Default pattern for time().
      * @param string      $defaultDatetimePattern  Default pattern for datetime().
+     * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and
+     *                                             ordinal(). Null keeps the ICU default of the locale, '' disables
+     *                                             grouping. Otherwise at most 4 bytes, no digit, and not the
+     *                                             locale's decimal separator.
+     * @throws FormatterException if the grouping separator is not accepted.
      */
     public function __construct(
         string $locale = 'en_US',
@@ -63,12 +69,17 @@ final class Formatter
         string $defaultDatePattern = 'medium',
         string $defaultTimePattern = 'short',
         string $defaultDatetimePattern = 'medium',
+        ?string $groupingSeparator = null,
     ) {
         $this->locale = $locale;
         $this->defaultCurrency = $defaultCurrency;
         $this->defaultDatePattern = $defaultDatePattern;
         $this->defaultTimePattern = $defaultTimePattern;
         $this->defaultDatetimePattern = $defaultDatetimePattern;
+        if ($groupingSeparator !== null && $groupingSeparator !== '') {
+            $this->assertValidGroupingSeparator($groupingSeparator);
+        }
+        $this->groupingSeparator = $groupingSeparator;
     }
 
     /**
@@ -126,7 +137,7 @@ final class Formatter
      */
     public function money(float $amount, ?string $currency = null): string
     {
-        $fmt = new NumberFormatter($this->locale, NumberFormatter::CURRENCY);
+        $fmt = $this->groupedNumberFormatter(NumberFormatter::CURRENCY);
         $resolvedCurrency = $currency
             ?? $this->defaultCurrency
             ?? $fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE) ?: 'USD';
@@ -145,7 +156,7 @@ final class Formatter
      */
     public function decimal(float $value, int $precision = 2): string
     {
-        $fmt = new NumberFormatter($this->locale, NumberFormatter::DECIMAL);
+        $fmt = $this->groupedNumberFormatter(NumberFormatter::DECIMAL);
         $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, $precision);
         $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, $precision);
 
@@ -164,7 +175,7 @@ final class Formatter
      */
     public function percent(float $value, int $precision = 0): string
     {
-        $fmt = new NumberFormatter($this->locale, NumberFormatter::PERCENT);
+        $fmt = $this->groupedNumberFormatter(NumberFormatter::PERCENT);
         $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, $precision);
         $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, $precision);
 
@@ -187,7 +198,7 @@ final class Formatter
             throw FormatterException::formattingFailed('ordinal', $fmt->getErrorMessage());
         }
 
-        return $result;
+        return $this->groupingSeparator === null ? $result : $this->replaceOrdinalGrouping($result);
     }
 
     /**
@@ -441,6 +452,56 @@ final class Formatter
     }
 
     // ─── Internal Helpers ─────────────────────────────────────────────
+
+    /**
+     * NumberFormatter whose grouping separator is the configured one, if any.
+     */
+    private function groupedNumberFormatter(int $style): NumberFormatter
+    {
+        $fmt = new NumberFormatter($this->locale, $style);
+
+        if ($this->groupingSeparator !== null) {
+            $fmt->setSymbol(NumberFormatter::GROUPING_SEPARATOR_SYMBOL, $this->groupingSeparator);
+            $fmt->setSymbol(NumberFormatter::MONETARY_GROUPING_SEPARATOR_SYMBOL, $this->groupingSeparator);
+        }
+
+        return $fmt;
+    }
+
+    /**
+     * @throws FormatterException if the separator is longer than 4 bytes, has a digit, or equals the decimal separator.
+     */
+    private function assertValidGroupingSeparator(string $separator): void
+    {
+        if (strlen($separator) > 4
+            || preg_match('/\p{Nd}/u', $separator) !== 0
+            || $separator === $this->localeSymbol(NumberFormatter::DECIMAL_SEPARATOR_SYMBOL)
+        ) {
+            throw FormatterException::invalidGroupingSeparator();
+        }
+    }
+
+    /**
+     * ICU ordinal rules ignore the grouping symbol setting, so swap the locale's grouping character between digits.
+     */
+    private function replaceOrdinalGrouping(string $ordinal): string
+    {
+        $localeGrouping = $this->localeSymbol(NumberFormatter::GROUPING_SEPARATOR_SYMBOL);
+        if ($localeGrouping === '') {
+            return $ordinal;
+        }
+
+        return (string) preg_replace_callback(
+            '/(?<=\p{Nd})' . preg_quote($localeGrouping, '/') . '(?=\p{Nd})/u',
+            fn (): string => (string) $this->groupingSeparator,
+            $ordinal,
+        );
+    }
+
+    private function localeSymbol(int $symbol): string
+    {
+        return (new NumberFormatter($this->locale, NumberFormatter::DECIMAL))->getSymbol($symbol);
+    }
 
     /**
      * Find the custom formatter answering to a name: the exact registration, else the

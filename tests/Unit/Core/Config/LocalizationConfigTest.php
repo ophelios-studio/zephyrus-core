@@ -175,4 +175,25 @@ final class LocalizationConfigTest extends TestCase
         self::assertSame('short', $config->timeFormat);
         self::assertSame('medium', $config->datetimeFormat);
     }
+
+    public function testFromArrayGroupingSeparatorIsNullByDefault(): void
+    {
+        self::assertNull(LocalizationConfig::fromArray([])->groupingSeparator);
+    }
+
+    public function testFromArrayGroupingSeparatorAcceptsCamelAndSnakeCaseKeys(): void
+    {
+        self::assertSame("\u{202F}", LocalizationConfig::fromArray(['groupingSeparator' => "\u{202F}"])->groupingSeparator);
+        self::assertSame("\u{202F}", LocalizationConfig::fromArray(['grouping_separator' => "\u{202F}"])->groupingSeparator);
+    }
+
+    public function testFromArrayEmptyGroupingSeparatorIsKeptToDisableGrouping(): void
+    {
+        self::assertSame('', LocalizationConfig::fromArray(['grouping_separator' => ''])->groupingSeparator);
+    }
+
+    public function testFromArrayGroupingSeparatorIsNotTrimmed(): void
+    {
+        self::assertSame(' ', LocalizationConfig::fromArray(['grouping_separator' => ' '])->groupingSeparator);
+    }
 }
