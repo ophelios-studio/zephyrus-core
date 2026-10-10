@@ -193,7 +193,7 @@ final class Mailer
      * @param string      $path        Path to the file. Absolute is strongly preferred; a
      *                                 relative path still resolves against the working
      *                                 directory, which is rarely what a caller means.
-     * @param string      $name        Display name (default: original filename). May not
+     * @param string      $name        Display name (default: original filename, checked the same way). May not
      *                                 contain a NUL byte, a line break, a path separator or "=?",
      *                                 exceed 255 bytes, have surrounding spaces, nor be blank,
      *                                 "0", "." or "..", nor end with a dot: it lands in a MIME
@@ -215,9 +215,10 @@ final class Mailer
             throw MailerException::attachmentRejected('path', $path, 'is a stream wrapper, not a local file');
         }
 
-        if ($name !== '') {
-            $this->assertDisplayName($name, false);
-        }
+        $this->assertDisplayName(
+            $name !== '' ? $name : basename($path),
+            false,
+        );
 
         if (!is_file($path)) {
             throw MailerException::attachmentNotFound($path);

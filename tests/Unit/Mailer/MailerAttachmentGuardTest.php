@@ -257,6 +257,31 @@ final class MailerAttachmentGuardTest extends TestCase
         self::assertCount(1, $mailer->getPhpMailer()->getAttachments());
     }
 
+    public static function unusableFileNameProvider(): iterable
+    {
+        yield 'encoded word' => ['=?utf-8?Q?evil.exe?='];
+        yield 'trailing dot' => ['report.'];
+        yield 'leading space' => [' invoice.pdf'];
+    }
+
+    #[DataProvider('unusableFileNameProvider')]
+    public function testAnUnusableFileNameIsRefusedWhenNoDisplayNameIsGiven(string $fileName): void
+    {
+        $path = $this->root . '/' . $fileName;
+        file_put_contents($path, 'payload');
+
+        try {
+            $mailer = new Mailer($this->config);
+
+            $this->expectException(MailerException::class);
+            $this->expectExceptionMessage('Attachment rejected: display name');
+
+            $mailer->attach($path);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function testAMissingFileStillReportsItAsMissing(): void
     {
         $mailer = new Mailer($this->config);
