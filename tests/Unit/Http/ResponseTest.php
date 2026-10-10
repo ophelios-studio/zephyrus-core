@@ -677,6 +677,16 @@ final class ResponseTest extends TestCase
         Response::redirect('/home' . $value);
     }
 
+    public function testRedirectRefusalPointsToPercentEncodingAndLocalRedirect(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(
+            'Invalid redirect URL: it contains a control character; percent-encode it, or use localRedirect() for request input.',
+        );
+
+        Response::redirect("/home\r\nSet-Cookie: s=1");
+    }
+
     public function testWithHeadersNamesTheHeaderWhenTheValueIsNotAString(): void
     {
         $this->expectException(InvalidArgumentException::class);

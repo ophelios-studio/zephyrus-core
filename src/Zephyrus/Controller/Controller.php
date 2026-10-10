@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Controller;
 
+use InvalidArgumentException;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Validation\ErrorBag;
@@ -91,6 +92,8 @@ abstract class Controller implements ControllerLifecycleInterface
 
     /**
      * Returns a redirect response. Never pass user input here: see localRedirect().
+     *
+     * @throws InvalidArgumentException When $url holds a control character other than HTAB.
      */
     protected function redirect(string $url, int $status = 302): Response
     {

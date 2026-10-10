@@ -117,7 +117,12 @@ final readonly class Response
      */
     public static function redirect(string $url, int $status = 302): self
     {
-        self::assertValidHeaderValue('location', $url);
+        if (!self::isValidHeaderValue($url)) {
+            throw new InvalidArgumentException(
+                'Invalid redirect URL: it contains a control character; percent-encode it, or use localRedirect() '
+                . 'for request input.',
+            );
+        }
 
         return new self(body: '', status: $status, headers: ['location' => $url]);
     }
