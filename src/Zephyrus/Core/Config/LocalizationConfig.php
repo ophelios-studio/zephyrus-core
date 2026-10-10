@@ -16,6 +16,7 @@ namespace Zephyrus\Core\Config;
  * - timeFormat: default ICU pattern or preset for Formatter::time() (default 'short').
  * - datetimeFormat: default ICU pattern or preset for Formatter::datetime() (default 'medium').
  * - groupingSeparator: thousands separator for money/decimal/percent/ordinal (null keeps the locale default, '' disables grouping).
+ *   At most 4 bytes, valid UTF-8, no digit or control character.
  */
 final readonly class LocalizationConfig
 {
@@ -53,9 +54,7 @@ final readonly class LocalizationConfig
         $dateFormat = trim((string) ($values['dateFormat'] ?? $values['date_format'] ?? 'medium'));
         $timeFormat = trim((string) ($values['timeFormat'] ?? $values['time_format'] ?? 'short'));
         $datetimeFormat = trim((string) ($values['datetimeFormat'] ?? $values['datetime_format'] ?? 'medium'));
-        $groupingSeparator = isset($values['groupingSeparator']) || isset($values['grouping_separator'])
-            ? (string) ($values['groupingSeparator'] ?? $values['grouping_separator'])
-            : null;
+        $groupingSeparator = self::resolveGroupingSeparator($values['groupingSeparator'] ?? $values['grouping_separator'] ?? null);
 
         if ($locale === '') {
             throw ConfigurationException::invalidValue('localization', 'locale', $locale, 'must be non-empty');
@@ -86,6 +85,38 @@ final readonly class LocalizationConfig
             datetimeFormat: $datetimeFormat !== '' ? $datetimeFormat : 'medium',
             groupingSeparator: $groupingSeparator,
         );
+    }
+
+    /**
+     * Validate the grouping separator. The locale-dependent checks run in Formatter.
+     *
+     * @throws ConfigurationException if the value is not a string of at most 4 bytes that is valid UTF-8
+     *         and has no digit or control character.
+     */
+    private static function resolveGroupingSeparator(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (!is_string($value)) {
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', get_debug_type($value), 'must be a string');
+        }
+
+        $display = addcslashes($value, "\x00..\x1F\x7F");
+        if (strlen($value) > 4) {
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must be at most 4 bytes');
+        }
+
+        if (preg_match('//u', $value) !== 1) {
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must be valid UTF-8');
+        }
+
+        if (preg_match('/[\p{Nd}\p{Cc}]/u', $value) === 1) {
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must not contain a digit or control character');
+        }
+
+        return $value;
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\LocalizationConfig;
@@ -195,5 +196,57 @@ final class LocalizationConfigTest extends TestCase
     public function testFromArrayGroupingSeparatorIsNotTrimmed(): void
     {
         self::assertSame(' ', LocalizationConfig::fromArray(['grouping_separator' => ' '])->groupingSeparator);
+    }
+
+    public function testFromArrayRefusesAGroupingSeparatorThatIsNotAString(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'grouping_separator'");
+
+        LocalizationConfig::fromArray(['grouping_separator' => ['x']]);
+    }
+
+    public function testFromArrayRefusesAGroupingSeparatorOverFourBytes(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        LocalizationConfig::fromArray(['grouping_separator' => 'ABCDE']);
+    }
+
+    public function testFromArrayAcceptsAGroupingSeparatorOfFourBytes(): void
+    {
+        self::assertSame("\u{2009}'", LocalizationConfig::fromArray(['grouping_separator' => "\u{2009}'"])->groupingSeparator);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unsafeGroupingSeparators(): iterable
+    {
+        yield 'digit' => ['1'];
+        yield 'arabic-indic digit' => ["\u{0661}"];
+        yield 'NUL' => ["\0"];
+        yield 'tab' => ["\t"];
+        yield 'line feed' => ["\n"];
+        yield 'invalid UTF-8' => ["\xC3\x28"];
+    }
+
+    #[DataProvider('unsafeGroupingSeparators')]
+    public function testFromArrayRefusesAGroupingSeparatorWithADigitControlCharacterOrInvalidUtf8(string $separator): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        LocalizationConfig::fromArray(['grouping_separator' => $separator]);
+    }
+
+    public function testTheRefusalMessageDoesNotEchoAControlCharacter(): void
+    {
+        try {
+            LocalizationConfig::fromArray(['grouping_separator' => "A\0B"]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringNotContainsString("\0", $exception->getMessage());
+            self::assertStringContainsString('A\\000B', $exception->getMessage());
+        }
     }
 }
