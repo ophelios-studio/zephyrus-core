@@ -15,22 +15,10 @@ use Zephyrus\Security\CsrfMiddleware;
 use Zephyrus\Security\CsrfTokenManagerInterface;
 
 /**
- * A leading "//" used to desync the path from the route that dispatched.
- *
- * The path was parsed twice from two different strings. Request built a FULL
- * url and parsed that, so uri()->path() kept "//x/admin/secret". The router
- * parsed the BARE path, where parse_url reads a leading "//token" as an
- * AUTHORITY, so it saw "/admin/secret" and dispatched it. The request therefore
- * executed one route while every path-based check inspected another.
- *
- * Measured against the pre-fix code through the real kernel:
- *
- *   GET  //x/admin/secret        -> 200, body "SECRET REACHED"
- *   POST //webhooks/account/close, no token -> 200, account closed
- *
- * The second is a live CSRF bypass: the unanchored exclusion #/webhooks/#
- * matched the raw path and skipped the token check while the router dispatched
- * the protected /account/close.
+ * Routing, path-based checks (guards, CSRF exclusions) and uri()->path() must
+ * all read the same canonical path, so a request cannot dispatch one route
+ * while the checks inspect another. parse_url() reads a leading "//x" as an
+ * authority, so leading slashes are collapsed before anything reads the path.
  */
 final class RequestPathCanonicalizationTest extends TestCase
 {
@@ -63,23 +51,19 @@ final class RequestPathCanonicalizationTest extends TestCase
         return KernelBuilder::create()->withRouter($router)->build();
     }
 
-    // -- The exploit ----------------------------------------------------------
+    // -- Leading double slash -------------------------------------------------
 
     public function testDoubleSlashPrefixNoLongerReachesTheProtectedRoute(): void
     {
         $request = $this->request('//x/admin/secret');
         $response = $this->routerKernel()->handle($request);
 
-        // Pre-fix this returned 200 "SECRET REACHED".
         self::assertNotSame('SECRET REACHED', trim($response->body));
         self::assertSame('X-ADMIN-SECRET', trim($response->body), 'it dispatches what its path says');
         self::assertSame('/x/admin/secret', $request->path());
     }
 
-    /**
-     * The guard is the reason this mattered: it inspected a path the router
-     * never used, so it returned false and let the request through.
-     */
+    /** A guard sees the path the router dispatches. */
     public function testAPathGuardNowSeesTheRouteThatWillDispatch(): void
     {
         foreach (['//admin', '//x/admin/secret', '/admin/secret'] as $target) {
@@ -91,20 +75,15 @@ final class RequestPathCanonicalizationTest extends TestCase
             self::assertSame($guardSees, $dispatches, $target);
         }
 
-        // Specifically: "//admin" now resolves to "/admin", so a guard blocks
-        // it. Pre-fix the guard saw "//admin" and waved it through.
+        // "//admin" resolves to "/admin", so a guard blocks it.
         self::assertTrue(str_starts_with($this->request('//admin')->path(), '/admin'));
     }
 
     public function testCsrfExclusionCannotBeBypassedWithADoubleSlashPrefix(): void
     {
-        // The unanchored shape this used to exercise, "#/webhooks/#", is now
-        // refused by CsrfConfig outright, so the pattern here is the anchored
-        // one an application can actually configure. What is still being
-        // proven is the OTHER half of the defence: the exclusion is keyed on
-        // the canonical path, so "//webhooks/account/close" (where "webhooks"
-        // is an authority, not a path segment) resolves to "/account/close"
-        // and never reaches the exemption.
+        // Exclusions must be anchored (CsrfConfig rejects others). The exemption matches
+        // the canonical /webhooks/account/close, which is also the path the router
+        // dispatches, so the protected /account/close is never reached.
         $kernel = KernelBuilder::create()
             ->withRouter((new Router())->post('/account/close', PathCanonController::class . '@close'))
             ->withMiddleware(new CsrfMiddleware(
@@ -115,7 +94,6 @@ final class RequestPathCanonicalizationTest extends TestCase
 
         $bypass = $kernel->handle($this->request('//webhooks/account/close', 'POST'));
 
-        // Pre-fix: 200 and the account was closed with no token.
         self::assertNotSame(200, $bypass->status);
         self::assertStringNotContainsString('ACCOUNT CLOSED', $bypass->body);
     }
@@ -134,7 +112,7 @@ final class RequestPathCanonicalizationTest extends TestCase
             ))
             ->build();
 
-        // Non-breakage: the exclusion still works for the real path.
+        // The exclusion still applies to the real path.
         $excluded = $kernel->handle($this->request('/webhooks/stripe', 'POST'));
         self::assertSame(200, $excluded->status);
 
@@ -156,7 +134,7 @@ final class RequestPathCanonicalizationTest extends TestCase
             'triple slash'             => ['///x/admin', '/x/admin'],
             'bare double slash'        => ['//', '/'],
             'double slash with query'  => ['//x/admin?q=1', '/x/admin'],
-            // Unchanged shapes: the non-breakage proof.
+            // Already canonical: unchanged.
             'ordinary path'            => ['/admin/secret', '/admin/secret'],
             'root'                     => ['/', '/'],
             'trailing slash'           => ['/users/', '/users/'],
@@ -172,8 +150,7 @@ final class RequestPathCanonicalizationTest extends TestCase
         $path = $this->request($target)->path();
 
         self::assertSame($expected, $path);
-        // "///x/admin" produced parse_url false and "//admin" produced null;
-        // both used to be cast to "" and silently became the root.
+        // A failed parse must not become an empty path, which would mean the root.
         self::assertNotSame('', $path);
     }
 
@@ -182,11 +159,11 @@ final class RequestPathCanonicalizationTest extends TestCase
     {
         $request = $this->request($target);
 
-        // The whole defect was these two disagreeing.
+        // Both paths must agree.
         self::assertSame($request->uri()->path(), $request->path(), $target);
     }
 
-    // -- Non-breakage on real routing ----------------------------------------
+    // -- Routing on canonical paths -------------------------------------------
 
     public function testOrdinaryRoutingIsUnchanged(): void
     {
@@ -202,8 +179,7 @@ final class RequestPathCanonicalizationTest extends TestCase
 
     public function testFromArrayCanonicalisesTheSameWayAsFromGlobals(): void
     {
-        // Both entry points must agree, or a test would pass while production
-        // stayed vulnerable.
+        // Both entry points must agree.
         self::assertSame(
             $this->request('//x/admin/secret')->path(),
             Request::fromArray('GET', '//x/admin/secret')->path(),
@@ -213,8 +189,7 @@ final class RequestPathCanonicalizationTest extends TestCase
 
     public function testAbsoluteFormTargetsAreLeftAlone(): void
     {
-        // An ordinary absolute URL has nothing to collapse, and the "//" that
-        // separates the scheme from the authority must survive untouched.
+        // Nothing to collapse here: the "//" after the scheme must survive.
         $request = Request::fromArray('GET', 'http://example.com/admin/secret');
 
         self::assertSame('/admin/secret', $request->path());
@@ -241,14 +216,7 @@ final class RequestPathCanonicalizationTest extends TestCase
         ];
     }
 
-    /**
-     * The residual inconsistency: fromArray() given a FULL URL skipped
-     * canonicalisation, so uri()->path() reported "//x/admin/secret" while
-     * path() reported "/x/admin/secret". Production was never affected, but two
-     * construction paths disagreeing about the same request is the exact shape
-     * of the original bug, and a consumer test built this way could appear to
-     * demonstrate a vulnerability that does not exist.
-     */
+    /** fromArray() given an absolute URL canonicalises the path like the other entry points. */
     #[DataProvider('absoluteUrlProvider')]
     public function testAbsoluteUrlsAreCanonicalizedToo(string $url, string $expected): void
     {
@@ -274,11 +242,7 @@ final class RequestPathCanonicalizationTest extends TestCase
         ];
     }
 
-    /**
-     * All three ways of building the same request must produce the same path:
-     * fromGlobals, fromArray with an origin-form target, and fromArray with the
-     * equivalent absolute URL.
-     */
+    /** fromGlobals, fromArray with an origin-form target and fromArray with the equivalent absolute URL agree. */
     #[DataProvider('equivalentTargetProvider')]
     public function testAllThreeConstructionPathsAgree(string $target): void
     {
@@ -315,7 +279,7 @@ final class RequestPathCanonicalizationTest extends TestCase
 
     public function testAHandRolledRequestIsCanonicalizedByTheConstructor(): void
     {
-        // The last construction path: bypassing both named constructors.
+        // Direct construction, bypassing both named constructors.
         $request = new Request(method: 'GET', uri: new \Zephyrus\Http\Uri('https://h//x/admin/secret'));
 
         self::assertSame('/x/admin/secret', $request->path());

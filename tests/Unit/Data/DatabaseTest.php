@@ -67,9 +67,7 @@ final class DatabaseTest extends TestCase
 
     public function testFromConfigAlwaysPinsEmulatePreparesOff(): void
     {
-        // Not "absent", PINNED. The key must be present and false in the options
-        // the factory receives, because that array is exactly what drives the real
-        // PDO at connect time and an absent key leaves the decision to the driver.
+        // The key must be present and false: an absent key leaves the choice to the driver.
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'app',
@@ -91,11 +89,8 @@ final class DatabaseTest extends TestCase
     }
 
     /**
-     * The connect-time option only covers the connection fromConfig() opens.
-     * A $pdoFactory is free to ignore the options it is handed and build its own
-     * PDO with emulation on, so the constructor re-asserts the attribute on every
-     * connection that reaches it. Without that, the factory is a documented hole
-     * straight back to client-side interpolation.
+     * The constructor re-asserts native prepares, so a factory that ignores $options
+     * cannot bring back emulation.
      */
     public function testAPdoFactoryCannotReintroduceEmulatedPrepares(): void
     {
@@ -109,7 +104,7 @@ final class DatabaseTest extends TestCase
         Database::fromConfig(
             $config,
             function (string $dsn, string $username, string $password, array $options) use (&$spy): PDO {
-                // Deliberately DISCARDS $options and asks for emulation.
+                // Ignores $options on purpose and requests emulation.
                 $spy = new AttributeSpyPdo('sqlite::memory:');
 
                 return $spy;
@@ -120,11 +115,7 @@ final class DatabaseTest extends TestCase
         self::assertSame(false, end($spy->emulateSettings), 'the last word must be false');
     }
 
-    /**
-     * Same guarantee for the other door: a pre-built PDO injected through the
-     * constructor. Testability was never meant to be an escape hatch out of the
-     * connection's security posture.
-     */
+    /** A pre-built PDO passed to the constructor is also forced onto native prepares. */
     public function testAnInjectedPdoIsForcedOntoNativePrepares(): void
     {
         $spy = new AttributeSpyPdo('sqlite::memory:');
@@ -137,10 +128,8 @@ final class DatabaseTest extends TestCase
 
     public function testTrickyParametersStillRoundTripOnNativePrepares(): void
     {
-        // Kept from the emulated-prepares era, and still worth having: an integer
-        // LIMIT, a typed WHERE int_col = ? comparison and a NULL bound value are
-        // the three shapes a prepare-mode change is most likely to move, so they
-        // are exercised end to end through fromConfig() on the pinned setting.
+        // Integer LIMIT, typed WHERE and NULL bindings are the shapes a prepare-mode
+        // change moves most, so they run end to end through fromConfig().
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'app',
@@ -165,7 +154,7 @@ final class DatabaseTest extends TestCase
         $db->execute('INSERT INTO items (id, qty, note) VALUES (?, ?, ?)', [2, 20, 'second']);
         $db->execute('INSERT INTO items (id, qty, note) VALUES (?, ?, ?)', [3, 30, null]);
 
-        // (a) integer LIMIT ? — must be treated as an integer, not a string.
+        // (a) integer LIMIT ?: bound as an integer, not a string.
         $limited = $db->select('SELECT id FROM items ORDER BY id LIMIT ?', [2]);
         self::assertCount(2, $limited);
         self::assertSame([1, 2], array_map(static fn ($r): int => (int) $r->id, $limited));
@@ -176,8 +165,7 @@ final class DatabaseTest extends TestCase
         self::assertSame(2, (int) $exact->id);
         self::assertSame(20, (int) $exact->qty);
 
-        // (c) NULL parameter — the row with a NULL note must match IS NULL,
-        //     and a NULL-bound equality must NOT spuriously match rows.
+        // (c) NULL parameter: IS ? matches the NULL note, and = ? matches no row.
         $nullNotes = $db->select('SELECT id FROM items WHERE note IS ? ORDER BY id', [null]);
         self::assertCount(1, $nullNotes);
         self::assertSame(3, (int) $nullNotes[0]->id);
@@ -190,11 +178,8 @@ final class DatabaseTest extends TestCase
 
     public function testFromConfigOmitsSslParametersByDefault(): void
     {
-        // The regression that matters: with neither key configured the DSN must
-        // be byte-for-byte the string every existing application already
-        // connects with, so libpq keeps its own 'prefer' default and nothing
-        // about an untouched deployment changes. The literal is spelled out
-        // rather than composed, so any accidental addition fails here.
+        // With neither key configured the DSN stays byte-for-byte what existing
+        // deployments use, so libpq keeps its own 'prefer' default.
         $config = DatabaseConfig::fromArray([
             'host' => 'db.internal',
             'port' => 5433,
@@ -212,9 +197,7 @@ final class DatabaseTest extends TestCase
 
     public function testFromConfigOmitsSslParametersForBlankConfiguredValues(): void
     {
-        // An environment variable that exists but is empty (a cleared Fly
-        // secret, an unset !env with no default) must land on the untouched DSN
-        // too, never on a malformed 'sslmode=' with nothing after it.
+        // An empty value yields the untouched DSN, never a malformed 'sslmode='.
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'app',
@@ -274,9 +257,7 @@ final class DatabaseTest extends TestCase
 
     public function testFromConfigAppendsSslRootCertIndependentlyOfTheMode(): void
     {
-        // A configured trust anchor is never silently dropped: libpq simply
-        // ignores it under a non-verifying mode, which is a better outcome than
-        // the framework deciding the operator did not mean it.
+        // A configured root cert is kept even under a non-verifying mode, where libpq ignores it.
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'app',
@@ -291,8 +272,7 @@ final class DatabaseTest extends TestCase
 
     public function testSslDsnParametersCarryNoCredentials(): void
     {
-        // The DSN is the shared column shape cache key and is echoed in
-        // connection-failure messages, so it must stay free of the password.
+        // The DSN is echoed in failure messages and used as a cache key, so it must not carry the password.
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'zephyrus_app_role',
@@ -307,10 +287,7 @@ final class DatabaseTest extends TestCase
         self::assertStringNotContainsString('zephyrus_app_role', $dsn);
     }
 
-    /**
-     * Open a connection through the injected factory purely to read back the
-     * DSN it was handed, with no real database involved.
-     */
+    /** Returns the DSN handed to the injected factory, without touching a real database. */
     private function captureDsn(DatabaseConfig $config): string
     {
         $captured = '';
@@ -1021,20 +998,16 @@ final class DatabaseTest extends TestCase
 }
 
 /**
- * A PDO that records every PDO::ATTR_EMULATE_PREPARES decision made about it,
- * both the driver option it was constructed with and every subsequent
- * setAttribute() call, while behaving as a normal (SQLite-backed) connection so
- * bound-parameter queries actually execute.
+ * A SQLite PDO that records every PDO::ATTR_EMULATE_PREPARES value it is given,
+ * from the constructor option or from setAttribute().
  *
- * Recording setAttribute() is the point: pdo_sqlite does not implement the
- * attribute, so getAttribute() would throw and the enforcement could not be
- * observed from the outside on the connection the tests actually use.
+ * pdo_sqlite does not implement the attribute, so getAttribute() cannot read it back.
  */
 final class AttributeSpyPdo extends PDO
 {
     public bool $constructorEmulateOption = false;
 
-    /** @var list<bool> every value passed to setAttribute(ATTR_EMULATE_PREPARES), in order */
+    /** @var list<bool> ATTR_EMULATE_PREPARES values passed to setAttribute(), in order */
     public array $emulateSettings = [];
 
     /**
@@ -1052,9 +1025,7 @@ final class AttributeSpyPdo extends PDO
         if ($attribute === PDO::ATTR_EMULATE_PREPARES) {
             $this->emulateSettings[] = (bool) $value;
 
-            // Swallowed rather than forwarded: pdo_sqlite answers false for an
-            // attribute it does not implement, and the parent's return value is
-            // what Database's constructor would see.
+            // Not forwarded: pdo_sqlite does not implement the attribute.
             return true;
         }
 

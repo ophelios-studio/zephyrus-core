@@ -19,13 +19,8 @@ use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
 
 /**
- * ExceptionEvent is the reporting seam that replaces the catch block a global
- * middleware used to be able to rely on.
- *
- * Since error conversion moved inside the global pipeline, $next() RETURNS a
- * 500 instead of letting the throwable propagate, so a "catch, report, rethrow"
- * middleware would go quiet with nothing to show it had. These tests pin the
- * seam, and pin that adding it changed nothing for anyone not using it.
+ * ExceptionEvent is observation only: reporters see the error that the pipeline
+ * converts into a 500, and cannot change the response.
  */
 final class HttpKernelExceptionEventTest extends TestCase
 {
@@ -33,12 +28,7 @@ final class HttpKernelExceptionEventTest extends TestCase
 
     private string $previousErrorLog = '';
 
-    /**
-     * Several cases below register a reporter that throws on purpose, and the
-     * kernel logs every listener failure. Route that to a file so the suite's
-     * stderr stays readable; HttpKernelListenerFailureLoggingTest is what
-     * asserts the content.
-     */
+    /** Sends listener failures to a temp file so the suite's stderr stays readable. */
     protected function setUp(): void
     {
         $this->errorLogFile = (string) tempnam(sys_get_temp_dir(), 'zephyrus-kernel-events-');
@@ -53,15 +43,11 @@ final class HttpKernelExceptionEventTest extends TestCase
         @unlink($this->errorLogFile);
     }
 
-    // -- David's condition: opting into nothing must change nothing ----------
+    // -- Opting into nothing must change nothing ----------------------------
 
     /**
-     * The non-breakage proof. Builds the same kernel three ways (no dispatcher
-     * at all, a dispatcher with unrelated listeners, and a dispatcher with an
-     * ExceptionEvent listener) and asserts the RESPONSE is identical across all
-     * of them on every error path.
-     *
-     * If firing the event ever influenced the response, this fails.
+     * The response is identical with no dispatcher, with unrelated listeners and
+     * with an ExceptionEvent listener, on every error path.
      */
     public function testResponsesAreIdenticalWhetherOrNotAListenerIsRegistered(): void
     {
@@ -114,8 +100,7 @@ final class HttpKernelExceptionEventTest extends TestCase
 
     public function testKernelWithoutEventDispatcherStillHandlesErrors(): void
     {
-        // Mirrors how RequestEvent / ResponseEvent treat a null dispatcher:
-        // the kernel simply does not fire, and nothing else changes.
+        // A null dispatcher fires nothing, as with RequestEvent and ResponseEvent.
         $kernel = $this->buildKernel(null);
 
         self::assertSame(404, $kernel->handle(Request::fromArray('GET', '/missing'))->status);
@@ -191,9 +176,8 @@ final class HttpKernelExceptionEventTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/missing'));
 
         self::assertSame(500, $response->status);
-        // Two DIFFERENT throwables, so two events: the original routing failure,
-        // then the responder's own failure. A broken error template is visible
-        // rather than swallowed.
+        // Two throwables, two events: the routing failure, then the responder's own
+        // failure, so a broken error template is not swallowed.
         self::assertCount(2, $seen);
         self::assertSame(ExceptionEvent::SOURCE_ROUTING, $seen[0]['source']);
         self::assertSame(ExceptionEvent::SOURCE_RESPONDER, $seen[1]['source']);
@@ -226,8 +210,7 @@ final class HttpKernelExceptionEventTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/missing'));
 
         self::assertSame(500, $response->status);
-        // The throwing middleware runs once and the backstop reports once. If
-        // the backstop re-entered the pipeline both counts would climb.
+        // A backstop that re-entered the pipeline would make both counts climb.
         self::assertSame(1, $middleware->calls);
         self::assertCount(1, $seen);
     }
@@ -250,8 +233,7 @@ final class HttpKernelExceptionEventTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/boom'));
 
         self::assertSame(500, $response->status);
-        // And the response is still fully decorated: a broken reporter costs
-        // the response nothing at all.
+        // A broken reporter does not touch the response headers.
         self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
         self::assertSame('nosniff', $response->headers['x-content-type-options']);
     }
@@ -276,20 +258,9 @@ final class HttpKernelExceptionEventTest extends TestCase
     }
 
     /**
-     * Reporters registered together are INDEPENDENT.
+     * A throwing reporter must not suppress the reporters registered after it.
      *
-     * This test used to pin the opposite, and said so: EventDispatcher had no
-     * per-listener isolation, the kernel's guard caught the first throw, and
-     * the remaining listeners for that event never ran. Pinning it was honest
-     * about the code, but the behaviour it described was a security defect
-     * rather than a design choice. fireExceptionEvent() is the seam whose whole
-     * purpose is to make failures visible, so one broken reporter silently
-     * suppressing an audit reporter behind it is the worst possible place for
-     * that to happen. EventDispatcher::dispatch() now takes a per-listener
-     * error handler and the kernel passes one, so the assertion is inverted.
-     *
-     * What did NOT change, and is asserted alongside: nothing a listener throws
-     * can influence the response, and the next request is unaffected.
+     * Nothing a listener throws changes the response, and the next request is unaffected.
      */
     public function testAThrowingListenerNoLongerCancelsTheRemainingListeners(): void
     {
@@ -308,12 +279,10 @@ final class HttpKernelExceptionEventTest extends TestCase
         $kernel->handle(Request::fromArray('GET', '/boom'));
         $kernel->handle(Request::fromArray('GET', '/boom'));
 
-        // Once per request, both times: the failing high-priority reporter no
-        // longer cancels the low-priority one.
+        // The low-priority reporter runs on each request.
         self::assertSame(2, $reached);
 
-        // Still guaranteed: the kernel keeps producing correct responses, and
-        // the isolation holds on every subsequent request too.
+        // Isolation holds on subsequent requests too.
         self::assertSame(500, $kernel->handle(Request::fromArray('GET', '/boom'))->status);
         self::assertSame(3, $reached);
     }
@@ -322,9 +291,8 @@ final class HttpKernelExceptionEventTest extends TestCase
 
     public function testListenerHasNoWayToReplaceTheResponse(): void
     {
-        // Observation only, by design: replacement already exists via
-        // withExceptionHandler() and ResponseEvent. Pinned so nobody adds a
-        // setResponse() to this event without deciding precedence first.
+        // Replacement belongs to withExceptionHandler() and ResponseEvent; a
+        // setResponse() here would first need a precedence decision.
         self::assertFalse(
             method_exists(ExceptionEvent::class, 'setResponse'),
             'ExceptionEvent must stay observation-only',

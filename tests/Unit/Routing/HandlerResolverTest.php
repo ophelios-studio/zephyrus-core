@@ -21,7 +21,7 @@ use Zephyrus\Routing\RouteMatch;
 // ---------------------------------------------------------------------------
 
 /**
- * A plain POPO controller (no base class) — resolver should work regardless.
+ * A plain controller with no base class.
  */
 final class PlainHandlerController
 {
@@ -95,7 +95,7 @@ final class PlainHandlerController
         return Response::text($dt->format('Y'));
     }
 
-    /** No type annotation — castToType must return the raw value (L175). */
+    /** No type annotation: the raw value is returned. */
     public function withUntypedParam($value): Response
     {
         return Response::text((string) $value);
@@ -178,8 +178,8 @@ final class NonInstantiableController
 }
 
 /**
- * A controller with a method whose parameter cannot be resolved.
- * (Not Request-typed, has no matching attribute, and no default.)
+ * A controller with a method whose parameter cannot be resolved: not Request-typed,
+ * no matching attribute and no default.
  */
 final class UnresolvableParamController
 {
@@ -256,9 +256,9 @@ final class BothLifecycleController extends Controller
 }
 
 /**
- * Serves BOTH /policies/{type} and /policies/{type}/{productId} from one
- * method, which is the shape that broke: on the shorter route $productId must
- * be its declared default, never whatever a middleware last put on the request.
+ * Serves /policies/{type} and /policies/{type}/{productId} from one method. On the
+ * shorter route $productId must take its declared default, never a value a
+ * middleware published on the request.
  */
 final class OptionalTailController
 {
@@ -572,7 +572,7 @@ final class HandlerResolverTest extends TestCase
 
         $match = $this->makeMatch('GET', '/', UnresolvableParamController::class . '@act');
 
-        // Request has no 'missing' attribute and method has no default → must throw.
+        // No 'missing' attribute and no default: must throw.
         $this->resolver->resolve($match, Request::fromArray('GET', '/'));
     }
 
@@ -593,7 +593,7 @@ final class HandlerResolverTest extends TestCase
 
     public function testPlainPopoControllerHasNoLifecycleHooks(): void
     {
-        // PlainHandlerController has no before/after — resolver must not error.
+        // PlainHandlerController has no before/after: the resolver must not error.
         $match    = $this->makeMatch('GET', '/hello', PlainHandlerController::class . '@hello');
         $response = $this->resolver->resolve($match, Request::fromArray('GET', '/hello'));
 
@@ -617,7 +617,7 @@ final class HandlerResolverTest extends TestCase
         $match    = $this->makeMatch('GET', '/act', BeforeGuardController::class . '@act');
         $response = $this->resolver->resolve($match, Request::fromArray('GET', '/act'));
 
-        // No X-Block header → before() returns null → handler runs.
+        // No X-Block header: before() returns null and the handler runs.
         self::assertSame(200, $response->status);
         self::assertSame('ok', $response->body);
     }
@@ -648,7 +648,7 @@ final class HandlerResolverTest extends TestCase
 
         $response = $this->resolver->resolve($match, $request);
 
-        // before() short-circuits → after() never decorates, no X-After header.
+        // before() short-circuits: after() does not decorate, so no X-After header.
         self::assertSame(401, $response->status);
         self::assertSame('halted', $response->body);
         self::assertArrayNotHasKey('x-after', $response->headers);
@@ -758,7 +758,7 @@ final class HandlerResolverTest extends TestCase
         );
     }
 
-    // -- union type all-fail → describeType -----------------------------------
+    // -- union type all-fail: describeType ------------------------------------
 
     public function testUnionTypeAllCastsFailThrows(): void
     {
@@ -773,7 +773,7 @@ final class HandlerResolverTest extends TestCase
         );
     }
 
-    // -- class type → default passthrough in castToNamedType ------------------
+    // -- class type: default passthrough in castToNamedType -------------------
 
     public function testClassTypeAttributePassesThroughUntouched(): void
     {
@@ -831,7 +831,7 @@ final class HandlerResolverTest extends TestCase
         self::assertStringContainsString('"id":99', $response->body);
     }
 
-    // -- castToType null-type passthrough (L175) --------------------------------
+    // -- castToType null-type passthrough ---------------------------------------
 
     public function testUntypedParamWithAttributePassesThroughRawValue(): void
     {
@@ -845,7 +845,7 @@ final class HandlerResolverTest extends TestCase
         self::assertSame('hello', $response->body);
     }
 
-    // -- toInt native-int passthrough (L228) ------------------------------------
+    // -- toInt native-int passthrough -------------------------------------------
 
     public function testIntParamWithNativeIntAttributeDoesNotCoerce(): void
     {
@@ -859,7 +859,7 @@ final class HandlerResolverTest extends TestCase
         self::assertStringContainsString('"id":7', $response->body);
     }
 
-    // -- toBool native-bool passthrough (L254) ----------------------------------
+    // -- toBool native-bool passthrough -----------------------------------------
 
     public function testBoolParamWithNativeBoolAttributeDoesNotCoerce(): void
     {
@@ -876,12 +876,8 @@ final class HandlerResolverTest extends TestCase
     // -- Positional fallback is scoped to the ROUTE parameters -----------------
 
     /**
-     * The regression. One handler serving /policies/{type} and
-     * /policies/{type}/{productId} used to receive the first attribute a global
-     * middleware had published (here a locale) as $productId, because the
-     * positional fallback ran over ALL request attributes and ran BEFORE the
-     * declared default. The value was a plausible string, so the failure
-     * surfaced far from its cause.
+     * The positional fallback draws only from route parameters, so a middleware
+     * attribute never binds $productId.
      */
     public function testOptionalTailParameterKeepsItsDefaultOnTheShorterRoute(): void
     {
@@ -923,10 +919,7 @@ final class HandlerResolverTest extends TestCase
         self::assertStringContainsString('"productId":"sku-9"', $response->body);
     }
 
-    /**
-     * With no default to fall back on there is nothing to bind, and the
-     * resolver must say so rather than hand the handler a middleware value.
-     */
+    /** With no default, the resolver must fail rather than bind a middleware value. */
     public function testMiddlewareAttributeNeverFillsAPositionalSlot(): void
     {
         $match = $this->makeMatch(
@@ -966,10 +959,7 @@ final class HandlerResolverTest extends TestCase
         self::assertSame('privacy', $response->body);
     }
 
-    /**
-     * A placeholder already bound by name is spent. It must not be offered a
-     * second time to the next unmatched parameter.
-     */
+    /** A placeholder bound by name is spent and is not offered again to a later parameter. */
     public function testRouteParameterTakenByNameIsNotOfferedAgainPositionally(): void
     {
         $match = $this->makeMatch(
@@ -1011,10 +1001,8 @@ final class HandlerResolverTest extends TestCase
     }
 
     /**
-     * End to end through the kernel, which is where the wiring that caused the
-     * bug lives: HttpKernel merges the route parameters into the attributes
-     * BEFORE the global pipeline, so a global middleware's attribute always
-     * lands right behind them.
+     * End to end through HttpKernel, which merges route parameters into the attributes before the global pipeline,
+     * so the route parameters still bind when a global middleware runs in between.
      */
     public function testKernelServesBothRoutesFromOneHandlerBehindAGlobalMiddleware(): void
     {
@@ -1089,9 +1077,8 @@ final class HandlerResolverTest extends TestCase
 
     public function testDnfTypeFallsBackToItsCompositeMemberWhenNoNamedMemberCasts(): void
     {
-        // int|(Countable&ArrayAccess): the int candidate rejects the object and
-        // the composite member carries no coercion rule, so the value must pass
-        // through rather than be reported as an unresolvable route parameter.
+        // int|(Countable&ArrayAccess): no candidate coerces the object, so it passes
+        // through rather than failing as an unresolvable parameter.
         $match = $this->makeMatch('GET', '/bags', PlainHandlerController::class . '@withIntOrIntersection');
 
         $response = $this->resolver->resolve(

@@ -11,13 +11,9 @@ use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
 
 /**
- * Integration tests for SessionManager using real PHP sessions.
+ * Integration tests for SessionManager against real PHP sessions.
  *
- * Each test that touches real session state runs in a dedicated process via
- * #[RunInSeparateProcess] so no session state leaks between tests.
- *
- * Together with SessionManagerTest (override-storage mode), these tests bring
- * SessionManager to 100% line coverage.
+ * Tests touching real session state run in a separate process, so no state leaks between them.
  */
 final class SessionManagerRealSessionTest extends TestCase
 {
@@ -25,7 +21,7 @@ final class SessionManagerRealSessionTest extends TestCase
 
     public function testIsStartedReturnsFalseWhenNoSessionStarted(): void
     {
-        // No session started, no override storage → real session_status() check.
+        // No session started and no override storage: session_status() decides.
         $session = new SessionManager();
 
         self::assertFalse($session->isStarted());
@@ -34,12 +30,7 @@ final class SessionManagerRealSessionTest extends TestCase
 
     // ── setHandler ────────────────────────────────────────────────────────────
 
-    /**
-     * PHP refuses to swap the save handler while a session is active. It warns
-     * and answers false, and the old code kept the handler anyway, so the app
-     * believed sessions went to the database while PHP kept writing them to
-     * files.
-     */
+    /** PHP refuses to swap the save handler while a session is active, and that refusal must surface. */
     #[RunInSeparateProcess]
     public function testSetHandlerThrowsWhenPhpRefusesTheHandlerBecauseASessionIsActive(): void
     {
@@ -86,9 +77,7 @@ final class SessionManagerRealSessionTest extends TestCase
     #[RunInSeparateProcess]
     public function testStartRefusesToAdoptAClientSuppliedSessionId(): void
     {
-        // PHP defaults use_strict_mode to 0, which adopts and persists whatever
-        // ID the client sends. That lets an unauthenticated caller seed session
-        // IDs at will, and it is what makes session fixation possible.
+        // PHP defaults use_strict_mode to 0, which adopts any client-supplied id (session fixation).
         $planted = bin2hex(random_bytes(16));
         session_id($planted);
 
@@ -100,10 +89,8 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     /**
-     * The framework enabling a security-relevant ini flag that silently does
-     * nothing is how this was missed the first time: PHP skips its
-     * use_strict_mode check entirely for a handler without validateId(), so the
-     * setting read as done while a client-supplied id was still adopted.
+     * PHP skips the use_strict_mode check for a handler without validateId(),
+     * so start() warns in debug when the handler cannot honour it.
      */
     #[RunInSeparateProcess]
     public function testStartWarnsInDebugWhenTheHandlerCannotHonourStrictMode(): void
@@ -161,12 +148,7 @@ final class SessionManagerRealSessionTest extends TestCase
 
     // ── the Secure cookie attribute ───────────────────────────────────────────
 
-    /**
-     * SessionConfig::fromArray([]) used to emit a session cookie with no Secure
-     * attribute at all: "PHPSESSID=...; path=/; HttpOnly; SameSite=Lax". The
-     * default is "auto" now, so an HTTPS request gets Secure without the
-     * deployment having to remember.
-     */
+    /** The default secure setting is "auto": an HTTPS request gets the Secure attribute without configuration. */
     #[RunInSeparateProcess]
     public function testStartSetsSecureWhenTheRequestArrivedOverHttps(): void
     {
@@ -211,12 +193,7 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame('', $params['domain'], 'the cookie stays host-only');
     }
 
-    /**
-     * End to end through the middleware, which is where the request's own
-     * scheme becomes the cookie attribute. Request resolved that scheme against
-     * the trusted-header allowlist, so a forwarded protocol only counts when
-     * the deployment declared the proxy that writes it.
-     */
+    /** Through the middleware: the request's own scheme decides the Secure attribute. */
     #[RunInSeparateProcess]
     public function testTheMiddlewareGivesAnHttpsRequestASecureSessionCookie(): void
     {
@@ -326,11 +303,7 @@ final class SessionManagerRealSessionTest extends TestCase
 
     // ── start refusal ─────────────────────────────────────────────────────────
 
-    /**
-     * PHP refuses to start a session once output is sent. The app would then
-     * write data that is never saved, so start() must say so, before any ini
-     * or cookie setting raises a warning of its own with absolute paths.
-     */
+    /** start() must throw once output has been sent, before any ini or cookie setting warns with file paths. */
     #[RunInSeparateProcess]
     public function testStartThrowsWithoutAWarningOnceOutputIsSent(): void
     {
@@ -417,10 +390,7 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame(PHP_SESSION_NONE, session_status());
     }
 
-    /**
-     * A closed session keeps its id while its row stays in the store. Reporting
-     * a logout as done then would leave the stored session live.
-     */
+    /** destroy() must fail when the stored session survives, since its id stays live. */
     #[RunInSeparateProcess]
     public function testDestroyThrowsWhenTheSessionIsClosedButStillHasAnId(): void
     {
@@ -457,10 +427,7 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertNotSame($before, session_id());
     }
 
-    /**
-     * Rotating nothing is not a success: a caller that regenerates after login
-     * believes the fixation defence ran, so a missing session must be loud.
-     */
+    /** Regenerating without an active session must throw, not report a rotation. */
     #[RunInSeparateProcess]
     public function testRegenerateThrowsWhenNoSessionIsActive(): void
     {
@@ -471,11 +438,7 @@ final class SessionManagerRealSessionTest extends TestCase
         $session->regenerate();
     }
 
-    /**
-     * PHP refuses to delete the old session when the save handler's destroy()
-     * returns false. The old code discarded that answer, so the caller
-     * believed the old id was gone while the handler still held it.
-     */
+    /** A false from the handler's destroy() must fail regenerate(), since PHP keeps the old session. */
     #[RunInSeparateProcess]
     public function testRegenerateThrowsWhenTheSaveHandlerRefusesToDestroyTheOldSession(): void
     {
@@ -488,10 +451,7 @@ final class SessionManagerRealSessionTest extends TestCase
         $session->regenerate(true);
     }
 
-    /**
-     * With regenerate(false) the old row is kept, so PHP writes through the
-     * handler, and a refused write is a cause the message must name.
-     */
+    /** With regenerate(false) the old row is kept and PHP writes through the handler, so a refused write must be named. */
     #[RunInSeparateProcess]
     public function testRegenerateMessageNamesAHandlerThatRefusesToWrite(): void
     {
@@ -513,11 +473,7 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertStringContainsString('output', $thrown->getMessage());
     }
 
-    /**
-     * PHP will not rotate an id once output has reached the browser, because
-     * the new id could never be sent in a cookie. The old code reported success
-     * anyway, so a login could finish with the pre-login id still live.
-     */
+    /** Regenerating after output was sent must throw: the new id could not reach the browser in a cookie. */
     #[RunInSeparateProcess]
     public function testRegenerateThrowsWhenOutputHasAlreadyBeenSent(): void
     {
@@ -538,9 +494,8 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     /**
-     * PHP's warning says why it refused, and that text must not reach the
-     * message, which travels to logs and pages. It stays on phpReason() and on
-     * the chained ErrorException a logger records.
+     * The PHP warning text stays out of the exception message, since the message reaches logs and pages;
+     * it is kept on phpReason() and the chained ErrorException.
      */
     #[RunInSeparateProcess]
     public function testRegenerateKeepsPhpReasonOffTheMessageButExposesIt(): void
@@ -566,11 +521,7 @@ final class SessionManagerRealSessionTest extends TestCase
 
     // ── destroy refusal ───────────────────────────────────────────────────────
 
-    /**
-     * A logout that reports success while the stored session survives leaves
-     * the attacker's copy of the cookie working. PHP answers false when the
-     * handler cannot destroy the data, and that answer must reach the caller.
-     */
+    /** A false from the handler's destroy() must reach the caller, or a logout leaves the stored session usable. */
     #[RunInSeparateProcess]
     public function testDestroyThrowsWhenTheSaveHandlerRefusesToDestroy(): void
     {
@@ -583,11 +534,7 @@ final class SessionManagerRealSessionTest extends TestCase
         $session->destroy();
     }
 
-    /**
-     * Sends output past every buffer level, since PHP counts the headers as
-     * sent only then, and reopens those levels: PHPUnit flags a test that
-     * closes its buffer as risky.
-     */
+    /** Flushes every output buffer so the headers count as sent, then reopens them, since PHPUnit flags tests that close a buffer. */
     private function sendOutputToBrowser(): void
     {
         $levels = ob_get_level();
@@ -602,7 +549,7 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 }
 
-/** A handler whose destroy() always fails, as a database handler can when its delete query fails. */
+/** A handler whose destroy() always fails. */
 final class DestroyRefusingHandler implements \SessionHandlerInterface
 {
     public function open(string $path, string $name): bool { return true; }
@@ -657,7 +604,7 @@ final class RecordingDestroyHandler implements \SessionHandlerInterface
     public function gc(int $maxLifetime): int|false { return 0; }
 }
 
-/** A handler whose write() always fails, as a database handler can when its update query fails. */
+/** A handler whose write() always fails. */
 final class WriteRefusingHandler implements \SessionHandlerInterface
 {
     public function open(string $path, string $name): bool { return true; }
@@ -668,7 +615,7 @@ final class WriteRefusingHandler implements \SessionHandlerInterface
     public function gc(int $maxLifetime): int|false { return 0; }
 }
 
-/** A handler whose read() always fails, as a database handler wrapper can when its database is unreachable. */
+/** A handler whose read() always fails, as when its database is unreachable. */
 final class ReadRefusingHandler implements \SessionHandlerInterface
 {
     public function open(string $path, string $name): bool { return true; }
