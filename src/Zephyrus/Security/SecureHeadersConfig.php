@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use Zephyrus\Core\Config\ConfigBoolean;
+use Zephyrus\Core\Config\ConfigurationException;
+
 /**
  * Immutable configuration for HTTP security response headers.
  *
@@ -65,6 +68,7 @@ final readonly class SecureHeadersConfig
      * Accepts camelCase and snake_case key variants; camelCase takes precedence.
      *
      * @param array<string, mixed> $values
+     * @throws ConfigurationException when hstsIncludeSubdomains is not a recognisable boolean.
      */
     public static function fromArray(array $values): self
     {
@@ -86,8 +90,10 @@ final readonly class SecureHeadersConfig
             hstsMaxAge: (int) (
                 $values['hstsMaxAge'] ?? $values['hsts_max_age'] ?? $defaults->hstsMaxAge
             ),
-            hstsIncludeSubdomains: (bool) (
-                $values['hstsIncludeSubdomains'] ?? $values['hsts_include_subdomains'] ?? $defaults->hstsIncludeSubdomains
+            hstsIncludeSubdomains: ConfigBoolean::parse(
+                'secureHeaders',
+                'hstsIncludeSubdomains',
+                $values['hstsIncludeSubdomains'] ?? $values['hsts_include_subdomains'] ?? $defaults->hstsIncludeSubdomains,
             ),
             csp: (string) ($values['csp'] ?? $defaults->csp),
             permissionsPolicy: (string) (

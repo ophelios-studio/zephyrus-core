@@ -347,4 +347,59 @@ final class SessionConfigTest extends TestCase
 
         new SessionConfig('APP', 0, true, false, 'Lax', '/', idleTimeout: 0);
     }
+
+    // -------------------------------------------------------------------------
+    // Boolean flags are read strictly
+    // -------------------------------------------------------------------------
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unreadableBooleans(): array
+    {
+        return [
+            'empty string' => [''],
+            'whitespace only' => ['   '],
+            'unknown word' => ['maybe'],
+            'int 2' => [2],
+        ];
+    }
+
+    #[DataProvider('unreadableBooleans')]
+    public function testAnUnreadableSecureValueIsRefusedInsteadOfReadAsInsecure(mixed $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SessionConfig::fromArray(['secure' => $value]);
+    }
+
+    #[DataProvider('unreadableBooleans')]
+    public function testAnUnreadableHttpOnlyValueIsRefusedInsteadOfReadAsDisabled(mixed $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SessionConfig::fromArray(['httpOnly' => $value]);
+    }
+
+    public function testSecureOffReadsAsInsecureNotAsSecure(): void
+    {
+        $config = SessionConfig::fromArray(['secure' => 'off']);
+
+        self::assertFalse($config->secureAuto);
+        self::assertFalse($config->resolveSecure(true));
+    }
+
+    public function testHttpOnlyOffReadsAsDisabled(): void
+    {
+        $config = SessionConfig::fromArray(['httpOnly' => 'off']);
+
+        self::assertFalse($config->httpOnly);
+    }
+
+    public function testHttpOnlyFalseReadsAsDisabledThroughSnakeCaseKey(): void
+    {
+        $config = SessionConfig::fromArray(['http_only' => 'false']);
+
+        self::assertFalse($config->httpOnly);
+    }
 }

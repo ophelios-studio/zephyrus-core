@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Security\SecureHeadersConfig;
 
 final class SecureHeadersConfigTest extends TestCase
@@ -161,5 +163,37 @@ final class SecureHeadersConfigTest extends TestCase
             'hstsIncludeSubdomains' => true,
         ]);
         self::assertSame('', $config->hstsHeaderValue());
+    }
+
+    public function testHstsIncludeSubdomainsOffReadsAsDisabled(): void
+    {
+        $config = SecureHeadersConfig::fromArray([
+            'hstsMaxAge'            => 31536000,
+            'hstsIncludeSubdomains' => 'off',
+        ]);
+
+        self::assertFalse($config->hstsIncludeSubdomains);
+        self::assertSame('max-age=31536000', $config->hstsHeaderValue());
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unreadableIncludeSubdomainsValues(): array
+    {
+        return [
+            'empty string' => [''],
+            'whitespace only' => ['   '],
+            'unknown word' => ['enabled'],
+            'int 2' => [2],
+        ];
+    }
+
+    #[DataProvider('unreadableIncludeSubdomainsValues')]
+    public function testAnUnreadableIncludeSubdomainsValueIsRefused(mixed $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SecureHeadersConfig::fromArray(['hstsIncludeSubdomains' => $value]);
     }
 }

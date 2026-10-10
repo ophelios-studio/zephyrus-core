@@ -12,6 +12,9 @@ final readonly class ApplicationConfig
     ) {
     }
 
+    /**
+     * @throws ConfigurationException when the debug value is not a recognisable boolean.
+     */
     public static function fromArray(array $values): self
     {
         $environment = isset($values['environment'])
@@ -22,7 +25,7 @@ final readonly class ApplicationConfig
 
         return new self(
             environment: $environment,
-            debug: filter_var($debug, FILTER_VALIDATE_BOOL),
+            debug: ConfigBoolean::parse('application', 'debug', $debug),
         );
     }
 }
