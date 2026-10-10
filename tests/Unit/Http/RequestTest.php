@@ -901,13 +901,13 @@ final class RequestTest extends TestCase
                 'HTTP_HOST'             => 'app.internal',
                 'REQUEST_URI'           => '/public',
                 'REMOTE_ADDR'           => '10.0.0.1',
-                'SERVER_PORT'           => '80',
+                'SERVER_PORT'           => '8080',
                 'HTTP_X_FORWARDED_PORT' => $port,
             ],
             trustedProxies: ['*'],
         );
 
-        self::assertSame('http://app.internal/public', $request->uri()->full());
+        self::assertSame('http://app.internal:8080/public', $request->uri()->full());
         self::assertSame('/public', $request->path());
     }
 
@@ -918,7 +918,7 @@ final class RequestTest extends TestCase
         yield 'dot segments' => ['1/../admin'];
         yield 'above the port range' => ['65536'];
         yield 'signed' => ['+80'];
-        yield 'trailing newline' => ["80\n"];
+        yield 'embedded newline' => ["80\n/admin"];
         yield 'zero' => ['0'];
         yield 'leading zeros' => ['00080'];
         yield 'leading zero on a valid port' => ['080'];
@@ -992,7 +992,7 @@ final class RequestTest extends TestCase
     }
 
     #[DataProvider('originFormTargetsWithoutLeadingSlash')]
-    public function testFromGlobalsKeepsTheHostWhenRequestTargetLacksLeadingSlash(string $target): void
+    public function testFromGlobalsKeepsTheHostWhenRequestTargetLacksLeadingSlash(string $target, string $expected): void
     {
         $request = Request::fromGlobals(
             server: [
@@ -1002,14 +1002,15 @@ final class RequestTest extends TestCase
             ],
         );
 
+        self::assertSame($expected, $request->uri()->full());
         self::assertSame('app.internal', $request->uri()->host());
     }
 
     public static function originFormTargetsWithoutLeadingSlash(): iterable
     {
-        yield 'authority injection' => ['@evil.com/admin'];
-        yield 'bare host' => ['evil.com/admin'];
-        yield 'empty target' => [''];
+        yield 'authority injection' => ['@evil.com/admin', 'http://app.internal/@evil.com/admin'];
+        yield 'bare host' => ['evil.com/admin', 'http://app.internal/evil.com/admin'];
+        yield 'empty target' => ['', 'http://app.internal/'];
     }
 
     public function testFromGlobalsBuildsHttpUri(): void
