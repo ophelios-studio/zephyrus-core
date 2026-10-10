@@ -381,7 +381,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             return false;
         }
 
-        $this->database();
+        if ($this->unavailable !== null) {
+            throw $this->unavailable;
+        }
+
         $state = $this->idStates[$id] ?? null;
 
         try {

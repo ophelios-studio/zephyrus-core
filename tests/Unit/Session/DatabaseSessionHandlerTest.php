@@ -1135,6 +1135,48 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame([], $warnings);
     }
 
+    public function testAWriteRefusedForAnUnreadIdDoesNotResolveTheDatabase(): void
+    {
+        $calls = 0;
+        $handler = $this->lazyHandler($calls);
+        $id = '43e880c2447ca10d3092d51d258c050c';
+
+        $warnings = $this->collectWarnings(function () use ($handler, $id): void {
+            self::assertFalse($handler->write($id, 'foo=bar'));
+            self::assertFalse($handler->updateTimestamp($id, 'foo=bar'));
+        });
+
+        self::assertSame(0, $calls);
+        self::assertCount(2, $warnings);
+    }
+
+    public function testAWriteForAnUnreadIdRethrowsTheStoredDatabaseFailure(): void
+    {
+        $failure = new \RuntimeException('connection refused');
+        $calls = 0;
+        $handler = new DatabaseSessionHandler(function () use ($failure, &$calls): Database {
+            $calls++;
+
+            throw $failure;
+        }, 'core.session');
+        $id = '43e880c2447ca10d3092d51d258c050c';
+
+        try {
+            $handler->gc(1440);
+            self::fail('Expected a SessionException.');
+        } catch (SessionException) {
+        }
+
+        try {
+            $handler->write($id, 'foo=bar');
+            self::fail('Expected a SessionException.');
+        } catch (SessionException $exception) {
+            self::assertSame($failure, $exception->getPrevious());
+        }
+
+        self::assertSame(1, $calls);
+    }
+
     public function testCreatedSessionWithoutDataStoresNoRow(): void
     {
         $id = '43e880c2447ca10d3092d51d258c050c';
