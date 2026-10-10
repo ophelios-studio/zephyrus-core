@@ -7,7 +7,7 @@ namespace Zephyrus\Mailer;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
- * Thrown when a mail operation fails.
+ * Thrown when a mail operation fails. Messages never contain credentials or message bodies.
  */
 final class MailerException extends ZephyrusRuntimeException
 {
@@ -40,7 +40,7 @@ final class MailerException extends ZephyrusRuntimeException
     private const string ESCAPED_CHARACTER_PATTERN = '~[\x{80}-\x{9F}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2028}\x{2029}\x{2066}-\x{2069}]~u';
 
     /**
-     * The transport did not accept the message. Its reply goes to transportMessage(), not the message, because it can name recipients.
+     * The transport did not accept the message. Its reply is only available from transportMessage().
      *
      * @param string $transportMessage The transport's own reply.
      */
@@ -55,7 +55,7 @@ final class MailerException extends ZephyrusRuntimeException
     }
 
     /**
-     * One or more recipients were refused. Its reply goes to transportMessage(), not the message, because it can name recipients.
+     * One or more recipients were refused. Its reply is only available from transportMessage().
      *
      * @param string $transportMessage The transport's own reply.
      */
@@ -70,7 +70,7 @@ final class MailerException extends ZephyrusRuntimeException
     }
 
     /**
-     * The transport's own reply, which can name recipients: scrub it before writing it to any sink.
+     * The transport's reply, which can name recipients: scrub it before logging.
      */
     public function transportMessage(): ?string
     {
@@ -93,6 +93,9 @@ final class MailerException extends ZephyrusRuntimeException
         return new self(sprintf('Invalid email address given to %s().', $method), MailerFailure::InvalidAddress);
     }
 
+    /**
+     * The attachment file does not exist.
+     */
     public static function attachmentNotFound(string $path): self
     {
         return new self(
@@ -102,14 +105,13 @@ final class MailerException extends ZephyrusRuntimeException
     }
 
     /**
-     * The attachment, its display name or its media type was refused.
-     *
-     * Separate from attachmentNotFound() on purpose: "this file is not there"
-     * and "this path is not allowed to be attached" are different answers, and
-     * a caller logging them should be able to tell them apart.
+     * The attachment, its display name, its media type or its directory was refused.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", C0 and C1 controls, DEL, U+061C, U+2028, U+2029, the bidi controls and backslashes are escaped, and values over 64 bytes are cut on a character boundary (within 3 bytes): paths keep their last 64 bytes, other values their first 64.
+     * @param string $value   The refused value, escaped for the message: invalid UTF-8 becomes "?",
+     *                        C0 controls, DEL and backslashes are C-escaped (\n, \001); C1, bidi and
+     *                        line separator characters become \u{XXXX}. Values over 64 bytes are cut
+     *                        (paths keep their end, other values their start).
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
@@ -157,6 +159,9 @@ final class MailerException extends ZephyrusRuntimeException
         ) ?? '';
     }
 
+    /**
+     * The mailer was used without the configuration it needs.
+     */
     public static function configurationMissing(string $detail): self
     {
         return new self(sprintf('Mailer configuration missing: %s', $detail), MailerFailure::ConfigurationMissing);

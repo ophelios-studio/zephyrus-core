@@ -3,10 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Zephyrus global helper functions.
- *
- * These functions provide convenient shorthand access to commonly used
- * framework features. They are autoloaded via composer.json autoload.files.
+ * Zephyrus global helper functions, autoloaded via composer.json autoload.files.
  */
 
 use Zephyrus\Core\App;
@@ -15,14 +12,12 @@ use Zephyrus\Formatting\FormatterException;
 
 if (!function_exists('env')) {
     /**
-     * Read an environment variable, with $_ENV and the process environment as sources.
+     * Read an environment variable from $_ENV or the process environment, returning $default when unset.
      *
-     * $_SERVER is never consulted: it also carries request data, so a value
-     * there is client-controlled. Refused names raise an InvalidArgumentException, see
-     * {@see \Zephyrus\Core\Config\EnvironmentVariable::read()}.
+     * $_SERVER is never consulted: it carries client-controlled request data.
+     * The strings true, false, null and empty (optionally in parentheses) are cast to their native values.
      *
-     * @param string $key     The environment variable name.
-     * @param mixed  $default Default value when the variable is not set.
+     * @throws \InvalidArgumentException for a refused variable name, see {@see \Zephyrus\Core\Config\EnvironmentVariable::read()}.
      */
     function env(string $key, mixed $default = null): mixed
     {
@@ -32,7 +27,6 @@ if (!function_exists('env')) {
             return $default;
         }
 
-        // Cast common string representations to their native types.
         return match (strtolower($value)) {
             'true', '(true)'   => true,
             'false', '(false)' => false,
@@ -45,20 +39,16 @@ if (!function_exists('env')) {
 
 if (!function_exists('config')) {
     /**
-     * Read a configuration value.
+     * Read a config section, or a dot-notation property of it.
+     * Returns $default when no configuration is set, the custom section is unknown or the property is missing.
      *
-     * When called with only a section name, returns the matching ConfigSection
-     * (or built-in config property). When called with a property, returns the
-     * value from that section using dot-notation.
-     *
-     * Built-in sections: application, session, security, localization, database.
-     * Custom sections are accessible when their factory is passed in the
-     * $sectionFactories argument of the Configuration factories (fromArray(),
-     * fromYamlFile(), fromFiles(), ...).
+     * Built-in sections are application, session, security, localization and database; custom sections
+     * need their factory in the $sectionFactories argument of the Configuration factories.
      *
      * @param string      $section  Section name (e.g. 'application', 'database', or custom).
      * @param string|null $property Dot-notation property within the section.
      * @param mixed       $default  Default value when the property is not found.
+     * @return mixed The ConfigSection (or built-in config object) when $property is null, else the property value.
      * @throws \InvalidArgumentException when $section is a spelling of a built-in section (see Configuration::section()).
      */
     function config(string $section, ?string $property = null, mixed $default = null): mixed
@@ -84,14 +74,11 @@ if (!function_exists('config')) {
             return $configSection;
         }
 
-        // ConfigSection subclasses have a generic get() method with
-        // dot-notation support.
         if ($configSection instanceof \Zephyrus\Core\Config\ConfigSection) {
             return $configSection->get($property, $default);
         }
 
-        // Built-in config classes are plain readonly objects — use direct
-        // property access.
+        // Built-in config classes are plain readonly objects, read by property.
         if (property_exists($configSection, $property)) {
             return $configSection->$property;
         }
@@ -102,13 +89,9 @@ if (!function_exists('config')) {
 
 if (!function_exists('session')) {
     /**
-     * Read or write session values.
+     * Read a session value, or set several at once from an array (returning null). Without a session, reads return $default and writes are ignored.
      *
-     * When called with a string key, returns the session value (or default).
-     * When called with an associative array, sets multiple session values at
-     * once and returns null.
-     *
-     * @param string|array<string, mixed> $key     Session key or array of key-value pairs.
+     * @param string|array<string, mixed> $key     Session key, or key-value pairs to set.
      * @param mixed                       $default Default when reading a missing key.
      */
     function session(string|array $key, mixed $default = null): mixed
@@ -131,7 +114,7 @@ if (!function_exists('session')) {
 
 if (!function_exists('localize')) {
     /**
-     * Translate a localization key with optional parameter interpolation.
+     * Translate a key with {placeholder} interpolation. Without a translator, returns $key unchanged.
      *
      * @param string               $key        The translation key (e.g. 'messages.welcome').
      * @param array<string, mixed> $parameters Named parameters for {placeholder} interpolation.
@@ -150,8 +133,6 @@ if (!function_exists('localize')) {
 if (!function_exists('i18n')) {
     /**
      * Alias for localize().
-     *
-     * @see localize()
      */
     function i18n(string $key, array $parameters = [], ?string $locale = null): string
     {
@@ -161,48 +142,11 @@ if (!function_exists('i18n')) {
 
 if (!function_exists('e')) {
     /**
-     * Escape a value for safe interpolation into HTML.
+     * Escape a value for HTML output. Null renders as an empty string.
      *
-     * ## Why this exists
-     *
-     * RenderConfig offers `engine: php` as a first-class option, and
-     * PhpEngine::capture() is raw extract() plus include. Nothing sits between a
-     * template variable and the response body on that engine, and until this
-     * helper landed there was no escaping function anywhere in this file, so the
-     * only thing a template author could write was `<?= $value ?>`. A Flash
-     * message rendered that way, exactly as the Flash docblock demonstrates, is
-     * stored XSS. Latte auto-escapes and does not need this; PhpEngine does.
-     *
-     * ## The two flags are not decoration
-     *
-     * ENT_QUOTES also escapes the SINGLE quote, which is the character that
-     * breaks out of a single-quoted attribute (`<a title='<?= e($v) ?>'>`). The
-     * PHP default leaves it alone.
-     *
-     * ENT_SUBSTITUTE turns invalid UTF-8 into U+FFFD. Without it,
-     * htmlspecialchars() returns an EMPTY STRING for a byte sequence it cannot
-     * decode, so the value silently disappears from the page with nothing
-     * logged and nothing thrown. A visible replacement character is a bug
-     * somebody can see.
-     *
-     * ## What it accepts, and why
-     *
-     * NULL is accepted and yields "". `e($row->middleName)` on a nullable
-     * column is the most common expression a template author writes, and a
-     * strict `string` parameter would make it a TypeError at render time. The
-     * realistic reaction to that is not `e($x ?? '')`, it is deleting the
-     * `e()`, so a helper that refuses null is a helper that gets removed. "" is
-     * also exactly what the unescaped `<?= $x ?>` already printed, so nothing
-     * is invented.
-     *
-     * Stringable is accepted for the same reason: this framework echoes its own
-     * value objects (Uri among them) in templates, and a helper less capable
-     * than a raw echo gets skipped.
-     *
-     * An array or a plain object is REFUSED at the signature. (string) [] is
-     * the literal 'Array' plus a warning and (string) $plainObject is a fatal,
-     * so neither is a value a template meant to print. That is the same posture
-     * ConfigSection::getString() takes on a value it cannot read.
+     * The php engine does not escape templates, so every variable it prints must go through this helper.
+     * ENT_QUOTES escapes single quotes too, for single-quoted attributes. ENT_SUBSTITUTE replaces invalid
+     * UTF-8 with U+FFFD; without it the whole value would silently become an empty string.
      *
      * @param string|int|float|bool|Stringable|null $value The value to render.
      */
@@ -214,12 +158,7 @@ if (!function_exists('e')) {
 
 if (!function_exists('format')) {
     /**
-     * Format a value using the Formatter service.
-     *
-     * The first argument is the formatter name, followed by the arguments to
-     * pass to it. Built-in names are listed in Formatter::BUILT_IN_FORMATTERS
-     * (money, date, filesize...); any other unregistered name throws
-     * FormatterException.
+     * Format a value with the Formatter service. Built-in names are listed in Formatter::BUILT_IN_FORMATTERS.
      *
      * Examples:
      *   format('money', 19.99)           => "$19.99"
@@ -244,7 +183,7 @@ if (!function_exists('format')) {
 
 if (!function_exists('asset')) {
     /**
-     * Generate a cache-busted asset URL.
+     * Generate a cache-busted asset URL. Without an asset manager, returns $path unchanged.
      *
      * @param string $path The asset path relative to the public directory.
      */
@@ -260,13 +199,12 @@ if (!function_exists('asset')) {
 
 if (!function_exists('route')) {
     /**
-     * Generate the URL of a named route. For absolute links (emails), call
-     * App::setUrlGenerator(new RouteUrlGenerator($router->routes(), 'https://example.com')) after building.
+     * Generate the URL of a named route. Absolute links (emails) need App::setUrlGenerator(new RouteUrlGenerator($router->routes(), 'https://example.com')).
      *
      * @param string                              $name       The route name.
      * @param array<string, scalar>               $parameters Path parameters, keyed by placeholder name.
      * @param array<string, scalar|array<scalar>> $query      Query string values.
-     * @param string|null                         $fragment   The URL fragment, without or with its leading "#".
+     * @param string|null                         $fragment   The URL fragment, with or without its leading "#".
      * @throws \LogicException when no URL generator is installed.
      * @throws \Zephyrus\Routing\Exception\RouteUrlGenerationException for an unknown name, a missing or unexpected parameter, or a value violating its constraint.
      */
@@ -283,7 +221,7 @@ if (!function_exists('route')) {
 
 if (!function_exists('embed')) {
     /**
-     * Inline-embed an asset's file contents (e.g. SVG).
+     * Inline an asset's file contents (e.g. SVG). Without an asset manager, returns ''.
      *
      * @param string $path The asset path relative to the public directory.
      */
@@ -299,10 +237,7 @@ if (!function_exists('embed')) {
 
 if (!function_exists('nonce')) {
     /**
-     * Get the CSP nonce for the current request.
-     *
-     * The nonce is generated once per request and reused for consistency
-     * across all script/style tags.
+     * Return the CSP nonce of the current request, shared by all script and style tags.
      */
     function nonce(): string
     {

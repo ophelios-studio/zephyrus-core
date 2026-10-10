@@ -23,34 +23,25 @@ use Zephyrus\Core\Config\ConfigurationException;
  *       address: !env MAIL_FROM_ADDRESS
  *       name: !env MAIL_FROM_NAME
  *
- * ## smtp.encryption is an allow-list, not free text
+ * Options (type, default):
  *
- * PHPMailer compares SMTPSecure with a strict identity against exactly two
- * literals, 'tls' and 'ssl'. Anything else -- a different case, a synonym, a
- * typo, a word an operator reasonably believed was the value -- matched
- * neither, fell through to the opportunistic SMTPAutoTLS path, and sent the
- * credentials over a socket a network attacker downgrades to plaintext simply
- * by not advertising STARTTLS. It failed silently and in the dangerous
- * direction:
+ *   smtp.host        string  'localhost'
+ *   smtp.port        int     587
+ *   smtp.username    string  ''
+ *   smtp.password    string  '' (redacted in toArray())
+ *   smtp.encryption  string  'tls', one of ENCRYPTIONS
+ *   from.address     string  '' (setFrom() is skipped; PHPMailer sends an empty From header)
+ *   from.name        string  ''
  *
- *   encryption: STARTTLS   the RFC's own name for the mechanism -> plaintext
- *   encryption: Tls        one capital letter                   -> plaintext
- *   encryption: none       a reasonable way to say "off"        -> plaintext
- *
- * So the value is now lowercased, trimmed, and checked against ENCRYPTIONS.
- * A value outside the set throws at configuration time, where an operator can
- * still see it, instead of on the wire where nobody can.
+ * smtp.encryption is an allow-list. It is lowercased, trimmed and checked against
+ * ENCRYPTIONS at configuration time: any other value would silently fall back to
+ * opportunistic STARTTLS, which a network attacker can strip to send credentials in plaintext.
  */
 final class MailerConfig extends ConfigSection
 {
     /**
-     * Every accepted smtp.encryption value.
-     *
-     * 'tls'  implicit STARTTLS on the submission port (usually 587).
-     * 'ssl'  implicit TLS from the first byte (usually 465).
-     * ''     no transport encryption AT ALL. Mailer disables SMTPAutoTLS for
-     *        this value, so it means what it says rather than "encrypt if the
-     *        server happens to offer it". Use it only for a local sink.
+     * Accepted smtp.encryption values: 'tls' (STARTTLS, usually port 587), 'ssl' (implicit TLS,
+     * usually port 465), or '' for no encryption, which disables opportunistic STARTTLS. Local sinks only.
      *
      * @var list<string>
      */
@@ -73,7 +64,7 @@ final class MailerConfig extends ConfigSection
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when smtp.encryption is outside ENCRYPTIONS.
+     * @throws ConfigurationException when a value has the wrong type or smtp.encryption is outside ENCRYPTIONS.
      */
     public static function fromArray(array $values): static
     {
@@ -91,13 +82,8 @@ final class MailerConfig extends ConfigSection
     }
 
     /**
-     * Keep the SMTP password out of any dump that honours __debugInfo().
-     *
-     * This is a courtesy for var_dump() and for a consumer's own diagnostics.
-     * It is NOT the load-bearing protection: Tracy reads properties by
-     * reflection and ignores __debugInfo() unless asked, so the real masking
-     * for the debugger is DebugIntegration::SENSITIVE_KEYS, and the masking for
-     * a config dump is toArray()'s redaction.
+     * Mask the SMTP password in var_dump(). Not a security boundary: reflection-based
+     * debuggers ignore it, see DebugIntegration::SENSITIVE_KEYS.
      *
      * @return array<string, mixed>
      */

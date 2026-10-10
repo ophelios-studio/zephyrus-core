@@ -11,9 +11,6 @@ use Zephyrus\Rendering\RenderEngine;
 /**
  * Fluent email builder wrapping PHPMailer.
  *
- * Supports SMTP transport, template-based HTML bodies (via any RenderEngine),
- * plain text alternatives, file attachments, and CC/BCC recipients.
- *
  * Usage:
  *
  *   $mailer = new Mailer($config);
@@ -26,24 +23,18 @@ use Zephyrus\Rendering\RenderEngine;
  *   $mailer = new Mailer($config, $latteEngine);
  *   $mailer->to('user@example.com')
  *       ->subject('Welcome')
- *       ->template('emails/welcome', ['name' => 'David'])
+ *       ->template('emails/welcome', ['name' => 'Ada'])
  *       ->send();
  */
 final class Mailer
 {
-    /**
-     * The line written to the error log the first time this process builds a
-     * mailer that will put credentials on an unencrypted socket.
-     */
+    /** Error log line written once when a mailer would send credentials unencrypted. */
     public const string PLAINTEXT_CREDENTIALS_WARNING =
         'Zephyrus: SMTP credentials will be sent WITHOUT transport encryption, because '
         . 'mailer.smtp.encryption is empty. Set it to "tls" (submission, port 587) or "ssl" '
         . '(implicit TLS, port 465) unless this really is a local sink.';
 
-    /**
-     * Emitted at most once per process: this is a configuration mistake, not a
-     * per-message event, and a line per email would bury it.
-     */
+    /** Set once the plaintext warning is logged, so a send loop does not flood the log. */
     private static bool $plaintextWarningEmitted = false;
 
     private PHPMailer $mail;
@@ -55,9 +46,7 @@ final class Mailer
 
     private const string PATH_SEPARATOR_PATTERN = '~[/\\\\]~';
 
-    /**
-     * C0 and C1 controls, DEL, U+061C, U+2028, U+2029 and the bidi controls U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069. Matched on bytes.
-     */
+    /** Controls, DEL, U+061C, line separators and bidi controls, matched on bytes. */
     private const string REFUSED_NAME_CHARACTER_PATTERN = '~[\x00-\x1F\x7F]|\xC2[\x80-\x9F]|\xD8\x9C|\xE2\x80[\x8E\x8F\xA8-\xAE]|\xE2\x81[\xA6-\xA9]~';
 
     /** Longest display name: PHPMailer folds header lines over 998 bytes unindented. */
@@ -66,6 +55,9 @@ final class Mailer
     /** Longest media type: the Content-Type line also carries the encoded display name. */
     private const int MAX_MEDIA_TYPE_BYTES = 127;
 
+    /**
+     * @throws MailerException when from.address is not a valid address.
+     */
     public function __construct(MailerConfig $config, ?RenderEngine $renderEngine = null)
     {
         $this->renderEngine = $renderEngine;
@@ -76,6 +68,8 @@ final class Mailer
 
     /**
      * Add a "To" recipient.
+     *
+     * @throws MailerException if the address is invalid, line breaks included (PHPMailer's default validator).
      */
     public function to(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
@@ -90,6 +84,8 @@ final class Mailer
 
     /**
      * Add a "CC" recipient.
+     *
+     * @throws MailerException if the address is invalid, line breaks included (PHPMailer's default validator).
      */
     public function cc(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
@@ -104,6 +100,8 @@ final class Mailer
 
     /**
      * Add a "BCC" recipient.
+     *
+     * @throws MailerException if the address is invalid, line breaks included (PHPMailer's default validator).
      */
     public function bcc(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
@@ -118,6 +116,8 @@ final class Mailer
 
     /**
      * Set a "Reply-To" address.
+     *
+     * @throws MailerException if the address is invalid, line breaks included (PHPMailer's default validator).
      */
     public function replyTo(#[\SensitiveParameter] string $address, #[\SensitiveParameter] string $name = ''): self
     {
@@ -131,7 +131,7 @@ final class Mailer
     }
 
     /**
-     * Set the email subject.
+     * Set the email subject. PHPMailer strips CR and LF from it before encoding.
      */
     public function subject(string $subject): self
     {
@@ -140,7 +140,7 @@ final class Mailer
     }
 
     /**
-     * Set a raw HTML body. The PHPMailer body is recomposed on each call, so an AltBody set on getPhpMailer() is replaced.
+     * Set the HTML body. Each call recomposes the PHPMailer body, replacing any AltBody set on getPhpMailer().
      */
     public function html(string $body): self
     {
@@ -150,7 +150,7 @@ final class Mailer
     }
 
     /**
-     * Set a plain text body (or alternative text for HTML emails). The PHPMailer body is recomposed on each call, so an AltBody set on getPhpMailer() is replaced.
+     * Set the plain text body, or the alternative text of an HTML body. Each call recomposes the PHPMailer body.
      */
     public function text(string $body): self
     {
@@ -160,12 +160,12 @@ final class Mailer
     }
 
     /**
-     * Render a template as the HTML body.
-     *
-     * Requires a RenderEngine to be provided in the constructor.
+     * Render a template as the HTML body, using the RenderEngine given to the constructor.
      *
      * @param string              $page The template identifier.
      * @param array<string,mixed> $args Template variables.
+     *
+     * @throws MailerException when no RenderEngine was given.
      */
     public function template(string $page, array $args = []): self
     {
@@ -181,33 +181,19 @@ final class Mailer
     /**
      * Attach a file.
      *
-     * ## This is not a sandbox, and the docblock used to imply it was
+     * Refuses NUL bytes, stream wrappers and unsafe names. Pass $allowedRoot whenever any
+     * part of $path comes from outside the application: the file must then resolve inside it.
      *
-     * It said "Absolute path to the file" and enforced nothing, so a caller
-     * that passed unvalidated input got exactly what it asked for: any file the
-     * PHP process can read, traversal included, mailed to the recipient. The
-     * guards below close what a library CAN close on its own -- a stream
-     * wrapper, a NUL byte, a display name carrying path separators -- but none
-     * of them can tell a wanted path from an attacker's.
+     * @param string      $path        Path to the file. Absolute is strongly preferred.
+     * @param string      $name        Display name, defaulting to the file's basename. It must not
+     *                                 contain a control, bidirectional or line separator character,
+     *                                 a path separator or "=?", exceed 255 bytes, carry surrounding
+     *                                 spaces, be blank, "0", "." or "..", or end with a dot. The
+     *                                 media type follows its extension, else the file's.
+     * @param string|null $allowedRoot Directory the file must resolve under. Null trusts the caller.
      *
-     * $allowedRoot is how a caller states the boundary it actually has. When
-     * given, the resolved file must sit inside the resolved root, and anything
-     * else is refused. Pass it whenever any part of $path came from outside the
-     * application.
-     *
-     * @param string      $path        Path to the file. Absolute is strongly preferred; a
-     *                                 relative path still resolves against the working
-     *                                 directory, which is rarely what a caller means.
-     * @param string      $name        Display name (default: original filename, checked the same way). May not
-     *                                 contain a control, bidirectional formatting or line
-     *                                 separator character, a path separator or "=?", exceed
-     *                                 255 bytes, have surrounding spaces, nor be blank, "0", "."
-     *                                 or "..", nor end with a dot: it lands in a MIME header and
-     *                                 is what the recipient's client writes to disk. The media
-     *                                 type follows the extension of the sent name, else the
-     *                                 extension of the file.
-     * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
-     *                                 the historical behaviour of trusting the caller.
+     * @throws MailerException if the path or name is refused, the file does not exist, $allowedRoot
+     *                         is not an existing directory, or the file resolves outside it.
      */
     public function attach(string $path, string $name = '', ?string $allowedRoot = null): self
     {
@@ -215,10 +201,7 @@ final class Mailer
             throw MailerException::attachmentRejected('path', $path, 'contains a NUL byte');
         }
 
-        // A wrapper turns "attach a file" into "fetch a URL" or "read a php://
-        // stream". is_file() rejects most of them already, but not all wrappers
-        // in every build, and refusing here states the rule instead of relying
-        // on that.
+        // Not every build makes is_file() reject every wrapper, so refuse them explicitly.
         if (preg_match('#^[a-zA-Z][a-zA-Z0-9+.\-]*://#', $path) === 1) {
             throw MailerException::attachmentRejected('path', $path, 'is a stream wrapper, not a local file');
         }
@@ -247,10 +230,10 @@ final class Mailer
      * Attach bytes held in memory, such as a generated PDF.
      *
      * @param string      $content  The file contents.
-     * @param string      $name     Display name the recipient's client writes to disk: at most 255
-     *                              bytes and unchanged by trimming or by dropping a trailing dot;
-     *                              not blank, "0", "." or "..", without control, bidirectional formatting or line separator characters, a path separator or "=?".
-     * @param string|null $mimeType Media type as type/subtype (at most 127 bytes), optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
+     * @param string      $name     Display name. Same rules as attach().
+     * @param string|null $mimeType Type/subtype of at most 127 bytes, optionally followed by parameters
+     *                              such as "; method=REQUEST" but not name, filename or boundary. Null
+     *                              lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
      */
@@ -294,9 +277,7 @@ final class Mailer
     }
 
     /**
-     * PHPMailer raises STOP_CONTINUE once the recipients were tried,
-     * but also when an attachment cannot be read while the body is built, before
-     * any DATA. Only the first one means recipients were refused.
+     * STOP_CONTINUE also fires when an attachment is unreadable before DATA; only the recipients_failed message means refusal.
      */
     private function transportFailure(#[\SensitiveParameter] PHPMailerException $e): MailerException
     {
@@ -319,7 +300,7 @@ final class Mailer
     }
 
     /**
-     * Refuse a sent name, display or file name, that could split a MIME header, name a path, or be dropped by the mail library.
+     * Refuse a display or file name that could split a MIME header, name a path, or be altered by PHPMailer.
      *
      * @param bool $fromFileName True when the name is the file's own name, because the caller gave no display name.
      */
@@ -373,12 +354,8 @@ final class Mailer
     }
 
     /**
-     * Resolve $path against $allowedRoot and refuse anything outside it.
-     *
-     * realpath() on BOTH sides is what makes this a boundary rather than a
-     * string comparison: it collapses '..', follows symlinks, and returns false
-     * for a path that does not exist, so a link pointing out of the root cannot
-     * pass by looking innocent.
+     * Refuse a $path that resolves outside $allowedRoot. realpath() on both sides
+     * collapses '..', follows symlinks and fails closed on a missing path.
      */
     private function assertWithinRoot(string $path, string $allowedRoot): void
     {
@@ -422,13 +399,8 @@ final class Mailer
         $this->mail->SMTPSecure = $config->smtpEncryption;
         $this->mail->CharSet = PHPMailer::CHARSET_UTF8;
 
-        // MailerConfig guarantees one of 'tls', 'ssl' or ''. An empty value is
-        // the operator saying "no encryption", so say it to PHPMailer too:
-        // SMTPAutoTLS would otherwise still try STARTTLS opportunistically, and
-        // that is the worst of the three answers. It looks encrypted in a happy
-        // capture, it produces no error when it does not happen, and a network
-        // attacker turns it off simply by omitting STARTTLS from the EHLO
-        // banner. '' now means none, and 'tls' means tls.
+        // Empty means no encryption at all: disable opportunistic STARTTLS too, since
+        // a network attacker can downgrade to plaintext by omitting it from the EHLO reply.
         if ($config->smtpEncryption === '') {
             $this->mail->SMTPAutoTLS = false;
         }
@@ -445,13 +417,7 @@ final class Mailer
     }
 
     /**
-     * Say once, loudly, that this process will authenticate in the clear.
-     *
-     * Turning '' into "definitely no encryption" is the honest reading of the
-     * setting, but it also removes the accidental safety net that opportunistic
-     * STARTTLS used to provide for a deployment that simply forgot to set
-     * MAIL_ENCRYPTION. Silence is what made the original bug survive, so the
-     * net is replaced by a statement rather than by nothing.
+     * Log PLAINTEXT_CREDENTIALS_WARNING once per process.
      */
     private static function warnAboutPlaintextCredentials(): void
     {
