@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Zephyrus\Session;
 
+use LogicException;
 use Zephyrus\Core\App;
 use Zephyrus\Core\Config\SessionConfig;
+use Zephyrus\Exceptions\MessageValue;
 
 /**
  * Thin, testable wrapper around PHP's native session functions.
@@ -131,12 +133,25 @@ final class SessionManager
             'path'     => $config->cookiePath,
             'secure'   => $config->resolveSecure($requestIsSecure ?? self::serverReportsHttps()),
             'httponly' => $config->httpOnly,
-            'samesite' => $config->sameSite,
+            'samesite' => self::cookieSameSite($config->sameSite),
         ]);
 
         if (!self::quietly(static fn (): bool => session_start(), $phpWarning)) {
             throw SessionException::startRefused($phpWarning);
         }
+    }
+
+    /**
+     * @return 'Strict'|'Lax'|'None'
+     */
+    private static function cookieSameSite(string $value): string
+    {
+        return match ($value) {
+            'Strict' => 'Strict',
+            'Lax' => 'Lax',
+            'None' => 'None',
+            default => throw new LogicException('Unsupported SameSite value ' . MessageValue::quote($value) . '.'),
+        };
     }
 
     /**
