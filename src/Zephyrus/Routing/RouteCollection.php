@@ -8,11 +8,11 @@ use Zephyrus\Http\Uri;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RoutePathRefusal;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final class RouteCollection
 {
-
     /**
      * @var array<int, Route>
      */
@@ -380,7 +380,7 @@ final class RouteCollection
     {
         $normalizedPath = $this->normalizePath($path);
 
-        if (self::pathRefusalReason($path, $normalizedPath) !== null) {
+        if (self::pathRefusalReason($path) !== null) {
             return [];
         }
 
@@ -489,18 +489,24 @@ final class RouteCollection
     public function match(string $method, string $path): RouteMatch
     {
         $normalizedPath = $this->normalizePath($path);
-        $refusal = self::pathRefusalReason($path, $normalizedPath);
+        $refusal = self::pathRefusalReason($path);
 
         if ($refusal !== null) {
-            throw RouteNotFoundException::refusedPath($method, $refusal);
+            throw RouteNotFoundException::pathIsRefused($method, $refusal);
         }
 
         $allowedMethods = [];
+        $refusedValue = null;
 
         foreach ($this->routesInMatchOrder() as $route) {
-            $parameters = $this->extractParameters($route, $normalizedPath);
+            $routeRefusal = null;
+            $parameters = $this->extractParameters($route, $normalizedPath, $routeRefusal);
 
             if ($parameters === null) {
+                if ($routeRefusal !== null && $this->routeAcceptsMethod($route, $method)) {
+                    $refusedValue ??= $routeRefusal;
+                }
+
                 continue;
             }
 
@@ -524,7 +530,11 @@ final class RouteCollection
             throw new MethodNotAllowedException($allowedMethods, $normalizedPath);
         }
 
-        throw new RouteNotFoundException(sprintf('No route matched %s %s', strtoupper($method), $normalizedPath));
+        if ($refusedValue !== null) {
+            throw RouteNotFoundException::parameterIsRefused($method, $normalizedPath, $refusedValue[0], $refusedValue[1]);
+        }
+
+        throw RouteNotFoundException::noRouteMatched($method, $normalizedPath);
     }
 
     /**
@@ -536,9 +546,11 @@ final class RouteCollection
      * Parameter values are decoded before their constraint is checked, or "%2E%2E" would
      * pass a constraint that forbids dots.
      *
+     * @param array{0: string, 1: RoutePathRefusal}|null $refusedValue Set to the parameter name and problem when every
+     *                                                       segment matches but a decoded value is refused.
      * @return array<string, string>|null
      */
-    private function extractParameters(Route $route, string $path): ?array
+    private function extractParameters(Route $route, string $path, ?array &$refusedValue = null): ?array
     {
         $routeSegments = $this->segments($route->path);
         $pathSegments = $this->segments($path);
@@ -548,6 +560,7 @@ final class RouteCollection
         }
 
         $parameters = [];
+        $refused = null;
 
         foreach ($routeSegments as $index => $segment) {
             $candidate = $pathSegments[$index];
@@ -556,8 +569,10 @@ final class RouteCollection
                 $name = substr($segment, 1, -1);
                 $value = rawurldecode($candidate);
 
-                if (!self::isWellFormedValue($value)) {
-                    return null;
+                $problem = self::valueProblem($value);
+                if ($problem !== null) {
+                    $refused ??= [$name, $problem];
+                    continue;
                 }
 
                 $pattern = $route->constraints[$name] ?? '[^/]+';
@@ -575,6 +590,12 @@ final class RouteCollection
             if ($segment !== $candidate) {
                 return null;
             }
+        }
+
+        if ($refused !== null) {
+            $refusedValue = $refused;
+
+            return null;
         }
 
         return $parameters;
@@ -597,19 +618,19 @@ final class RouteCollection
     }
 
     /**
-     * Rejects a value that is not valid UTF-8 or contains a control character (C0 or DEL).
+     * Why a value is refused: it is not valid UTF-8 or contains a control character (C0 or DEL), or null.
      *
      * No route constraint can admit such a value: invalid UTF-8 or NUL bound through PDO emulated
      * prepares can segfault the worker on pdo_pgsql. Uses /u rather than mb_check_encoding(),
      * so ext-mbstring is not required.
      */
-    private static function isWellFormedValue(string $value): bool
+    private static function valueProblem(string $value): ?RoutePathRefusal
     {
         if (preg_match(Uri::CONTROL_CHARACTER_PATTERN, $value) === 1) {
-            return false;
+            return RoutePathRefusal::ControlCharacter;
         }
 
-        return self::isValidUtf8($value);
+        return self::isValidUtf8($value) ? null : RoutePathRefusal::InvalidUtf8;
     }
 
     private static function isValidUtf8(string $value): bool
@@ -618,21 +639,21 @@ final class RouteCollection
     }
 
     /**
-     * The RouteNotFoundException reason for a refused path, or null when it may be matched.
+     * Why a path is refused, or null when it may be matched.
      *
      * The raw path is checked before "?" or "#", and before normalizePath(), because parse_url() rewrites
      * control bytes to "_" rather than failing.
      */
-    private static function pathRefusalReason(string $rawPath, string $normalizedPath): ?string
+    private static function pathRefusalReason(string $rawPath): ?RoutePathRefusal
     {
         $rawPath = substr($rawPath, 0, strcspn($rawPath, '?#'));
 
         if (preg_match(Uri::CONTROL_CHARACTER_PATTERN, $rawPath) === 1) {
-            return RouteNotFoundException::REASON_CONTROL_CHARACTER;
+            return RoutePathRefusal::ControlCharacter;
         }
 
-        if (!self::isValidUtf8($rawPath) || !self::isWellFormedValue($normalizedPath)) {
-            return RouteNotFoundException::REASON_INVALID_UTF8;
+        if (!self::isValidUtf8($rawPath)) {
+            return RoutePathRefusal::InvalidUtf8;
         }
 
         return null;

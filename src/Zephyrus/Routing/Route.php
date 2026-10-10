@@ -159,7 +159,7 @@ final readonly class Route
 
         foreach (explode('/', trim($path, '/')) as $segment) {
             if (preg_match(self::WHOLE_PLACEHOLDER_PATTERN, $segment) !== 1) {
-                self::assertNoBraces($path, $segment);
+                self::assertLiteralSegment($path, $segment);
 
                 continue;
             }
@@ -206,7 +206,7 @@ final readonly class Route
      *
      * @throws RouteSignatureException
      */
-    private static function assertNoBraces(string $path, string $segment): void
+    private static function assertLiteralSegment(string $path, string $segment): void
     {
         $remainder = preg_replace(self::PLACEHOLDER_PATTERN, '', $segment);
 

@@ -12,7 +12,11 @@ namespace Zephyrus\Http;
  */
 final readonly class Uri
 {
-    /** A C0 control character or DEL. */
+    /**
+     * A C0 control character or DEL, not a general sanitiser.
+     *
+     * @internal
+     */
     public const string CONTROL_CHARACTER_PATTERN = '/[\x00-\x1F\x7F]/';
 
     /** Anchored, so a "://" inside an origin-form query is not read as a scheme. */

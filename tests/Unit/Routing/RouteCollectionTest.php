@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RoutePathRefusal;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
@@ -63,7 +64,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '\\d+']));
 
         $this->expectException(RouteNotFoundException::class);
-        $this->expectExceptionMessage('No route matched GET /users/abc');
+        $this->expectExceptionMessage('No route matched "GET" "/users/abc"');
 
         $collection->match('GET', '/users/abc');
     }
@@ -75,7 +76,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('POST', '/users', 'UserController@store'));
 
         $this->expectException(MethodNotAllowedException::class);
-        $this->expectExceptionMessage('Method not allowed for /users. Allowed: GET, HEAD, POST');
+        $this->expectExceptionMessage('Method not allowed for "/users". Allowed: GET, HEAD, POST');
 
         $collection->match('DELETE', '/users');
     }
@@ -86,7 +87,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users', 'UserController@index'));
 
         $this->expectException(RouteNotFoundException::class);
-        $this->expectExceptionMessage('No route matched GET /projects');
+        $this->expectExceptionMessage('No route matched "GET" "/projects"');
 
         $collection->match('GET', '/projects');
     }
@@ -205,7 +206,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users', 'UserController@index'));
 
         $this->expectException(RouteNotFoundException::class);
-        $this->expectExceptionMessage('No route matched GET /users/extra');
+        $this->expectExceptionMessage('No route matched "GET" "/users/extra"');
 
         $collection->match('GET', '/users/extra');
     }
@@ -426,29 +427,34 @@ final class RouteCollectionTest extends TestCase
             $collection->match('GET', $path);
             self::fail('Expected a RouteNotFoundException');
         } catch (RouteNotFoundException $e) {
-            self::assertSame('No route matched GET ' . $path, $e->getMessage());
+            self::assertSame(
+                sprintf('No route matched "GET" "%s": parameter "name" contains a control character', $path),
+                $e->getMessage(),
+            );
+            self::assertSame(RoutePathRefusal::ControlCharacter, $e->refusalReason());
+            self::assertSame('name', $e->refusedParameter());
         }
 
         self::assertSame(['name' => 'abcd'], $collection->match('GET', '/users/abcd')->parameters);
     }
 
     /**
-     * @return array<string, array{string, string}>
+     * @return array<string, array{string, RoutePathRefusal}>
      */
     public static function refusedPaths(): array
     {
         return [
-            'SOH' => ["/a\x01b", 'contains a control character'],
-            'NUL' => ["/a\0b", 'contains a control character'],
-            'DEL' => ["/a\x7Fb", 'contains a control character'],
-            'control before the query' => ["/a\nb?x=1", 'contains a control character'],
-            'invalid UTF-8' => ["/a\xC3\x28", 'is not valid UTF-8'],
-            'invalid UTF-8 and control' => ["/a\xC3\x28\x01", 'contains a control character'],
+            'SOH' => ["/a\x01b", RoutePathRefusal::ControlCharacter],
+            'NUL' => ["/a\0b", RoutePathRefusal::ControlCharacter],
+            'DEL' => ["/a\x7Fb", RoutePathRefusal::ControlCharacter],
+            'control before the query' => ["/a\nb?x=1", RoutePathRefusal::ControlCharacter],
+            'invalid UTF-8' => ["/a\xC3\x28", RoutePathRefusal::InvalidUtf8],
+            'invalid UTF-8 and control' => ["/a\xC3\x28\x01", RoutePathRefusal::ControlCharacter],
         ];
     }
 
     #[DataProvider('refusedPaths')]
-    public function testMatchGivesTheRealReasonForARefusedPath(string $path, string $reason): void
+    public function testMatchGivesTheRealReasonForARefusedPath(string $path, RoutePathRefusal $reason): void
     {
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/a', 'AController@show'));
@@ -457,8 +463,118 @@ final class RouteCollectionTest extends TestCase
             $collection->match('post', $path);
             self::fail('Expected a RouteNotFoundException');
         } catch (RouteNotFoundException $e) {
-            self::assertSame('No route matched POST: the request path ' . $reason, $e->getMessage());
+            self::assertSame($reason, $e->refusalReason());
+            self::assertSame(
+                'No route matched "POST": the request path '
+                . ($reason === RoutePathRefusal::InvalidUtf8
+                    ? 'is not valid UTF-8'
+                    : 'contains a control character'),
+                $e->getMessage(),
+            );
         }
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function refusedParameterValues(): array
+    {
+        return [
+            'line feed' => ['/users/%0A', 'id', 'contains a control character'],
+            'nul' => ['/users/4%00', 'id', 'contains a control character'],
+            'del' => ['/users/%7F', 'id', 'contains a control character'],
+            'invalid utf-8' => ['/users/%FF', 'id', 'is not valid UTF-8'],
+        ];
+    }
+
+    #[DataProvider('refusedParameterValues')]
+    public function testMatchNamesTheParameterWhoseValueWasRefused(string $path, string $name, string $problem): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        try {
+            $collection->match('GET', $path);
+            self::fail('Expected a RouteNotFoundException');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame(
+                sprintf('No route matched "GET" "%s": parameter "%s" %s', $path, $name, $problem),
+                $e->getMessage(),
+            );
+            self::assertSame($name, $e->refusedParameter());
+            self::assertSame(
+                $problem === 'is not valid UTF-8' ? RoutePathRefusal::InvalidUtf8 : RoutePathRefusal::ControlCharacter,
+                $e->refusalReason(),
+            );
+        }
+    }
+
+    public function testMatchDoesNotBlameAParameterWhenThePatternDoesNotMatch(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}/posts', 'UserController@posts'));
+        $collection->add(Route::define('POST', '/users/{id}', 'UserController@update'));
+
+        foreach (['/users/%0A', '/users/%0A/comments', '/other/%0A/posts'] as $path) {
+            try {
+                $collection->match('GET', $path);
+                self::fail('Expected a RouteNotFoundException');
+            } catch (RouteNotFoundException $e) {
+                self::assertSame(sprintf('No route matched "GET" "%s"', $path), $e->getMessage());
+                self::assertNull($e->refusedParameter());
+            }
+        }
+    }
+
+    public function testMatchNamesTheFirstRefusedParameterOfARouteWithSeveral(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a/{x}/b/{y}', 'AController@show'));
+
+        try {
+            $collection->match('GET', '/a/ok/b/%0A');
+            self::fail('Expected a RouteNotFoundException');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched "GET" "/a/ok/b/%0A": parameter "y" contains a control character', $e->getMessage());
+        }
+    }
+
+    public function testALiteralRouteStillWinsOverARefusedParameterRoute(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('GET', '/users/%0A', 'UserController@literal'));
+
+        self::assertSame('UserController@literal', $collection->match('GET', '/users/%0A')->route->handler);
+    }
+
+    public function testMethodNotAllowedQuotesThePathWithoutRawSeparators(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $path = "/users/a\u{FEFF}b";
+
+        try {
+            $collection->match('DELETE', $path);
+            self::fail('Expected a MethodNotAllowedException');
+        } catch (MethodNotAllowedException $e) {
+            self::assertSame(
+                'Method not allowed for "/users/a' . '\\ufeffb". Allowed: GET, HEAD',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testALaterRouteStillMatchesAfterAnEarlierRouteRefusedAParameterValue(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}/edit', 'UserController@edit'));
+        $collection->add(Route::define('GET', '/users/%0A/{action}', 'UserController@literalThenAction'));
+
+        $match = $collection->match('GET', '/users/%0A/edit');
+
+        self::assertSame('UserController@literalThenAction', $match->route->handler);
+        self::assertSame(['action' => 'edit'], $match->parameters);
     }
 
     public function testMatchOrderIsComputedOnceAndRecomputedAfterAnAdd(): void
@@ -698,7 +814,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users', 'UserController@index'));
 
         $this->expectException(RouteNotFoundException::class);
-        $this->expectExceptionMessage('No route matched GET /users/');
+        $this->expectExceptionMessage('No route matched "GET" "/users/"');
 
         $collection->match('GET', '/users/');
     }
@@ -719,7 +835,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
 
         $this->expectException(RouteNotFoundException::class);
-        $this->expectExceptionMessage('No route matched GET /users/42/');
+        $this->expectExceptionMessage('No route matched "GET" "/users/42/"');
 
         $collection->match('GET', '/users/42/');
     }
@@ -798,7 +914,7 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('PUT', '/users/{id}', 'UserController@update'));
 
         $this->expectException(MethodNotAllowedException::class);
-        $this->expectExceptionMessage('Method not allowed for /users/me. Allowed: GET, HEAD, POST, PUT');
+        $this->expectExceptionMessage('Method not allowed for "/users/me". Allowed: GET, HEAD, POST, PUT');
         $collection->match('DELETE', '/users/me');
     }
 

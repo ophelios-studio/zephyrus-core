@@ -13,6 +13,7 @@ use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RoutePathRefusal;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 
 /**
@@ -65,7 +66,7 @@ final readonly class RouteDispatcher
     public function match(Request $request): RouteMatch
     {
         if ($request->uri()->pathHasControlCharacter()) {
-            throw RouteNotFoundException::refusedPath($request->method, RouteNotFoundException::REASON_CONTROL_CHARACTER);
+            throw RouteNotFoundException::pathIsRefused($request->method, RoutePathRefusal::ControlCharacter);
         }
 
         return $this->routes->match($request->method, $request->path());

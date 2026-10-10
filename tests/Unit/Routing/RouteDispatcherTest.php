@@ -12,6 +12,7 @@ use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RoutePathRefusal;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\RouteDispatcher;
@@ -164,7 +165,8 @@ final class RouteDispatcherTest extends TestCase
             $dispatcher->match(Request::fromArray('GET', "/a\x01b"));
             self::fail('Expected a RouteNotFoundException');
         } catch (RouteNotFoundException $e) {
-            self::assertSame('No route matched GET: the request path contains a control character', $e->getMessage());
+            self::assertSame('No route matched "GET": the request path contains a control character', $e->getMessage());
+            self::assertSame(RoutePathRefusal::ControlCharacter, $e->refusalReason());
         }
     }
 
@@ -182,7 +184,8 @@ final class RouteDispatcherTest extends TestCase
             $dispatcher->match(Request::fromArray('GET', "/users/\xC3\x28"));
             self::fail('Expected a RouteNotFoundException');
         } catch (RouteNotFoundException $e) {
-            self::assertSame('No route matched GET: the request path is not valid UTF-8', $e->getMessage());
+            self::assertSame('No route matched "GET": the request path is not valid UTF-8', $e->getMessage());
+            self::assertSame(RoutePathRefusal::InvalidUtf8, $e->refusalReason());
         }
     }
 

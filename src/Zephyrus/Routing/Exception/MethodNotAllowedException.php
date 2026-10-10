@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing\Exception;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 final class MethodNotAllowedException extends ZephyrusRuntimeException
@@ -17,7 +18,7 @@ final class MethodNotAllowedException extends ZephyrusRuntimeException
     ) {
         parent::__construct(sprintf(
             'Method not allowed for %s. Allowed: %s',
-            $path,
+            MessageValue::quote($path, 512),
             implode(', ', $allowedMethods),
         ));
     }
