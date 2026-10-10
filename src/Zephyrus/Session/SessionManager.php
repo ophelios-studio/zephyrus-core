@@ -359,7 +359,7 @@ final class SessionManager
     /**
      * Read a value and immediately remove it from the session, for one-time messages across a redirect.
      *
-     * @throws SessionException when no session is active.
+     * @throws SessionException when the key exists and no session is active.
      */
     public function flash(string $key, mixed $default = null): mixed
     {
