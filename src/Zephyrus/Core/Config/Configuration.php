@@ -55,10 +55,8 @@ final readonly class Configuration
      */
     public static function fromArray(array $config, array $sectionFactories = []): self
     {
-        self::refuseMisspelledBuiltInKeys($config);
+        self::refuseMisspelledKeys($config, self::canonicalNames(self::BUILT_IN_SECTIONS), []);
 
-        $customSections = [];
-        $readKeys = [];
         foreach ($sectionFactories as $name => $className) {
             if (!is_string($name)) { // @phpstan-ignore function.alreadyNarrowedType
                 throw new \InvalidArgumentException(self::unnamedFactoryMessage($name, $className));
@@ -78,7 +76,13 @@ final readonly class Configuration
                     $builtIn,
                 ));
             }
+        }
 
+        $canonicalFactories = self::canonicalNames(array_keys($sectionFactories));
+
+        $customSections = [];
+        $readKeys = [];
+        foreach ($sectionFactories as $name => $className) {
             $normalizedName = self::normalizeKey($name);
             $configKey = self::configKeyFor($config, $normalizedName);
             if ($configKey !== null) {
@@ -89,7 +93,7 @@ final readonly class Configuration
             }
         }
 
-        self::refuseMisspelledCustomKeys($config, $sectionFactories, $readKeys);
+        self::refuseMisspelledKeys($config, $canonicalFactories, $readKeys);
 
         return new self(
             application:    ApplicationConfig::fromArray((array) ($config['application'] ?? [])),
@@ -154,45 +158,20 @@ final readonly class Configuration
     }
 
     /**
-     * @param array<int|string, mixed> $config
-     * @throws ConfigurationException
-     */
-    private static function refuseMisspelledBuiltInKeys(array $config): void
-    {
-        foreach (array_keys($config) as $key) {
-            $key = (string) $key;
-            $builtIn = self::builtInSectionFor($key);
-
-            if ($builtIn !== null && $key !== $builtIn) {
-                throw new ConfigurationException(sprintf(
-                    "Configuration section '%s' is not recognised: did you mean '%s'?",
-                    $key,
-                    $builtIn,
-                ));
-            }
-        }
-    }
-
-    /**
-     * Refuse a top-level key that no factory read but that matches a registered factory name up to case and underscores.
+     * Refuse a top-level key that misspells a canonical name, ignoring case, underscores and spaces, unless accepted.
      *
      * @param array<int|string, mixed> $config
-     * @param array<int|string, mixed> $sectionFactories
-     * @param list<string> $readKeys
+     * @param array<string, string> $canonicalNames Folded spelling => canonical name.
+     * @param list<string> $acceptedKeys
      * @throws ConfigurationException
      */
-    private static function refuseMisspelledCustomKeys(array $config, array $sectionFactories, array $readKeys): void
+    private static function refuseMisspelledKeys(array $config, array $canonicalNames, array $acceptedKeys): void
     {
-        $registered = [];
-        foreach (array_keys($sectionFactories) as $name) {
-            $registered[self::foldName((string) $name)] = (string) $name;
-        }
-
         foreach (array_keys($config) as $key) {
             $key = (string) $key;
-            $suggestion = $registered[self::foldName($key)] ?? null;
+            $suggestion = $canonicalNames[self::foldName($key)] ?? null;
 
-            if ($suggestion !== null && !in_array($key, $readKeys, true)) {
+            if ($suggestion !== null && $key !== $suggestion && !in_array($key, $acceptedKeys, true)) {
                 throw new ConfigurationException(sprintf(
                     "Configuration section '%s' is not recognised: did you mean '%s'?",
                     $key,
@@ -200,6 +179,22 @@ final readonly class Configuration
                 ));
             }
         }
+    }
+
+    /**
+     * Map the folded spelling of each name to the name.
+     *
+     * @param list<string> $names
+     * @return array<string, string>
+     */
+    private static function canonicalNames(array $names): array
+    {
+        $canonical = [];
+        foreach ($names as $name) {
+            $canonical[self::foldName($name)] = $name;
+        }
+
+        return $canonical;
     }
 
     /**
