@@ -83,7 +83,9 @@ final class PhpEngine implements RenderEngine
     }
 
     /**
-     * Extract variables and capture the template output.
+     * Extract variables and capture the template output. The static closure and
+     * the `$__path__`/`$__args__` names keep templates away from `$this` and
+     * protect locals from `extract()`.
      *
      * @param string              $__path__ The absolute path to the template.
      * @param array<string,mixed> $__args__ Template variables.

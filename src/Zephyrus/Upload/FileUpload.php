@@ -77,6 +77,7 @@ final readonly class FileUpload
      * Every dotted segment of the client-supplied name, lowercased, in order.
      *
      * Unlike extension(), this reports all segments: an allowlist must check each one.
+     * `avatar.php.jpg` gives `['php', 'jpg']`, `.htaccess` gives `['htaccess']`.
      *
      * @return list<string>
      */

@@ -17,7 +17,8 @@ namespace Zephyrus\FileSystem;
  *
  * ## Symbolic links
  * create(), write() and copy() replace a symbolic link at the destination with a
- * regular file instead of following it. append() still follows the link.
+ * regular file instead of following it, so a link planted at a predictable path
+ * cannot redirect the write. append() still follows the link.
  */
 final class File extends FileSystemNode
 {
@@ -255,7 +256,7 @@ final class File extends FileSystemNode
     }
 
     /**
-     * Remove a symbolic link at `$path`, if any.
+     * Remove a symbolic link at `$path`, if any, so the write cannot follow it.
      *
      * @throws FileSystemException if the link is present but cannot be removed.
      */

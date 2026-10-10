@@ -395,8 +395,9 @@ final class Uploader
     /**
      * The extension the stored file receives.
      *
-     * The sniffed type decides. An unmapped type falls back to the client
-     * extension only when the allowlist contains it, otherwise the file has none.
+     * The sniffed type decides. A name without an extension keeps none. An
+     * unmapped type falls back to the client extension only when the allowlist
+     * contains it, otherwise the file has none.
      */
     private function storedExtension(FileUpload $file, string $sniffedMimeType): string
     {

@@ -15,8 +15,11 @@ use Zephyrus\Formatting\Formatter;
  * Templates use the `.latte` extension. The page identifier is a relative path
  * without extension: `render('users/show')` renders `{directory}/users/show.latte`.
  *
+ * Filters added by registerFormatterFilters() are usable in templates, e.g. `{$price|money}`.
+ *
  * Cache mode:
- *   - 'always' (default): compiled templates are written to the cache directory.
+ *   - 'always' (default): compiled templates are written to the cache directory and
+ *     recompiled when the source file changes.
  *   - 'never': nothing is cached, every render compiles in memory.
  * Any other value is refused at construction.
  *

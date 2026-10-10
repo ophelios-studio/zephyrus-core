@@ -9,7 +9,7 @@ use Zephyrus\Core\Config\ConfigSection;
 /**
  * Configuration section for the rendering engine.
  *
- * YAML example:
+ * YAML example, the values shown are the defaults:
  *
  *   render:
  *     engine: latte          # 'latte' or 'php'

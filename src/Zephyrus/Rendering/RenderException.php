@@ -44,7 +44,8 @@ final class RenderException extends ZephyrusRuntimeException
      * The template exists but rendering failed.
      *
      * The previous message is appended verbatim, so it may name a server path
-     * when the engine or PHP reports one.
+     * when the engine or PHP reports one. It is kept on purpose: a render failure
+     * without its cause cannot be diagnosed, unlike templateNotFound().
      */
     public static function renderFailed(string $page, \Throwable $previous): self
     {
