@@ -60,9 +60,6 @@ trait RenderResponses
     /**
      * Render a template using a specific engine (ignoring the default one).
      *
-     * Useful for one-off rendering with a different engine (e.g. rendering a
-     * plain PHP template in a controller that normally uses Latte).
-     *
      * @param RenderEngine        $engine The engine to use.
      * @param string              $page   Template identifier.
      * @param array<string,mixed> $args   Template variables.

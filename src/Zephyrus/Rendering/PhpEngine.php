@@ -9,36 +9,21 @@ use Zephyrus\FileSystem\SafePath;
 /**
  * Plain PHP template rendering engine.
  *
- * Templates are standard `.php` files that receive variables via `extract()`.
- * Output is captured using output buffering.
+ * Templates are `.php` files that receive variables via `extract()`. The page
+ * identifier is a relative path without extension: `render('users/show')`
+ * includes `{directory}/users/show.php`.
  *
- * The page identifier passed to `render()` is a relative path without
- * extension:
- *
- *   $engine->render('users/show', ['user' => $user]);
- *   // resolves to: {directory}/users/show.php
- *
- * File extension is configurable (default `.php`).
- *
- * ## THIS ENGINE DOES NOT ESCAPE ANYTHING
- * capture() is extract() plus include, so a template variable reaches the
- * response body byte for byte. Unlike LatteEngine there is no auto-escaping
- * layer, and there is no opt-in switch that adds one. Every value a template
- * prints into HTML must be passed through the global e() helper by the template
- * author:
+ * ## This engine does not escape anything
+ * A variable printed with a bare `<?= $value ?>` reaches the response as raw
+ * HTML. Pass every value written into HTML through the global e() helper:
  *
  *   <p><?= e($user->displayName) ?></p>
  *
- * A value printed with a bare `<?= $value ?>` is raw HTML. Flash messages,
- * validation errors and anything else that round-trips through a user are
- * stored XSS when written that way.
- *
  * ## Path safety
- * The page identifier is `include`d, so it is treated as untrusted. A page
- * containing a `..` segment or a null byte is refused outright, and the
- * resolved file must still sit under the configured template directory once
- * `realpath()` has collapsed symbolic links. `exists()` reports false for such
- * a page rather than acting as a file-existence oracle for the whole disk.
+ * The page identifier is `include`d, so it is untrusted. A page containing a
+ * `..` segment or a null byte is refused, and the resolved file must sit under
+ * the template directory after `realpath()`. `exists()` reports false for such
+ * a page.
  */
 final class PhpEngine implements RenderEngine
 {
@@ -90,7 +75,7 @@ final class PhpEngine implements RenderEngine
     }
 
     /**
-     * The path a page identifier would have resolved to, for error reporting only.
+     * The path a page identifier would resolve to, for error reporting only.
      */
     private function candidatePath(string $page): string
     {
@@ -98,17 +83,13 @@ final class PhpEngine implements RenderEngine
     }
 
     /**
-     * Extract variables and capture template output via output buffering.
-     *
-     * Uses a closure to isolate the template scope and prevent access to
-     * the engine's internal state.
+     * Extract variables and capture the template output.
      *
      * @param string              $__path__ The absolute path to the template.
      * @param array<string,mixed> $__args__ Template variables.
      */
     private function capture(string $__path__, array $__args__): string
     {
-        // Use a closure to isolate template scope.
         $renderer = static function (string $__path__, array $__args__): string {
             extract($__args__, EXTR_SKIP);
             ob_start();

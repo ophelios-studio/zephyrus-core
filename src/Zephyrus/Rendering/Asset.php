@@ -9,25 +9,18 @@ use Zephyrus\FileSystem\SafePath;
 /**
  * Asset manager for cache-busted URL generation and file embedding.
  *
- * Generates versioned URLs by appending a content-hash query parameter
- * to asset paths. This ensures browsers fetch fresh copies when assets
- * change, while allowing infinite caching for unchanged assets.
- *
- * Usage:
+ * Appends a content-hash query parameter to asset paths, so changed assets are
+ * refetched while unchanged ones can be cached indefinitely.
  *
  *   $asset = new Asset('/var/www/public');
- *   $asset->url('/css/app.css');  // "/css/app.css?v=a3f2b1c"
+ *   $asset->url('/css/app.css');    // "/css/app.css?v=a3f2b1c"
  *   $asset->embed('/img/logo.svg'); // "<svg>...</svg>"
  *
- * The hash is computed once per request and cached in memory.
- *
  * ## Path safety
- * `embed()` returns raw file bytes and is exposed to every template through the
- * global `embed()` helper, so the requested path is treated as untrusted. A path
- * containing a `..` segment or a null byte is refused, and the resolved file
- * must still sit under the configured public directory once `realpath()` has
- * collapsed symbolic links. `exists()` therefore reports false for such a path
- * rather than acting as a file-existence oracle for the whole disk.
+ * embed() returns raw file bytes and is exposed to templates through the global
+ * embed() helper, so the path is untrusted. A path containing a `..` segment or
+ * a null byte is refused, and the resolved file must sit under the public
+ * directory after `realpath()`. exists() reports false for such a path.
  */
 final class Asset
 {
@@ -96,9 +89,7 @@ final class Asset
      */
     private function resolve(string $path): ?string
     {
-        // Strip query string and fragment for filesystem resolution.
-        // parse_url() returns false on a severely malformed URL, in which case
-        // the raw path is used and SafePath decides whether it is acceptable.
+        // parse_url() returns false on malformed input: SafePath then judges the raw path.
         $parsed = parse_url($path, PHP_URL_PATH);
         $cleanPath = is_string($parsed) ? $parsed : $path;
         $filePath = SafePath::within($this->publicDirectory, $cleanPath);
@@ -127,7 +118,6 @@ final class Asset
             return null;
         }
 
-        // Truncate to 8 chars for short URLs.
         $short = substr($hash, 0, 8);
         $this->hashCache[$path] = $short;
 

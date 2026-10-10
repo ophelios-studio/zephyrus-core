@@ -7,13 +7,8 @@ namespace Zephyrus\Rendering;
 /**
  * Contract for template rendering engines.
  *
- * Implementations translate a page identifier (typically a relative path
- * without extension) and an associative array of template variables into a
- * rendered HTML string.
- *
- * Unlike Zephyrus v1 where engines output directly via echo/include, v2
- * engines return the rendered content as a string for cleaner composition
- * with the immutable Response value object.
+ * Implementations translate a page identifier (a relative path without
+ * extension) and template variables into a rendered HTML string.
  */
 interface RenderEngine
 {

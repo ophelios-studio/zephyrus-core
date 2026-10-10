@@ -16,14 +16,7 @@ use Zephyrus\Core\Config\ConfigSection;
  *     directory: app/Views   # relative to project root or absolute
  *     cache: cache/latte     # Latte cache directory
  *     mode: always           # 'always' or 'never'
- *     extension: .php        # file extension for PhpEngine (default '.php')
- *
- * Defaults:
- *   - engine:    'latte'
- *   - directory: 'app/Views'
- *   - cache:     'cache/latte'
- *   - mode:      'always'
- *   - extension: '.php'
+ *     extension: .php        # file extension for PhpEngine
  */
 final class RenderConfig extends ConfigSection
 {
@@ -68,7 +61,6 @@ final class RenderConfig extends ConfigSection
 
     private function resolvePath(string $path, ?string $basePath): string
     {
-        // Already absolute.
         if (str_starts_with($path, '/')) {
             return $path;
         }

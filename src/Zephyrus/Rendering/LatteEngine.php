@@ -12,27 +12,18 @@ use Zephyrus\Formatting\Formatter;
 /**
  * Latte 3.x template rendering engine.
  *
- * Wraps the Latte Engine with configurable template directory, cache
- * directory, auto-refresh behaviour, and support for Latte extensions.
- *
- * Template files must use the `.latte` extension. The page identifier
- * passed to `render()` is a relative path without extension:
- *
- *   $engine->render('users/show', ['user' => $user]);
- *   // resolves to: {directory}/users/show.latte
+ * Templates use the `.latte` extension. The page identifier is a relative path
+ * without extension: `render('users/show')` renders `{directory}/users/show.latte`.
  *
  * Cache mode:
- *   - 'always' (default): compiled templates are written to the cache directory
- *     and recompiled when the source changes.
- *   - 'never': no cache directory is used at all, so every render recompiles
- *     the template in memory (useful during development).
- * Any other value is a configuration error and is refused at construction.
+ *   - 'always' (default): compiled templates are written to the cache directory.
+ *   - 'never': nothing is cached, every render compiles in memory.
+ * Any other value is refused at construction.
  *
  * ## Path safety
- * The page identifier is resolved against the template directory, so it is
- * treated as untrusted. A page containing a `..` segment or a null byte is
- * refused outright, and the resolved file must still sit under the configured
- * template directory once `realpath()` has collapsed symbolic links.
+ * The page identifier is untrusted. A page containing a `..` segment or a null
+ * byte is refused, and the resolved file must sit under the template directory
+ * after `realpath()`.
  */
 final class LatteEngine implements RenderEngine
 {
@@ -91,14 +82,7 @@ final class LatteEngine implements RenderEngine
     }
 
     /**
-     * Register all Formatter methods (built-in and custom) as Latte filters.
-     *
-     * After calling this, templates can use pipe syntax such as
-     * `{$price|money}`, `{$date|date}`, or `{$value|phone}` for any
-     * custom formatter registered on the Formatter instance.
-     *
-     * Built-in formatters: money, date, datetime, time, filesize, percent,
-     * decimal, timeago, duration, list, ordinal, spellOut, truncate.
+     * Register the built-in and custom Formatter methods as Latte filters.
      */
     public function registerFormatterFilters(Formatter $formatter): void
     {
@@ -126,8 +110,7 @@ final class LatteEngine implements RenderEngine
     }
 
     /**
-     * Resolve a page identifier to a readable absolute file path contained
-     * within the template directory.
+     * Resolve a page identifier to a readable file inside the template directory.
      *
      * @return string|null Null when the page traverses out of the directory,
      *                     is unreadable, or does not exist.
@@ -140,7 +123,7 @@ final class LatteEngine implements RenderEngine
     }
 
     /**
-     * The path a page identifier would have resolved to, for error reporting only.
+     * The path a page identifier would resolve to, for error reporting only.
      */
     private function candidatePath(string $page): string
     {
@@ -148,13 +131,11 @@ final class LatteEngine implements RenderEngine
     }
 
     /**
-     * Apply the cache mode, which decides whether a compiled-template cache is
-     * used at all.
+     * Apply the cache mode.
      */
     private function configureCache(string $cacheDirectory, string $cacheMode): void
     {
         if ($cacheMode === 'never') {
-            // No temp directory: Latte compiles the template on every render.
             $this->latte->setAutoRefresh(true);
             return;
         }
