@@ -701,7 +701,9 @@ final readonly class Request
             return strtolower($matches[1]) . '://' . substr($requestUri, strlen($matches[0]));
         }
 
-        if ($requestUri !== '*' && !str_starts_with($requestUri, '/')) {
+        if ($requestUri === '*') {
+            $requestUri = '/';
+        } elseif (!str_starts_with($requestUri, '/')) {
             $requestUri = '/' . $requestUri;
         }
 

@@ -1246,6 +1246,20 @@ final class RequestTest extends TestCase
         self::assertSame('https://app.example.test:8443/x', $request->uri()->full());
     }
 
+    public function testFromGlobalsReadsAsteriskOptionsTargetAsRootPath(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'OPTIONS',
+                'HTTP_HOST'      => 'app.example.test',
+                'REQUEST_URI'    => '*',
+            ],
+        );
+
+        self::assertSame('http://app.example.test/', $request->uri()->full());
+        self::assertSame('/', $request->path());
+    }
+
     public function testFromGlobalsDefaultsMethodToGetWhenAbsent(): void
     {
         $request = Request::fromGlobals(server: []);
