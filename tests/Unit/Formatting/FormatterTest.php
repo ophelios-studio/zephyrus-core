@@ -657,6 +657,14 @@ final class FormatterTest extends TestCase
         self::assertSame(['money', 'spellOut'], $this->formatter->getCustomFormatterNames());
     }
 
+    public function testGetCustomFormatterNamesReturnsStringsForNumericNames(): void
+    {
+        $this->formatter->register('123', static fn (): string => 'numeric');
+        $this->formatter->register('slug', static fn (): string => 'slug');
+
+        self::assertSame(['123', 'slug'], $this->formatter->getCustomFormatterNames());
+    }
+
     public function testFormatKeepsCustomFormatterNameCaseSensitive(): void
     {
         $this->formatter->register('phone', static fn (): string => 'custom');

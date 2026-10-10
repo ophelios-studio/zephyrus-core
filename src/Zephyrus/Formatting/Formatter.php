@@ -478,11 +478,11 @@ final class Formatter
     /**
      * Returns the names of all registered custom formatters.
      *
-     * @return string[]
+     * @return list<string>
      */
     public function getCustomFormatterNames(): array
     {
-        return array_keys($this->customFormatters);
+        return array_map(strval(...), array_keys($this->customFormatters));
     }
 
     /**
