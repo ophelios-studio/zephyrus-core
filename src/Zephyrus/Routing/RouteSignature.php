@@ -9,18 +9,12 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 final readonly class RouteSignature
 {
     /**
-     * An empty secret is refused rather than accepted.
+     * Refuses an empty secret: an empty HMAC key lets anyone recompute the signature from the URL.
      *
-     * hash_hmac('sha256', $payload, '') is a perfectly well-formed digest that
-     * anybody can recompute from the URL alone, so an empty secret turns every
-     * signed URL into a public one while sign(), verify() and assertValid() all
-     * keep reporting success. The failure is invisible from the outside, which
-     * is why it has to fail at construction: a secret read from an unset
-     * environment variable is the way this happens in practice, and the moment
-     * to notice is boot, not an audit.
+     * Whitespace is trimmed for the emptiness test only; the secret is used verbatim, so an existing
+     * signature stays valid.
      *
-     * Whitespace is trimmed for the emptiness test only. The secret itself is
-     * used verbatim, so an existing signature stays valid.
+     * @throws RouteSignatureException When the secret is empty or whitespace only.
      */
     public function __construct(#[\SensitiveParameter] private string $secret)
     {
@@ -37,6 +31,11 @@ final readonly class RouteSignature
         return $this->appendSignature($payload, $signature, $this->extractFragment($url));
     }
 
+    /**
+     * Signs a URL that expires $ttlSeconds after $now (default: current time).
+     *
+     * @throws RouteSignatureException When the TTL is not positive.
+     */
     public function signTemporary(string $url, int $ttlSeconds, ?int $now = null): string
     {
         if ($ttlSeconds <= 0) {
@@ -48,6 +47,11 @@ final readonly class RouteSignature
         return $this->signTemporaryUntil($url, expiresAt: $currentTime + $ttlSeconds, now: $currentTime);
     }
 
+    /**
+     * Signs a URL that expires at the Unix instant $expiresAt.
+     *
+     * @throws RouteSignatureException When $expiresAt is not after $now.
+     */
     public function signTemporaryUntil(string $url, int $expiresAt, ?int $now = null): string
     {
         $currentTime = $now ?? time();
@@ -73,11 +77,17 @@ final readonly class RouteSignature
         return $this->validationFailure($url, $now, $clockSkewSeconds) === null;
     }
 
+    /**
+     * @throws RouteSignatureException When the signature is missing, invalid or expired.
+     */
     public function assertValid(string $url): void
     {
         $this->assertValidAt($url);
     }
 
+    /**
+     * @throws RouteSignatureException When the signature is missing, invalid or expired.
+     */
     public function assertValidAt(string $url, ?int $now = null, int $clockSkewSeconds = 0): void
     {
         $failure = $this->validationFailure($url, $now, $clockSkewSeconds);

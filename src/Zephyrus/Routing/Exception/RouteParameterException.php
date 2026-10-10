@@ -7,12 +7,10 @@ namespace Zephyrus\Routing\Exception;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
- * Thrown when a route parameter value cannot be coerced to the type declared
- * on the controller method signature (e.g. "abc" for int $id).
+ * Thrown when a route parameter cannot be coerced to the type declared on the
+ * controller method (e.g. "abc" for int $id).
  *
- * Mapped to a 404 Not Found response by HttpExceptionResponder — the
- * requested resource conceptually does not exist when the URL segment
- * fails type validation.
+ * HttpExceptionResponder maps it to 404 Not Found.
  */
 final class RouteParameterException extends ZephyrusRuntimeException
 {

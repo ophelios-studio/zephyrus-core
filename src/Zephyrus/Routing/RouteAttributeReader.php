@@ -21,6 +21,7 @@ use Zephyrus\Routing\Attribute\RequiresEnv as RequiresEnvAttribute;
 use Zephyrus\Routing\Attribute\Root as RootAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 
 /**
  * Discovers route definitions from PHP 8 attributes on controller methods.
@@ -31,12 +32,14 @@ use Zephyrus\Routing\Exception\RouteAttributeException;
 final class RouteAttributeReader
 {
     /**
-     * Scans the given class and returns all Route objects derived from
-     * #[Route] attributes on its public methods.
+     * Returns the routes declared by verb or route attributes on public methods declared by the class itself
+     * (inherited methods are not read). Returns none when a class-level #[RequiresEnv] fails, and skips a
+     * method whose #[RequiresEnv] fails.
      *
      * @param class-string $className
      * @return list<Route>
-     * @throws RouteAttributeException When the class cannot be reflected.
+     * @throws RouteAttributeException When the class cannot be reflected or two routes share a name.
+     * @throws RouteSignatureException When a route placeholder is malformed, duplicated or reserved.
      */
     public function read(string $className): array
     {

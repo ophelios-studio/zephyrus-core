@@ -7,6 +7,15 @@ namespace Zephyrus\Routing;
 use JsonException;
 use Zephyrus\Routing\Exception\RouteCacheException;
 
+/**
+ * Persists the compiled route table as a JSON file and validates it on load.
+ *
+ * The file is {"meta": {...}, "routes": [...]}. meta holds the format version (1), the sha256 of the
+ * routes section, the route count and generated_at. When meta is present, load() refuses an unknown
+ * version and a count or hash mismatch. The hash detects corruption, not tampering: a file without
+ * meta loads unchecked, so protect the file with permissions. A cache whose hash no longer matches
+ * the current routes is stale.
+ */
 final class RouteCache
 {
     private const METADATA_VERSION = 1;
@@ -31,6 +40,11 @@ final class RouteCache
         return is_file($this->cacheFile);
     }
 
+    /**
+     * Deletes the cache file when present.
+     *
+     * @throws RouteCacheException When the file exists and cannot be deleted.
+     */
     public function clear(): void
     {
         if (!$this->has()) {
@@ -135,6 +149,11 @@ final class RouteCache
         return $currentTime - $generatedAt;
     }
 
+    /**
+     * Returns the instant the cache expires for $maxAgeSeconds, or null when there is no cache.
+     *
+     * @throws RouteCacheException When $maxAgeSeconds is negative.
+     */
     public function expiresAt(int $maxAgeSeconds): ?int
     {
         if ($maxAgeSeconds < 0) {
@@ -149,6 +168,9 @@ final class RouteCache
         return $generatedAt + $maxAgeSeconds;
     }
 
+    /**
+     * @throws RouteCacheException When $maxAgeSeconds is negative.
+     */
     public function isExpired(int $maxAgeSeconds, ?int $now = null): bool
     {
         $expiresAt = $this->expiresAt($maxAgeSeconds);
@@ -166,6 +188,9 @@ final class RouteCache
         return $currentTime > $expiresAt;
     }
 
+    /**
+     * @throws RouteCacheException When $maxAgeSeconds is negative.
+     */
     public function isFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
         if ($this->isExpired($maxAgeSeconds, $now)) {
@@ -175,6 +200,9 @@ final class RouteCache
         return $this->isFresh($routes);
     }
 
+    /**
+     * @throws RouteCacheException When the cache is missing, invalid, expired or stale, or $maxAgeSeconds is negative.
+     */
     public function ensureFreshWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): void
     {
         $state = $this->inspect($routes, $maxAgeSeconds, $now);
@@ -185,14 +213,18 @@ final class RouteCache
         }
     }
 
+    /**
+     * @throws RouteCacheException When $maxAgeSeconds is negative.
+     */
     public function canUseWithin(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
         return $this->inspect($routes, $maxAgeSeconds, $now)['reason'] === self::REASON_FRESH;
     }
 
     /**
-     * Inspect cache state for diagnostics.
+     * Inspects the cache state for diagnostics.
      *
+     * @throws RouteCacheException When $maxAgeSeconds is negative.
      * @return array{
      *   exists: bool,
      *   metadata_valid: bool,
@@ -213,6 +245,11 @@ final class RouteCache
         return $this->evaluateState($routes, $maxAgeSeconds, $now);
     }
 
+    /**
+     * Writes the routes to the cache file.
+     *
+     * @throws RouteCacheException When encoding, creating the directory or writing the file fails.
+     */
     public function save(RouteCollection $routes): void
     {
         $routesPayload = $this->routesToPayload($routes->all());
@@ -230,20 +267,15 @@ final class RouteCache
 
         $directory = dirname($this->cacheFile);
         if ($directory !== '' && $directory !== '.' && !is_dir($directory)) {
-            // 0755, never 0777. The cache drives Class@method dispatch, so a
-            // local write to it is arbitrary dispatch inside this application.
-            // Under "umask 0" the old mode landed the directory 0777 and the
-            // file 0666, i.e. world-writable, on any machine that runs a
-            // deploy with a permissive umask.
+            // Explicit 0755, never world-writable: the cache drives Class@method dispatch.
             $created = @mkdir($directory, 0755, true);
             if ($created === false && !is_dir($directory)) {
                 throw new RouteCacheException(sprintf('Unable to create route cache directory: %s', $directory));
             }
         }
 
-        // Written to a temporary file and renamed into place, so a concurrent
-        // load() never observes a half-written payload, and chmod()ed
-        // explicitly rather than left to the umask.
+        // Written to a temporary file then renamed, so a concurrent load() never reads a partial payload.
+        // The mode is set explicitly, not left to the umask.
         $temporary = $this->cacheFile . '.' . bin2hex(random_bytes(8)) . '.tmp';
 
         $result = @file_put_contents($temporary, $json);
@@ -263,9 +295,10 @@ final class RouteCache
     }
 
     /**
-     * Save the given routes and return the generated cache metadata.
+     * Saves the routes and returns the written metadata.
      *
      * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}
+     * @throws RouteCacheException When the save fails.
      */
     public function warm(RouteCollection $routes): array
     {
@@ -280,10 +313,10 @@ final class RouteCache
     }
 
     /**
-     * Warm the cache only when stale.
+     * Rewrites the cache only when it is not fresh within $maxAgeSeconds.
      *
-     * Returns true when a new cache write happened, false when the existing
-     * cache was already fresh within the requested max age window.
+     * @return bool True when the cache was written, false when it was already fresh.
+     * @throws RouteCacheException When $maxAgeSeconds is negative or the save fails.
      */
     public function warmIfStale(RouteCollection $routes, int $maxAgeSeconds, ?int $now = null): bool
     {
@@ -300,6 +333,12 @@ final class RouteCache
         return true;
     }
 
+    /**
+     * Loads and validates the cache file into a RouteCollection.
+     *
+     * @throws RouteCacheException When the file is missing or unreadable, or fails a structure, version,
+     *                             hash or route validation.
+     */
     public function load(): RouteCollection
     {
         if (!is_file($this->cacheFile)) {
@@ -382,9 +421,7 @@ final class RouteCache
             $this->assertValidRouteName($name);
 
             try {
-                // Route validates its own placeholder names, so a cache file
-                // carrying a poisoned path fails here. Everything wrong with
-                // the cache file must surface as a RouteCacheException.
+                // Any invalid entry must surface as RouteCacheException.
                 $route = Route::define(
                     method: $entry['method'],
                     path: $entry['path'],

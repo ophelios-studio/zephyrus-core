@@ -6,12 +6,17 @@ namespace Zephyrus\Routing\Attribute;
 
 use Attribute;
 
+/**
+ * Declares a PATCH route on a controller method.
+ */
 #[Attribute(Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class Patch
 {
     /**
-     * @param array<string, string> $constraints
-     * @param array<int, string>    $middlewares
+     * @param string                $path        Path pattern with {placeholder} segments.
+     * @param array<string, string> $constraints Regex per placeholder name; unlisted placeholders match "[^/]+".
+     * @param array<int, string>    $middlewares Names of the middlewares or middleware groups applied to this route.
+     * @param string                $name        Route name for URL generation; empty for none.
      */
     public function __construct(
         public readonly string $path,

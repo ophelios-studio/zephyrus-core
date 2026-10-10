@@ -19,27 +19,21 @@ use Zephyrus\Routing\Exception\HandlerResolverException;
 use Zephyrus\Routing\Exception\RouteParameterException;
 
 /**
- * Resolves ClassName@method handler strings into Response values.
+ * Resolves "ClassName@method" handler strings into Response values.
  *
- * Dispatches to a controller method using reflection-based argument injection,
- * in this order, per parameter:
- * - Parameters type-hinted as Request receive the current Request instance.
- * - Parameters NAMED AFTER A PLACEHOLDER of the matched route are injected from
- *   the route match, never from the request attributes. See invoke() for why
- *   attribute-wins was withdrawn.
- * - Parameters whose name matches a request attribute are injected from
- *   $request->attribute($name), cast to the declared scalar type. That is how a
- *   middleware publishes a value to a handler.
- * - Parameters that match nothing by name fall back to POSITION, but only over
- *   the route parameters of the matched route that no earlier parameter already
- *   consumed by name. See resolvePositionalPool() for why the pool is that
- *   narrow.
- * - Parameters with default values fall back silently.
- * - All other unresolvable parameters throw HandlerResolverException.
+ * Each controller parameter is resolved in this order:
+ * - a Request type-hint receives the current request;
+ * - a name matching a placeholder of the matched route takes the route value,
+ *   never a request attribute, so a middleware cannot replace a constrained
+ *   segment;
+ * - a name matching a request attribute takes that attribute, cast to the
+ *   declared type;
+ * - otherwise the next unclaimed route parameter, by position;
+ * - otherwise the declared default value;
+ * - otherwise HandlerResolverException.
  *
- * An optional factory callable may be provided to integrate a DI container;
- * its signature is (class-string): object. When omitted, classes are
- * instantiated with no constructor arguments.
+ * The optional factory (class-string): object builds controllers. Without it,
+ * controllers are instantiated with no constructor arguments.
  */
 final class HandlerResolver
 {
@@ -61,8 +55,11 @@ final class HandlerResolver
     /**
      * Resolves and invokes the handler, returning the controller's Response.
      *
-     * This method matches the signature expected by RouteDispatcher's $resolver
-     * callable: (RouteMatch, Request): Response.
+     * Matches the RouteDispatcher resolver signature (RouteMatch, Request): Response.
+     *
+     * @throws HandlerResolverException When the handler, class, method or a parameter cannot be resolved.
+     * @throws RouteParameterException When a route value or request attribute value cannot be cast to the
+     *                                 declared parameter type.
      */
     public function resolve(RouteMatch $match, Request $request): Response
     {
@@ -74,7 +71,6 @@ final class HandlerResolver
             throw HandlerResolverException::unresolvableClass($class, $e);
         }
 
-        // before() hook — short-circuit if a Response is returned.
         if ($controller instanceof ControllerLifecycleInterface) {
             $early = $controller->before($request);
 
@@ -85,15 +81,12 @@ final class HandlerResolver
 
         $response = $this->invoke($controller, $class, $method, $request, $match);
 
-        // after() hook — may decorate the handler's Response.
         if ($controller instanceof ControllerLifecycleInterface) {
             $response = $controller->after($request, $response);
         }
 
         return $response;
     }
-
-    // -------------------------------------------------------------------------
 
     /**
      * Parses a "ClassName@method" string into [$class, $method].
@@ -116,7 +109,7 @@ final class HandlerResolver
     }
 
     /**
-     * Invokes $method on $controller, injecting arguments by type/name/position.
+     * Invokes $method on $controller, injecting arguments by type, name then position.
      */
     private function invoke(
         object $controller,
@@ -133,9 +126,7 @@ final class HandlerResolver
 
         $args = [];
 
-        // Route parameters of THIS route, in path order, minus the ones an
-        // earlier handler parameter already took by name. Only these are
-        // eligible for the positional fallback.
+        // Positional fallback draws only from this route's placeholders not already claimed by name.
         $positionalPool = $this->resolvePositionalPool($match, $request);
         $routeParameterNames = $this->routeParameterNames($match->route->path);
 
@@ -143,40 +134,19 @@ final class HandlerResolver
             $type = $param->getType();
             $name = $param->getName();
 
-            // Type-hinted as Request → inject the current request.
             if ($this->acceptsRequestType($type)) {
                 $args[] = $request;
                 continue;
             }
 
-            // A PLACEHOLDER OF THIS ROUTE is taken from the match, never from
-            // the attributes.
-            //
-            // The attributes used to win, and that was framed as a feature: a
-            // middleware could "deliberately rewrite a route parameter". What
-            // it actually meant is that a route constraint validated the URL
-            // SEGMENT and then something else was handed to the handler, with
-            // the replacement never constraint-checked. Measured:
-            //
-            //   Route constraint on {docId}: strict UUID.
-            //   GET /docs/<valid-uuid> + header X-Doc-Id: ../../../etc/passwd
-            //     -> 200 LOADING FILE: /var/docs/../../../etc/passwd.pdf
-            //
-            // A constraint that is not authoritative for its own handler
-            // argument is not a constraint. A middleware that genuinely needs
-            // to influence a handler publishes an attribute under a name that
-            // is NOT a placeholder of the route, which still binds by name
-            // below.
+            // A route placeholder is always read from the match: an attribute must never replace a constrained segment.
             if (in_array($name, $routeParameterNames, true) && array_key_exists($name, $match->parameters)) {
                 $args[] = $this->castToType($match->parameters[$name], $type, $class, $method, $name);
                 unset($positionalPool[$name]);
                 continue;
             }
 
-            // Named attribute (a value a middleware published onto the
-            // request, or a route parameter hydrated by a caller driving this
-            // resolver directly). Binding by name is the contract; position is
-            // only ever a fallback.
+            // A value a middleware published on the request. Position is only a fallback.
             if (array_key_exists($name, $request->attributes)) {
                 $attrValue = $request->attributes[$name];
                 $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
@@ -184,15 +154,12 @@ final class HandlerResolver
                 continue;
             }
 
-            // Positional fallback: take the next route parameter nobody has
-            // claimed by name yet.
             if ($positionalPool !== []) {
                 $attrValue = array_shift($positionalPool);
                 $args[] = $this->castToType($attrValue, $type, $class, $method, $name);
                 continue;
             }
 
-            // Fall back to a declared default value.
             if ($param->isDefaultValueAvailable()) {
                 $args[] = $param->getDefaultValue();
                 continue;
@@ -205,30 +172,10 @@ final class HandlerResolver
     }
 
     /**
-     * Builds the ordered pool the positional fallback draws from.
+     * Builds the ordered pool the positional fallback draws from: the matched route's placeholders, in path order.
      *
-     * The pool is the matched route's OWN parameters, in path order, and
-     * nothing else. It used to be array_values($request->attributes), which is
-     * a wider set: HttpKernel hydrates the route parameters into the attributes
-     * before the global pipeline runs, so every attribute a middleware adds
-     * afterwards (a session, a resolved locale, a tenant) landed in the same
-     * positional list. A handler declaring one more parameter than its route
-     * has placeholders, the ordinary way to serve /policies/{type} and
-     * /policies/{type}/{productId} from one method, therefore received the
-     * first middleware attribute instead of its declared default. The value was
-     * a plausible string, so it failed deep inside the handler rather than at
-     * the boundary.
-     *
-     * Membership is read off the route PATH rather than off the match, so the
-     * pool is right for both wirings in use: HttpKernel merges the match's
-     * parameters into the attributes before dispatch, while a caller driving
-     * this resolver directly may hydrate the attributes itself.
-     *
-     * VALUES COME FROM THE MATCH FIRST, and fall back to the attributes only
-     * for a placeholder the match does not carry, which is the direct-caller
-     * wiring above. The attributes used to win here too, so a middleware could
-     * replace a constraint-checked segment with anything at all and the
-     * replacement reached the handler unchecked. See invoke().
+     * Never the whole attribute bag, or middleware attributes would shift later parameters off their defaults.
+     * Values come from the match first, and from the attributes only for a placeholder the match does not carry.
      *
      * @return array<string, mixed>
      */
@@ -251,10 +198,7 @@ final class HandlerResolver
     }
 
     /**
-     * The placeholder names of a route path, in path order.
-     *
-     * Mirrors how RouteCollection recognises a parameter segment: the WHOLE
-     * segment is a placeholder, never a fragment of one.
+     * The placeholder names of a route path, in path order. A placeholder is a whole segment, as in RouteCollection.
      *
      * @return array<int, string>
      */
@@ -300,10 +244,7 @@ final class HandlerResolver
         }
 
         if ($type instanceof ReflectionUnionType) {
-            // A DNF type such as "int|(Countable&Stringable)" is a union whose
-            // members are NOT all named: getTypes() hands back the nested
-            // ReflectionIntersectionType too, and passing that to
-            // castToNamedType() was a TypeError on a live request.
+            // DNF members may be intersections, which have no coercion rule: only named members are cast.
             $hasCompositeMember = false;
 
             foreach ($type->getTypes() as $candidate) {
@@ -319,10 +260,7 @@ final class HandlerResolver
                 }
             }
 
-            // No named member accepted the value, but a composite member is
-            // still standing and carries no coercion rule of its own, so the
-            // value goes through untouched. Throwing here instead would reject
-            // an object that actually satisfies the intersection.
+            // An intersection member may accept the untouched value, so it is not rejected here.
             if ($hasCompositeMember) {
                 return $value;
             }
@@ -336,15 +274,9 @@ final class HandlerResolver
             );
         }
 
-        // Anything that is not a named type is an intersection (the only other
-        // ReflectionType on PHP 8.4/8.5, and the positive test keeps a future
-        // fourth one out of castToNamedType too). Every member of an
-        // intersection is a class or an interface, so no coercion applies and
-        // the value passes through exactly as it already does for a named class
-        // type. PHP's own parameter check enforces the intersection at invoke().
+        // Any other type is an intersection: no coercion applies, PHP enforces it at invoke().
         if (!$type instanceof ReflectionNamedType) {
-            // An intersection never allows null, so null is refused at this
-            // boundary rather than deeper, matching a non-nullable named type.
+            // Intersections are non-nullable, so null is refused here.
             if ($value === null) {
                 throw new RouteParameterException(
                     $class,
@@ -388,18 +320,9 @@ final class HandlerResolver
     }
 
     /**
-     * Convert a value to int, refusing anything this platform cannot represent.
+     * Converts to int, refusing digits PHP cannot represent.
      *
-     * The digit test used to be the whole check, and (int) then SATURATED
-     * silently: "/n/9999999999999999999999" answered 200 with
-     * id=9223372036854775807, so two distinct URLs collapsed to one argument
-     * and a lookup, an audit record or an ownership check keyed on the wrong
-     * row. That also contradicted this class's own contract, which is to throw
-     * RouteParameterException for a value it cannot represent.
-     *
-     * Representability is proven by ROUND-TRIPPING rather than by comparing
-     * against PHP_INT_MAX as a string, so leading zeros ("007") and "-0" keep
-     * working exactly as before.
+     * (int) saturates silently, so the canonical digits must survive a round trip: "007" passes, an out-of-range value fails.
      */
     private function toInt(mixed $value, string $class, string $method, string $parameter): int
     {
@@ -477,9 +400,7 @@ final class HandlerResolver
             return $type->getName();
         }
 
-        // Recursive, because a DNF union nests an intersection. The closure
-        // this replaced declared ReflectionNamedType, so describing such a
-        // union was itself a TypeError inside the error path.
+        // Recursive, because a DNF union nests an intersection.
         if ($type instanceof ReflectionUnionType) {
             return implode('|', array_map($this->describeType(...), $type->getTypes()));
         }

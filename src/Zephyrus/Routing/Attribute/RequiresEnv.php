@@ -7,11 +7,10 @@ namespace Zephyrus\Routing\Attribute;
 use Attribute;
 
 /**
- * Conditionally register a route based on an environment variable.
+ * Registers the routes of a class or method only when an environment variable has the expected value.
  *
- * When applied to a controller class or method, routes are only
- * registered when the environment variable matches the expected value.
- * This allows separating WEB vs API controllers at route discovery time.
+ * Separates application modes such as WEB and API at route discovery. Subclasses inherit the
+ * requirement of their parent classes.
  *
  * Usage:
  *   #[RequiresEnv('MODE', 'WEB')]
@@ -20,6 +19,10 @@ use Attribute;
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
 final class RequiresEnv
 {
+    /**
+     * @param string $variable Environment variable name.
+     * @param string $value    Value the variable must equal.
+     */
     public function __construct(
         public readonly string $variable,
         public readonly string $value,

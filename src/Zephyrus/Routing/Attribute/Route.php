@@ -18,8 +18,11 @@ use Attribute;
 final class Route
 {
     /**
-     * @param array<string, string> $constraints
-     * @param array<int, string>    $middlewares
+     * @param string                $path        Path pattern with {placeholder} segments.
+     * @param string                $method      HTTP method.
+     * @param array<string, string> $constraints Regex per placeholder name; unlisted placeholders match "[^/]+".
+     * @param array<int, string>    $middlewares Names of the middlewares or middleware groups applied to this route.
+     * @param string                $name        Route name for URL generation; empty for none.
      */
     public function __construct(
         public readonly string $path,
