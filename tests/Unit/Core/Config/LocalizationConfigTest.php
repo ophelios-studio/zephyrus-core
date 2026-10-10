@@ -208,20 +208,15 @@ final class LocalizationConfigTest extends TestCase
         LocalizationConfig::fromArray(['grouping_separator' => ['x']]);
     }
 
-    public function testFromArrayRefusesAGroupingSeparatorOverFourBytes(): void
+    public function testFromArrayRefusesALongGroupingSeparator(): void
     {
         $this->expectException(ConfigurationException::class);
 
         LocalizationConfig::fromArray(['grouping_separator' => 'ABCDE']);
     }
 
-    public function testFromArrayAcceptsAGroupingSeparatorOfFourBytes(): void
-    {
-        self::assertSame("\u{2009}'", LocalizationConfig::fromArray(['grouping_separator' => "\u{2009}'"])->groupingSeparator);
-    }
-
     #[DataProviderExternal(FormatterInputTest::class, 'refusedGroupingSeparators')]
-    public function testFromArrayRefusesAGroupingSeparatorThatCanHideOrReorderDigits(string $separator): void
+    public function testFromArrayRefusesAGroupingSeparatorOutsideTheList(string $separator): void
     {
         try {
             LocalizationConfig::fromArray(['grouping_separator' => $separator]);
@@ -233,21 +228,14 @@ final class LocalizationConfigTest extends TestCase
     }
 
     #[DataProviderExternal(FormatterInputTest::class, 'acceptedGroupingSeparators')]
-    public function testFromArrayAcceptsSpacesAndNeutralPunctuationAsGroupingSeparators(string $separator): void
+    public function testFromArrayAcceptsTheListedGroupingSeparators(string $separator): void
     {
         self::assertSame($separator, LocalizationConfig::fromArray(['grouping_separator' => $separator])->groupingSeparator);
-    }
-
-    public function testFromArrayLeavesTheDotAndCommaChecksToTheLocale(): void
-    {
-        self::assertSame('.', LocalizationConfig::fromArray(['grouping_separator' => '.'])->groupingSeparator);
-        self::assertSame(',', LocalizationConfig::fromArray(['grouping_separator' => ','])->groupingSeparator);
     }
 
     public function testFromArrayRefusesAGroupingSeparatorThatIsNotValidUtf8(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('must be valid UTF-8');
 
         LocalizationConfig::fromArray(['grouping_separator' => "\xC3\x28"]);
     }

@@ -21,8 +21,8 @@ final class FormatterInputTest extends TestCase
         yield 'thin space' => ["\u{2009}"];
         yield 'apostrophe' => ["'"];
         yield 'right single quotation mark' => ["\u{2019}"];
-        yield 'apostrophe then thin space' => ["'\u{2009}"];
-        yield 'thin space then apostrophe' => ["\u{2009}'"];
+        yield 'comma' => [','];
+        yield 'dot' => ['.'];
     }
 
     /**
@@ -31,11 +31,19 @@ final class FormatterInputTest extends TestCase
     public static function refusedGroupingSeparators(): iterable
     {
         yield 'digit' => ['1'];
+        yield 'two dots' => ['..'];
         yield 'arabic-indic digit' => ["\u{0661}"];
         yield 'digit added in Unicode 17' => ["\u{11DE0}"];
         yield 'vulgar fraction one half' => ["\u{00BD}"];
         yield 'circled digit one' => ["\u{2460}"];
         yield 'latin letter' => ['x'];
+        yield 'plus sign' => ['+'];
+        yield 'hyphen-minus' => ['-'];
+        yield 'minus sign' => ["\u{2212}"];
+        yield 'plus-minus sign' => ["\u{00B1}"];
+        yield 'percent sign' => ['%'];
+        yield 'dollar sign' => ['$'];
+        yield 'euro sign' => ["\u{20AC}"];
         yield 'modifier letter prime' => ["\u{02B9}"];
         yield 'NUL' => ["\0"];
         yield 'tab' => ["\t"];
@@ -63,6 +71,15 @@ final class FormatterInputTest extends TestCase
         yield 'halfwidth hangul filler' => ["\u{FFA0}"];
         yield 'unassigned' => ["\u{2065}"];
         yield 'private use' => ["\u{E000}"];
+        yield 'one-dot leader' => ["\u{2024}"];
+        yield 'single low-9 quotation mark' => ["\u{201A}"];
+        yield 'modifier letter minus sign' => ["\u{02D7}"];
+        yield 'heavy plus sign' => ["\u{2795}"];
+        yield 'hyphen' => ["\u{2010}"];
+        yield 'en dash' => ["\u{2013}"];
+        yield 'underscore' => ['_'];
+        yield 'comma then space' => [', '];
+        yield 'apostrophe then thin space' => ["'\u{2009}"];
         yield 'accepted character then right-to-left letter' => ["'\u{05F3}"];
     }
 
@@ -83,42 +100,23 @@ final class FormatterInputTest extends TestCase
     }
 
     #[DataProvider('acceptedGroupingSeparators')]
-    public function testAcceptsSpacesAndNeutralPunctuation(string $separator): void
+    public function testAcceptsTheSeparatorsRealLocalesUse(string $separator): void
     {
         self::assertNull(FormatterInput::groupingSeparatorRefusal($separator));
     }
 
-    public function testAcceptsADotOrACommaWhateverTheLocale(): void
+    public function testAcceptsEmptyToTurnGroupingOff(): void
     {
-        self::assertNull(FormatterInput::groupingSeparatorRefusal('.'));
-        self::assertNull(FormatterInput::groupingSeparatorRefusal(','));
+        self::assertNull(FormatterInput::groupingSeparatorRefusal(''));
     }
 
     #[DataProvider('refusedGroupingSeparators')]
-    public function testRefusesACharacterThatCanHideOrReorderDigits(string $separator): void
+    public function testRefusesAnythingOutsideTheList(string $separator): void
     {
-        $reason = FormatterInput::groupingSeparatorRefusal($separator);
-
-        self::assertNotNull($reason);
-        self::assertStringContainsString('right-to-left', $reason);
-        self::assertStringContainsString('U+05D0', $reason);
-    }
-
-    public function testRefusesAnEmptySeparator(): void
-    {
-        self::assertSame('must not be empty', FormatterInput::groupingSeparatorRefusal(''));
-    }
-
-    public function testRefusesASeparatorOverFourBytes(): void
-    {
-        self::assertSame('must be at most 4 bytes', FormatterInput::groupingSeparatorRefusal("\u{2009}''"));
-        self::assertSame('must be at most 4 bytes', FormatterInput::groupingSeparatorRefusal(str_repeat(' ', 100_000)));
-    }
-
-    public function testRefusesInvalidUtf8(): void
-    {
-        self::assertSame('must be valid UTF-8', FormatterInput::groupingSeparatorRefusal("\xC3\x28"));
-        self::assertSame('must be valid UTF-8', FormatterInput::groupingSeparatorRefusal("\xED\xA0\x80"));
+        self::assertSame(
+            "must be one of , . ' U+2019, a space, U+00A0, U+202F or U+2009, or empty to turn grouping off",
+            FormatterInput::groupingSeparatorRefusal($separator),
+        );
     }
 
     public function testAcceptsThreeAsciiLettersAsACurrencyCode(): void

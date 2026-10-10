@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Zephyrus\Formatting;
 
-use IntlChar;
-
 /**
  * Locale-independent checks on the grouping separator and currency code, shared by Formatter and
  * LocalizationConfig so both refuse the same values with the same reason.
+ *
+ * A grouping separator is one of `,` `.` `'` U+2019, a space, U+00A0, U+202F or U+2009, or '' to turn
+ * grouping off. In a right-to-left locale, or inside right-to-left text, only `,` `.` U+00A0 and U+202F
+ * keep the groups in order; a space, U+2009, `'` or U+2019 reverses them.
  *
  * @internal
  */
@@ -16,59 +18,21 @@ final class FormatterInput
 {
     public const string CURRENCY_CODE_RULE = 'must be three ASCII letters, for example CAD';
 
-    private const int SEPARATOR_MAX_BYTES = 4;
+    private const string SEPARATOR_RULE = "must be one of , . ' U+2019, a space, U+00A0, U+202F or U+2009, "
+        . 'or empty to turn grouping off';
 
-    private const string SEPARATOR_CHARACTER_RULE = 'must contain only spaces, punctuation or symbols, not a letter, '
-        . 'a number, or an invisible, combining or right-to-left character such as U+200B, U+0336 or U+05D0';
-
-    // Bidi classes that stay put between digits on a left-to-right line: CS, ES, ET, ON, WS.
-    private const array SEPARATOR_DIRECTIONS = [
-        IntlChar::CHAR_DIRECTION_COMMON_NUMBER_SEPARATOR,
-        IntlChar::CHAR_DIRECTION_EUROPEAN_NUMBER_SEPARATOR,
-        IntlChar::CHAR_DIRECTION_EUROPEAN_NUMBER_TERMINATOR,
-        IntlChar::CHAR_DIRECTION_OTHER_NEUTRAL,
-        IntlChar::CHAR_DIRECTION_WHITE_SPACE_NEUTRAL,
-    ];
-
-    private const array SEPARATOR_CATEGORIES = [
-        IntlChar::CHAR_CATEGORY_SPACE_SEPARATOR,
-        IntlChar::CHAR_CATEGORY_DASH_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_START_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_END_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_CONNECTOR_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_OTHER_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_INITIAL_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_FINAL_PUNCTUATION,
-        IntlChar::CHAR_CATEGORY_MATH_SYMBOL,
-        IntlChar::CHAR_CATEGORY_CURRENCY_SYMBOL,
-        IntlChar::CHAR_CATEGORY_MODIFIER_SYMBOL,
-        IntlChar::CHAR_CATEGORY_OTHER_SYMBOL,
-    ];
+    private const array GROUPING_SEPARATORS = [',', '.', "'", "\u{2019}", ' ', "\u{00A0}", "\u{202F}", "\u{2009}"];
 
     /**
      * Returns why the grouping separator is refused, or null when it is accepted.
      */
     public static function groupingSeparatorRefusal(string $separator): ?string
     {
-        if ($separator === '') {
-            return 'must not be empty';
+        if ($separator === '' || in_array($separator, self::GROUPING_SEPARATORS, true)) {
+            return null;
         }
 
-        if (strlen($separator) > self::SEPARATOR_MAX_BYTES) {
-            return 'must be at most 4 bytes';
-        }
-
-        if (preg_match('//u', $separator) !== 1) {
-            return 'must be valid UTF-8';
-        }
-
-        foreach (mb_str_split($separator, 1, 'UTF-8') as $character) {
-            if (!self::isSeparatorCharacter($character)) {
-                return self::SEPARATOR_CHARACTER_RULE;
-            }
-        }
-
-        return null;
+        return self::SEPARATOR_RULE;
     }
 
     /**
@@ -77,12 +41,5 @@ final class FormatterInput
     public static function isCurrencyCode(string $code): bool
     {
         return preg_match('/^[A-Za-z]{3}$/D', $code) === 1;
-    }
-
-    private static function isSeparatorCharacter(string $character): bool
-    {
-        return in_array(IntlChar::charDirection($character), self::SEPARATOR_DIRECTIONS, true)
-            && in_array(IntlChar::charType($character), self::SEPARATOR_CATEGORIES, true)
-            && IntlChar::hasBinaryProperty($character, IntlChar::PROPERTY_DEFAULT_IGNORABLE_CODE_POINT) === false;
     }
 }

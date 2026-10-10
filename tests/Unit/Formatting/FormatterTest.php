@@ -785,7 +785,7 @@ final class FormatterTest extends TestCase
         }
     }
 
-    public function testGroupingSeparatorOptionIsRefusedWhenLongerThanFourBytes(): void
+    public function testGroupingSeparatorOptionIsRefusedWhenLong(): void
     {
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: 'ABCDE');
@@ -813,7 +813,7 @@ final class FormatterTest extends TestCase
     }
 
     #[DataProviderExternal(FormatterInputTest::class, 'refusedGroupingSeparators')]
-    public function testGroupingSeparatorOptionRefusesACharacterThatCanHideOrReorderDigits(string $separator): void
+    public function testGroupingSeparatorOptionRefusesAnythingOutsideTheList(string $separator): void
     {
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: $separator);
@@ -833,11 +833,12 @@ final class FormatterTest extends TestCase
     }
 
     #[DataProviderExternal(FormatterInputTest::class, 'acceptedGroupingSeparators')]
-    public function testGroupingSeparatorOptionAcceptsSpacesAndNeutralPunctuation(string $separator): void
+    public function testGroupingSeparatorOptionAcceptsTheListedSeparators(string $separator): void
     {
-        $formatter = new Formatter('en_US', groupingSeparator: $separator);
+        $locale = $separator === '.' ? 'fr_CA' : 'en_US';
+        $formatter = new Formatter($locale, groupingSeparator: $separator);
 
-        self::assertSame("1{$separator}234.5", $formatter->decimal(1234.5, 1));
+        self::assertStringStartsWith("1{$separator}234", $formatter->decimal(1234.5, 1));
     }
 
     public function testGroupingSeparatorOptionAcceptsACommaWhereTheLocaleDoesNotReserveIt(): void
@@ -854,11 +855,23 @@ final class FormatterTest extends TestCase
         self::assertSame("1\u{202F}234.5", $formatter->decimal(1234.5, 1));
     }
 
-    public function testGroupingSeparatorOptionAcceptsTheFourByteBoundary(): void
+    public function testGroupingSeparatorOptionAppliesToOrdinals(): void
     {
-        $formatter = new Formatter('en_US', groupingSeparator: "\u{2009}'");
+        $formatter = new Formatter('en_US', groupingSeparator: "\u{2019}");
 
-        self::assertSame("1\u{2009}'234th", $formatter->ordinal(1234));
+        self::assertSame("1\u{2019}234th", $formatter->ordinal(1234));
+    }
+
+    public function testGroupingSeparatorOptionRefusesLookalikesOfTheDecimalSign(): void
+    {
+        foreach ([['en_US', "\u{2024}"], ['fr_CA', "\u{201A}"]] as [$locale, $separator]) {
+            try {
+                new Formatter($locale, groupingSeparator: $separator);
+                self::fail('Expected a FormatterException.');
+            } catch (FormatterException $exception) {
+                self::assertStringContainsString('must be one of', $exception->getMessage());
+            }
+        }
     }
 
     public function testEnglishCanadianGroupingIsUnchanged(): void

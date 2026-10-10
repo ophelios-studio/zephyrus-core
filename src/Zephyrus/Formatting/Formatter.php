@@ -55,10 +55,11 @@ final class Formatter
      * @param string      $defaultDatetimePattern  Default for datetime(), same syntax.
      * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and ordinal().
      *                                             Null keeps the locale's ICU default, '' disables grouping. Otherwise
-     *                                             at most 4 bytes of spaces, punctuation or symbols that cannot reorder
-     *                                             digits, not the locale's decimal, monetary decimal or minus sign.
-     *                                             Prefer U+00A0 or U+202F: a plain space or U+2019 can reverse the
-     *                                             digit groups when the amount sits inside right-to-left text.
+     *                                             one of `,` `.` `'` U+2019, a space, U+00A0, U+202F or U+2009, and not
+     *                                             the locale's decimal, monetary decimal or minus sign.
+     *                                             In a right-to-left locale, or inside right-to-left text, only `,` `.`
+     *                                             U+00A0 and U+202F keep the groups in order; a space, U+2009, `'` or
+     *                                             U+2019 reverses them.
      * @throws FormatterException if the default currency or the grouping separator is not accepted.
      */
     public function __construct(

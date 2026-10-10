@@ -22,9 +22,9 @@ use Zephyrus\Formatting\FormatterInput;
  * - dateFormat (date_format), timeFormat (time_format), datetimeFormat (datetime_format): ICU
  *   pattern or preset for Formatter::date(), time() and datetime(). Defaults 'medium', 'short', 'medium'.
  * - groupingSeparator (grouping_separator): thousands separator. Null keeps the locale default,
- *   '' disables grouping. Otherwise at most 4 bytes of spaces, punctuation or symbols that cannot
- *   reorder digits. Prefer U+00A0 or U+202F: a plain space or U+2019 can reverse the digit groups
- *   when the amount sits inside right-to-left text.
+ *   '' disables grouping. Otherwise one of `,` `.` `'` U+2019, a space, U+00A0, U+202F or U+2009.
+ *   In a right-to-left locale, or inside right-to-left text, only `,` `.` U+00A0 and U+202F keep the
+ *   groups in order; a space, U+2009, `'` or U+2019 reverses them.
  */
 final readonly class LocalizationConfig
 {
