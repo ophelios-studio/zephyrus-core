@@ -286,7 +286,7 @@ final class SessionManager
     {
         $this->assertValidKey($key);
 
-        $storage = $this->overrideStorage ?? $_SESSION ?? [];
+        $storage = $this->loadedData() ?? [];
 
         return array_key_exists($key, $storage) ? $storage[$key] : $default;
     }
@@ -317,7 +317,7 @@ final class SessionManager
     {
         $this->assertValidKey($key);
 
-        $storage = $this->overrideStorage ?? $_SESSION ?? [];
+        $storage = $this->loadedData() ?? [];
 
         return array_key_exists($key, $storage);
     }
@@ -353,7 +353,7 @@ final class SessionManager
      */
     public function all(): array
     {
-        return $this->overrideStorage ?? $_SESSION ?? [];
+        return $this->loadedData() ?? [];
     }
 
     /**

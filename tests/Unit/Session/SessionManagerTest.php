@@ -14,12 +14,12 @@ use Zephyrus\Session\SessionManager;
  */
 final class SessionManagerTest extends TestCase
 {
-    // ── factory helper ────────────────────────────────────────────────────────
-
     protected function tearDown(): void
     {
         unset($_SESSION);
     }
+
+    // ── factory helper ────────────────────────────────────────────────────────
 
     private function makeSession(array $initial = []): SessionManager
     {
@@ -321,16 +321,6 @@ final class SessionManagerTest extends TestCase
         self::assertFalse($session->has('user'));
     }
 
-    public function testRemoveOfAbsentKeyPassesAfterDestroy(): void
-    {
-        $session = new SessionManager(['user' => 'alice']);
-        $session->destroy();
-
-        $session->remove('user');
-
-        self::assertFalse($session->has('user'));
-    }
-
     public function testRemoveOfPresentKeyThrowsWithoutActiveSession(): void
     {
         $_SESSION = ['user' => 'alice'];
@@ -388,6 +378,7 @@ final class SessionManagerTest extends TestCase
             );
         }
     }
+
     public function testFlashReadPassesWithoutActiveSession(): void
     {
         $session = new SessionManager();

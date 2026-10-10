@@ -12,6 +12,11 @@ use Zephyrus\Session\SessionManager;
 
 final class SessionCsrfTokenManagerTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        unset($_SESSION);
+    }
+
     // ── factory helpers ───────────────────────────────────────────────────────
 
     private function makeManager(?string $sessionKey = null): SessionCsrfTokenManager
@@ -41,11 +46,6 @@ final class SessionCsrfTokenManagerTest extends TestCase
         $this->expectExceptionMessageMatches('/^Cannot write "_csrf_token" to the session: no session is active\./');
 
         $manager->getToken();
-    }
-
-    protected function tearDown(): void
-    {
-        unset($_SESSION);
     }
 
     public function testRegenerateThrowsBeforeTheSessionIsReadSoTheOldTokenIsNotKept(): void
