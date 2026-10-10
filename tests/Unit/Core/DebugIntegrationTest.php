@@ -545,6 +545,18 @@ final class DebugIntegrationTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
+    public function testACapturedSensitiveParameterValueUnderASensitiveNameShowsItsInnerType(): void
+    {
+        $password = new SensitiveParameterValue(self::marker('password'));
+        DebugIntegration::initialize(debug: true);
+
+        $text = Dumper::toText(static fn (): SensitiveParameterValue => $password);
+
+        self::assertStringContainsString('$password: ***** (string)', $text);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testCapturedClosuresAreMaskedAtEveryDepth(): void
     {
         $password = self::marker('password');

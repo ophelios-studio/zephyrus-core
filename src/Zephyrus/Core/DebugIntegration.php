@@ -264,7 +264,7 @@ final class DebugIntegration
         $use->depth = $value->depth + 1;
         foreach ($bindings as $name => $binding) {
             // Tracy masks a SensitiveParameterValue on the property path, whatever its key.
-            if (self::isSensitiveCapture($name, $binding, $describer)) {
+            if (!$binding instanceof SensitiveParameterValue && self::isSensitiveCapture($name, $binding, $describer)) {
                 $binding = new SensitiveParameterValue($binding);
             }
 
