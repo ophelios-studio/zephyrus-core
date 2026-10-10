@@ -107,10 +107,10 @@ final readonly class Route
 
             $middleware = (new \ReflectionClass($middleware))->getName();
 
-            foreach (self::UNSKIPPABLE_MIDDLEWARES as $security) {
-                if (is_a($security, $middleware, true)) {
-                    throw RouteMiddlewareException::excludedSecurityMiddleware($subject, $middleware, $security);
-                }
+            $security = self::protectingSecurityMiddleware($middleware);
+
+            if ($security !== null) {
+                throw RouteMiddlewareException::excludedSecurityMiddleware($subject, $middleware, $security);
             }
 
             if (!in_array($middleware, $skippable, true)) {
@@ -119,6 +119,29 @@ final readonly class Route
         }
 
         return $skippable;
+    }
+
+    /**
+     * Whether skippableMiddlewares() would accept the name: a middleware class that is not, and
+     * is not a parent of, a framework security middleware.
+     *
+     * @internal Read by Router only.
+     */
+    public static function isSkippable(string $middleware): bool
+    {
+        return is_a($middleware, MiddlewareInterface::class, true)
+            && self::protectingSecurityMiddleware((new \ReflectionClass($middleware))->getName()) === null;
+    }
+
+    private static function protectingSecurityMiddleware(string $middleware): ?string
+    {
+        foreach (self::UNSKIPPABLE_MIDDLEWARES as $security) {
+            if (is_a($security, $middleware, true)) {
+                return $security;
+            }
+        }
+
+        return null;
     }
 
     /**

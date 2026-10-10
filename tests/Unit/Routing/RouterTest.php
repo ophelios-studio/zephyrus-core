@@ -375,15 +375,68 @@ final class RouterTest extends TestCase
         );
     }
 
-    public function testGroupRefusesAMiddlewareGroupNameAndSaysSo(): void
+    public function testGroupHintLeavesFrameworkSecurityMiddlewaresOut(): void
     {
-        $this->expectException(RouteMiddlewareException::class);
-        $this->expectExceptionMessage('"web" is a middleware group: list its classes');
+        self::assertSame(
+            'Group "/public" cannot skip "web": "web" is a middleware group: list its classes instead '
+            . '(Zephyrus\Session\SessionMiddleware)',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [CsrfMiddleware::class, SessionMiddleware::class])
+                ->group('/public', fn (Router $router): Router => $router, excludedMiddlewares: ['web'])),
+        );
+    }
 
-        (new Router())->middlewareGroup('web', [SessionMiddleware::class])->group(
-            '/public',
-            fn (Router $router): Router => $router->get('/a', 'PublicController@a'),
-            excludedMiddlewares: ['web'],
+    public function testResourceHintLeavesFrameworkSecurityMiddlewaresOut(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "web": "web" is a middleware group: list its classes instead '
+            . '(Zephyrus\Session\SessionMiddleware)',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [SessionMiddleware::class, CsrfMiddleware::class])
+                ->resource('/u', 'UserController', excludedMiddlewares: ['web'])),
+        );
+    }
+
+    public function testWithoutMiddlewareHintLeavesFrameworkSecurityMiddlewaresOut(): void
+    {
+        self::assertSame(
+            'Route "GET /a" cannot skip "web": "web" is a middleware group: list its classes instead '
+            . '(Zephyrus\Session\SessionMiddleware)',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [CsrfMiddleware::class, SessionMiddleware::class])
+                ->get('/a', 'PublicController@a')
+                ->withoutMiddleware('web')),
+        );
+    }
+
+    public function testGroupRefusalSaysNothingCanBeSkippedWhenOnlySecurityMiddlewaresRemain(): void
+    {
+        self::assertSame(
+            'Group "/public" cannot skip "web": "web" is a middleware group with no class that can be skipped',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [CsrfMiddleware::class])
+                ->group('/public', fn (Router $router): Router => $router, excludedMiddlewares: ['web'])),
+        );
+    }
+
+    public function testResourceRefusalSaysNothingCanBeSkippedForAnEmptyGroup(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "web": "web" is a middleware group with no class that can be skipped',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [])
+                ->resource('/u', 'UserController', excludedMiddlewares: ['web'])),
+        );
+    }
+
+    public function testWithoutMiddlewareRefusalSaysNothingCanBeSkippedWhenOnlyRouteMiddlewareNamesRemain(): void
+    {
+        self::assertSame(
+            'Route "GET /a" cannot skip "web": "web" is a middleware group with no class that can be skipped',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', ['auth', CsrfMiddleware::class])
+                ->get('/a', 'PublicController@a')
+                ->withoutMiddleware('web')),
         );
     }
 

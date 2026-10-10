@@ -48,17 +48,15 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     }
 
     /**
-     * @param list<string> $classes The classes the group expands to.
+     * @param list<string> $classes The classes of the group that can be skipped.
      */
-    public static function excludedMiddlewareGroup(string $subject, string $name, array $classes = []): self
+    public static function excludedMiddlewareGroup(string $subject, string $name, array $classes): self
     {
-        return new self(sprintf(
-            '%s cannot skip "%s": "%s" is a middleware group: list its classes instead%s',
-            $subject,
-            $name,
-            $name,
-            $classes === [] ? '' : sprintf(' (%s)', implode(', ', $classes)),
-        ));
+        $hint = $classes === []
+            ? ' with no class that can be skipped'
+            : sprintf(': list its classes instead (%s)', implode(', ', $classes));
+
+        return new self(sprintf('%s cannot skip "%s": "%s" is a middleware group%s', $subject, $name, $name, $hint));
     }
 
     public static function excludedSecurityMiddleware(string $subject, string $class, string $security): self

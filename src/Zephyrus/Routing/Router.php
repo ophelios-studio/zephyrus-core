@@ -222,7 +222,7 @@ final class Router
                 throw RouteMiddlewareException::excludedMiddlewareGroup(
                     $subject,
                     $name,
-                    $this->expandMiddlewares([$name]),
+                    array_values(array_filter($this->expandMiddlewares([$name]), Route::isSkippable(...))),
                 );
             }
         }
