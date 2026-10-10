@@ -15,54 +15,14 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
 final class RouteCacheException extends ZephyrusRuntimeException
 {
     /**
-     * A filesystem operation (read, write, delete, mkdir) failed on the cache.
+     * A cache file is refused: the message names the file, the problem and the fix.
      */
-    public static function fileSystemError(string $operation, string $path): self
-    {
-        return new self(sprintf('Unable to %s route cache file: %s', $operation, $path));
-    }
-
-    /**
-     * JSON encoding or decoding of the cache payload failed.
-     */
-    public static function encodingFailed(string $direction, ?\Throwable $previous = null): self
+    public static function refused(string $file, string $problem, ?\Throwable $previous = null): self
     {
         return new self(
-            sprintf('Unable to %s route cache payload', $direction),
+            sprintf('Route cache file %s has %s; rebuild the cache with save() or warm()', $file, $problem),
             previous: $previous,
         );
-    }
-
-    /**
-     * The cache payload is missing a required top-level section or has wrong structure.
-     */
-    public static function invalidPayloadStructure(string $detail): self
-    {
-        return new self(sprintf('Route cache payload %s', $detail));
-    }
-
-    /**
-     * A metadata field in the cache payload is invalid or unsupported.
-     */
-    public static function invalidMetadata(string $detail): self
-    {
-        return new self(sprintf('Route cache payload contains %s', $detail));
-    }
-
-    /**
-     * The cache payload failed a hash or count integrity check.
-     */
-    public static function integrityCheckFailed(string $detail): self
-    {
-        return new self(sprintf('Route cache payload %s', $detail));
-    }
-
-    /**
-     * An individual route entry within the cache has invalid or missing fields.
-     */
-    public static function invalidRouteEntry(string $detail): self
-    {
-        return new self(sprintf('Route cache entry %s', $detail));
     }
 
     /**
