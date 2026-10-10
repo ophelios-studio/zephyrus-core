@@ -11,6 +11,8 @@ UPPER_TYPE_RE='^([A-Za-z]+)(\(|!|$)'
 SCOPE_RE='^[a-z0-9,._/-]+$'
 GITHUB_COMMITTER='noreply@github.com'
 CI_SKIP_RE='\[(skip ci|ci skip|no ci|skip actions|actions skip)\]'
+# Random per run, so untrusted text cannot contain the token that resumes command processing.
+stop_token="untrusted-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 
 if [ "${1:-}" = --title ]; then
   title_mode=1
@@ -41,6 +43,12 @@ escape() {
   printf '%s' "$s"
 }
 
+# Prints untrusted text with runner workflow commands stopped, so it cannot run one.
+print_untrusted() {
+  local prefix=$1 text=$2
+  printf '::stop-commands::%s\n%s%s\n::%s::\n' "$stop_token" "$prefix" "$text" "$stop_token"
+}
+
 is_allowed_type() {
   local candidate
   for candidate in "${ALLOWED_LIST[@]}"; do
@@ -53,6 +61,7 @@ is_allowed_type() {
 
 reasons=()
 
+# Reasons are fixed strings: annotation lines must never carry untrusted text.
 join_reasons() {
   local joined="" reason
   for reason in "${reasons[@]}"; do
@@ -73,14 +82,14 @@ check_subject() {
     if [[ "$head" =~ $UPPER_TYPE_RE ]] && [[ "${BASH_REMATCH[1]}" == *[A-Z]* ]]; then
       reasons+=("type must be lowercase")
     else
-      reasons+=("malformed type '$head'")
+      reasons+=("malformed type")
     fi
     return 0
   fi
   type=${BASH_REMATCH[1]}
   scope=${BASH_REMATCH[3]}
   if ! is_allowed_type "$type"; then
-    reasons+=("unknown type '$type'")
+    reasons+=("unknown type")
   fi
   if [ -n "${BASH_REMATCH[2]}" ] && ! [[ "$scope" =~ $SCOPE_RE ]]; then
     reasons+=("scope must be lowercase [a-z0-9,._/-]")
@@ -127,7 +136,7 @@ check_title() {
   check_text "$title"
   if [ "${#reasons[@]}" -gt 0 ]; then
     printf '::error title=Pull request title::%s\n' "$(escape "$(join_reasons)")"
-    printf '  Title: %s\n' "$(escape "$title")"
+    print_untrusted '  Title: ' "$title"
     echo ""
     echo "Expected form: type(scope): description"
     echo "Allowed types: ${ALLOWED_TYPES// /, }"
@@ -183,7 +192,7 @@ while IFS= read -r commit; do
   if [ "${#reasons[@]}" -gt 0 ]; then
     failed=$((failed + 1))
     printf '::error title=Commit %s::%s\n' "$short" "$(escape "$(join_reasons)")"
-    printf '  %s  %s\n' "$short" "$(escape "$subject")"
+    print_untrusted "  $short  " "$subject"
   fi
 done <<< "$commits"
 
@@ -196,13 +205,13 @@ if [ "$failed" -gt 0 ]; then
   echo "Each commit is one line, with no body and no co-author trailer."
   case "${EVENT_NAME:-}" in
     pull_request)
-      echo "To fix: git rebase -i $base (reword or squash), then git push --force-with-lease."
+      echo "To fix: git rebase -i --autosquash $base (reword or squash), then git push --force-with-lease."
       ;;
     push)
       echo "These commits are already published and must not be rewritten. The next commits must follow the rules."
       ;;
     *)
-      echo "Unpushed commits: git rebase -i $base (reword or squash)."
+      echo "Unpushed commits: git rebase -i --autosquash $base (reword or squash)."
       echo "Commits already pushed must not be rewritten: the next commits must follow the rules."
       ;;
   esac
