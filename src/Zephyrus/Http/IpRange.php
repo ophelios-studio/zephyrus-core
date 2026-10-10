@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Zephyrus\Http;
 
 /**
- * Shared parser for IP addresses and CIDR ranges. Every trust or allow decision
- * goes through here, and anything it cannot parse is a non-match, never a match.
+ * Shared parser for IP addresses and CIDR ranges, used by trusted proxy and IP
+ * allowlist matching. Anything it cannot parse is a non-match, never a match.
+ * Debugger client lists are matched by Tracy, see DebugIntegration.
  */
 final class IpRange
 {
@@ -101,10 +102,6 @@ final class IpRange
      */
     private static function split(string $range): ?array
     {
-        if (str_contains($range, "\0")) {
-            return null;
-        }
-
         $slash = strpos($range, '/');
         if ($slash === false) {
             $address = $range;
@@ -146,7 +143,7 @@ final class IpRange
      */
     private static function toBinary(string $address): ?string
     {
-        if (str_contains($address, "\0") || filter_var($address, FILTER_VALIDATE_IP) === false) {
+        if (filter_var($address, FILTER_VALIDATE_IP) === false) {
             return null;
         }
 
