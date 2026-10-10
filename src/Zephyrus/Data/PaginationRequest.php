@@ -131,6 +131,8 @@ final class PaginationRequest implements \JsonSerializable
      * Build from an untrusted request array (e.g. $_GET). Per-page is clamped into [1, $maxPerPage]
      * and the page into a representable value, so no query can yield an unbounded LIMIT or an overflowing OFFSET.
      *
+     * Reads page, or offset, for the page, and per_page, perPage, page_size, pageSize, limit for the page size.
+     *
      * @param array<string, mixed> $query
      */
     public static function fromQuery(array $query, int $defaultPerPage = 25, int $maxPerPage = 100): self

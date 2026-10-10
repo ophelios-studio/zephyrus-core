@@ -8,6 +8,21 @@ namespace Zephyrus\Data;
  * Base class for domain data brokers: the SQL of one domain area lives in a subclass.
  *
  * Methods take and return stdClass rows or scalars. Transactions compose through transaction().
+ *
+ * Example:
+ *
+ *   final class UserBroker extends Broker
+ *   {
+ *       public function findById(int $id): ?\stdClass
+ *       {
+ *           return $this->selectOne('SELECT * FROM users WHERE id = ?', [$id]);
+ *       }
+ *
+ *       public function insert(string $name): string|false
+ *       {
+ *           return $this->insertRowGetId('INSERT INTO users (name) VALUES (?) RETURNING id', [$name]);
+ *       }
+ *   }
  */
 abstract class Broker
 {
@@ -399,9 +414,7 @@ abstract class Broker
     }
 
     /**
-     * Return the last generated ID of the connection, or false when the driver cannot report it.
-     *
-     * Refused on PostgreSQL: use insertRowGetId() with RETURNING instead.
+     * Return the last generated ID of the connection. Refused on PostgreSQL: use insertRowGetId() with RETURNING instead.
      *
      * @throws DatabaseException on PostgreSQL, or when the driver cannot report the ID.
      */

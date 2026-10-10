@@ -60,6 +60,9 @@ final class SortRequest implements \JsonSerializable
      * Build from an untrusted request array (e.g. $_GET). A column outside the mandatory
      * allowlist falls back to $defaultColumn.
      *
+     * Reads sort (e.g. "name" or "-name"), sort_by, sortBy, order_by, orderBy for the column,
+     * and sort_dir, sortDir, direction, order for the direction.
+     *
      * @param array<string, mixed> $query
      * @param array<int, string> $allowedColumns
      */
