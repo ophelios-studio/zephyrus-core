@@ -221,6 +221,33 @@ final class LocalizationConfigTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
+    public static function formatAndLineSeparators(): iterable
+    {
+        yield 'right-to-left override' => ["\u{202E}"];
+        yield 'left-to-right isolate' => ["\u{2066}"];
+        yield 'zero-width space' => ["\u{200B}"];
+        yield 'byte order mark' => ["\u{FEFF}"];
+        yield 'line separator' => ["\u{2028}"];
+        yield 'paragraph separator' => ["\u{2029}"];
+    }
+
+    #[DataProvider('formatAndLineSeparators')]
+    public function testFromArrayRefusesAGroupingSeparatorThatIsAFormatOrLineSeparatorCharacter(string $separator): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        LocalizationConfig::fromArray(['grouping_separator' => $separator]);
+    }
+
+    public function testFromArrayAcceptsNoBreakSpacesAsGroupingSeparators(): void
+    {
+        self::assertSame("\u{00A0}", LocalizationConfig::fromArray(['grouping_separator' => "\u{00A0}"])->groupingSeparator);
+        self::assertSame("\u{202F}", LocalizationConfig::fromArray(['grouping_separator' => "\u{202F}"])->groupingSeparator);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
     public static function unsafeGroupingSeparators(): iterable
     {
         yield 'digit' => ['1'];

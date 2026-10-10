@@ -34,7 +34,7 @@ final class FormatterExceptionTest extends TestCase
     {
         $message = FormatterException::invalidGroupingSeparator()->getMessage();
         self::assertStringContainsString('at most 4 bytes', $message);
-        self::assertStringContainsString('control character', $message);
+        self::assertStringContainsString('format or line separator character', $message);
         self::assertStringContainsString('minus sign', $message);
     }
 

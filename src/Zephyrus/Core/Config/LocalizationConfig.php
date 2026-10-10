@@ -19,7 +19,7 @@ namespace Zephyrus\Core\Config;
  * - dateFormat (date_format), timeFormat (time_format), datetimeFormat (datetime_format): ICU
  *   pattern or preset for Formatter::date(), time() and datetime(). Defaults 'medium', 'short', 'medium'.
  * - groupingSeparator (grouping_separator): thousands separator. Null keeps the locale default,
- *   '' disables grouping. At most 4 bytes, valid UTF-8, no digit or control character.
+ *   '' disables grouping. At most 4 bytes, valid UTF-8, no digit, control, format or line separator character.
  */
 final readonly class LocalizationConfig
 {
@@ -92,7 +92,7 @@ final readonly class LocalizationConfig
      * Validate the grouping separator. The locale-dependent checks run in Formatter.
      *
      * @throws ConfigurationException if the value is not a string of at most 4 bytes that is valid UTF-8
-     *         and has no digit or control character.
+     *         and has no digit, control, format or line separator character.
      */
     private static function resolveGroupingSeparator(mixed $value): ?string
     {
@@ -113,8 +113,8 @@ final readonly class LocalizationConfig
             throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must be valid UTF-8');
         }
 
-        if (preg_match('/[\p{Nd}\p{Cc}]/u', $value) === 1) {
-            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must not contain a digit or control character');
+        if (preg_match('/[\p{Nd}\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u', $value) === 1) {
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must not contain a digit, control, format or line separator character');
         }
 
         return $value;

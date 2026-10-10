@@ -54,8 +54,9 @@ final class Formatter
      * @param string      $defaultDatetimePattern  Default for datetime(), same syntax.
      * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and ordinal().
      *                                             Null keeps the locale's ICU default, '' disables grouping. Otherwise
-     *                                             at most 4 bytes, valid UTF-8, no digit or control character, not the
-     *                                             locale's decimal, monetary decimal or minus sign.
+     *                                             at most 4 bytes, valid UTF-8, no digit, control, format or line
+     *                                             separator character, not the locale's decimal, monetary decimal or
+     *                                             minus sign.
      * @throws FormatterException if the grouping separator is not accepted.
      */
     public function __construct(
@@ -466,15 +467,16 @@ final class Formatter
     }
 
     /**
-     * Rejects a separator over 4 bytes, not valid UTF-8, containing a digit or control character, or equal to the
-     * locale's decimal, monetary decimal or minus sign (see reservedSeparators()).
+     * Rejects a separator over 4 bytes, not valid UTF-8, containing a digit, control, format or line
+     * separator character, or equal to the locale's decimal, monetary decimal or minus sign (see
+     * reservedSeparators()).
      *
      * @throws FormatterException
      */
     private function assertValidGroupingSeparator(string $separator): void
     {
         if (strlen($separator) > 4
-            || preg_match('/[\p{Nd}\p{Cc}]/u', $separator) !== 0
+            || preg_match('/[\p{Nd}\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u', $separator) !== 0
             || in_array($separator, $this->reservedSeparators(), true)
         ) {
             throw FormatterException::invalidGroupingSeparator();

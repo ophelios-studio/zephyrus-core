@@ -22,7 +22,7 @@ final class FormatterException extends ZephyrusRuntimeException
     public static function invalidGroupingSeparator(): self
     {
         return new self(
-            'Invalid grouping separator: expected at most 4 bytes, no digit or control character, and not the locale decimal, monetary or minus sign.',
+            'Invalid grouping separator: expected at most 4 bytes, no digit, control, format or line separator character, and not the locale decimal, monetary or minus sign.',
         );
     }
 

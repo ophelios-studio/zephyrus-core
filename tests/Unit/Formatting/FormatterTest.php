@@ -775,6 +775,35 @@ final class FormatterTest extends TestCase
         new Formatter('en_US', groupingSeparator: "\xC3\x28");
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function formatAndLineSeparators(): iterable
+    {
+        yield 'right-to-left override' => ["\u{202E}"];
+        yield 'left-to-right isolate' => ["\u{2066}"];
+        yield 'zero-width space' => ["\u{200B}"];
+        yield 'byte order mark' => ["\u{FEFF}"];
+        yield 'line separator' => ["\u{2028}"];
+        yield 'paragraph separator' => ["\u{2029}"];
+    }
+
+    #[DataProvider('formatAndLineSeparators')]
+    public function testGroupingSeparatorOptionIsRefusedWhenItIsAFormatOrLineSeparatorCharacter(string $separator): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: $separator);
+    }
+
+    public function testGroupingSeparatorOptionAcceptsNoBreakSpaces(): void
+    {
+        $formatter = new Formatter('en_US', groupingSeparator: "\u{00A0}");
+        self::assertSame("1\u{00A0}234.5", $formatter->decimal(1234.5, 1));
+
+        $formatter = new Formatter('en_US', groupingSeparator: "\u{202F}");
+        self::assertSame("1\u{202F}234.5", $formatter->decimal(1234.5, 1));
+    }
+
     public function testGroupingSeparatorOptionAcceptsTheFourByteBoundary(): void
     {
         $formatter = new Formatter('en_US', groupingSeparator: "\u{2009}'");
