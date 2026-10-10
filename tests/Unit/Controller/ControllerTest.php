@@ -15,7 +15,7 @@ use Zephyrus\Validation\Rules;
 use Zephyrus\Validation\ValidationException;
 
 // ---------------------------------------------------------------------------
-// Fixture — minimal concrete subclass
+// Fixture: minimal concrete subclass
 // ---------------------------------------------------------------------------
 
 final class SampleController extends Controller

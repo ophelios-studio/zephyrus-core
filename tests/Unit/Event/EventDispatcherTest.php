@@ -288,7 +288,7 @@ final class EventDispatcherTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // EventSubscriberInterface — addSubscriber / removeSubscriber
+    // EventSubscriberInterface: addSubscriber / removeSubscriber
     // -------------------------------------------------------------------------
 
     public function testAddSubscriberRegistersAllListeners(): void
@@ -322,7 +322,7 @@ final class EventDispatcherTest extends TestCase
 
         $dispatcher->addSubscriber($subscriber);
 
-        // Register a lower-priority competing listener — subscriber's priority-10 listener should run first
+        // Register a lower-priority competing listener: subscriber's priority-10 listener should run first
         $dispatcher->addListener(UserRegisteredEvent::class, function () use (&$log): void {
             $log[] = 'standalone';
         }, priority: 1);
@@ -360,7 +360,7 @@ final class EventDispatcherTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // Isolation — different event classes do not cross-contaminate
+    // Isolation: different event classes do not cross-contaminate
     // -------------------------------------------------------------------------
 
     public function testListenersForDifferentEventsAreisolated(): void

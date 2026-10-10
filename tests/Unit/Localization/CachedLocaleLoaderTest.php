@@ -54,7 +54,7 @@ final class CachedLocaleLoaderTest extends TestCase
     public function testNoApcuDelegatesToInnerEveryTime(): void
     {
         if (extension_loaded('apcu') && apcu_enabled()) {
-            $this->markTestSkipped('APCu is available — this test requires APCu to be absent.');
+            $this->markTestSkipped('APCu is available: this test requires APCu to be absent.');
         }
 
         $inner = $this->countingLoader(['fr' => ['bonjour' => 'Bonjour']]);

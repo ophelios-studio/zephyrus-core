@@ -411,7 +411,7 @@ final class KernelBuilderTest extends TestCase
 }
 
 // ---------------------------------------------------------------------------
-// Fixture controller — minimal, no base class required
+// Fixture controller: minimal, no base class required
 // ---------------------------------------------------------------------------
 
 final class KernelBuilderFixtureController

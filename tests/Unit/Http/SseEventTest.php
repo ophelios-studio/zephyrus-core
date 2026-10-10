@@ -10,7 +10,7 @@ use Zephyrus\Http\SseEvent;
 final class SseEventTest extends TestCase
 {
     // ------------------------------------------------------------------
-    // format() — wire representation
+    // format(): wire representation
     // ------------------------------------------------------------------
 
     public function test_data_only(): void

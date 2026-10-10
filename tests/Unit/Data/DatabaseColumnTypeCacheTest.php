@@ -148,7 +148,7 @@ final class DatabaseColumnTypeCacheTest extends TestCase
         // Two columns resolved on the first select.
         self::assertSame(2, $callsAfterFirst);
 
-        // Second identical select must NOT re-resolve — served from cache.
+        // Second identical select must NOT re-resolve: served from cache.
         $this->db->select($sql);
         $this->db->select($sql);
 

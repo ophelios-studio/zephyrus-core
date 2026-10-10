@@ -216,7 +216,7 @@ final class FormValidatorTest extends TestCase
             'user.name' => [Rules::required()],
         ]);
 
-        // 'user' key is entirely absent — resolves to null
+        // 'user' key is entirely absent: resolves to null
         $bag = $form->validate([]);
         self::assertTrue($bag->hasErrorsFor('user.name'));
     }
@@ -251,7 +251,7 @@ final class FormValidatorTest extends TestCase
 
     public function testDotPathIntermediateNodeIsScalarReturnsNull(): void
     {
-        // 'user' is a string, not an array — should yield null for user.name
+        // 'user' is a string, not an array: should yield null for user.name
         $form = new FormValidator([
             'user.name' => [Rules::required()],
         ]);

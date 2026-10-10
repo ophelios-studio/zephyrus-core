@@ -298,7 +298,7 @@ final class RouterTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
-    // group() — route name propagation
+    // group(): route name propagation
     // -----------------------------------------------------------------------
 
     public function testGroupPreservesRouteNameDefinedInsideGroup(): void

@@ -22,7 +22,7 @@ use Zephyrus\Routing\Router;
  *
  * Uses the same KernelBuilder + Controller + attribute routing pattern as
  * the real entry point to catch any regression that would break bootstrap.
- * All requests are built with Request::fromArray() — the equivalent of
+ * All requests are built with Request::fromArray(), the equivalent of
  * fromGlobals() but injectable for deterministic testing.
  */
 final class BootstrapExampleTest extends TestCase
@@ -156,7 +156,7 @@ final class BootstrapExampleTest extends TestCase
         self::assertStringContainsString('/users/', $response->headers['location']);
     }
 
-    // -- Public controller — no auth guard ------------------------------------
+    // -- Public controller: no auth guard ------------------------------------
 
     public function testArticleIndexRequiresNoAuth(): void
     {
@@ -226,7 +226,7 @@ final class BootstrapExampleTest extends TestCase
 }
 
 // ===========================================================================
-// Fixture controllers — mirrors public/index.php controllers exactly
+// Fixture controllers: mirrors public/index.php controllers exactly
 // ===========================================================================
 
 final class BootstrapHealthController extends Controller

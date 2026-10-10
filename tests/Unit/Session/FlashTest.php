@@ -122,7 +122,7 @@ final class FlashTest extends TestCase
     {
         App::reset();
 
-        // Should not throw — just returns empty.
+        // Should not throw: just returns empty.
         Flash::success('ignored');
         $flash = Flash::readAll();
 

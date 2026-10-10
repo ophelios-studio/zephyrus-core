@@ -50,7 +50,7 @@ final class SecureHeadersConfigTest extends TestCase
         self::assertSame('', SecureHeadersConfig::defaults()->permissionsPolicy);
     }
 
-    // ── fromArray() — camelCase keys ─────────────────────────────────────────
+    // ── fromArray(): camelCase keys ─────────────────────────────────────────
 
     public function testFromArrayCamelCaseKeys(): void
     {
@@ -75,7 +75,7 @@ final class SecureHeadersConfigTest extends TestCase
         self::assertSame('camera=()', $config->permissionsPolicy);
     }
 
-    // ── fromArray() — snake_case keys ────────────────────────────────────────
+    // ── fromArray(): snake_case keys ────────────────────────────────────────
 
     public function testFromArraySnakeCaseKeys(): void
     {

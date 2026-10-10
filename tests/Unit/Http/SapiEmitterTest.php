@@ -89,7 +89,7 @@ final class SapiEmitterTest extends TestCase
 
     public function testEmitStreamsBodyInChunksWithDefaultChunkSize(): void
     {
-        // 20 KiB body — larger than the 8 KiB default chunk.
+        // 20 KiB body: larger than the 8 KiB default chunk.
         $body = str_repeat('A', 20 * 1024);
 
         ob_start();
@@ -200,8 +200,8 @@ final class SapiEmitterTest extends TestCase
         ob_end_clean();
 
         self::assertSame(405, http_response_code());
-        // Header values verified via toHeaderLines() — SAPI header list
-        // is only inspectable in FPM/CGI contexts, not CLI.
+        // Header values verified via toHeaderLines(), since the SAPI header
+        // list is only inspectable in FPM/CGI contexts, not CLI.
         self::assertSame(['allow: GET, POST'], $response->toHeaderLines());
     }
 
@@ -213,7 +213,7 @@ final class SapiEmitterTest extends TestCase
     {
         $response = Response::text('ok');
 
-        // Verify via the pure accessor — SAPI header_list() is FPM/CGI only.
+        // Verify via the pure accessor: SAPI header_list() is FPM/CGI only.
         self::assertSame('HTTP/1.1 200 OK', $response->toStatusLine());
     }
 

@@ -37,7 +37,7 @@ final class HttpKernelEventsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // RequestEvent — no short-circuit
+    // RequestEvent: no short-circuit
     // -------------------------------------------------------------------------
 
     public function testRequestEventListenerReceivesEvent(): void
@@ -70,7 +70,7 @@ final class HttpKernelEventsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // RequestEvent — short-circuit
+    // RequestEvent: short-circuit
     // -------------------------------------------------------------------------
 
     public function testRequestEventShortCircuitBypasesRouting(): void
@@ -271,7 +271,7 @@ final class HttpKernelEventsTest extends TestCase
 }
 
 // ---------------------------------------------------------------------------
-// Fixture controller — minimal, no base class required
+// Fixture controller: minimal, no base class required
 // ---------------------------------------------------------------------------
 
 final class HttpKernelEventsFixtureController

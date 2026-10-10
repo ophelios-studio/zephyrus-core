@@ -14,7 +14,7 @@ use Zephyrus\Data\PaginationRequest;
 use Zephyrus\Data\SortRequest;
 
 // ---------------------------------------------------------------------------
-// Minimal concrete stub — exposes protected helpers as public for testing.
+// Minimal concrete stub: exposes protected helpers as public for testing.
 // ---------------------------------------------------------------------------
 
 final class UserBroker extends Broker

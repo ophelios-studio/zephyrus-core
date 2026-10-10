@@ -113,7 +113,7 @@ final class LocaleResolverTest extends TestCase
 
     public function testNoSupportedListAcceptsAnyCandidate(): void
     {
-        // Open mode — no filter; first normalized candidate returned
+        // Open mode: no filter; first normalized candidate returned
         self::assertSame('de', $this->resolver->resolve(null, 'de, fr', 'en'));
     }
 

@@ -96,10 +96,10 @@ final class SessionCsrfTokenManagerTest extends TestCase
 
     public function testIsTokenValidReturnsFalseWhenNoTokenGenerated(): void
     {
-        // New manager with empty session — no token stored yet.
+        // New manager with empty session: no token stored yet.
         $manager = $this->makeManager();
 
-        // isTokenValid() before getToken() — nothing stored.
+        // isTokenValid() before getToken(): nothing stored.
         self::assertFalse($manager->isTokenValid('anything'));
     }
 

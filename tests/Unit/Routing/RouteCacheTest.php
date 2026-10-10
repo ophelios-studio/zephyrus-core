@@ -994,7 +994,7 @@ final class RouteCacheTest extends TestCase
 
     public function testLoadSucceedsWithAbsentMeta(): void
     {
-        // A cache file with no 'meta' key — all meta checks are skipped.
+        // A cache file with no 'meta' key: all meta checks are skipped.
         $payload = ['routes' => []];
 
         file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
