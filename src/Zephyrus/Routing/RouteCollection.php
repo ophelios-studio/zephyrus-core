@@ -19,6 +19,11 @@ final class RouteCollection
     private array $routes = [];
 
     /**
+     * @var list<Route>|null
+     */
+    private ?array $routesInMatchOrderCache = null;
+
+    /**
      * Whether /users and /users/ resolve to the same route (default true).
      */
     public function __construct(
@@ -29,6 +34,7 @@ final class RouteCollection
     public function add(Route $route): void
     {
         $this->routes[] = $route;
+        $this->routesInMatchOrderCache = null;
     }
 
     public function withRoute(Route $route): self
@@ -631,6 +637,10 @@ final class RouteCollection
      */
     private function routesInMatchOrder(): array
     {
+        if ($this->routesInMatchOrderCache !== null) {
+            return $this->routesInMatchOrderCache;
+        }
+
         $static = [];
         $parameterized = [];
 
@@ -642,7 +652,7 @@ final class RouteCollection
             }
         }
 
-        return [...$static, ...$parameterized];
+        return $this->routesInMatchOrderCache = [...$static, ...$parameterized];
     }
 
     private function isStaticRoute(Route $route): bool

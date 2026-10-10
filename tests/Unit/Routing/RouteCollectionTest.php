@@ -461,6 +461,40 @@ final class RouteCollectionTest extends TestCase
         }
     }
 
+    public function testMatchOrderIsComputedOnceAndRecomputedAfterAnAdd(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $property = new \ReflectionProperty(RouteCollection::class, 'routesInMatchOrderCache');
+
+        self::assertNull($property->getValue($collection));
+
+        $collection->match('GET', '/users/1');
+        $first = $property->getValue($collection);
+        $collection->match('GET', '/users/2');
+
+        self::assertIsArray($first);
+        self::assertSame($first, $property->getValue($collection));
+        self::assertSame('UserController@show', $collection->match('GET', '/users/me')->route->handler);
+
+        $collection->add(Route::define('GET', '/users/me', 'UserController@me'));
+
+        self::assertNull($property->getValue($collection));
+        self::assertSame('UserController@me', $collection->match('GET', '/users/me')->route->handler);
+    }
+
+    public function testDerivedCollectionsDoNotShareTheMatchOrder(): void
+    {
+        $base = new RouteCollection();
+        $base->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $base->match('GET', '/users/1');
+
+        $derived = $base->withRoute(Route::define('GET', '/users/me', 'UserController@me'));
+
+        self::assertSame('UserController@me', $derived->match('GET', '/users/me')->route->handler);
+        self::assertSame('UserController@show', $base->match('GET', '/users/me')->route->handler);
+    }
+
     public function testHandlersReturnsRegisteredHandlersInOrder(): void
     {
         $collection = new RouteCollection();
