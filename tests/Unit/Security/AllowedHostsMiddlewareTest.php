@@ -78,9 +78,9 @@ final class AllowedHostsMiddlewareTest extends TestCase
     public function testAnAllowedHostHeaderCannotAdmitARequestWhoseUriPointsElsewhere(): void
     {
         $called = false;
-        $mw = new AllowedHostsMiddleware(['app.agreely.ca']);
+        $mw = new AllowedHostsMiddleware(['app.example.com']);
         $request = new Request('GET', 'https://evil.attacker.test/path', headers: [
-            'host' => 'app.agreely.ca',
+            'host' => 'app.example.com',
         ]);
 
         $response = $mw->process($request, static function (Request $r) use (&$called): Response {
@@ -102,8 +102,8 @@ final class AllowedHostsMiddlewareTest extends TestCase
      */
     public function testAnAllowedUriIsServedEvenWhenTheRawHostHeaderDisagrees(): void
     {
-        $mw = new AllowedHostsMiddleware(['app.agreely.ca']);
-        $request = new Request('GET', 'https://app.agreely.ca/dashboard', headers: [
+        $mw = new AllowedHostsMiddleware(['app.example.com']);
+        $request = new Request('GET', 'https://app.example.com/dashboard', headers: [
             'host' => 'internal-backend.flycast',
         ]);
 
