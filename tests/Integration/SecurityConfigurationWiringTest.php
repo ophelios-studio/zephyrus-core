@@ -150,6 +150,35 @@ final class SecurityConfigurationWiringTest extends TestCase
             ->build();
     }
 
+    public function testCsrfRegisteredOnlyUnderARouteNameRefusesToBoot(): void
+    {
+        // A named middleware runs only for the routes that reference its name,
+        // so CSRF registered this way protects nothing on the other routes.
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(['security' => ['csrf' => ['enabled' => true]]])
+                ->withRouter(new Router())
+                ->registerMiddleware('csrf', new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+                ->build();
+
+            self::fail('build() accepted CSRF that only a route name references');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('security.csrf', $exception->getMessage());
+            self::assertStringContainsString('withMiddleware()', $exception->getMessage());
+        }
+    }
+
+    public function testCsrfRegisteredGloballyBootsNormally(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['csrf' => ['enabled' => true]]])
+            ->withRouter(new Router())
+            ->withMiddleware(new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
     public function testTheCheckCanBeTurnedOffWholesale(): void
     {
         $application = ApplicationBuilder::create()

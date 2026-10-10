@@ -241,6 +241,34 @@ final class KernelBuilderTest extends TestCase
         self::assertSame(1, $calls);
     }
 
+    // -- Middleware lookup ----------------------------------------------------
+
+    public function testHasGlobalMiddlewareSeesAGlobalRegistration(): void
+    {
+        $middleware = $this->makeMiddleware('X-Global', 'yes');
+
+        $builder = KernelBuilder::create()->withMiddleware($middleware);
+
+        self::assertTrue($builder->hasGlobalMiddleware($middleware::class));
+    }
+
+    public function testHasGlobalMiddlewareIgnoresANameOnlyRegistration(): void
+    {
+        $middleware = $this->makeMiddleware('X-Named', 'yes');
+
+        $builder = KernelBuilder::create()->registerMiddleware('auth', $middleware);
+
+        self::assertFalse($builder->hasGlobalMiddleware($middleware::class));
+        self::assertTrue($builder->hasMiddleware($middleware::class));
+    }
+
+    public function testHasGlobalMiddlewareIsFalseOnAnEmptyBuilder(): void
+    {
+        $middleware = $this->makeMiddleware('X-Absent', 'yes');
+
+        self::assertFalse(KernelBuilder::create()->hasGlobalMiddleware($middleware::class));
+    }
+
     // -------------------------------------------------------------------------
 
     private function makeMiddleware(string $header, string $value): MiddlewareInterface

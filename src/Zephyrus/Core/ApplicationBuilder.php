@@ -514,7 +514,8 @@ final class ApplicationBuilder
      * Only a setting the source file actually DECLARED (see
      * SecurityConfig::isDeclared()) and that asks for a protection: forceHttps
      * true, a non-empty allowedHosts, CSRF enabled, a finite maxBodySize.
-     * Disabling something inert is harmless and is never reported.
+     * A protection counts only when it is mounted with withMiddleware(). Disabling
+     * something inert is harmless and is never reported.
      *
      * trustedProxies, trustedHeaders and encryptionKey are NOT checked. They
      * are consumed outside the builder entirely, by Request::fromGlobals() and
@@ -536,7 +537,7 @@ final class ApplicationBuilder
         if (
             $security->isDeclared('forceHttps')
             && $security->forceHttps
-            && !$this->kernelBuilder->hasMiddleware(ForceHttpsMiddleware::class)
+            && !$this->kernelBuilder->hasGlobalMiddleware(ForceHttpsMiddleware::class)
         ) {
             $unwired['forceHttps'] = ForceHttpsMiddleware::class;
         }
@@ -544,7 +545,7 @@ final class ApplicationBuilder
         if (
             $security->isDeclared('allowedHosts')
             && $security->allowedHosts !== []
-            && !$this->kernelBuilder->hasMiddleware(AllowedHostsMiddleware::class)
+            && !$this->kernelBuilder->hasGlobalMiddleware(AllowedHostsMiddleware::class)
         ) {
             $unwired['allowedHosts'] = AllowedHostsMiddleware::class;
         }
@@ -554,7 +555,7 @@ final class ApplicationBuilder
                 || $security->isDeclared('csrfExceptions')
                 || $security->isDeclared('csrfAutoHtml'))
             && $security->csrfEnabled
-            && !$this->kernelBuilder->hasMiddleware(CsrfMiddleware::class)
+            && !$this->kernelBuilder->hasGlobalMiddleware(CsrfMiddleware::class)
         ) {
             $unwired['csrf'] = CsrfMiddleware::class;
         }
@@ -562,7 +563,7 @@ final class ApplicationBuilder
         if (
             $security->isDeclared('maxBodySize')
             && $security->maxBodySize > 0
-            && !$this->kernelBuilder->hasMiddleware(MaxBodySizeMiddleware::class)
+            && !$this->kernelBuilder->hasGlobalMiddleware(MaxBodySizeMiddleware::class)
         ) {
             $unwired['maxBodySize'] = MaxBodySizeMiddleware::class;
         }
@@ -574,11 +575,30 @@ final class ApplicationBuilder
         if ($unwired !== []) {
             $qualified = [];
             foreach ($unwired as $setting => $middleware) {
-                $qualified['security.' . $setting] = $middleware;
+                $qualified['security.' . $setting] = $this->describeUnwiredMiddleware($middleware);
             }
 
             throw ConfigurationException::unwiredSecurity($qualified);
         }
+    }
+
+    /**
+     * Names the middleware a boot error should ask for, noting when the class
+     * is registered under a route name only.
+     *
+     * @param class-string $middleware
+     */
+    private function describeUnwiredMiddleware(string $middleware): string
+    {
+        if (!$this->kernelBuilder->hasMiddleware($middleware)) {
+            return $middleware;
+        }
+
+        $hint = $middleware . ' (currently registered under a route name only, so it guards just the routes that name it: mount it with withMiddleware()';
+
+        return $middleware === CsrfMiddleware::class
+            ? $hint . ' and exempt routes through security.csrf.exceptions)'
+            : $hint . ')';
     }
 
     /**

@@ -202,8 +202,8 @@ final class KernelBuilder
      *
      * This exists so that a caller can ask "is this protection wired?" WITHOUT
      * the builder ever wiring one itself. ApplicationBuilder uses it to refuse
-     * a boot whose security configuration nothing consumes; a consumer can use
-     * it to avoid registering a second copy of something it already registers.
+     * a consumer can use it to avoid registering a second copy of something it
+     * already registers. ApplicationBuilder checks hasGlobalMiddleware() instead.
      *
      * Matching is by instanceof. The framework's own security middlewares are
      * final, so in practice that means the exact class: a consumer that WRAPS
@@ -222,6 +222,26 @@ final class KernelBuilder
         }
 
         foreach ($this->namedRouteMiddlewares as $middleware) {
+            if ($middleware instanceof $class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether a middleware of the given class is registered as a GLOBAL middleware.
+     *
+     * Unlike hasMiddleware(), a middleware registered only under a route name
+     * does not count: it runs for the routes that reference that name, not for
+     * every request.
+     *
+     * @param class-string $class
+     */
+    public function hasGlobalMiddleware(string $class): bool
+    {
+        foreach ($this->globalMiddlewares as $middleware) {
             if ($middleware instanceof $class) {
                 return true;
             }
