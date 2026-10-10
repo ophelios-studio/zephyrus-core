@@ -302,27 +302,69 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     /**
-     * @return array<string, array{0: string}>
+     * @return array<string, array{0: string, 1: string}>
      */
     public static function partialSegmentPlaceholderProvider(): array
     {
         return [
-            'suffix' => ['/files/report-{year}.pdf'],
-            'prefix only' => ['/files/x{year}'],
-            'suffix only' => ['/files/{year}.pdf'],
-            'between segments text' => ['/a/b{c}d/e'],
+            'suffix' => ['/files/report-{year}.pdf', 'report-{year}.pdf'],
+            'prefix only' => ['/files/x{year}', 'x{year}'],
+            'suffix only' => ['/files/{year}.pdf', '{year}.pdf'],
+            'between segments text' => ['/a/b{c}d/e', 'b{c}d'],
+            'two placeholders around text' => ['/a/{a}.{b}', '{a}.{b}'],
+            'two adjacent placeholders' => ['/a/{a}{b}', '{a}{b}'],
         ];
     }
 
     #[DataProvider('partialSegmentPlaceholderProvider')]
-    public function testAPlaceholderThatDoesNotFillAWholeSegmentIsRefusedAtRegistration(string $path): void
+    public function testAPlaceholderThatDoesNotFillAWholeSegmentIsRefusedAtRegistration(string $path, string $segment): void
     {
         try {
             Route::define('GET', $path, 'C@show');
             self::fail('A partial segment placeholder must not register.');
         } catch (RouteSignatureException $e) {
             self::assertSame(
-                sprintf('Invalid route path "%s": a placeholder must fill a whole segment', $path),
+                sprintf(
+                    'Invalid route path "%s": segment "%s" mixes a placeholder with text; capture the whole '
+                    . 'segment with a constraint or give the placeholder its own segment',
+                    $path,
+                    $segment,
+                ),
+                $e->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function malformedPlaceholderProvider(): array
+    {
+        return [
+            'doubled braces' => ['/a/{{}}', '{{}}'],
+            'open doubled' => ['/a/{{}', '{{}'],
+            'close doubled' => ['/a/{}}', '{}}'],
+            'two empty placeholders' => ['/a/{}{}', '{}{}'],
+            'empty placeholder' => ['/a/{}', '{}'],
+            'unclosed then closed' => ['/a/{a{b}', '{a{b}'],
+            'extra closing brace' => ['/a/{a}}', '{a}}'],
+        ];
+    }
+
+    #[DataProvider('malformedPlaceholderProvider')]
+    public function testASegmentWithBracesThatIsNotAPlaceholderIsRefusedAtRegistration(string $path, string $segment): void
+    {
+        try {
+            Route::define('GET', $path, 'C@show');
+            self::fail('A malformed placeholder must not register.');
+        } catch (RouteSignatureException $e) {
+            self::assertSame(
+                sprintf(
+                    'Invalid route path "%s": segment "%s" is not a valid placeholder; write {name}, where name '
+                    . 'starts with a letter or underscore and holds only letters, digits and underscores',
+                    $path,
+                    $segment,
+                ),
                 $e->getMessage(),
             );
         }

@@ -24,6 +24,9 @@ final readonly class Route
      */
     public const PARAMETER_NAME_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/D';
 
+    private const string WHOLE_PLACEHOLDER_PATTERN = '/^\{[^{}]+\}$/D';
+    private const string PLACEHOLDER_PATTERN = '/\{[^{}]+\}/';
+
     /**
      * Parameter names the framework publishes itself, which a URL segment must not supply.
      *
@@ -66,7 +69,8 @@ final readonly class Route
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
      * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
-     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved.
+     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved, a placeholder
+     *                                  shares its segment with text, or a segment wrapped in braces is not a valid placeholder.
      * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
      *                                  security middleware.
      */
@@ -154,13 +158,8 @@ final readonly class Route
         $seen = [];
 
         foreach (explode('/', trim($path, '/')) as $segment) {
-            if (strlen($segment) <= 2 || !str_starts_with($segment, '{') || !str_ends_with($segment, '}')) {
-                if (preg_match('/\{[^{}]+\}/', $segment) === 1) {
-                    throw new RouteSignatureException(sprintf(
-                        'Invalid route path "%s": a placeholder must fill a whole segment',
-                        $path,
-                    ));
-                }
+            if (preg_match(self::WHOLE_PLACEHOLDER_PATTERN, $segment) !== 1) {
+                self::assertNoBraces($path, $segment);
 
                 continue;
             }
@@ -202,13 +201,54 @@ final readonly class Route
     }
 
     /**
+     * A segment that is not one whole placeholder is a literal, unless it holds a placeholder next to text or is
+     * wrapped in braces without being a placeholder. A brace that closes no placeholder inside text stays literal.
+     *
+     * @throws RouteSignatureException
+     */
+    private static function assertNoBraces(string $path, string $segment): void
+    {
+        $remainder = preg_replace(self::PLACEHOLDER_PATTERN, '', $segment);
+
+        if ($remainder === $segment) {
+            if (str_starts_with($segment, '{') && str_ends_with($segment, '}')) {
+                throw self::invalidPlaceholder($path, $segment);
+            }
+
+            return;
+        }
+
+        if (preg_match('/[{}]/', (string) $remainder) === 1) {
+            throw self::invalidPlaceholder($path, $segment);
+        }
+
+        throw new RouteSignatureException(sprintf(
+            'Invalid route path "%s": segment "%s" mixes a placeholder with text; capture the whole '
+            . 'segment with a constraint or give the placeholder its own segment',
+            $path,
+            $segment,
+        ));
+    }
+
+    private static function invalidPlaceholder(string $path, string $segment): RouteSignatureException
+    {
+        return new RouteSignatureException(sprintf(
+            'Invalid route path "%s": segment "%s" is not a valid placeholder; write {name}, where name '
+            . 'starts with a letter or underscore and holds only letters, digits and underscores',
+            $path,
+            $segment,
+        ));
+    }
+
+    /**
      * Builds a route with a normalised path and an upper-case method.
      *
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
      * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
      *
-     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved.
+     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved, a placeholder
+     *                                  shares its segment with text, or a segment wrapped in braces is not a valid placeholder.
      * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
      *                                  security middleware.
      */
