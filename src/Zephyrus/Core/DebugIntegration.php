@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
+use ArrayIterator;
 use Closure;
 use ReflectionFunction;
 use SensitiveParameterValue;
 use Tracy\Debugger;
 use Tracy\Dumper;
 use Tracy\Dumper\Describer;
+use Tracy\Dumper\Exposer;
 use Tracy\Dumper\Value;
 use Zephyrus\Core\Config\ConfigSection;
 
@@ -207,6 +209,9 @@ final class DebugIntegration
         // @phpstan-ignore assign.propertyType (same as above)
         Dumper::$objectExporters[Closure::class] = self::exposeClosure(...);
 
+        // @phpstan-ignore assign.propertyType (same as above)
+        Dumper::$objectExporters[ArrayIterator::class] = self::exposeArrayIterator(...);
+
         $hidden = array_values(array_unique([
             ...self::SENSITIVE_KEYS,
             ...self::SENSITIVE_PROPERTIES,
@@ -279,6 +284,22 @@ final class DebugIntegration
         $use->value = '$' . implode(', $', array_keys($bindings));
         $use->collapsed = true;
         $describer->addPropertyTo($value, 'use', null, described: $use);
+    }
+
+    /**
+     * Render an ArrayIterator's elements as a storage property, so masking applies to them.
+     *
+     * @param ArrayIterator<array-key, mixed> $iterator
+     */
+    private static function exposeArrayIterator(ArrayIterator $iterator, Value $value, Describer $describer): void
+    {
+        $flags = $iterator->getFlags();
+        $iterator->setFlags(ArrayIterator::STD_PROP_LIST);
+        Exposer::exposeObject($iterator, $value, $describer);
+        $iterator->setFlags($flags);
+
+        $describer->addPropertyTo($value, 'storage', $iterator->getArrayCopy(), Value::PropertyPrivate, null, ArrayIterator::class);
+        $value->value .= ' (' . count($iterator) . ')';
     }
 
     /**

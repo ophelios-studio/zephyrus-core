@@ -333,6 +333,64 @@ final class DebugIntegrationTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{class-string<\ArrayIterator>}>
+     */
+    public static function arrayIteratorClassProvider(): iterable
+    {
+        yield 'ArrayIterator' => [\ArrayIterator::class];
+        yield 'RecursiveArrayIterator' => [\RecursiveArrayIterator::class];
+    }
+
+    /**
+     * @param class-string<\ArrayIterator> $class
+     */
+    #[DataProvider('arrayIteratorClassProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksTheContentsOfAnArrayIterator(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+        $user = self::marker('user');
+        $iterator = new $class(['password' => $secret, 'username' => $user]);
+
+        $html = Dumper::toHtml($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        self::assertStringContainsString($user, $html, 'Control: an unlisted key must still be dumped.');
+        self::assertStringContainsString($user, $text, 'Control: an unlisted key must still be dumped.');
+        self::assertStringNotContainsString($secret, $html, 'toHtml() rendered the contents of an ArrayIterator.');
+        self::assertStringNotContainsString($secret, $text, 'toText() rendered the contents of an ArrayIterator.');
+    }
+
+    /**
+     * @param class-string<\ArrayIterator> $class
+     */
+    #[DataProvider('arrayIteratorClassProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksTheContentsOfAnArrayIteratorArgument(string $class): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+        $user = self::marker('user');
+
+        try {
+            self::throwWithIterator(new $class(['password' => $secret, 'username' => $user]));
+        } catch (\RuntimeException $exception) {
+            $html = self::blueScreenHtml($exception);
+        }
+
+        self::assertStringContainsString($user, $html, 'Control: an unlisted key must still be rendered.');
+        self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered the contents of an ArrayIterator argument.');
+    }
+
+    private static function throwWithIterator(\ArrayIterator $iterator): never
+    {
+        throw new \RuntimeException('boom');
+    }
+
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function testBlueScreenKeepsScalarValuesOfPatternKeysVisible(): void
