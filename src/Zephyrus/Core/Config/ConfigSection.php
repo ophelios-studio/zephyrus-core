@@ -63,7 +63,7 @@ abstract class ConfigSection
     /**
      * Build a section from its raw configuration array.
      *
-     * Concrete, not abstract: anonymous subclasses that only use the typed getters do not declare it.
+     * Concrete, not abstract: subclasses that only use the typed getters do not declare it.
      * A subclass keeps the constructor signature, because `new static($values)` relies on it;
      * a subclass hydrating typed properties overrides this method.
      *

@@ -196,8 +196,8 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Canonical host: lowercased, one trailing dot and any port removed. Accepts a bracketed IPv6
-     * literal, an IPv4 address or a DNS name; null for anything else.
+     * Canonical host: lowercased, one trailing dot and any port removed, brackets removed from an
+     * IPv6 literal. Accepts a bracketed IPv6 literal, an IPv4 address or a DNS name; null for anything else.
      */
     private static function normalizeHost(string $host): ?string
     {

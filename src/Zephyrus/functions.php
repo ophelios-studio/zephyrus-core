@@ -195,7 +195,11 @@ if (!function_exists('asset')) {
 
 if (!function_exists('route')) {
     /**
-     * Generate the URL of a named route. Absolute links (emails) need App::setUrlGenerator(new RouteUrlGenerator($router->routes(), 'https://example.com')).
+     * Generate the URL of a named route.
+     *
+     * Absolute links (emails): after ApplicationBuilder::build(),
+     * App::setUrlGenerator(new RouteUrlGenerator($router->routes(), 'https://example.com'))
+     * makes every later route() call in the process absolute.
      *
      * @param string                              $name       The route name.
      * @param array<string, scalar>               $parameters Path parameters, keyed by placeholder name.

@@ -128,7 +128,7 @@ final class CsrfConfig
      * excludedPathPatterns | excluded_path_patterns | csrf_exceptions | csrfExceptions.
      *
      * @param array<string, mixed> $config
-     * @throws InvalidArgumentException when injectToken is true or an exclusion pattern is refused.
+     * @throws InvalidArgumentException when injectToken is true or an exclusion list or pattern is refused.
      * @throws ConfigurationException when enabled or injectToken is not a recognisable boolean.
      */
     public static function fromArray(array $config): self

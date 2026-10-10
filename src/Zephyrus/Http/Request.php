@@ -318,7 +318,8 @@ final readonly class Request
     }
 
     /**
-     * The client IP: REMOTE_ADDR for an untrusted peer, or $default when the client is unknown.
+     * The client IP: the forwarded client when REMOTE_ADDR is a trusted proxy, REMOTE_ADDR otherwise.
+     * When that is null, the valid `client_ip` request attribute is used, then $default.
      */
     public function clientIp(?string $default = null): ?string
     {
