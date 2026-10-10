@@ -28,13 +28,8 @@ use Zephyrus\Session\SessionManager;
 use Zephyrus\Session\SessionMiddleware;
 
 /**
- * Error responses must leave the kernel through the global middleware pipeline.
- *
- * Before the pipeline wrapped the error responder, a 404, a 405 and a handler
- * exception were all answered outside it, so SecureHeadersMiddleware,
- * ContentSecurityPolicyMiddleware, AllowedHostsMiddleware and
- * ForceHttpsMiddleware were silently inert on exactly the responses an attacker
- * probes most. These tests pin the fixed behaviour.
+ * Error responses (404, 405, handler exceptions) must pass through the global middleware pipeline,
+ * so security middlewares also decorate them.
  */
 final class HttpKernelErrorPipelineTest extends TestCase
 {
@@ -42,8 +37,6 @@ final class HttpKernelErrorPipelineTest extends TestCase
     {
         ErrorPipelineTrace::reset();
     }
-
-    // -- The real security middleware on the real error paths -----------------
 
     /**
      * @return array<string, array{0: string, 1: string, 2: int}>
@@ -53,10 +46,8 @@ final class HttpKernelErrorPipelineTest extends TestCase
         return [
             '404 no route matched'        => ['GET', '/does-not-exist', 404],
             '405 wrong method'            => ['POST', '/only-get', 405],
-            // Reaches RouteParameterException from HandlerResolver, i.e. the
-            // catch INSIDE dispatchMatchedRoute rather than the deferred
-            // routing failure. The route must be unconstrained for the bad
-            // segment to reach the handler's int parameter at all.
+            // Reaches the handler-side catch, not the routing failure: the route is unconstrained,
+            // so the segment hits the int parameter.
             '404 parameter type mismatch' => ['GET', '/coerce/not-an-int', 404],
             '500 handler threw'           => ['GET', '/boom', 500],
         ];
@@ -104,8 +95,6 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
     }
 
-    // -- 404 / 405 / 500 through a plain global middleware --------------------
-
     public function testNotFoundResponseCarriesGlobalMiddlewareDecoration(): void
     {
         $kernel = KernelBuilder::create()
@@ -132,7 +121,6 @@ final class HttpKernelErrorPipelineTest extends TestCase
 
         self::assertSame(405, $response->status);
         self::assertSame('yes', $response->headers['x-global']);
-        // The Allow header from the responder survives the pipeline.
         self::assertNotEmpty($response->headers['allow']);
     }
 
@@ -164,12 +152,9 @@ final class HttpKernelErrorPipelineTest extends TestCase
 
         $kernel->handle(Request::fromArray('GET', '/missing'));
 
-        // The middleware receives the 404 as a normal return value, not as an
-        // exception unwinding past it.
+        // The 404 is a return value, not an exception unwinding past the middleware.
         self::assertSame([404], $seen);
     }
-
-    // -- Ordering is unchanged -------------------------------------------------
 
     public function testMiddlewareExecutionOrderIsUnchangedForAMatchedRoute(): void
     {
@@ -214,12 +199,10 @@ final class HttpKernelErrorPipelineTest extends TestCase
 
         $kernel->handle(Request::fromArray('GET', '/users/42'));
 
-        // Route matching runs before the global pipeline precisely so this
-        // keeps working.
+        // Route matching runs before the global pipeline, so route parameters are already on the request
+        // a global middleware sees.
         self::assertSame('42', $captured['id'] ?? null);
     }
-
-    // -- Route middlewares and the error paths --------------------------------
 
     public function testRouteMiddlewaresDoNotRunWhenNoRouteMatched(): void
     {
@@ -235,8 +218,6 @@ final class HttpKernelErrorPipelineTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/nowhere'));
 
         self::assertSame(404, $response->status);
-        // No route matched, so the route has no middlewares to run. Only the
-        // global middleware wrapped this response.
         self::assertSame(['global-before', 'global-after'], ErrorPipelineTrace::entries());
     }
 
@@ -258,10 +239,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * Documents the deliberate choice: route middlewares do NOT post-process a
-     * response built from a handler exception. They start, the handler throws,
-     * and the exception unwinds past them before it is converted. Only global
-     * middlewares decorate error responses, on every error path, uniformly.
+     * Route middlewares do not post-process a response built from a handler exception; only global middlewares do.
      */
     public function testRouteMiddlewaresDoNotPostProcessAHandlerThrownError(): void
     {
@@ -277,8 +255,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/boom'));
 
         self::assertSame(500, $response->status);
-        // route-guard-before ran, route-guard-after did not: the throw unwound
-        // past it. The global middleware still decorated the error response.
+        // The exception unwinds past route-guard, so its after-hook is skipped.
         self::assertSame(
             ['global-before', 'route-guard-before', 'global-after'],
             ErrorPipelineTrace::entries(),
@@ -306,8 +283,6 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame('yes', $matched->headers['x-global']);
     }
 
-    // -- The backstop ----------------------------------------------------------
-
     public function testGlobalMiddlewareThatThrowsStillYieldsAResponseWithoutLooping(): void
     {
         $middleware = new ErrorPipelineThrowingMiddleware();
@@ -323,8 +298,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
 
         self::assertSame(500, $response->status);
         self::assertSame('Internal Server Error', $response->body);
-        // The backstop converts directly and never re-enters the pipeline, so a
-        // middleware that always throws runs exactly once.
+        // The backstop never re-enters the pipeline, so a middleware that always throws runs once.
         self::assertSame(1, $middleware->calls);
     }
 
@@ -344,17 +318,14 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * Pins documented limit 2: the backstop response is NOT decorated. When a
-     * global middleware throws, the throw has already unwound past the
-     * post-processing of every middleware outside it, so nothing can decorate
-     * the result. This is a real gap, not an oversight, and the class docblock
-     * says so rather than claiming every response carries the headers.
+     * Known gap, listed in the HttpKernel class docblock: the backstop response is not decorated
+     * when a global middleware throws.
      */
     public function testBackstopResponseCarriesNoGlobalDecorations(): void
     {
         $kernel = KernelBuilder::create()
             ->withRouter(new Router())
-            // Registered FIRST, so it is outermost and would normally decorate.
+            // Registered first, so it is outermost.
             ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
             ->withMiddleware(new ErrorPipelineThrowingMiddleware())
             ->build();
@@ -366,11 +337,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * Pins the guard in HttpKernel::toErrorResponse(). A registered exception
-     * handler that throws (a missing error-page template is the usual cause)
-     * must NOT strip the security headers from every error response. Without
-     * the guard the second throwable escapes the destination closure, unwinds
-     * past the global middlewares, and lands undecorated in the backstop.
+     * A registered exception handler that throws must not strip the security headers from error responses.
      */
     public function testBrokenExceptionHandlerStillYieldsADecoratedResponse(): void
     {
@@ -387,18 +354,13 @@ final class HttpKernelErrorPipelineTest extends TestCase
 
         self::assertSame(500, $response->status);
         self::assertSame('Internal Server Error', $response->body);
-        // The decoration is the point: a broken error template must not strip
-        // the security headers from the site's error responses.
+        // A broken error template must still leave the response decorated.
         self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
         self::assertSame('nosniff', $response->headers['x-content-type-options']);
     }
 
     /**
-     * An application that rethrows the SAME exception is deciding to let it
-     * through, normally so a debugger renders it in development. Both consuming
-     * apps do exactly this. Swallowing it replaced a stack trace with a plain
-     * "Internal Server Error" and removed the developer's debugger with nothing
-     * to explain why.
+     * A handler that rethrows the same exception must let it through unchanged, so debuggers still render it.
      */
     public function testAnExceptionHandlerThatRethrowsTheOriginalPropagatesOutOfHandle(): void
     {
@@ -423,7 +385,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
 
         self::assertInstanceOf(RuntimeException::class, $caught);
         self::assertSame('handler exploded', $caught->getMessage());
-        // The application must see its OWN exception, never an internal marker.
+        // The application sees its own exception, never an internal marker.
         self::assertNotInstanceOf(\Zephyrus\Core\KernelRethrowSignal::class, $caught);
         unset($original);
     }
@@ -444,13 +406,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * The reason the rethrow is wrapped in a signal rather than thrown bare.
-     *
-     * A bare rethrow escapes the destination closure, unwinds through the
-     * global pipeline and lands in pipe()'s backstop, which calls the responder
-     * AGAIN: the application's handler runs twice and the reporting seam fires
-     * a second time with a misleading source. Measured at 2 invocations before
-     * the signal existed.
+     * The rethrow is wrapped in a signal: a bare rethrow would reach the backstop, which runs the responder again.
      */
     public function testADeliberateRethrowInvokesTheHandlerOnceAndReportsOnce(): void
     {
@@ -496,8 +452,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
             )
             ->build();
 
-        // Previously this escaped handle() as an uncaught throwable, which in
-        // production is a bare SAPI 500 with no headers and no body control.
+        // An uncaught throwable here would surface as a bare SAPI 500 with no headers.
         $response = $kernel->handle(Request::fromArray('GET', '/missing'));
 
         self::assertSame(500, $response->status);
@@ -505,8 +460,8 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * Pins documented limit 3: a ResponseEvent listener runs after the pipeline,
-     * so a listener that replaces the response wholesale drops the decorations.
+     * Known gap, listed in the HttpKernel class docblock: a ResponseEvent listener runs after the pipeline,
+     * so replacing the response drops the decorations.
      */
     public function testResponseEventReplacementDropsGlobalDecorations(): void
     {
@@ -528,11 +483,8 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * Pins the behaviour change that matters most for error reporting: a global
-     * middleware's $next() now RETURNS a 500 where it previously let the
-     * exception propagate. A middleware doing "catch, report, rethrow" stops
-     * seeing handler exceptions, which is a silent failure, so it is pinned
-     * here and called out in the HttpKernel docblock.
+     * A global middleware's $next() returns a 500 instead of letting a handler exception propagate,
+     * so "catch, report, rethrow" middlewares no longer see it.
      */
     public function testGlobalMiddlewareNoLongerObservesAHandlerThrowable(): void
     {
@@ -569,19 +521,11 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame('handled by backstop', $response->body);
     }
 
-    // -- Short-circuiting global middlewares now answer unmatched paths -------
-    //
-    // These pin the documented behaviour change: a global middleware that
-    // returns without calling $next can now respond before the 404 is built, so
-    // the status code on those paths changes. Each stops an unauthenticated
-    // prober from learning which routes exist.
+    // Global middlewares also run on unmatched paths: connection checks (HTTPS, Host) answer first,
+    // while CSRF passes over them so the 404 or 405 stands.
 
     /**
-     * CSRF asks whether a state change to a RESOURCE is authorised. When no
-     * route matched there is no resource, so the honest answer is 404, not a
-     * security-shaped 403 that sends whoever debugs it hunting a token problem
-     * when the URL is simply wrong. A stale webhook posting to a renamed
-     * endpoint is the case that costs real time.
+     * An unmatched path answers 404, not a CSRF 403: there is no resource to authorise.
      */
     public function testGlobalCsrfMiddlewareDoesNotGateAnUnmatchedRoute(): void
     {
@@ -615,7 +559,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
         $missing = $kernel->handle(Request::fromArray('POST', '/exists'));
         $bad     = $kernel->handle(Request::fromArray('POST', '/exists', body: ['_csrf_token' => 'wrong']));
 
-        // CSRF is NOT weakened on routes that actually exist.
+        // CSRF still applies to matched routes.
         self::assertSame(403, $missing->status);
         self::assertSame(403, $bad->status);
     }
@@ -649,8 +593,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
             ->withMiddleware(new CsrfMiddleware(new ErrorPipelineTokenManager(), new CsrfConfig()))
             ->build();
 
-        // DELETE is unsafe and carries no token, but no route matched it, so
-        // the answer is the 405 rather than a 403.
+        // No route matched the unsafe DELETE, so the answer is a 405, not a 403.
         $response = $kernel->handle(Request::fromArray('DELETE', '/only-get'));
 
         self::assertSame(405, $response->status);
@@ -673,8 +616,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertTrue($captured[Request::ATTRIBUTE_UNMATCHED_ROUTE] ?? null);
 
         $kernel->handle(Request::fromArray('GET', '/exists'));
-        // Never set on a matched route: the attribute describes a routing
-        // failure, and a matched request has none to describe.
+        // Only set on routing failures, never on a matched route.
         self::assertArrayNotHasKey(Request::ATTRIBUTE_UNMATCHED_ROUTE, $captured);
     }
 
@@ -708,16 +650,10 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertStringContainsString('Invalid Host header', $response->body);
     }
 
-    // -- The session behaviour change, pinned --------------------------------
-
     /**
-     * The commit message and the SessionMiddleware docblock both claim a 404
-     * now starts a session. That claim is load-bearing for the five projects
-     * tracking this framework, so it is pinned rather than only documented.
+     * SessionMiddleware runs on an unmatched route, so a 404 starts a session.
      *
-     * A SessionManager in override-storage mode is used so the test never
-     * spawns a real PHP session; what is being proven is that the middleware
-     * RUNS on an unmatched route, which is the behaviour change.
+     * The SessionManager uses override storage so no real PHP session is spawned.
      */
     public function testSessionMiddlewareRunsOnAnUnmatchedRoute(): void
     {
@@ -735,13 +671,9 @@ final class HttpKernelErrorPipelineTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/no-such-path'));
 
         self::assertSame(404, $response->status);
-        // The session attribute is present, so SessionMiddleware ran and called
-        // start() on a request that matched no route. Before the pipeline
-        // wrapped error responses it did not run at all here.
+        // The session attribute is present, so SessionMiddleware ran on a request that matched no route.
         self::assertInstanceOf(SessionManager::class, $captured['session'] ?? null);
     }
-
-    // -- Interaction with the rest of the kernel ------------------------------
 
     public function testCustomExceptionHandlerResponseIsAlsoDecoratedByGlobalMiddleware(): void
     {
@@ -869,10 +801,6 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 }
 
-// ===========================================================================
-// Fixture controllers
-// ===========================================================================
-
 final class ErrorPipelinePingController
 {
     public function ping(): Response
@@ -906,10 +834,6 @@ final class ErrorPipelineTracingController
         return Response::text('ok');
     }
 }
-
-// ===========================================================================
-// Fixture middleware
-// ===========================================================================
 
 final class ErrorPipelineHeaderMiddleware implements MiddlewareInterface
 {

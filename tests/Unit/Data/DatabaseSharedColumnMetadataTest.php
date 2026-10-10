@@ -13,25 +13,14 @@ use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
 
 /**
- * Verifies the PROCESS-WIDE column shape cache added to Database, on top of the
- * per-instance memo already covered by DatabaseColumnTypeCacheTest.
+ * Tests the process-wide column shape cache of Database, layered over the per-instance memo.
  *
- * The three failure modes this layer had to avoid are each pinned by a test:
+ * Guarded failure modes, each covered by a test:
+ *   1. Caching converters instead of metadata: the cached shape must stay serializable.
+ *   2. Sharing converters between instances on the same DSN: each instance applies its own registry.
+ *   3. Keying on SQL text alone: a changed column count must re-resolve.
  *
- *   1. Caching converters instead of metadata: the cached value must stay plain
- *      data, so testCachedShapeIsPlainSerializableData asserts it survives
- *      serialize() (a cached Closure would throw outright).
- *   2. Poisoning one instance's converters with another's: two Database
- *      instances on the same DSN running the same SQL must each apply their OWN
- *      registry, in BOTH directions (the money guard, and the reverse case
- *      where the first instance has no converter for a type the second one does).
- *   3. Keying on SQL text alone: identical SQL whose column count changed must
- *      re-resolve rather than serve a stale shape.
- *
- * A spy PDOStatement drives a real SQLite result set for the row data while
- * (a) reporting PostgreSQL-style native types via getColumnMeta() so the real
- * converters are exercised, and (b) counting getColumnMeta() calls, which is
- * the resolution work a cache hit is supposed to avoid.
+ * A spy PDOStatement serves real SQLite rows, reports PostgreSQL native types and counts getColumnMeta() calls.
  */
 final class DatabaseSharedColumnMetadataTest extends TestCase
 {
@@ -39,11 +28,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
     protected function setUp(): void
     {
-        // Isolate BOTH backing layers between tests so ordering cannot make one
-        // pass vacuously off another test's warm entries. flushSharedColumnMetadata()
-        // covers the process static and APCu, which matters here: a warm APCu
-        // entry outlives a test and would otherwise defeat an isolation attempt
-        // that only reset the static.
+        // The flush must clear APCu too: a warm APCu entry outlives the test.
         Database::setSharedColumnMetadataEnabled(true);
         Database::flushSharedColumnMetadata();
         MetaSpyStatement::reset();
@@ -55,8 +40,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         Database::flushSharedColumnMetadata();
         MetaSpyStatement::reset();
     }
-
-    // ── the shared layer actually avoids the metadata work ───────────────────
 
     public function testSecondInstanceOnTheSameDsnResolvesWithoutTouchingTheBackend(): void
     {
@@ -104,7 +87,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         $this->seedMixedRow($warm);
         $warmRow = $warm->selectOne($sql);
 
-        // Every conversion family still lands where it should.
         self::assertSame(1, $warmRow->id);
         self::assertSame(7, $warmRow->payload->a);
         self::assertSame(12.5, $warmRow->price);
@@ -138,8 +120,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         );
     }
 
-    // ── trap 1: the cached value must be plain data, never a converter ───────
-
     public function testCachedShapeIsPlainSerializableData(): void
     {
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
@@ -155,16 +135,13 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertSame(2, $shape['count']);
         self::assertSame(['id' => 'INT4', 'price' => 'NUMERIC'], $shape['types']);
 
-        // A cached Closure would make this throw, not return false. Caching the
-        // converters directly is exactly what this layer must never do.
+        // Caching converters (closures) would make serialize() throw.
         self::assertIsString(serialize($shape));
     }
 
     public function testShapeRecordsEveryColumnIncludingOnesWithNoConverter(): void
     {
-        // 'label' has no registered converter anywhere. It must still be part of
-        // the cached shape, otherwise an instance that later registers a TEXT
-        // converter would read back a shape that no longer mentions the column.
+        // A column without a converter must still be cached, or a converter registered later would read a shape missing it.
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'TEXT'];
 
         $db = $this->makeDatabase('full_shape', self::TWO_COLUMN_TABLE);
@@ -177,14 +154,9 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertSame('TEXT', $shape['types']['price']);
     }
 
-    // ── trap 2: an instance may only ever apply its OWN converters ───────────
-
     public function testTwoInstancesWithDifferentConversionsEachApplyTheirOwn(): void
     {
-        // THE money guard. The framework default maps NUMERIC to floatval; an
-        // application overrides it with a string passthrough precisely so money
-        // never rounds through a float. Sharing a cache between the two must
-        // never let one instance serve the other's converter.
+        // The money guard: NUMERIC defaults to floatval, and an application overrides it so money never rounds through a float.
         MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
         $sql = 'SELECT id, price FROM records WHERE id = 1';
 
@@ -199,8 +171,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         $this->seedTwoColumnRow($application, '12.50');
         $applicationRow = $application->selectOne($sql);
 
-        // Same DSN, same SQL, same width: the shape genuinely came from cache,
-        // so this assertion is not passing vacuously on a second cold resolve.
         self::assertSame(
             $callsAfterFirst,
             MetaSpyStatement::$calls,
@@ -216,10 +186,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
     public function testConverterRegisteredOnlyByTheSecondInstanceStillApplies(): void
     {
-        // The reverse direction, and the reason the shape records every column:
-        // the FIRST instance has no BYTEA converter. Had it cached only the
-        // columns it could convert, the second instance would read back a shape
-        // with no bytea column in it and its converter would silently never run.
+        // The first instance has no BYTEA converter: the shape must record every column, or the second converter never runs.
         MetaSpyStatement::$nativeTypeByName = ['price' => 'BYTEA'];
         $sql = 'SELECT id, price FROM records WHERE id = 1';
 
@@ -227,7 +194,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         $this->seedTwoColumnRow($without, '\\x48656c6c6f');
         $withoutRow = $without->selectOne($sql);
 
-        // No BYTEA converter registered, so the raw value passes through.
         self::assertSame('\\x48656c6c6f', $withoutRow->price);
 
         $callsAfterFirst = MetaSpyStatement::$calls;
@@ -253,16 +219,13 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         $db = $this->makeDatabase('late_register', self::TWO_COLUMN_TABLE);
         $this->seedTwoColumnRow($db, '7.00');
 
-        // Warm both layers with the builtin NUMERIC conversion.
         self::assertSame(7.0, $db->selectOne($sql)->price);
 
         $callsAfterWarm = MetaSpyStatement::$calls;
 
         $db->registerTypeConversion('NUMERIC', static fn (string $v): string => $v);
 
-        // The converter changes how a type converts, never what type a column
-        // is, so the shape stays valid: the new behaviour must appear WITHOUT
-        // re-reading metadata.
+        // A converter changes how a type converts, not the column type, so the cached shape stays valid.
         self::assertSame('7.00', $db->selectOne($sql)->price);
         self::assertSame(
             $callsAfterWarm,
@@ -271,12 +234,9 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         );
     }
 
-    // ── trap 3: SQL text alone is not a sufficient key ───────────────────────
-
     public function testColumnCountChangeForTheSameSqlInvalidatesTheShape(): void
     {
-        // Identical SQL text, identical DSN, one extra column: the exact shape
-        // of a migration landing before the process restarts.
+        // Same SQL text and DSN, one extra column: a migration applied before a restart.
         $sql = 'SELECT * FROM records';
 
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
@@ -329,13 +289,9 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertCount(2, self::sharedStore(), 'Each DSN gets its own entry.');
     }
 
-    // ── the APCu layer: surviving request shutdown ───────────────────────────
-
     public function testApcuServesTheShapeAfterTheProcessStaticIsGone(): void
     {
-        // THE point of the APCu layer. PHP destroys every static at request
-        // shutdown while the persistent PDO handle survives, so this is what a
-        // second request against a warm machine actually looks like.
+        // Simulates a second request: PHP drops every static at shutdown, the persistent PDO handle survives.
         $this->requireApcu();
 
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
@@ -363,8 +319,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         );
         self::assertEquals($firstRow, $secondRow);
 
-        // The APCu hit warms the static back up, so nothing else in this
-        // process pays even the shared-memory lookup.
+        // The APCu hit refills the static, so later lookups skip shared memory.
         self::assertCount(1, self::sharedStore());
         self::assertSame($cachedShape, array_values(self::sharedStore())[0]);
     }
@@ -436,14 +391,9 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertCount(0, self::apcuKeysWithPrefix());
     }
 
-    // ── the APCu layer degrades, and never degrades to "no conversion" ───────
-
     public function testMalformedApcuEntryResolvesProperlyRatherThanSkippingConversions(): void
     {
-        // The failure that would matter: a junk entry read back as a shape with
-        // no types in it converts nothing, so a NUMERIC silently stops being a
-        // string and a JSONB silently stays raw. Every rejection path has to
-        // mean "go ask the backend", never "there is nothing to convert".
+        // A rejected entry must mean "resolve again", never a shape without types, which would silently skip conversions.
         $this->requireApcu();
 
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
@@ -503,18 +453,9 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertSame(array_values(self::sharedStore())[0], $stored);
     }
 
-    // ── duplicate column names ───────────────────────────────────────────────
-
     public function testDuplicateColumnNamesResolveAgainstTheColumnThatActuallyWins(): void
     {
-        // Registry-independent shapes changed one edge case, in the direction of
-        // correctness. With two result columns sharing a name, PDO::FETCH_OBJ
-        // keeps the LAST one's value, so the LAST one's type is the type that
-        // matters. The previous resolution recorded a converter only for columns
-        // it could convert, so an earlier INT4 column kept ownership of the name
-        // and intval() was applied to a value that came from the later column:
-        // a UUID string silently became 0. The shape now records every column,
-        // last one wins, and the value is left alone.
+        // PDO::FETCH_OBJ keeps the last column sharing a name, so the shape records every column and the last one wins.
         MetaSpyStatement::$nativeTypeByIndex = [0 => 'INT4', 1 => 'UUID'];
 
         $db = $this->makeDatabase('duplicate_names', self::TWO_COLUMN_TABLE);
@@ -524,8 +465,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
         self::assertSame('a3f2-not-a-number', $row->id);
     }
-
-    // ── the escape hatch, and equivalence with the layer off ─────────────────
 
     public function testResultsAreIdenticalWithTheSharedLayerDisabledAndEnabled(): void
     {
@@ -576,9 +515,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
     public function testSharedStoreStaysBoundedUnderUnboundedDistinctSql(): void
     {
-        // A long-lived process generating dynamic SQL (varying IN lists,
-        // generated filters) must not grow this store forever. The cap resets
-        // it wholesale rather than carrying LRU bookkeeping on the hot path.
+        // The store is capped and resets wholesale, so dynamic SQL cannot grow it forever.
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
 
         $cap = (new ReflectionClass(Database::class))->getConstant('MAX_SHARED_COLUMN_SHAPES');
@@ -601,9 +538,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
     public function testDirectlyInjectedPdoNeverTouchesTheSharedLayer(): void
     {
-        // A PDO handed to the constructor has no knowable identity, so two
-        // unrelated databases could collide on the same SQL. Those instances
-        // keep the per-instance memo alone, exactly as before this cache.
+        // A PDO injected through the constructor has no identity to key on, so it keeps the per-instance memo only.
         MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
         $sql = 'SELECT id, price FROM records WHERE id = 1';
 
@@ -622,8 +557,6 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertCount(0, self::sharedStore());
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-
     private const MIXED_TABLE = 'CREATE TABLE records ('
         . 'id INTEGER PRIMARY KEY, payload TEXT, price TEXT, flag TEXT, tags TEXT, label TEXT)';
 
@@ -641,8 +574,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 
         $pdo = $this->makePdo($ddl);
 
-        // fromConfig() issues a SET client_encoding that SQLite rejects; the
-        // framework swallows that, and it resolves no column metadata.
+        // fromConfig() runs a SET client_encoding that SQLite rejects; the framework swallows it.
         return Database::fromConfig(
             $config,
             static fn (string $dsn, string $username, string $password, array $options): PDO => $pdo,
@@ -658,8 +590,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         return $pdo;
     }
 
-    // Writes never resolve column metadata, so the getColumnMeta() counter is
-    // untouched by seeding and stays a cumulative count of resolution work.
+    // Writes never resolve column metadata, so seeding leaves the getColumnMeta() counter alone.
 
     private function seedTwoColumnRow(Database $db, string $price = '12.50'): void
     {
@@ -686,8 +617,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
     }
 
     /**
-     * Empty the process static WITHOUT touching APCu, which is what PHP itself
-     * does at request shutdown. The only way to test the APCu layer honestly.
+     * Empties the process static only, as PHP does at request shutdown; APCu is kept.
      */
     private static function clearProcessStaticOnly(): void
     {
@@ -725,20 +655,16 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
 }
 
 /**
- * A PDOStatement that spies on getColumnMeta():
- *   - counts calls, which is the backend metadata work a cache hit must avoid,
- *   - overrides the reported native_type per column name, so the PostgreSQL
- *     converters can be exercised against a SQLite-backed result set.
+ * PDOStatement counting getColumnMeta() calls and forcing native types, so PostgreSQL converters run on SQLite rows.
  *
- * Named apart from DatabaseColumnTypeCacheTest's SpyStatement because both live
- * in this namespace and the two suites count calls independently.
+ * Distinct from DatabaseColumnTypeCacheTest's SpyStatement, which lives in the same namespace.
  */
 final class MetaSpyStatement extends PDOStatement
 {
-    /** @var array<string, string> column name → forced native_type */
+    /** @var array<string, string> column name => forced native_type */
     public static array $nativeTypeByName = [];
 
-    /** @var array<int, string> column index → forced native_type, wins over the name map */
+    /** @var array<int, string> column index => forced native_type, takes precedence over the name map */
     public static array $nativeTypeByIndex = [];
 
     public static int $calls = 0;

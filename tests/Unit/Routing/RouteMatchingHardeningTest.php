@@ -18,17 +18,11 @@ use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\RouteMatch;
 
 /**
- * Everything the matcher used to let through: a trailing newline past an
- * author's whitelist, invalid UTF-8 and NUL past the default pattern, a
- * placeholder name the framework itself owns, and an integer that saturated
- * instead of being refused.
+ * Guards of the route matcher: constraints, malformed segments, placeholder
+ * names, integer overflow and the cache file mode.
  */
 final class RouteMatchingHardeningTest extends TestCase
 {
-    // =====================================================================
-    // The missing /D modifier
-    // =====================================================================
-
     /**
      * @return array<string, array{0: string, 1: string}>
      */
@@ -43,9 +37,7 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     /**
-     * Without the D modifier PCRE lets "$" match just before a final newline,
-     * so every author-written whitelist accepted one. Pre-fix each of these
-     * matched and the handler received the newline intact.
+     * Without the D modifier, "$" also matches before a final newline.
      */
     #[DataProvider('trailingNewlineProvider')]
     public function testAConstraintDoesNotAcceptATrailingNewline(string $pattern, string $path): void
@@ -65,10 +57,6 @@ final class RouteMatchingHardeningTest extends TestCase
         self::assertSame('123', $collection->match('GET', '/s/123')->parameter('value'));
     }
 
-    // =====================================================================
-    // Invalid UTF-8 and NUL in a segment
-    // =====================================================================
-
     /**
      * @return array<string, array{0: string}>
      */
@@ -84,10 +72,8 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     /**
-     * The default "[^/]+" pattern is byte-oriented, so all of these used to
-     * reach a handler argument intact. With PDO emulated prepares on PHP 8.4,
-     * binding invalid UTF-8 through pdo_pgsql segfaults the worker, which makes
-     * this a remote process kill rather than an error path.
+     * Invalid UTF-8 and NUL must never reach a handler argument: binding invalid
+     * UTF-8 through pdo_pgsql with emulated prepares crashes the worker.
      */
     #[DataProvider('malformedSegmentProvider')]
     public function testAMalformedSegmentNeverReachesAHandlerArgument(string $path): void
@@ -120,8 +106,7 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     /**
-     * The same bytes sent RAW rather than percent-encoded, which is what a
-     * hand-rolled client can do. Refused before any route is consulted.
+     * Raw (not percent-encoded) malformed bytes are refused before any route is consulted.
      */
     #[DataProvider('rawMalformedTargetProvider')]
     public function testARawMalformedTargetIsRefusedBeforeMatching(string $path): void
@@ -135,10 +120,7 @@ final class RouteMatchingHardeningTest extends TestCase
 
     public function testARawNulByteCannotReachAHandlerArgument(): void
     {
-        // parse_url() substitutes "_" for a raw NUL, so this one is neutralised
-        // before the guard is even consulted. Asserted rather than assumed: the
-        // invariant that matters is that no NUL reaches an argument, and the
-        // mechanism that delivers it here is not ours.
+        // parse_url() replaces a raw NUL with "_" before the guard runs; only the outcome is asserted.
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/a/{value}', 'C@show'));
 
@@ -150,7 +132,6 @@ final class RouteMatchingHardeningTest extends TestCase
 
     public function testValidMultibyteSegmentsStillMatch(): void
     {
-        // Non-breakage: well-formed UTF-8 is untouched, encoded or raw.
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/a/{value}', 'C@show'));
 
@@ -169,10 +150,6 @@ final class RouteMatchingHardeningTest extends TestCase
         $collection->match('GET', '/docs/a%2Fb');
     }
 
-    // =====================================================================
-    // Placeholder names
-    // =====================================================================
-
     /**
      * @return array<string, array{0: string}>
      */
@@ -190,9 +167,7 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     /**
-     * Every one of these used to register happily. "{0}" is the sharpest: an
-     * integer-like attribute key is RENUMBERED by array_merge(), so the value
-     * a numeric placeholder matched did not survive the hop onto the request.
+     * Refused at registration. A numeric name such as "{0}" would be renumbered by array_merge() and lost.
      */
     #[DataProvider('invalidPlaceholderProvider')]
     public function testAnInvalidPlaceholderNameIsRefusedAtRegistration(string $path): void
@@ -207,8 +182,7 @@ final class RouteMatchingHardeningTest extends TestCase
 
         self::assertSame('/users/{id}/posts/{postId}', $route->path);
         self::assertSame('/x/{_draft}', Route::define('GET', '/x/{_draft}', 'C@show')->path);
-        // A brace that is not a WHOLE segment stays a literal, as the matcher
-        // has always treated it.
+        // A brace inside a larger segment is a literal.
         self::assertSame('/x/a{b}c', Route::define('GET', '/x/a{b}c', 'C@show')->path);
     }
 
@@ -229,15 +203,10 @@ final class RouteMatchingHardeningTest extends TestCase
         }
     }
 
-    // =====================================================================
-    // The route cache file mode
-    // =====================================================================
-
     public function testTheCacheDirectoryAndFileAreNotWorldWritable(): void
     {
-        // The cache drives Class@method dispatch, so a local write to it is
-        // arbitrary dispatch. Under "umask 0" the directory used to land 0777
-        // and the file 0666.
+        // The cache drives Class@method dispatch, so it must not be writable by others.
+        // The umask is set to 0 so that the modes are proven, not inherited.
         $previousUmask = umask(0);
         $directory = sys_get_temp_dir() . '/zephyrus-cache-perm-' . bin2hex(random_bytes(8));
         $file = $directory . '/routes.json';
@@ -280,10 +249,6 @@ final class RouteMatchingHardeningTest extends TestCase
         }
     }
 
-    // =====================================================================
-    // Integer saturation
-    // =====================================================================
-
     /**
      * @return array<string, array{0: string}>
      */
@@ -297,9 +262,7 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     /**
-     * "/n/9999999999999999999999" answered 200 with id=9223372036854775807, so
-     * two distinct URLs collapsed onto one argument. The class contract is to
-     * throw for a value it cannot represent.
+     * Saturating would map distinct URLs onto one argument, so unrepresentable integers throw.
      */
     #[DataProvider('unrepresentableIntegerProvider')]
     public function testAnUnrepresentableIntegerIsRefusedInsteadOfSaturating(string $value): void

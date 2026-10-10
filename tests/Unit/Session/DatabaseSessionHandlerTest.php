@@ -14,8 +14,7 @@ use Zephyrus\Session\DatabaseSessionHandler;
 use Zephyrus\Session\SessionException;
 
 /**
- * Tests DatabaseSessionHandler using an in-memory SQLite database so no
- * external services are required.
+ * Tests DatabaseSessionHandler against an in-memory SQLite database.
  */
 final class DatabaseSessionHandlerTest extends TestCase
 {
@@ -64,7 +63,6 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         self::assertSame('second', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
 
-        // Ensure only one row exists.
         $count = $this->database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']);
         self::assertSame(1, $count);
     }
@@ -170,7 +168,6 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testDestroyNonexistentSessionDoesNotThrow(): void
     {
-        // Should not throw.
         $result = $this->handler->destroy('ffffffffffffffffffffffffffffffff');
 
         self::assertTrue($result);
@@ -178,7 +175,6 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testGcRemovesExpiredSessions(): void
     {
-        // Insert a row with an old access timestamp.
         $this->database->execute(
             'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
             ['0f1e2d3c4b5a69788796a5b4c3d2e1f0', time() - 7200, time() - 3600, 'old_data'],
@@ -186,7 +182,6 @@ final class DatabaseSessionHandlerTest extends TestCase
         $this->handler->read('aabbccddeeff00112233445566778899');
         $this->handler->write('aabbccddeeff00112233445566778899', 'fresh_data');
 
-        // GC with a 1-hour lifetime should remove '0f1e2d3c4b5a69788796a5b4c3d2e1f0' but keep 'aabbccddeeff00112233445566778899'.
         $deleted = $this->handler->gc(3600);
 
         self::assertSame(1, $deleted);
@@ -202,21 +197,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'updated'));
     }
 
-    // ── Session id adoption (strict mode) ─────────────────────────────────────
-
     /**
-     * The test that would have caught the original bug.
-     *
-     * SessionManager sets session.use_strict_mode=1, but PHP only consults it
-     * when the handler supplies validateId(). Without the interface the flag was
-     * inert and a client-supplied id was adopted verbatim:
-     *
-     *   strict mode on, plain handler       -> session_id() = attackerchosenid123
-     *   strict mode on, validateId handler  -> session_id() = 43e880c2447c...
-     *
-     * A test that merely starts a session and reads it back passes against the
-     * broken version too, so this asserts the interface and the rejection
-     * directly.
+     * PHP enforces strict mode only when the handler implements validateId(); otherwise it adopts client-supplied ids.
      */
     public function testHandlerImplementsTheInterfaceStrictModeRequires(): void
     {
@@ -225,8 +207,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testValidateIdRejectsAnIdThatDoesNotAlreadyExist(): void
     {
-        // The planted-id case. Rejecting it is what makes PHP discard the
-        // client's id and generate a fresh one instead of adopting it.
+        // Rejecting an unknown id makes PHP generate a fresh one instead of adopting the client's.
         self::assertFalse($this->handler->validateId('c0ffee00c0ffee00c0ffee00c0ffee00'));
         self::assertSame(
             0,
@@ -263,9 +244,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     #[DataProvider('malformedIdProvider')]
     public function testMalformedIdsAreRejectedEverywhere(string $id): void
     {
-        // An unvalidated id lands in a PRIMARY KEY column: probing produced a
-        // real row keyed "secX/../-marker-18537", and another 250 characters
-        // long.
+        // A malformed id must never reach the PRIMARY KEY column.
         self::assertFalse($this->handler->validateId($id));
         self::assertFalse($this->handler->write($id, 'payload'));
         self::assertSame('', $this->handler->read($id));
@@ -279,8 +258,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testDestroyToleratesAMalformedIdWithoutBreakingLogout(): void
     {
-        // Nothing can have been stored under it, so destroy() is already
-        // satisfied. Failing here would break a logout flow for no gain.
+        // Nothing can be stored under a malformed id, so failing here would only break logout.
         self::assertTrue($this->handler->destroy('../../etc/passwd'));
     }
 
@@ -293,8 +271,6 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame('payload', $handler->read('tenant-abcd1234'));
         self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', 'payload'));
     }
-
-    // ── updateTimestamp ───────────────────────────────────────────────────────
 
     public function testUpdateTimestampRefreshesAccessWithoutAlteringThePayload(): void
     {
@@ -321,15 +297,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * Replaces testUpdateTimestampRestoresASessionCollectedMidFlight, which
-     * asserted the opposite and blessed the bug.
-     *
-     * The old insert branch existed to save a session garbage-collected
-     * mid-flight, and it could not tell that case apart from a row DELETED on
-     * purpose. So logout, sign-out-everywhere and the session eviction a
-     * password reset performs were all undone by any request that was already
-     * open when the delete landed: the whole authenticated payload went
-     * straight back under the same id.
+     * A row deleted on purpose (logout, password reset) must not be recreated by a request still in flight.
      */
     public function testUpdateTimestampNeverRecreatesARowThatIsNoLongerThere(): void
     {
@@ -349,24 +317,10 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
     }
 
-    // ── Concurrency ───────────────────────────────────────────────────────────
-
     /**
-     * Reproduces the duplicate-key race that write() used to lose sessions to.
+     * write() is a single atomic upsert: a competing insert of the same new id must not make it fail.
      *
-     * write() was a check-then-act: SELECT for an existing row, then INSERT or
-     * UPDATE. Two concurrent requests carrying the same NEW session id both saw
-     * no row and both INSERTed, and the loser hit a duplicate-key violation on
-     * the primary key. Because handlers are commonly wrapped to swallow write
-     * failures (so a session problem cannot break a page render), the session
-     * write silently did not happen and nothing was logged anywhere.
-     *
-     * The interleaving is simulated deterministically rather than with threads:
-     * RacingPdo inserts the competing row in the instant before the handler's
-     * own write statement executes, which is exactly the window that was
-     * unsafe. Against the old check-then-act code this test throws
-     * DatabaseException with SQLSTATE 23000; against the single atomic upsert
-     * it succeeds and the row holds this writer's data.
+     * RacingPdo inserts the competing row just before the write statement runs, so the interleaving is deterministic.
      */
     public function testWriteSurvivesAConcurrentInsertOfTheSameNewSessionId(): void
     {
@@ -379,39 +333,25 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         self::assertSame('', $handler->read('b7c1f0a94e2d8135c6a0f4e79b23d581'));
 
-        // Must not throw: the competing row appears mid-write.
         self::assertTrue($handler->write('b7c1f0a94e2d8135c6a0f4e79b23d581', 'mine'));
         self::assertTrue($pdo->raced, 'the race window must actually have been exercised');
 
-        // The row ends in a correct state, and there is exactly one of it.
         self::assertSame('mine', $handler->read('b7c1f0a94e2d8135c6a0f4e79b23d581'));
         self::assertSame(1, $database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', ['b7c1f0a94e2d8135c6a0f4e79b23d581']));
     }
 
-    // ── Deletion survives an in-flight request ────────────────────────────────
-
     /**
-     * The finding this whole state-tracking exists for.
-     *
-     * An attacker holding a stolen cookie polls; the victim resets their
-     * password, which deletes every row for that user. The attacker's request
-     * had already read the row, so its write() used to upsert the authenticated
-     * payload back under the same id and the stolen session survived the reset.
-     * Measured against the previous code: logout at t+0.00s, a slow request
-     * writing at t+2.01s, and the id was still alive with its payload restored.
+     * A write from a request that read the session before a logout must not revive the deleted row.
      */
     public function testWriteDoesNotResurrectASessionDeletedWhileTheRequestWasInFlight(): void
     {
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
         $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
 
-        // The in-flight request loads the session...
         self::assertSame('user_id|i:1;', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
 
-        // ...and the logout lands from another request while it is running.
         $this->database->execute('DELETE FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']);
 
-        // The in-flight request now saves what it has.
         self::assertFalse($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;role|s:5:"admin";'));
 
         self::assertSame(
@@ -430,8 +370,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         $this->database->execute('DELETE FROM session WHERE session_id = ?', ['43e880c2447ca10d3092d51d258c050c']);
 
-        // PHP calls this, not write(), when the payload did not change, which
-        // is most requests and therefore the likelier half of the race.
+        // PHP calls updateTimestamp() instead of write() when the payload is unchanged, the common case.
         self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
 
         self::assertSame(
@@ -452,10 +391,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * The other half of the fix: refusing to resurrect must not stop a session
-     * from being CREATED. PHP calls write() (not updateTimestamp) for a
-     * brand-new session, with an empty payload, so this is the path every
-     * first request takes.
+     * A brand-new session, written with an empty payload, must still be created.
      */
     public function testWriteStillCreatesTheRowForASessionThisRequestOpened(): void
     {
@@ -466,9 +402,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * PHP reads before it writes, so only a wrapper that skipped read() (its
-     * database was briefly unreachable, say) writes an id this handler never
-     * read, with a payload built without the stored one.
+     * Only a caller that skipped read() can write an id this handler never read; that write must not clobber the stored session.
      */
     public function testWriteRefusesAnIdThisHandlerNeverReadSoTheStoredSessionSurvives(): void
     {
@@ -519,8 +453,6 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $warnings[0][1]);
     }
 
-    // ── What the write methods report ─────────────────────────────────────────
-
     public function testUpdateTimestampReportsTheRowItRefreshed(): void
     {
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
@@ -548,8 +480,6 @@ final class DatabaseSessionHandlerTest extends TestCase
         $handler->destroy('43e880c2447ca10d3092d51d258c050c');
     }
 
-    // ── Expiry window ─────────────────────────────────────────────────────────
-
     public function testTheExpiryFollowsSessionGcMaxlifetime(): void
     {
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
@@ -561,11 +491,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         );
     }
 
-    // ── A failed read ─────────────────────────────────────────────────────────
-
     /**
-     * A wrapper that catches the read failure hands PHP an empty session, and
-     * PHP then writes that anonymous payload back under the same cookie.
+     * A failed read must not let write() overwrite the stored session with an empty payload.
      */
     public function testAFailedReadStopsWriteFromOverwritingTheStoredSession(): void
     {
@@ -674,8 +601,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * A handler on a connection that reports the pgsql driver and records the
-     * lock statements it receives.
+     * A handler on a connection that reports the pgsql driver and records the lock statements.
      *
      * @return array{0: AdvisoryLockRecordingPdo, 1: DatabaseSessionHandler, 2: Database}
      */
@@ -707,14 +633,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::fail('read() was expected to fail');
     }
 
-    // ── Expiry is enforced, not merely recorded ───────────────────────────────
-
     /**
-     * The `expire` column used to be written by write() and updateTimestamp()
-     * and READ BY NOTHING, so expiry rested entirely on PHP's GC lottery, which
-     * this framework never configures and which Debian and Ubuntu ship disabled
-     * (session.gc_probability = 0). A 30-day-old row was adopted and returned
-     * its payload.
+     * Expired rows are refused by validateId() without relying on PHP's GC, which may be disabled.
      */
     public function testAnExpiredRowIsNotAdoptedEvenWhenGarbageCollectionNeverRan(): void
     {
@@ -736,8 +656,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * The stored expiry was stamped under the lifetime in force at the last
-     * write, so a lowered timeout must not wait for it.
+     * The current session.gc_maxlifetime applies, not the expiry stored at the last write.
      */
     #[RunInSeparateProcess]
     public function testASessionIdleLongerThanTheCurrentLifetimeIsRefusedWhateverItsStoredExpiry(): void
@@ -765,14 +684,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         );
     }
 
-    // ── Id shape ──────────────────────────────────────────────────────────────
-
     /**
-     * PCRE's "$" also matches immediately before a trailing newline, so the
-     * previous pattern accepted 32 valid characters followed by "\n" and stored
-     * it as a second, distinct primary key. Unreachable through PHP today
-     * (PHP validates the cookie character set first), so latent rather than
-     * live, but the pattern is the only bound on what can reach that column.
+     * "$" also matches before a trailing newline, which must not let such an id become a second primary key.
      */
     public function testAnIdWithATrailingNewlineIsRejected(): void
     {
@@ -784,19 +697,10 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
     }
 
-    // ── Strict mode ───────────────────────────────────────────────────────────
-
     /**
-     * The class docblock used to tell you to register the handler with a bare
-     * session_set_save_handler() call. Followed verbatim, that left
-     * session.use_strict_mode at PHP's default of 0 and PHP ADOPTED the id the
-     * client sent. validateId() cannot catch it, because PHP only calls
-     * validateId() when strict mode is already on, so the constructor has to
-     * turn the flag on itself.
+     * The constructor turns on session.use_strict_mode, so PHP discards an unknown client-supplied id.
      *
-     * Run in a subprocess because a session ini setting cannot be changed once
-     * output has begun, and PHPUnit has printed its progress dots long before
-     * this test runs.
+     * Runs in a subprocess: session ini settings cannot change once output has begun.
      */
     public function testConstructingTheHandlerTurnsStrictModeOnSoAPlantedIdIsDiscarded(): void
     {
@@ -832,17 +736,11 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertNotSame('', $sessionId);
     }
 
-    // ── Locking (PostgreSQL) ──────────────────────────────────────────────────
-
     /**
-     * write() hands the database the WHOLE payload, so two concurrent requests
-     * on one session lose each other's changes: request A mints a CSRF token,
-     * request B writes a locale, and A's token is gone. PHP's own `files`
-     * handler holds an flock for the whole request; this handler held nothing.
+     * The session is locked for the whole request, because write() stores the whole payload, so concurrent
+     * requests would overwrite each other's changes.
      *
-     * The lock itself is proven against a real PostgreSQL with two concurrent
-     * connections, which SQLite cannot model. What is asserted here is that the
-     * statements are issued at all, and in the right order, on a pgsql driver.
+     * Only the statements and their order are asserted here; DatabaseSessionHandlerPostgresTest covers the real lock.
      */
     public function testAPostgresConnectionLocksTheSessionForTheWholeRequest(): void
     {
@@ -916,8 +814,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * Inside the caller's transaction a failed statement aborts everything
-     * after it, so each lock statement gets a savepoint of its own.
+     * Each lock statement gets its own savepoint, as a failure would abort the caller's whole transaction.
      */
     public function testALockStatementInsideACallerTransactionRunsUnderItsOwnSavepoint(): void
     {
@@ -987,7 +884,6 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(['pg_try_advisory_lock', 'pg_advisory_unlock', 'pg_advisory_unlock'], $pdo->advisoryCalls);
     }
 
-    /** Signing out another session (sign out everywhere, say) leaves this request's session locked. */
     public function testDestroyingAnotherSessionKeepsTheLockOnThisOne(): void
     {
         [$pdo, $handler, $database] = $this->recordingHandler();
@@ -1002,9 +898,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * pg_advisory_unlock() answers false when this connection does not hold the
-     * lock, which is what transaction pooling produces: the lock stays held on
-     * another server connection.
+     * pg_advisory_unlock() returning false means the lock sits on another pooled connection: warn and stop locking.
      */
     public function testAnUnlockThatFindsNoLockWarnsAndStopsLocking(): void
     {
@@ -1112,8 +1006,7 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testWriteIssuesASingleStatement(): void
     {
-        // The property that removes the race: one atomic upsert, no separate
-        // read to act on. A second statement would reopen the window above.
+        // A single atomic upsert: a separate read before the write would reopen the race.
         $pdo = new CountingPdo('sqlite::memory:');
         $pdo->exec(self::SCHEMA);
 
@@ -1151,8 +1044,7 @@ final class SessionPayloadObject
 }
 
 /**
- * Inserts a competing row in the window immediately before the handler's own
- * write statement runs, simulating a second concurrent request.
+ * Inserts a competing row just before the handler's write statement, simulating a concurrent request.
  */
 final class RacingPdo extends \PDO
 {
@@ -1190,8 +1082,7 @@ final class CountingPdo extends \PDO
 }
 
 /**
- * Answers "pgsql" to a driver-name lookup and records the advisory-lock calls
- * the handler makes, rewriting them to something SQLite can execute.
+ * Reports the pgsql driver and records advisory-lock calls, rewritten so SQLite can run them.
  */
 final class AdvisoryLockRecordingPdo extends \PDO
 {
