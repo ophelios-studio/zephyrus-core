@@ -8,6 +8,11 @@ use Zephyrus\Http\IpRange;
 
 final class Rules
 {
+    /**
+     * Fails for null, '' and []; '0', 0 and false pass.
+     * The presence of this rule makes FormValidator run the field's rules on empty values.
+     * Whitespace-only strings pass (pair with notBlank to refuse them).
+     */
     public static function required(string $message = 'This field is required.'): Rule
     {
         return Rule::of(
@@ -17,6 +22,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings of at least $min characters (counted with mb_strlen); non-strings fail.
+     */
     public static function minLength(int $min, string $message = ''): Rule
     {
         return Rule::of(
@@ -25,6 +33,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings of at most $max characters (counted with mb_strlen); non-strings fail.
+     */
     public static function maxLength(int $max, string $message = ''): Rule
     {
         return Rule::of(
@@ -33,6 +44,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings that FILTER_VALIDATE_EMAIL accepts; non-strings fail.
+     */
     public static function email(string $message = 'Must be a valid email address.'): Rule
     {
         return Rule::of(
@@ -41,6 +55,11 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts ints, integer strings ('5', '+5', padded ' 5 '), the bool true (read as 1) and whole floats
+     * below 1e14 (5.0) with the default precision ini of 14.
+     * Fractional floats, '05' and '5.0' fail.
+     */
     public static function integer(string $message = 'Must be an integer.'): Rule
     {
         return Rule::of(
@@ -49,6 +68,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts int, float and numeric strings, following PHP's is_numeric rules.
+     */
     public static function numeric(string $message = 'Must be numeric.'): Rule
     {
         return Rule::of(
@@ -57,6 +79,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings made of an optional minus sign and ASCII digits; non-strings fail.
+     */
     public static function integerString(string $message = 'Must be an integer string.'): Rule
     {
         return Rule::of(
@@ -65,6 +90,10 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings with an optional minus sign, digits and at most $scale decimal places ('.' separator).
+     * A $scale of 0 or less accepts integer strings only.
+     */
     public static function decimalString(int $scale = 2, string $message = ''): Rule
     {
         $pattern = $scale <= 0
@@ -77,6 +106,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts numbers (int, float or numeric string) greater than or equal to $min.
+     */
     public static function min(int|float $min, string $message = ''): Rule
     {
         return Rule::of(
@@ -85,6 +117,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts numbers (int, float or numeric string) strictly greater than $min.
+     */
     public static function greaterThan(int|float $min, string $message = ''): Rule
     {
         return Rule::of(
@@ -93,6 +128,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts numbers (int, float or numeric string) less than or equal to $max.
+     */
     public static function max(int|float $max, string $message = ''): Rule
     {
         return Rule::of(
@@ -101,6 +139,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts numbers (int, float or numeric string) strictly less than $max.
+     */
     public static function lessThan(int|float $max, string $message = ''): Rule
     {
         return Rule::of(
@@ -109,6 +150,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts numbers (int, float or numeric string) in the inclusive range $min to $max.
+     */
     public static function between(int|float $min, int|float $max, string $message = ''): Rule
     {
         return Rule::of(
@@ -117,6 +161,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts numbers (int, float or numeric string) strictly between $min and $max.
+     */
     public static function betweenExclusive(int|float $min, int|float $max, string $message = ''): Rule
     {
         return Rule::of(
@@ -125,6 +172,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings matching $pattern, a complete PCRE pattern with delimiters; non-strings fail.
+     */
     public static function regex(string $pattern, string $message): Rule
     {
         return Rule::of(
@@ -134,7 +184,7 @@ final class Rules
     }
 
     /**
-     * Validates that a string contains only ASCII characters.
+     * Accepts strings made only of ASCII bytes; the empty string passes.
      */
     public static function ascii(string $message = 'Must contain only ASCII characters.'): Rule
     {
@@ -145,7 +195,7 @@ final class Rules
     }
 
     /**
-     * Validates alphanumeric strings (letters and digits only).
+     * Accepts non-empty strings of ASCII letters and digits; non-strings fail.
      */
     public static function alphaNumeric(string $message = 'Must contain only letters and numbers.'): Rule
     {
@@ -156,7 +206,7 @@ final class Rules
     }
 
     /**
-     * Validates that a string starts with the provided prefix.
+     * Accepts strings starting with $prefix (byte-wise, case-sensitive); an empty prefix always passes.
      */
     public static function startsWith(string $prefix, string $message = ''): Rule
     {
@@ -167,7 +217,7 @@ final class Rules
     }
 
     /**
-     * Validates that a string ends with the provided suffix.
+     * Accepts strings ending with $suffix (byte-wise, case-sensitive); an empty suffix always passes.
      */
     public static function endsWith(string $suffix, string $message = ''): Rule
     {
@@ -178,7 +228,7 @@ final class Rules
     }
 
     /**
-     * Validates that a string contains the provided needle.
+     * Accepts strings containing $needle (byte-wise, case-sensitive); an empty needle always passes.
      */
     public static function contains(string $needle, string $message = ''): Rule
     {
@@ -189,6 +239,8 @@ final class Rules
     }
 
     /**
+     * Accepts values strictly equal (===) to one of $allowed.
+     *
      * @param array<int|string, mixed> $allowed
      */
     public static function in(array $allowed, string $message = ''): Rule
@@ -199,6 +251,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings that FILTER_VALIDATE_URL accepts, whatever the scheme (see httpUrl).
+     */
     public static function url(string $message = 'Must be a valid URL.'): Rule
     {
         return Rule::of(
@@ -208,7 +263,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP/HTTPS URL.
+     * Accepts an absolute URL whose scheme is http or https (case-insensitive).
      */
     public static function httpUrl(string $message = 'Must be a valid HTTP/HTTPS URL.'): Rule
     {
@@ -230,6 +285,9 @@ final class Rules
         );
     }
 
+    /**
+     * Accepts strings with at least one non-whitespace character; non-strings fail.
+     */
     public static function notBlank(string $message = 'Must not be blank.'): Rule
     {
         return Rule::of(
@@ -258,7 +316,7 @@ final class Rules
     }
 
     /**
-     * Validates any standard UUID format (8-4-4-4-12 hex, case-insensitive).
+     * Accepts any UUID shape (8-4-4-4-12 hex, either case); the version and variant are not checked.
      */
     public static function uuid(string $message = 'Must be a valid UUID.'): Rule
     {
@@ -272,8 +330,7 @@ final class Rules
     }
 
     /**
-     * Validates a date string against the given format (default Y-m-d).
-     * Uses DateTime::createFromFormat with strict overflow checking.
+     * Accepts a string that round-trips through $format, so 2026-02-30 is refused; NUL bytes fail.
      */
     public static function date(string $format = 'Y-m-d', string $message = ''): Rule
     {
@@ -290,7 +347,7 @@ final class Rules
     }
 
     /**
-     * Validates a datetime string against the given format (default Y-m-d H:i:s).
+     * Accepts a string that round-trips through $format; NUL bytes fail.
      */
     public static function dateTime(string $format = 'Y-m-d H:i:s', string $message = ''): Rule
     {
@@ -309,7 +366,7 @@ final class Rules
     }
 
     /**
-     * Validates an RFC 3339 datetime string (e.g. 2026-03-08T00:39:00Z).
+     * Accepts a whole-second RFC 3339 datetime with a 'Z' or numeric offset (no fractions, upper-case 'T' and 'Z').
      */
     public static function rfc3339DateTime(string $message = 'Must be a valid RFC 3339 datetime.'): Rule
     {
@@ -336,7 +393,8 @@ final class Rules
     }
 
     /**
-     * Validates an IANA timezone identifier.
+     * Accepts identifiers listed by DateTimeZone::listIdentifiers(), case-sensitive; the empty string fails.
+     * Backward-compatible aliases such as America/Montreal are refused.
      */
     public static function timezone(string $message = 'Must be a valid timezone identifier.'): Rule
     {
@@ -353,7 +411,7 @@ final class Rules
     }
 
     /**
-     * Validates 24-hour time strings (HH:MM).
+     * Accepts HH:MM from 00:00 to 23:59; seconds are refused.
      */
     public static function time24(string $message = 'Must be a valid 24-hour time (HH:MM).'): Rule
     {
@@ -364,7 +422,7 @@ final class Rules
     }
 
     /**
-     * Validates E.164 phone number format.
+     * Accepts a '+' followed by 2 to 15 digits, the first one non-zero.
      */
     public static function phoneE164(string $message = 'Must be a valid E.164 phone number.'): Rule
     {
@@ -375,7 +433,7 @@ final class Rules
     }
 
     /**
-     * Validates hexadecimal color values (#RGB or #RRGGBB).
+     * Accepts #RGB or #RRGGBB in either letter case; alpha forms such as #RGBA are refused.
      */
     public static function hexColor(string $message = 'Must be a valid hex color.'): Rule
     {
@@ -386,7 +444,7 @@ final class Rules
     }
 
     /**
-     * Validates MAC address format.
+     * Accepts six hex pairs, each separated by ':' or '-', in either letter case.
      */
     public static function macAddress(string $message = 'Must be a valid MAC address.'): Rule
     {
@@ -398,7 +456,7 @@ final class Rules
     }
 
     /**
-     * Validates cron expressions with 5 fields.
+     * Accepts five whitespace-separated, non-empty fields; field values are not range-checked.
      */
     public static function cronExpression(string $message = 'Must be a valid cron expression.'): Rule
     {
@@ -419,7 +477,7 @@ final class Rules
     }
 
     /**
-     * Validates simple postal/ZIP code shapes (alphanumeric + space/hyphen).
+     * Accepts 3 to 13 ASCII letters, digits, spaces or hyphens, starting and ending with a letter or digit.
      */
     public static function postalCode(string $message = 'Must be a valid postal code.'): Rule
     {
@@ -430,7 +488,7 @@ final class Rules
     }
 
     /**
-     * Validates that an array has at least $min items.
+     * Accepts arrays with at least $min items; non-arrays fail.
      */
     public static function countMin(int $min, string $message = ''): Rule
     {
@@ -441,7 +499,7 @@ final class Rules
     }
 
     /**
-     * Validates that an array has at most $max items.
+     * Accepts arrays with at most $max items; non-arrays fail.
      */
     public static function countMax(int $max, string $message = ''): Rule
     {
@@ -452,7 +510,7 @@ final class Rules
     }
 
     /**
-     * Validates a valid IPv4 or IPv6 address.
+     * Accepts an IPv4 or IPv6 address (FILTER_VALIDATE_IP); CIDR notation is refused.
      */
     public static function ip(string $message = 'Must be a valid IP address.'): Rule
     {
@@ -463,7 +521,7 @@ final class Rules
     }
 
     /**
-     * Validates a valid IPv4 address.
+     * Accepts a valid IPv4 address.
      */
     public static function ipv4(string $message = 'Must be a valid IPv4 address.'): Rule
     {
@@ -474,7 +532,7 @@ final class Rules
     }
 
     /**
-     * Validates a valid IPv6 address.
+     * Accepts a valid IPv6 address.
      */
     public static function ipv6(string $message = 'Must be a valid IPv6 address.'): Rule
     {
@@ -485,7 +543,8 @@ final class Rules
     }
 
     /**
-     * Validates a DNS hostname (labels 1-63 chars, full host <= 253 chars).
+     * Accepts a DNS name of at most 253 characters made of labels of 1 to 63 characters (letters, digits and inner hyphens).
+     * Surrounding whitespace is trimmed and the name lowercased before the check; a trailing dot is refused.
      */
     public static function hostname(string $message = 'Must be a valid hostname.'): Rule
     {
@@ -518,9 +577,8 @@ final class Rules
     }
 
     /**
-     * Validates IPv4/IPv6 CIDR notation (e.g. 10.0.0.0/8, 2001:db8::/32). The address must have
-     * no bits after the prefix (10.1.0.0/8 is refused), and IPv6 ranges below /96 that embed an
-     * IPv4 address are refused.
+     * Accepts IPv4 or IPv6 CIDR notation (10.0.0.0/8, 2001:db8::/32).
+     * Bits set after the prefix are refused (10.1.0.0/8), as are IPv6 prefixes shorter than /96 that embed an IPv4 address.
      */
     public static function cidr(string $message = 'Must be a valid CIDR block.'): Rule
     {
@@ -533,7 +591,7 @@ final class Rules
     }
 
     /**
-     * Validates a TCP/UDP port number (1..65535).
+     * Accepts an int or a digit string from 1 to 65535; leading zeros pass, signs and spaces fail.
      */
     public static function port(string $message = 'Must be a valid port number.'): Rule
     {
@@ -556,7 +614,7 @@ final class Rules
     }
 
     /**
-     * Validates either a hostname or an IP address.
+     * Accepts a hostname or an IP address (see hostname and ip).
      */
     public static function host(string $message = 'Must be a valid host.'): Rule
     {
@@ -567,7 +625,8 @@ final class Rules
     }
 
     /**
-     * Validates private IPv4/IPv6 addresses.
+     * Accepts an IP address in a private or reserved range, including loopback and link-local.
+     * This is the complement of publicIp among valid addresses.
      */
     public static function privateIp(string $message = 'Must be a valid private IP address.'): Rule
     {
@@ -588,7 +647,7 @@ final class Rules
     }
 
     /**
-     * Validates public routable IPv4/IPv6 addresses.
+     * Accepts a valid IP address outside the private and reserved ranges; non-strings fail.
      */
     public static function publicIp(string $message = 'Must be a valid public IP address.'): Rule
     {
@@ -604,7 +663,7 @@ final class Rules
     }
 
     /**
-     * Validates IPv4 subnet masks (e.g. 255.255.255.0).
+     * Accepts an IPv4 dotted mask of contiguous leading ones (255.255.255.0, 0.0.0.0); IPv6 is refused.
      */
     public static function subnetMask(string $message = 'Must be a valid subnet mask.'): Rule
     {
@@ -628,7 +687,7 @@ final class Rules
     }
 
     /**
-     * Validates an inclusive port range expressed as "start-end".
+     * Accepts 'start-end' where both ends pass port() and start is less than or equal to end.
      */
     public static function portRange(string $message = 'Must be a valid port range.'): Rule
     {
@@ -651,7 +710,8 @@ final class Rules
     }
 
     /**
-     * Validates a JSON-encoded string.
+     * Accepts any text json_decode parses, scalars included ('null' passes); the empty string fails.
+     * At most 511 nested arrays or objects pass (json_decode's default depth of 512).
      */
     public static function json(string $message = 'Must be valid JSON.'): Rule
     {
@@ -670,7 +730,7 @@ final class Rules
     }
 
     /**
-     * Validates that a JSON-encoded string is a JSON object.
+     * Accepts JSON object text ({...}); arrays, scalars and invalid JSON fail.
      */
     public static function jsonObject(string $message = 'Must be a valid JSON object.'): Rule
     {
@@ -689,7 +749,7 @@ final class Rules
     }
 
     /**
-     * Validates that a JSON-encoded string is a JSON array.
+     * Accepts JSON array text ([...]); objects, scalars and invalid JSON fail.
      */
     public static function jsonArray(string $message = 'Must be a valid JSON array.'): Rule
     {
@@ -708,7 +768,7 @@ final class Rules
     }
 
     /**
-     * Validates a URL slug (lowercase letters, numbers, single hyphen separators).
+     * Accepts lowercase ASCII letters and digits in runs joined by single hyphens; the empty string fails.
      */
     public static function slug(string $message = 'Must be a valid slug.'): Rule
     {
@@ -719,7 +779,7 @@ final class Rules
     }
 
     /**
-     * Validates that a value is lowercase.
+     * Accepts strings unchanged by mb_strtolower (multibyte-aware); the empty string passes.
      */
     public static function lowercase(string $message = 'Must be lowercase.'): Rule
     {
@@ -730,7 +790,7 @@ final class Rules
     }
 
     /**
-     * Validates that a value is uppercase.
+     * Accepts strings unchanged by mb_strtoupper (multibyte-aware); the empty string passes.
      */
     public static function uppercase(string $message = 'Must be uppercase.'): Rule
     {
@@ -741,7 +801,8 @@ final class Rules
     }
 
     /**
-     * Validates that a value has no whitespace characters.
+     * Accepts a non-empty string without ASCII whitespace; the empty string fails.
+     * A single trailing LF currently passes.
      */
     public static function noWhitespace(string $message = 'Must not contain whitespace.'): Rule
     {
@@ -751,9 +812,9 @@ final class Rules
         );
     }
 
-    
+
     /**
-     * Validates a Base64-encoded string.
+     * Accepts canonical padded Base64: whitespace and non-canonical padding fail; the empty string fails.
      */
     public static function base64(string $message = 'Must be valid Base64.'): Rule
     {
@@ -775,7 +836,7 @@ final class Rules
     }
 
     /**
-     * Validates Base64URL-encoded strings (RFC 4648 URL-safe alphabet).
+     * Accepts unpadded Base64URL (the '-' and '_' alphabet) that re-encodes to the same string; the empty string fails.
      */
     public static function base64Url(string $message = 'Must be valid Base64URL.'): Rule
     {
@@ -808,7 +869,9 @@ final class Rules
     }
 
     /**
-     * Validates semantic version strings (SemVer 2.0 core + optional prerelease/build).
+     * Accepts SemVer 2.0 versions: no leading 'v'.
+     * No leading zeros in major, minor or patch; pre-release identifiers are not checked for them.
+     * A single trailing LF currently passes.
      */
     public static function semver(string $message = 'Must be a valid semantic version.'): Rule
     {
@@ -824,7 +887,7 @@ final class Rules
     }
 
     /**
-     * Validates ULID strings (26 Crockford Base32 chars).
+     * Accepts 26 upper-case Crockford Base32 characters (no I, L, O or U).
      */
     public static function ulid(string $message = 'Must be a valid ULID.'): Rule
     {
@@ -835,7 +898,7 @@ final class Rules
     }
 
     /**
-     * Validates a lowercase hex-encoded SHA-256 digest.
+     * Accepts 64 lower-case hexadecimal characters.
      */
     public static function sha256(string $message = 'Must be a valid SHA-256 hash.'): Rule
     {
@@ -846,7 +909,8 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP request path starting with '/'.
+     * Accepts a string starting with '/' and containing no spaces.
+     * Dot segments and '//' are not rejected: do not use the result as a safe filesystem path.
      */
     public static function httpPath(string $message = 'Must be a valid HTTP path.'): Rule
     {
@@ -860,7 +924,7 @@ final class Rules
     }
 
     /**
-     * Validates a single filesystem/web path segment.
+     * Accepts one segment of letters, digits, '.', '_' or '-'; '.', '..', slashes and backslashes fail.
      */
     public static function pathSegment(string $message = 'Must be a valid path segment.'): Rule
     {
@@ -877,7 +941,7 @@ final class Rules
     }
 
     /**
-     * Validates a safe filename (no directory separators or traversal markers).
+     * Accepts up to 255 characters of letters, digits, '.', '_' or '-', starting with a letter or digit; any '..' fails.
      */
     public static function safeFilename(string $message = 'Must be a safe filename.'): Rule
     {
@@ -890,7 +954,7 @@ final class Rules
     }
 
     /**
-     * Validates file extension tokens (without dot).
+     * Accepts 1 to 10 ASCII letters or digits, without the leading dot.
      */
     public static function fileExtension(string $message = 'Must be a valid file extension.'): Rule
     {
@@ -901,7 +965,8 @@ final class Rules
     }
 
     /**
-     * Validates a URL query string without the leading '?'.
+     * Accepts a query string without the leading '?'; the empty string passes.
+     * '#' and spaces fail, and the string must parse to at least one key.
      */
     public static function queryString(string $message = 'Must be a valid query string.'): Rule
     {
@@ -928,7 +993,7 @@ final class Rules
     }
 
     /**
-     * Validates a percent-encoded URL fragment/component.
+     * Accepts a non-empty string of unreserved characters and %XX escapes only.
      */
     public static function percentEncoded(string $message = 'Must be a valid percent-encoded string.'): Rule
     {
@@ -945,7 +1010,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP status code (100-599).
+     * Accepts an int or digit string from 100 to 599.
      */
     public static function httpStatusCode(string $message = 'Must be a valid HTTP status code.'): Rule
     {
@@ -962,7 +1027,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP method token.
+     * Accepts a standard HTTP method name in any letter case.
      */
     public static function httpMethod(string $message = 'Must be a valid HTTP method.'): Rule
     {
@@ -983,7 +1048,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP version token (HTTP/1.0, HTTP/1.1, HTTP/2, HTTP/2.0, HTTP/3, HTTP/3.0).
+     * Accepts an HTTP version token such as HTTP/1.1 (case-insensitive): 1.0, 1.1, 2, 2.0, 3, 3.0.
      */
     public static function httpVersion(string $message = 'Must be a valid HTTP version.'): Rule
     {
@@ -995,7 +1060,7 @@ final class Rules
     }
 
     /**
-     * Validates a MIME type such as "application/json".
+     * Accepts type/subtype tokens in any letter case; parameters such as '; charset=' fail.
      */
     public static function mimeType(string $message = 'Must be a valid MIME type.'): Rule
     {
@@ -1006,7 +1071,8 @@ final class Rules
     }
 
     /**
-     * Validates a Bearer token value (without the "Bearer " prefix).
+     * Accepts a non-empty RFC 6750 b64token (letters, digits, -._~+/) with optional trailing '=' padding.
+     * The 'Bearer ' prefix fails. A single trailing LF currently passes.
      */
     public static function bearerToken(string $message = 'Must be a valid bearer token.'): Rule
     {
@@ -1017,7 +1083,7 @@ final class Rules
     }
 
     /**
-     * Validates an IETF BCP-47 language tag (basic form).
+     * Accepts a basic BCP-47 tag such as en or en-CA, in either letter case; the registry is not consulted.
      */
     public static function languageTag(string $message = 'Must be a valid language tag.'): Rule
     {
@@ -1028,7 +1094,7 @@ final class Rules
     }
 
     /**
-     * Validates an Accept-Language header value.
+     * Accepts a comma-separated list of language ranges with optional q-values and '*'; blank values fail.
      */
     public static function acceptLanguage(string $message = 'Must be a valid Accept-Language header value.'): Rule
     {
@@ -1048,7 +1114,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP header name token (RFC 7230 token charset).
+     * Accepts an HTTP header name token (RFC 7230 token charset).
      */
     public static function httpHeaderName(string $message = 'Must be a valid HTTP header name.'): Rule
     {
@@ -1059,7 +1125,8 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP header value (printable visible ASCII + spaces/tabs).
+     * Accepts visible ASCII, spaces and tabs; the empty string passes.
+     * CR, LF and other control bytes fail, except a single trailing LF, which currently passes.
      */
     public static function httpHeaderValue(string $message = 'Must be a valid HTTP header value.'): Rule
     {
@@ -1070,7 +1137,8 @@ final class Rules
     }
 
     /**
-     * Validates JWT compact serialization (header.payload.signature).
+     * Accepts header.payload.signature in base64url characters; the signature may be empty (unsigned tokens).
+     * The signature is not verified.
      */
     public static function jwt(string $message = 'Must be a valid JWT token format.'): Rule
     {
@@ -1082,8 +1150,7 @@ final class Rules
     }
 
     /**
-     * Validates a host:port endpoint.
-     * Supports hostname/IPv4 as host:port and IPv6 as [ipv6]:port.
+     * Accepts host:port, with IPv6 hosts in brackets: [ipv6]:port.
      */
     public static function hostPort(string $message = 'Must be a valid host:port endpoint.'): Rule
     {
@@ -1115,7 +1182,7 @@ final class Rules
     }
 
     /**
-     * Validates ISO 3166-1 alpha-2 country codes.
+     * Accepts two ASCII letters, either case; the code is not checked against the ISO 3166-1 list.
      */
     public static function countryCode(string $message = 'Must be a valid ISO country code.'): Rule
     {
@@ -1126,7 +1193,7 @@ final class Rules
     }
 
     /**
-     * Validates locale tags in language_REGION form (e.g. en_CA).
+     * Accepts language_REGION with a lower-case language and an upper-case region (en_CA).
      */
     public static function locale(string $message = 'Must be a valid locale (e.g. en_CA).'): Rule
     {
@@ -1137,7 +1204,7 @@ final class Rules
     }
 
     /**
-     * Validates UUID versions 1-5.
+     * Accepts UUID versions 1-5.
      */
     public static function uuidV1toV5(string $message = 'Must be a valid UUID v1-v5.'): Rule
     {
@@ -1149,7 +1216,7 @@ final class Rules
     }
 
     /**
-     * Validates UUID version 4.
+     * Accepts UUID version 4.
      */
     public static function uuidV4(string $message = 'Must be a valid UUID v4.'): Rule
     {
@@ -1161,7 +1228,7 @@ final class Rules
     }
 
     /**
-     * Validates UUID version 6 (RFC 9562): version nibble must be 6,
+     * Accepts UUID version 6 (RFC 9562): version nibble must be 6,
      * variant nibble must be 8, 9, a, or b (RFC 4122 variant).
      */
     public static function uuidV6(string $message = 'Must be a valid UUID v6.'): Rule
@@ -1174,7 +1241,7 @@ final class Rules
     }
 
     /**
-     * Validates UUID version 7 (RFC 9562): version nibble must be 7,
+     * Accepts UUID version 7 (RFC 9562): version nibble must be 7,
      * variant nibble must be 8, 9, a, or b (RFC 4122 variant).
      */
     public static function uuidV7(string $message = 'Must be a valid UUID v7.'): Rule
@@ -1187,7 +1254,7 @@ final class Rules
     }
 
     /**
-     * Validates UUID version 8 (RFC 9562): version nibble must be 8,
+     * Accepts UUID version 8 (RFC 9562): version nibble must be 8,
      * variant nibble must be 8, 9, a, or b (RFC 4122 variant).
      */
     public static function uuidV8(string $message = 'Must be a valid UUID v8.'): Rule
@@ -1200,7 +1267,7 @@ final class Rules
     }
 
     /**
-     * Validates ISO 4217 currency codes.
+     * Accepts three ASCII letters, either case; the code is not checked against the ISO 4217 list.
      */
     public static function currencyCode(string $message = 'Must be a valid ISO currency code.'): Rule
     {
@@ -1211,7 +1278,8 @@ final class Rules
     }
 
     /**
-     * Validates IBAN structure (basic format check).
+     * Accepts IBAN shape (2 letters, 2 digits, then 10 to 30 alphanumerics), spaces ignored, either case.
+     * The mod-97 checksum is not verified.
      */
     public static function iban(string $message = 'Must be a valid IBAN format.'): Rule
     {
@@ -1223,7 +1291,7 @@ final class Rules
     }
 
     /**
-     * Validates BIC / SWIFT code format.
+     * Accepts an 8 or 11 character BIC shape, either case; the bank registry is not consulted.
      */
     public static function bic(string $message = 'Must be a valid BIC/SWIFT code.'): Rule
     {
@@ -1235,7 +1303,7 @@ final class Rules
     }
 
     /**
-     * Validates payment card number shape (12-19 digits, spaces/hyphens allowed).
+     * Accepts 12 to 19 digits once spaces and hyphens are removed; no Luhn check (see cardNumberLuhn).
      */
     public static function cardNumber(string $message = 'Must be a valid card number format.'): Rule
     {
@@ -1257,7 +1325,7 @@ final class Rules
     }
 
     /**
-     * Validates card number format and Luhn checksum.
+     * Accepts a card number shape (12 to 19 digits, spaces and hyphens removed) that passes the Luhn checksum.
      */
     public static function cardNumberLuhn(string $message = 'Must be a valid card number.'): Rule
     {
@@ -1293,7 +1361,7 @@ final class Rules
     }
 
     /**
-     * Validates CVV/CVC shape (3 or 4 digits).
+     * Accepts a string of 3 or 4 digits; integers fail, so leading zeros survive.
      */
     public static function cardCvv(string $message = 'Must be a valid card CVV.'): Rule
     {
@@ -1304,7 +1372,7 @@ final class Rules
     }
 
     /**
-     * Validates card expiry in MM/YY format.
+     * Accepts MM/YY with a month from 01 to 12; the date is not compared with today.
      */
     public static function cardExpiryMmyy(string $message = 'Must be a valid card expiry (MM/YY).'): Rule
     {
@@ -1315,7 +1383,7 @@ final class Rules
     }
 
     /**
-     * Validates card expiry in MM/YYYY format.
+     * Accepts MM/YYYY with a month from 01 to 12; the date is not compared with today.
      */
     public static function cardExpiryMmyyyy(string $message = 'Must be a valid card expiry (MM/YYYY).'): Rule
     {
@@ -1326,7 +1394,7 @@ final class Rules
     }
 
     /**
-     * Validates non-empty, non-whitespace-only strings.
+     * Accepts strings with at least one non-whitespace character (same check as notBlank).
      */
     public static function nonEmptyString(string $message = 'Must be a non-empty string.'): Rule
     {
@@ -1337,7 +1405,7 @@ final class Rules
     }
 
     /**
-     * Validates membership in a case-insensitive string allowlist.
+     * Accepts strings equal to one of $values ignoring case (mb_strtolower); non-strings fail.
      *
      * @param array<int, string> $values
      */
@@ -1352,7 +1420,7 @@ final class Rules
     }
 
     /**
-     * Validates JSON Pointer format (RFC 6901 basic shape).
+     * Accepts an RFC 6901 pointer: the empty string (whole document) or a '/'-prefixed path using only ~0 and ~1 escapes.
      */
     public static function jsonPointer(string $message = 'Must be a valid JSON Pointer.'): Rule
     {
@@ -1377,7 +1445,7 @@ final class Rules
     }
 
     /**
-     * Validates latitude values in range [-90, 90].
+     * Accepts a number or numeric string from -90 to 90 inclusive.
      */
     public static function latitude(string $message = 'Must be a valid latitude.'): Rule
     {
@@ -1394,7 +1462,7 @@ final class Rules
     }
 
     /**
-     * Validates longitude values in range [-180, 180].
+     * Accepts a number or numeric string from -180 to 180 inclusive.
      */
     public static function longitude(string $message = 'Must be a valid longitude.'): Rule
     {
@@ -1411,7 +1479,7 @@ final class Rules
     }
 
     /**
-     * Validates Unix timestamps in seconds (non-negative integer).
+     * Accepts a non-negative whole number of seconds (int or digit string); signs and decimals fail.
      */
     public static function unixTimestamp(string $message = 'Must be a valid Unix timestamp.'): Rule
     {
@@ -1428,7 +1496,7 @@ final class Rules
     }
 
     /**
-     * Validates epoch milliseconds (non-negative integer).
+     * Accepts a non-negative whole number of milliseconds (int or digit string); signs and decimals fail.
      */
     public static function epochMilliseconds(string $message = 'Must be a valid epoch-milliseconds value.'): Rule
     {
@@ -1445,9 +1513,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP ETag value (RFC 7232).
-     * Accepts strong ETags ("abc") and weak ETags (W/"abc").
-     * The opaque tag may be empty or any sequence of visible ASCII except '"'.
+     * Accepts a strong ETag ("abc") or weak ETag (W/"abc"); the opaque tag may be empty.
      */
     public static function etag(string $message = 'Must be a valid HTTP ETag.'): Rule
     {
@@ -1458,7 +1524,7 @@ final class Rules
     }
 
     /**
-     * Validates an If-None-Match header value (`*` or comma-separated ETags).
+     * Accepts '*' or a comma-separated list of ETags; an empty list item fails.
      */
     public static function ifNoneMatch(string $message = 'Must be a valid If-None-Match header.'): Rule
     {
@@ -1491,7 +1557,7 @@ final class Rules
     }
 
     /**
-     * Validates an If-Match header value (`*` or comma-separated ETags).
+     * Accepts '*' or a comma-separated list of ETags; an empty list item fails.
      */
     public static function ifMatch(string $message = 'Must be a valid If-Match header.'): Rule
     {
@@ -1524,7 +1590,7 @@ final class Rules
     }
 
     /**
-     * Validates an HTTP-date (IMF-fixdate, e.g. Mon, 23 Feb 2026 20:31:00 GMT).
+     * Accepts an HTTP-date (IMF-fixdate, e.g. Mon, 23 Feb 2026 20:31:00 GMT).
      */
     public static function httpDate(string $message = 'Must be a valid HTTP date.'): Rule
     {
@@ -1547,7 +1613,7 @@ final class Rules
     }
 
     /**
-     * Validates an If-Modified-Since header value.
+     * Accepts an If-Modified-Since header value.
      */
     public static function ifModifiedSince(string $message = 'Must be a valid If-Modified-Since header.'): Rule
     {
@@ -1555,7 +1621,7 @@ final class Rules
     }
 
     /**
-     * Validates an If-Unmodified-Since header value.
+     * Accepts an If-Unmodified-Since header value.
      */
     public static function ifUnmodifiedSince(string $message = 'Must be a valid If-Unmodified-Since header.'): Rule
     {
@@ -1563,7 +1629,7 @@ final class Rules
     }
 
     /**
-     * Validates an If-Range header value (HTTP-date or single ETag).
+     * Accepts an If-Range header value (HTTP-date or single ETag).
      */
     public static function ifRange(string $message = 'Must be a valid If-Range header.'): Rule
     {
@@ -1574,8 +1640,8 @@ final class Rules
     }
 
     /**
-     * Validates HTTP Range header values for byte ranges.
-     * Supports forms like `bytes=0-499`, `bytes=500-`, and `bytes=-500`.
+     * Accepts 'bytes=' followed by comma-separated 'first-last', 'first-' or '-suffix' ranges.
+     * Checks the syntax and first <= last only, not the resource size.
      */
     public static function byteRange(string $message = 'Must be a valid byte range header.'): Rule
     {
@@ -1618,8 +1684,8 @@ final class Rules
     }
 
     /**
-     * Validates a Content-Range header value for byte units.
-     * Supports `bytes start-end/size` and the unsatisfied wildcard form.
+     * Accepts 'bytes first-last/size' (size may be '*') or the unsatisfied form 'bytes *' with '/size'.
+     * Checks first <= last and last < size, not the resource size.
      */
     public static function contentRange(string $message = 'Must be a valid Content-Range header.'): Rule
     {

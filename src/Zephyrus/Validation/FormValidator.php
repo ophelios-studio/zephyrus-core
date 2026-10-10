@@ -44,11 +44,7 @@ final class FormValidator
     }
 
     /**
-     * Merges all fields from $sub prefixed with "$prefix." (immutable).
-     *
-     * Allows reusable sub-validators to be composed into a parent:
-     *   $form->withNested('address', $addressValidator)
-     * registers 'address.city', 'address.zip', etc.
+     * Merges the fields of $sub under "$prefix." (immutable): with prefix 'address', a 'city' field becomes 'address.city'.
      */
     public function withNested(string $prefix, self $sub): self
     {
@@ -62,13 +58,13 @@ final class FormValidator
     /**
      * Validates $data against all registered field rules.
      *
-     * Fields whose rule list does not contain a required() rule are treated
-     * as optional: when the value is null or an empty string, all rules are
-     * skipped and no errors are reported.
+     * Rules run in declaration order and every failing rule adds its message:
+     * a field never stops at its first failure.
      *
-     * Field names containing "." are resolved as dot-paths into nested arrays
-     * (e.g. "address.city" → $data['address']['city']).  Missing keys at any
-     * depth are treated as null so that required-rule catches absent fields.
+     * A field without a required() rule is skipped when its value is null or
+     * an empty string. A field name containing "." is a dot-path into nested
+     * arrays ("address.city" reads $data['address']['city']); a missing key at
+     * any depth is null, so required() reports it.
      *
      * @param array<string, mixed> $data
      */
@@ -120,7 +116,7 @@ final class FormValidator
     }
 
     /**
-     * Check whether the given rule set contains a required() rule.
+     * Whether the rule set contains a required() rule.
      *
      * @param Rule[] $rules
      */
@@ -135,8 +131,7 @@ final class FormValidator
     }
 
     /**
-     * Resolves a dot-notation path into a nested array.
-     * Returns null if any key in the chain is missing or non-array.
+     * Returns null when any key in the path is missing or a parent is not an array.
      *
      * @param array<string, mixed> $data
      */
