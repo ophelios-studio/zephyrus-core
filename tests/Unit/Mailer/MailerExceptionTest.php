@@ -121,6 +121,16 @@ final class MailerExceptionTest extends TestCase
         self::assertCount(1, $parameters);
     }
 
+    public function testAPathOfContinuationBytesIsCutWithinThreeBytesOfTheStart(): void
+    {
+        $message = MailerException::attachmentRejected('path', str_repeat("\x80", 100), 'is refused')->getMessage();
+
+        self::assertSame(
+            'Attachment rejected: path "...' . str_repeat('?', 61) . '" (100 bytes) is refused.',
+            $message,
+        );
+    }
+
     public function testInvalidAddressNamesTheMethodNotTheAddress(): void
     {
         $exception = MailerException::invalidAddress('cc');

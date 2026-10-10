@@ -30,6 +30,11 @@ final class MailerException extends ZephyrusRuntimeException
     private const SHOWN_VALUE_MAX_LENGTH = 64;
 
     /**
+     * A UTF-8 character is at most 4 bytes, so a character boundary lies within 3 bytes of any cut.
+     */
+    private const int MAX_BOUNDARY_WALK = 3;
+
+    /**
      * The transport did not accept the message. Its reply goes to transportMessage(), not the message, because it can name recipients.
      *
      * @param string $transportMessage The transport's own reply.
@@ -99,7 +104,7 @@ final class MailerException extends ZephyrusRuntimeException
      * a caller logging them should be able to tell them apart.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", control characters and backslashes are escaped, and values over 64 bytes are cut on a character boundary: paths keep their last 64 bytes, other values their first 64.
+     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", control characters and backslashes are escaped, and values over 64 bytes are cut on a character boundary (within 3 bytes): paths keep their last 64 bytes, other values their first 64.
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
@@ -123,7 +128,8 @@ final class MailerException extends ZephyrusRuntimeException
 
         if ($keepEnd) {
             $start = strlen($value) - self::SHOWN_VALUE_MAX_LENGTH;
-            while ($start < strlen($value) && (ord($value[$start]) & 0xC0) === 0x80) {
+            $limit = $start + self::MAX_BOUNDARY_WALK;
+            while ($start < $limit && (ord($value[$start]) & 0xC0) === 0x80) {
                 ++$start;
             }
 
