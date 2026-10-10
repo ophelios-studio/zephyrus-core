@@ -308,8 +308,25 @@ final class DebugIntegration
         Exposer::exposeObject($iterator, $value, $describer);
         $iterator->setFlags($flags);
 
-        $describer->addPropertyTo($value, 'storage', $iterator->getArrayCopy(), Value::PropertyPrivate, null, ArrayIterator::class);
+        $describer->addPropertyTo($value, 'storage', self::withBareKeys($iterator->getArrayCopy()), Value::PropertyPrivate, null, ArrayIterator::class);
         $value->value .= ' (' . count($iterator) . ')';
+    }
+
+    /**
+     * Strip the class or wildcard prefix PHP puts on the keys of a wrapped object's non-public properties.
+     *
+     * @param array<array-key, mixed> $entries
+     * @return array<array-key, mixed>
+     */
+    private static function withBareKeys(array $entries): array
+    {
+        $bare = [];
+        foreach ($entries as $key => $entry) {
+            $name = is_string($key) && str_starts_with($key, "\0") ? substr($key, (int) strrpos($key, "\0") + 1) : $key;
+            $bare[$name] = $entry;
+        }
+
+        return $bare;
     }
 
     /**

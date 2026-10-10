@@ -484,6 +484,26 @@ final class DebugIntegrationTest extends TestCase
         self::assertStringNotContainsString($token, $html, 'The bluescreen rendered the body of a PHPMailer.');
     }
 
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksThePrivateAndProtectedPropertiesOfAnObjectInAnArrayIterator(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+        $token = self::marker('token');
+        $user = self::marker('user');
+        $iterator = new \ArrayIterator(new CredentialHolder($secret, $token, $user));
+
+        $html = Dumper::toHtml($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must dump an unlisted property.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered a private property of an ArrayIterator's object.");
+            self::assertStringNotContainsString($token, $output, "$label rendered a protected property of an ArrayIterator's object.");
+        }
+    }
+
     private static function throwWithPhpMailer(PHPMailer $mail): never
     {
         throw new \RuntimeException('delivery refused');
@@ -924,5 +944,12 @@ final class AuthenticationError extends \Error
     public function __construct(string $message, public readonly string $login)
     {
         parent::__construct($message);
+    }
+}
+
+final class CredentialHolder
+{
+    public function __construct(private string $password, protected string $token, public string $username)
+    {
     }
 }
