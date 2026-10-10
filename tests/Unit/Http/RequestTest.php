@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Http;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
+use Zephyrus\Http\Uri;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteMatch;
 use Zephyrus\Upload\FileUpload;
@@ -53,6 +54,50 @@ final class RequestTest extends TestCase
         self::assertSame('/users/42', $request->uri()->path());
         self::assertTrue($request->isMethod('POST'));
         self::assertFalse($request->isMethod('GET'));
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function relativeTargetProvider(): iterable
+    {
+        yield 'bare segment gets a leading slash' => ['admin', '/admin', ''];
+        yield 'host-like segment is not parsed as authority' => ['x:80:', '/x:80:', ''];
+        yield 'query only is rooted' => ['?a=1', '/', 'a=1'];
+        yield 'empty target is the root' => ['', '/', ''];
+        yield 'asterisk form is the root' => ['*', '/', ''];
+        yield 'absolute https URL keeps its path' => ['https://example.com/x?y=1', '/x', 'y=1'];
+        yield 'absolute HTTP URL keeps its path' => ['HTTP://example.com/x', '/x', ''];
+        yield 'rooted target is unchanged' => ['/already', '/already', ''];
+        yield 'scheme-like path is a path' => ['ftp://h/x', '/ftp://h/x', ''];
+    }
+
+    #[DataProvider('relativeTargetProvider')]
+    public function testFromArrayRootsATargetTheWayFromGlobalsDoes(string $target, string $path, string $query): void
+    {
+        $request = Request::fromArray('GET', $target);
+
+        self::assertSame($path, $request->path());
+        self::assertSame($query, $request->uri()->queryString());
+    }
+
+    #[DataProvider('relativeTargetProvider')]
+    public function testConstructorRootsTargetLikeFromArray(string $target, string $path, string $query): void
+    {
+        $request = new Request('GET', $target);
+
+        self::assertSame($path, $request->path());
+        self::assertSame($query, $request->uri()->queryString());
+    }
+
+    public function testConstructorRootsRelativeUriObjectPath(): void
+    {
+        self::assertSame('/admin', (new Request('GET', new Uri('admin')))->path());
+    }
+
+    public function testConstructorKeepsAbsoluteUriObjectUnchanged(): void
+    {
+        self::assertSame('ftp://h/x', (new Request('GET', new Uri('ftp://h/x')))->uri()->full());
     }
 
     public function testAttributeHelpersAreImmutable(): void

@@ -70,6 +70,10 @@ final readonly class Request
         'x-client-ip',
     ];
 
+    private const SCHEME_PATTERN = '#^[a-zA-Z][a-zA-Z0-9+.\-]*://#';
+
+    private const HTTP_URL_PATTERN = '#^(https?)://#i';
+
     /** @var array<int|string, mixed> */
     public array $query;
     /** @var array<string, FileUpload|array<int, FileUpload>> */
@@ -80,6 +84,9 @@ final readonly class Request
     private CookieJar $cookieJar;
 
     /**
+     * A path without a leading "/" is read as rooted, and "*" as "/", as fromGlobals() does;
+     * an http(s) URL is kept as it is.
+     *
      * @param RequestBody|array<string, mixed> $body
      * @param array<int|string, mixed>|null $query Null derives the query from the URI.
      * @param HeaderBag|array<string, mixed> $headers
@@ -181,6 +188,8 @@ final readonly class Request
      * Convenience factory for testing. Accepts plain arrays for all parameters
      * and constructs sub-objects internally. It does not parse $rawBody: to test
      * a malformed body, use the constructor with `new RequestBody([], $raw, malformed: true)`.
+     * A path without a leading "/" is read as rooted, and "*" as "/", as fromGlobals() does;
+     * an http(s) URL is kept as it is.
      *
      * @param array<string, mixed> $body
      * @param array<int|string, mixed>|null $query Null derives the query from the URI.
@@ -495,17 +504,21 @@ final readonly class Request
     /**
      * Canonicalise the URI of every Request, whichever construction path it came from.
      *
-     * An already canonical Uri is returned unchanged.
+     * A string is rooted as a target. A Uri is rooted unless it is absolute (`scheme://`), and is
+     * returned unchanged when already canonical.
      */
     private static function canonicalizeUri(Uri|string $uri): Uri
     {
         if (!$uri instanceof Uri) {
-            return new Uri(self::canonicalizeUrl($uri));
+            return new Uri(self::canonicalizeUrl(self::rootTarget($uri)));
         }
 
-        $canonical = self::canonicalizeUrl($uri->full());
+        $url = $uri->full();
+        $isAbsolute = preg_match(self::SCHEME_PATTERN, $url) === 1;
+        $target = $isAbsolute ? $url : self::rootTarget($url);
+        $canonical = self::canonicalizeUrl($target);
 
-        return $canonical === $uri->full() ? $uri : new Uri($canonical);
+        return $canonical === $url ? $uri : new Uri($canonical);
     }
 
     /**
@@ -527,7 +540,7 @@ final readonly class Request
     {
         // Absolute form, anchored so a query value such as
         // "/redirect?to=http://elsewhere" is not mistaken for a scheme.
-        if (preg_match('#^[a-zA-Z][a-zA-Z0-9+.\-]*://#', $url, $matches) !== 1) {
+        if (preg_match(self::SCHEME_PATTERN, $url, $matches) !== 1) {
             return self::collapseLeadingSlashes($url);
         }
 
@@ -555,6 +568,24 @@ final readonly class Request
     }
 
     /**
+     * Root an origin-form target: "*" and "" become "/", and a missing leading slash is added.
+     *
+     * An http(s) absolute URL is returned unchanged.
+     */
+    private static function rootTarget(string $target): string
+    {
+        if (preg_match(self::HTTP_URL_PATTERN, $target) === 1) {
+            return $target;
+        }
+
+        if ($target === '*') {
+            return '/';
+        }
+
+        return str_starts_with($target, '/') ? $target : '/' . $target;
+    }
+
+    /**
      * Build the absolute request URL from the server values and the forwarded headers.
      *
      * Forwarded inputs are gated by $trustedHeaders, the same allowlist as the client
@@ -569,15 +600,11 @@ final readonly class Request
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
-        if (preg_match('#^(https?)://#i', $requestUri, $matches) === 1) {
+        if (preg_match(self::HTTP_URL_PATTERN, $requestUri, $matches) === 1) {
             return strtolower($matches[1]) . '://' . substr($requestUri, strlen($matches[0]));
         }
 
-        if ($requestUri === '*') {
-            $requestUri = '/';
-        } elseif (!str_starts_with($requestUri, '/')) {
-            $requestUri = '/' . $requestUri;
-        }
+        $requestUri = self::rootTarget($requestUri);
 
         $forwarded = in_array('forwarded', $trustedHeaders, true)
             ? self::parseForwardedHeader(
