@@ -139,6 +139,8 @@ final class Container implements ContainerInterface
 
     /**
      * Return true when $id is an already-loaded class or a well-formed name that autoloads.
+     *
+     * @phpstan-assert-if-true class-string $id
      */
     private function isLoadableClass(string $id): bool
     {

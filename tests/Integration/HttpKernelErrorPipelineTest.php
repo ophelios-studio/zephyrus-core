@@ -359,6 +359,22 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame('nosniff', $response->headers['x-content-type-options']);
     }
 
+    public function testAnExceptionHandlerThatReturnsNullFallsBackToTheBuiltInMapping(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter(new Router())
+            ->withExceptionHandler(
+                RouteNotFoundException::class,
+                static fn (\Throwable $e, ?Request $request) => null,
+            )
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/missing'));
+
+        self::assertSame(404, $response->status);
+        self::assertSame('Not Found', $response->body);
+    }
+
     /**
      * A handler that rethrows the same exception must let it through unchanged, so debuggers still render it.
      */

@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
+use LogicException;
+use Throwable;
 use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\MiddlewarePipeline;
+use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
 use Zephyrus\Rendering\RenderEngine;
 use Zephyrus\Rendering\RenderResponses;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
@@ -59,7 +63,7 @@ final class KernelBuilder
 
     private ?RenderEngine $renderEngine = null;
 
-    /** @var array<class-string<\Throwable>, callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response> */
+    /** @var array<class-string<Throwable>, callable(Throwable, Request): ?Response> */
     private array $exceptionHandlers = [];
 
     public static function create(): self
@@ -163,10 +167,10 @@ final class KernelBuilder
      * Registers a handler for an exception class, checked before the built-in
      * mappings (404, 405, 422, 500). The most specific matching class wins, by
      * instanceof. The handler receives the request without route middleware
-     * attributes (see HttpKernel).
+     * attributes (see HttpKernel). Returning null declines: the built-in mapping applies.
      *
-     * @param class-string<\Throwable> $exceptionClass
-     * @param callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
+     * @param class-string<Throwable> $exceptionClass
+     * @param callable(Throwable, Request): ?Response $handler
      */
     public function withExceptionHandler(string $exceptionClass, callable $handler): self
     {
@@ -276,7 +280,13 @@ final class KernelBuilder
 
         $responder = new HttpExceptionResponder();
         foreach ($this->exceptionHandlers as $class => $handler) {
-            $responder->registerHandler($class, $handler);
+            $responder->registerHandler(
+                $class,
+                static fn (Throwable $exception, ?Request $request): ?Response => $handler(
+                    $exception,
+                    $request ?? throw new LogicException('The kernel always passes a request to exception handlers.'),
+                ),
+            );
         }
 
         return new HttpKernel($dispatcher, $responder, $this->eventDispatcher, $globalPipeline);
@@ -298,6 +308,7 @@ final class KernelBuilder
         $factory = $this->controllerFactory ?? static fn (string $class): object => new $class();
 
         return static function (string $class) use ($factory, $engine): object {
+            /** @var class-string $class */
             $controller = $factory($class);
 
             if (self::usesRenderResponses($controller) && method_exists($controller, 'setRenderEngine')) {

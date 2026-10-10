@@ -37,14 +37,15 @@ class HttpExceptionResponder
     private const FORMAT_JSON = 'json';
     private const FORMAT_PROBLEM_JSON = 'problem+json';
 
-    /** @var array<class-string<Throwable>, callable(Throwable, ?Request): Response> */
+    /** @var array<class-string<Throwable>, callable(Throwable, ?Request): ?Response> */
     private array $handlers = [];
 
     /**
      * Registers a handler for an exception class. Registering the same class again replaces the handler.
+     * A handler that returns null declines: the built-in mapping applies.
      *
      * @param class-string<Throwable> $exceptionClass
-     * @param callable(Throwable, ?Request): Response $handler
+     * @param callable(Throwable, ?Request): ?Response $handler
      * @return $this
      */
     public function registerHandler(string $exceptionClass, callable $handler): self

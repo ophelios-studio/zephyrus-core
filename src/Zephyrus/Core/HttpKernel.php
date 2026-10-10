@@ -72,8 +72,9 @@ final readonly class HttpKernel
             $requestEvent = new RequestEvent($request);
             $this->events->dispatch($requestEvent);
 
-            if ($requestEvent->hasResponse()) {
-                return $this->fireResponseEvent($request, $requestEvent->getResponse());
+            $shortCircuit = $requestEvent->getResponse();
+            if ($shortCircuit !== null) {
+                return $this->fireResponseEvent($request, $shortCircuit);
             }
         }
 

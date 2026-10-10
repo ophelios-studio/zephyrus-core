@@ -250,6 +250,20 @@ final class HttpExceptionResponderTest extends TestCase
         self::assertSame('Custom 404', $response->body);
     }
 
+    public function testCustomHandlerReturningNullFallsBackToTheBuiltInMapping(): void
+    {
+        $responder = new HttpExceptionResponder();
+        $responder->registerHandler(
+            RouteNotFoundException::class,
+            static fn (\Throwable $e, ?Request $r) => null,
+        );
+
+        $response = $responder->toResponse(new RouteNotFoundException('No route'));
+
+        self::assertSame(404, $response->status);
+        self::assertSame('Not Found', $response->body);
+    }
+
     public function testCustomHandlerForGenericException(): void
     {
         $responder = new HttpExceptionResponder();
