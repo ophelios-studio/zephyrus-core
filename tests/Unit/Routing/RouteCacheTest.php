@@ -1335,7 +1335,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid handler format');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid handler format at entry 0 ["GET","/health"]');
     }
 
     public function testLoadThrowsWhenRouteNameIsBlankString(): void
@@ -1428,7 +1428,7 @@ final class RouteCacheTest extends TestCase
         $state = $cache->inspect(new RouteCollection(), 60, 1700000000);
 
         self::assertSame('invalid-payload', $state['reason']);
-        self::assertSame('a route entry with an invalid HTTP method format', $state['problem']);
+        self::assertSame('a route entry with an invalid HTTP method format at entry 0 ["get","/health"]', $state['problem']);
         self::assertTrue($state['metadata_valid']);
         self::assertFalse($state['fresh']);
         self::assertSame(1700000000, $state['generated_at']);
@@ -1489,6 +1489,135 @@ final class RouteCacheTest extends TestCase
         $this->assertLoadRefused(new RouteCache($this->cacheFile), 'a routes section that is not a list');
     }
 
+    public function testInspectReportsANonListRoutesSectionAsAnExpiredInvalidPayload(): void
+    {
+        $section = ['GET' => []];
+        $meta = ['route_count' => 1, 'routes_hash' => hash('sha256', json_encode($section, JSON_THROW_ON_ERROR))] + self::metadataFor([]);
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => $section], JSON_THROW_ON_ERROR));
+
+        $state = (new RouteCache($this->cacheFile))->inspect(new RouteCollection(), 60, 1700000010);
+
+        self::assertSame('invalid-payload', $state['reason']);
+        self::assertFalse($state['metadata_valid']);
+        self::assertTrue($state['expired']);
+        self::assertSame('a routes section that is not a list', $state['problem']);
+    }
+
+    #[DataProvider('unloadableRouteProvider')]
+    public function testSaveRefusesWhatLoadWouldRefuseAndWarmIfStaleDoesNotWrite(\Closure $defineRoute, string $problem): void
+    {
+        $routes = new RouteCollection();
+        $routes->add($defineRoute());
+
+        $cache = new RouteCache($this->cacheFile);
+
+        foreach ([static fn () => $cache->save($routes), static fn () => $cache->warmIfStale($routes, 60)] as $write) {
+            try {
+                $write();
+                self::fail('Expected a RouteCacheException');
+            } catch (RouteCacheException $exception) {
+                self::assertStringContainsString($problem, $exception->getMessage());
+            }
+        }
+
+        self::assertFileDoesNotExist($this->cacheFile);
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(): Route, string}>
+     */
+    public static function unloadableRouteProvider(): iterable
+    {
+        yield 'handler without an at sign' => [static fn (): Route => Route::define('GET', '/a', 'Handler'), 'invalid handler format'];
+        yield 'method with a dash' => [static fn (): Route => Route::define('M-SEARCH', '/a', 'C@m'), 'invalid HTTP method format'];
+        yield 'blank route name' => [static fn (): Route => Route::define('GET', '/a', 'C@m', name: ' '), 'invalid route name'];
+        yield 'integer constraint key' => [static fn (): Route => Route::define('GET', '/a', 'C@m', constraints: [1 => '\\d+']), 'invalid constraints map'];
+        yield 'non-string middleware' => [static fn (): Route => Route::define('GET', '/a', 'C@m', middlewares: [1]), 'invalid middlewares list'];
+    }
+
+    public function testInspectReportsExpiryAndMetadataForAnExpiredCacheWithABadEntry(): void
+    {
+        $entries = [['method' => 'get', 'path' => '/health', 'handler' => 'HealthController@show']];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $state = (new RouteCache($this->cacheFile))->inspect(new RouteCollection(), 60, 1700000100);
+
+        self::assertSame('invalid-payload', $state['reason']);
+        self::assertTrue($state['expired']);
+        self::assertSame(100, $state['age']);
+        self::assertSame(1700000060, $state['expires_at']);
+    }
+
+    public function testInspectKeepsMetadataForARoutesHashMismatch(): void
+    {
+        $meta = ['routes_hash' => str_repeat('a', 64)] + self::metadataFor([]);
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $state = (new RouteCache($this->cacheFile))->inspect(new RouteCollection(), 60, 1700000010);
+
+        self::assertSame('invalid-payload', $state['reason']);
+        self::assertTrue($state['metadata_valid']);
+        self::assertFalse($state['expired']);
+        self::assertSame(10, $state['age']);
+        self::assertSame(1700000060, $state['expires_at']);
+    }
+
+    public function testInvalidJsonRefusalKeepsTheDecoderMessage(): void
+    {
+        file_put_contents($this->cacheFile, '{not json');
+
+        $this->assertLoadRefused(new RouteCache($this->cacheFile), 'contents that are not valid JSON: Syntax error');
+    }
+
+    public function testIsFreshIgnoresAGenerationTimestampInTheFuture(): void
+    {
+        $routes = new RouteCollection();
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $payload = json_decode((string) file_get_contents($this->cacheFile), true, 512, JSON_THROW_ON_ERROR);
+        $payload['meta']['generated_at'] = time() + 3600;
+        file_put_contents($this->cacheFile, json_encode($payload, JSON_THROW_ON_ERROR));
+
+        self::assertTrue($cache->isFresh($routes));
+    }
+
+    public function testMetadataIsReturnedForARoutesHashMismatch(): void
+    {
+        $meta = ['routes_hash' => str_repeat('a', 64)] + self::metadataFor([]);
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertSame($meta, $cache->metadata());
+        self::assertSame(str_repeat('a', 64), $cache->routesHash());
+    }
+
+    #[DataProvider('integrityMismatchMetadataProvider')]
+    public function testAccessorsDescribeAnIntegrityMismatchLikeInspect(array $meta): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+        $now = 1700000010;
+        $state = $cache->inspect(new RouteCollection(), 60, $now);
+
+        self::assertSame('invalid-payload', $state['reason']);
+        self::assertSame($state['expired'], $cache->isExpired(60, $now));
+        self::assertSame($state['generated_at'], $cache->generatedAt());
+        self::assertSame($state['age'], $cache->age($now));
+        self::assertSame($state['expires_at'], $cache->expiresAt(60));
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function integrityMismatchMetadataProvider(): iterable
+    {
+        yield 'routes hash mismatch' => [['routes_hash' => str_repeat('a', 64)] + self::metadataFor([])];
+        yield 'route count mismatch' => [['route_count' => 3] + self::metadataFor([])];
+    }
+
     public function testSaveAndWarmRefuseDuplicateRouteNamesWithoutWritingTheFile(): void
     {
         $routes = new RouteCollection();
@@ -1503,7 +1632,7 @@ final class RouteCacheTest extends TestCase
                 self::fail('Expected a RouteCacheException');
             } catch (RouteCacheException $exception) {
                 self::assertStringContainsString('Duplicate route names detected: users.show', $exception->getMessage());
-                self::assertStringContainsString('rename', $exception->getMessage());
+                self::assertStringContainsString('two routes sharing a name (Duplicate route names detected: users.show); rename one', $exception->getMessage());
             }
         }
 

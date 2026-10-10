@@ -83,7 +83,9 @@ final class RouteCache
             return null;
         }
 
-        return $this->payloadFailure($decoded) === null ? $decoded['meta'] : null;
+        $problem = $this->sectionFailure($decoded) ?? $this->metadataFailure($decoded['meta'] ?? null);
+
+        return $problem === null ? $decoded['meta'] : null;
     }
 
     public function generatedAt(): ?int
@@ -172,7 +174,7 @@ final class RouteCache
 
         $state = $this->diagnose($routes, $maxAgeSeconds, $now);
         if (!$state['fresh']) {
-            throw $this->refuse($state['problem'] ?? 'a state that cannot be used');
+            throw $this->refuse($state['problem']);
         }
     }
 
@@ -186,6 +188,14 @@ final class RouteCache
 
     /**
      * Inspects the cache state for diagnostics.
+     *
+     * exists: the file is present. metadata_valid: its metadata section is accepted, which is false when the
+     * file is missing or cannot be decoded, or when its sections are invalid (checked first). fresh: usable now.
+     * expired: older than $maxAgeSeconds or dated in the future, and also true when the file is missing or its
+     * sections or metadata are invalid. reason: one of missing-file, invalid-metadata, invalid-payload, expired,
+     * stale-routes, fresh. age and expires_at: seconds since
+     * generation and the expiry instant. generated_at: the generation instant. problem: what a refusal
+     * would say after "Route cache file <file> has ", null when fresh.
      *
      * @throws RouteCacheException When $maxAgeSeconds is negative.
      * @return array{
@@ -210,19 +220,11 @@ final class RouteCache
     /**
      * Writes the routes to the cache file.
      *
-     * @throws RouteCacheException When two routes share a name, or encoding, creating the directory or writing the file fails.
+     * @throws RouteCacheException When load() would refuse the routes (for example two routes sharing a name),
+     *                             or encoding, creating the directory or writing the file fails.
      */
     public function save(RouteCollection $routes): void
     {
-        try {
-            $routes->assertNoDuplicateRouteNames();
-        } catch (RouteSignatureException $exception) {
-            throw new RouteCacheException(
-                $exception->getMessage() . '; rename the routes so each name is unique before caching',
-                previous: $exception,
-            );
-        }
-
         $routesPayload = $this->routesToPayload($routes->all());
 
         $payload = [
@@ -234,6 +236,11 @@ final class RouteCache
             $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
         } catch (JsonException $exception) {
             throw new RouteCacheException('Unable to encode route cache payload', previous: $exception);
+        }
+
+        $problem = $this->buildRoutes(json_decode($json, true, 512, JSON_THROW_ON_ERROR)['routes']);
+        if (is_string($problem)) {
+            throw new RouteCacheException(sprintf('Route cache not written: the routes have %s', $problem));
         }
 
         $directory = dirname($this->cacheFile);
@@ -348,21 +355,22 @@ final class RouteCache
     private function diagnose(RouteCollection $routes, ?int $maxAgeSeconds, ?int $now): array
     {
         if (!$this->has()) {
-            return self::state(false, false, self::REASON_MISSING_FILE, 'not been written');
+            return self::state(false, false, self::REASON_MISSING_FILE, 'not been written', expired: true);
         }
 
         $decoded = $this->decodeFile();
         if (is_string($decoded)) {
-            return self::state(true, false, self::REASON_INVALID_METADATA, $decoded);
+            return self::state(true, false, self::REASON_INVALID_METADATA, $decoded, expired: true);
         }
 
-        $problem = $this->payloadFailure($decoded);
+        $problem = $this->sectionFailure($decoded);
         if ($problem !== null) {
-            $reason = $this->metadataFailure($decoded['meta'] ?? null) === null
-                ? self::REASON_INVALID_PAYLOAD
-                : self::REASON_INVALID_METADATA;
+            return self::state(true, false, self::REASON_INVALID_PAYLOAD, $problem, expired: true);
+        }
 
-            return self::state(true, false, $reason, $problem);
+        $problem = $this->metadataFailure($decoded['meta'] ?? null);
+        if ($problem !== null) {
+            return self::state(true, false, self::REASON_INVALID_METADATA, $problem, expired: true);
         }
 
         $meta = $decoded['meta'];
@@ -370,18 +378,21 @@ final class RouteCache
         $currentTime = $now ?? time();
         $age = self::ageOf($generatedAt, $currentTime);
         $expiresAt = $maxAgeSeconds === null ? null : self::expiryOf($generatedAt, $maxAgeSeconds);
+        $future = $maxAgeSeconds !== null && $generatedAt > $currentTime;
+        $expired = $future || ($expiresAt !== null && $currentTime > $expiresAt);
 
-        $built = $this->buildRoutes($decoded['routes']);
-        if (is_string($built)) {
-            return self::state(true, true, self::REASON_INVALID_PAYLOAD, $built, $age, $expiresAt, $generatedAt);
+        $problem = $this->integrityFailure($decoded);
+        if ($problem === null) {
+            $built = $this->buildRoutes($decoded['routes']);
+            $problem = is_string($built) ? $built : null;
         }
 
-        if ($maxAgeSeconds !== null && $generatedAt > $currentTime) {
-            return self::state(true, true, self::REASON_EXPIRED, 'a generation timestamp in the future', $age, $expiresAt, $generatedAt, expired: true);
+        if ($problem !== null) {
+            return self::state(true, true, self::REASON_INVALID_PAYLOAD, $problem, $age, $expiresAt, $generatedAt, $expired);
         }
 
-        if ($expiresAt !== null && $currentTime > $expiresAt) {
-            return self::state(true, true, self::REASON_EXPIRED, 'expired', $age, $expiresAt, $generatedAt, expired: true);
+        if ($expired) {
+            return self::state(true, true, self::REASON_EXPIRED, $future ? 'a generation timestamp in the future' : 'expired', $age, $expiresAt, $generatedAt, true);
         }
 
         if (!hash_equals($meta['routes_hash'], $this->computeRoutesHash($routes->all()))) {
@@ -418,7 +429,7 @@ final class RouteCache
             'exists' => $exists,
             'metadata_valid' => $metadataValid,
             'fresh' => $reason === self::REASON_FRESH,
-            'expired' => $expired || !$metadataValid,
+            'expired' => $expired,
             'reason' => $reason,
             'age' => $age,
             'expires_at' => $expiresAt,
@@ -501,24 +512,37 @@ final class RouteCache
 
     /**
      * @param array<mixed> $decoded
-     * @return string|null The structure, metadata, count or hash problem, or null when the payload passes those checks.
+     * @return string|null The first problem found in the structure, metadata, count or hash, or null.
      */
     private function payloadFailure(array $decoded): ?string
+    {
+        return $this->sectionFailure($decoded)
+            ?? $this->metadataFailure($decoded['meta'] ?? null)
+            ?? $this->integrityFailure($decoded);
+    }
+
+    /**
+     * @param array<mixed> $decoded
+     */
+    private function sectionFailure(array $decoded): ?string
     {
         $routesPayload = $decoded['routes'] ?? null;
         if ($routesPayload === null) {
             return 'no routes section';
         }
 
-        if (!is_array($routesPayload) || !array_is_list($routesPayload)) {
-            return 'a routes section that is not a list';
-        }
+        return is_array($routesPayload) && array_is_list($routesPayload) ? null : 'a routes section that is not a list';
+    }
 
-        $meta = $decoded['meta'] ?? null;
-        $problem = $this->metadataFailure($meta);
-        if ($problem !== null) {
-            return $problem;
-        }
+    /**
+     * Count and hash checks. The caller has already validated the sections and the metadata.
+     *
+     * @param array<mixed> $decoded
+     */
+    private function integrityFailure(array $decoded): ?string
+    {
+        $routesPayload = $decoded['routes'];
+        $meta = $decoded['meta'];
 
         if ($meta['route_count'] !== count($routesPayload)) {
             return 'a route count that does not match its routes section';
@@ -570,9 +594,9 @@ final class RouteCache
         return null;
     }
 
-    private function refuse(string $problem, ?\Throwable $previous = null): RouteCacheException
+    private function refuse(string $problem): RouteCacheException
     {
-        return RouteCacheException::refused($this->cacheFile, $problem, $previous);
+        return RouteCacheException::refused($this->cacheFile, $problem);
     }
 
     /**
@@ -599,8 +623,8 @@ final class RouteCache
 
         try {
             $decoded = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException) {
-            return 'contents that are not valid JSON';
+        } catch (JsonException $exception) {
+            return 'contents that are not valid JSON: ' . $exception->getMessage();
         }
 
         return is_array($decoded) ? $decoded : 'contents that do not decode to an object';
@@ -614,10 +638,10 @@ final class RouteCache
     {
         $collection = new RouteCollection();
 
-        foreach ($routesPayload as $entry) {
+        foreach ($routesPayload as $index => $entry) {
             $route = $this->routeFromEntry($entry);
             if (is_string($route)) {
-                return $route;
+                return $route . $this->entryLocation($index, $entry);
             }
 
             $collection->add($route);
@@ -626,10 +650,27 @@ final class RouteCache
         try {
             $collection->assertNoDuplicateRouteNames();
         } catch (RouteSignatureException $exception) {
-            return 'a route table that is rejected: ' . $exception->getMessage();
+            return 'two routes sharing a name (' . $exception->getMessage() . '); rename one';
         }
 
         return $collection;
+    }
+
+    /**
+     * Names the refused entry by its position and, when it is an object, its method and path.
+     */
+    private function entryLocation(int $index, mixed $entry): string
+    {
+        if (!is_array($entry)) {
+            return sprintf(' at entry %d', $index);
+        }
+
+        $methodAndPath = json_encode(
+            [$entry['method'] ?? null, $entry['path'] ?? null],
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
+        );
+
+        return sprintf(' at entry %d %s', $index, $methodAndPath);
     }
 
     private function routeFromEntry(mixed $entry): Route|string
