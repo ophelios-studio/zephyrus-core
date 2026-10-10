@@ -711,11 +711,12 @@ final readonly class Request
 
         $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
 
-        $scheme = self::httpScheme($forwarded['proto'] ?? null)
+        $forwardedScheme = self::httpScheme($forwarded['proto'] ?? null)
             ?? (in_array('x-forwarded-proto', $trustedHeaders, true)
                 ? self::httpScheme(self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null))
-                : null)
-            ?? ($https ? 'https' : 'http');
+                : null);
+
+        $scheme = $forwardedScheme ?? ($https ? 'https' : 'http');
 
         $host = self::authorityHost($forwarded['host']
             ?? (in_array('x-forwarded-host', $trustedHeaders, true)
@@ -724,11 +725,15 @@ final readonly class Request
             ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost'));
 
         if (!str_contains($host, ':')) {
+            // A proxy-supplied scheme without a forwarded port means the default port
+            // of that scheme. SERVER_PORT belongs to the hop to the proxy, not to the client.
             $port = self::portNumber($forwarded['port'] ?? null)
                 ?? (in_array('x-forwarded-port', $trustedHeaders, true)
                     ? self::portNumber(self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null))
                     : null)
-                ?? self::portNumber(isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null);
+                ?? ($forwardedScheme === null
+                    ? self::portNumber(isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null)
+                    : null);
 
             if ($port !== null && !self::isDefaultPortForScheme($scheme, $port)) {
                 $host .= ':' . $port;

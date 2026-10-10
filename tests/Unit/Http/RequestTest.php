@@ -1175,6 +1175,77 @@ final class RequestTest extends TestCase
         self::assertSame('https://secure.example.com/health', $request->uri()->full());
     }
 
+    public function testFromGlobalsDropsServerPortBehindTlsProxyThatForwardsOnlyTheProto(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'       => 'GET',
+                'HTTP_HOST'            => 'app.example.test',
+                'REQUEST_URI'          => '/x',
+                'REMOTE_ADDR'          => '10.0.0.1',
+                'SERVER_PORT'          => '80',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('https://app.example.test/x', $request->uri()->full());
+    }
+
+    public function testFromGlobalsDropsServerPortWhenCaddyLikeProxyForwardsProtoAndHost(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.internal:8080',
+                'REQUEST_URI'            => '/dashboard',
+                'REMOTE_ADDR'            => '10.0.0.2',
+                'SERVER_PORT'            => '8080',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_HOST'  => 'app.example.test',
+            ],
+            trustedProxies: ['10.0.0.2'],
+        );
+
+        self::assertSame('https://app.example.test/dashboard', $request->uri()->full());
+    }
+
+    public function testFromGlobalsDropsServerPortBehindForwardedHeaderWithProtoOnly(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'SERVER_PORT'    => '80',
+                'HTTP_FORWARDED' => 'proto=https;host=app.example.test',
+            ],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('https://app.example.test/x', $request->uri()->full());
+    }
+
+    public function testFromGlobalsKeepsForwardedPortWhenProtoComesFromAForwardedHeader(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.example.test',
+                'REQUEST_URI'            => '/x',
+                'REMOTE_ADDR'            => '10.0.0.1',
+                'SERVER_PORT'            => '80',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_X_FORWARDED_PORT'  => '8443',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame('https://app.example.test:8443/x', $request->uri()->full());
+    }
+
     public function testFromGlobalsDefaultsMethodToGetWhenAbsent(): void
     {
         $request = Request::fromGlobals(server: []);
