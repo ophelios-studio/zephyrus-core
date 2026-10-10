@@ -402,4 +402,20 @@ final class SessionConfigTest extends TestCase
 
         self::assertFalse($config->httpOnly);
     }
+
+    public function testAnUnreadableSnakeCaseHttpOnlyIsRefusedNamingTheKeyWritten(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'http_only' has invalid value");
+
+        SessionConfig::fromArray(['http_only' => 'maybe']);
+    }
+
+    public function testAnUnreadableCamelCaseHttpOnlyIsRefusedNamingTheKeyWritten(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'httpOnly' has invalid value");
+
+        SessionConfig::fromArray(['httpOnly' => 'maybe']);
+    }
 }

@@ -92,7 +92,7 @@ final readonly class SecureHeadersConfig
             ),
             hstsIncludeSubdomains: ConfigBoolean::parse(
                 'secureHeaders',
-                'hstsIncludeSubdomains',
+                self::writtenKey($values, 'hstsIncludeSubdomains', 'hsts_include_subdomains'),
                 $values['hstsIncludeSubdomains'] ?? $values['hsts_include_subdomains'] ?? $defaults->hstsIncludeSubdomains,
             ),
             csp: (string) ($values['csp'] ?? $defaults->csp),
@@ -100,6 +100,16 @@ final readonly class SecureHeadersConfig
                 $values['permissionsPolicy'] ?? $values['permissions_policy'] ?? $defaults->permissionsPolicy
             ),
         );
+    }
+
+    /**
+     * The camelCase spelling unless only the snake_case one is set.
+     *
+     * @param array<string, mixed> $values
+     */
+    private static function writtenKey(array $values, string $camel, string $snake): string
+    {
+        return ($values[$camel] ?? null) === null && ($values[$snake] ?? null) !== null ? $snake : $camel;
     }
 
     /**

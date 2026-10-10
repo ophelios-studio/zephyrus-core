@@ -143,13 +143,27 @@ final readonly class SessionConfig
         return new self(
             name:       (string) ($values['name']                                 ?? 'PHPSESSID'),
             lifetime:   (int)    ($values['lifetime']                             ?? 0),
-            httpOnly:   ConfigBoolean::parse('session', 'httpOnly', $values['httpOnly'] ?? $values['http_only'] ?? true),
+            httpOnly:   ConfigBoolean::parse(
+                'session',
+                self::writtenKey($values, 'httpOnly', 'http_only'),
+                $values['httpOnly'] ?? $values['http_only'] ?? true,
+            ),
             secure:     !$auto && ConfigBoolean::parse('session', 'secure', $rawSecure),
             sameSite:   (string) ($values['sameSite']   ?? $values['same_site']   ?? 'Lax'),
             cookiePath: (string) ($values['cookiePath'] ?? $values['cookie_path'] ?? '/'),
             secureAuto: $auto,
             idleTimeout: self::idleTimeoutFrom($values['idleTimeout'] ?? $values['idle_timeout'] ?? null),
         );
+    }
+
+    /**
+     * The camelCase spelling unless only the snake_case one is set.
+     *
+     * @param array<string, mixed> $values
+     */
+    private static function writtenKey(array $values, string $camel, string $snake): string
+    {
+        return ($values[$camel] ?? null) === null && ($values[$snake] ?? null) !== null ? $snake : $camel;
     }
 
     /**

@@ -196,4 +196,12 @@ final class SecureHeadersConfigTest extends TestCase
 
         SecureHeadersConfig::fromArray(['hstsIncludeSubdomains' => $value]);
     }
+
+    public function testAnUnreadableSnakeCaseIncludeSubdomainsIsRefusedNamingTheKeyWritten(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'hsts_include_subdomains' has invalid value");
+
+        SecureHeadersConfig::fromArray(['hsts_include_subdomains' => 'maybe']);
+    }
 }
