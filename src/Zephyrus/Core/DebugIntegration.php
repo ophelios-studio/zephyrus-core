@@ -108,6 +108,9 @@ final class DebugIntegration
         'Zephyrus\Http\RequestBody::$raw',
         'Zephyrus\Data\DatabaseException::$driverMessage',
         'Zephyrus\Mailer\MailerException::$transportMessage',
+        'Zephyrus\Mailer\Mailer::$mail',
+        'Zephyrus\Mailer\Mailer::$htmlBody',
+        'Zephyrus\Mailer\Mailer::$textBody',
         'Exception::$trace',
         'Error::$trace',
     ];

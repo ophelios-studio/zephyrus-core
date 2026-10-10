@@ -15,6 +15,8 @@ use Tracy\Dumper;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Data\DatabaseException;
+use Zephyrus\Mailer\Mailer;
+use Zephyrus\Mailer\MailerConfig;
 use Zephyrus\Mailer\MailerException;
 
 final class DebugIntegrationTest extends TestCase
@@ -384,6 +386,34 @@ final class DebugIntegrationTest extends TestCase
 
         self::assertStringContainsString($user, $html, 'Control: an unlisted key must still be rendered.');
         self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered the contents of an ArrayIterator argument.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksMailerRecipientsAndBodies(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $recipient = self::marker('recipient') . '@example.com';
+        $token = self::marker('reset-token');
+        $text = self::marker('text-body');
+        $mailer = new Mailer(MailerConfig::fromArray([]));
+        $mailer->to($recipient)->html($token)->text($text);
+
+        try {
+            self::deliver($mailer);
+        } catch (\RuntimeException $exception) {
+            $html = self::blueScreenHtml($exception);
+        }
+
+        self::assertStringContainsString('delivery refused', $html, 'Control: the bluescreen must render the exception.');
+        self::assertStringNotContainsString($recipient, $html, 'The bluescreen rendered a Mailer recipient.');
+        self::assertStringNotContainsString($token, $html, 'The bluescreen rendered the HTML body of a Mailer.');
+        self::assertStringNotContainsString($text, $html, 'The bluescreen rendered the text body of a Mailer.');
+    }
+
+    private static function deliver(Mailer $mailer): never
+    {
+        throw new \RuntimeException('delivery refused');
     }
 
     private static function throwWithIterator(\ArrayIterator $iterator): never
