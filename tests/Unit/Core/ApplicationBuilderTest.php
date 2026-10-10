@@ -70,6 +70,14 @@ final class ApplicationBuilderTest extends TestCase
             'allowed_hosts',
             'Unknown security key "allowed_hosts". ' . $accepted . ' Did you mean "allowedHosts"?',
         ];
+        yield 'kebab case' => [
+            'max-body-size',
+            'Unknown security key "max-body-size". ' . $accepted . ' Did you mean "maxBodySize"?',
+        ];
+        yield 'qualified kebab case' => [
+            'security.allowed-hosts',
+            'Unknown security key "security.allowed-hosts". ' . $accepted . ' Did you mean "allowedHosts"?',
+        ];
         yield 'capitalised prefix' => [
             'Security.csrf',
             'Unknown security key "Security.csrf". ' . $accepted . ' Did you mean "csrf"?',

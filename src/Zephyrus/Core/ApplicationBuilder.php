@@ -42,6 +42,8 @@ final class ApplicationBuilder
 
     private const array ACKNOWLEDGEABLE_SECURITY_KEYS = ['forceHttps', 'allowedHosts', 'csrf', 'maxBodySize', 'headers'];
 
+    private const string SECURITY_KEY_PREFIX = 'security.';
+
     private KernelBuilder $kernelBuilder;
 
     private ?LocaleLoaderInterface $localeLoader = null;
@@ -463,16 +465,20 @@ final class ApplicationBuilder
      */
     private static function acknowledgedSecurityKeyName(string $key): string
     {
-        $short = str_starts_with($key, 'security.') ? substr($key, strlen('security.')) : $key;
+        $short = str_starts_with($key, self::SECURITY_KEY_PREFIX)
+            ? substr($key, strlen(self::SECURITY_KEY_PREFIX))
+            : $key;
         if (in_array($short, self::ACKNOWLEDGEABLE_SECURITY_KEYS, true)) {
             return $short;
         }
 
         $message = 'Unknown security key ' . MessageValue::quote($key) . '. Accepted names: '
-            . implode(', ', self::ACKNOWLEDGEABLE_SECURITY_KEYS) . ', each short or prefixed with "security.".';
-        $spelling = self::looseSpelling(str_starts_with(strtolower($key), 'security.') ? substr($key, 9) : $key);
+            . implode(', ', self::ACKNOWLEDGEABLE_SECURITY_KEYS) . ', each short or prefixed with '
+            . MessageValue::quote(self::SECURITY_KEY_PREFIX) . '.';
+        $spelling = self::looseSpelling($key);
         foreach (self::ACKNOWLEDGEABLE_SECURITY_KEYS as $accepted) {
-            if ($spelling === self::looseSpelling($accepted)) {
+            $spellings = [self::looseSpelling($accepted), self::looseSpelling(self::SECURITY_KEY_PREFIX . $accepted)];
+            if (in_array($spelling, $spellings, true)) {
                 $message .= ' Did you mean ' . MessageValue::quote($accepted) . '?';
                 break;
             }
@@ -483,7 +489,7 @@ final class ApplicationBuilder
 
     private static function looseSpelling(string $name): string
     {
-        return str_replace('_', '', strtolower($name));
+        return str_replace(['_', '-'], '', strtolower($name));
     }
 
     /**
@@ -667,7 +673,7 @@ final class ApplicationBuilder
         $unwired = array_filter($unwired);
 
         foreach ($this->acknowledgedSecurityKeys as $acknowledged) {
-            unset($unwired['security.' . $acknowledged]);
+            unset($unwired[self::SECURITY_KEY_PREFIX . $acknowledged]);
         }
 
         if ($unwired !== []) {
@@ -812,8 +818,8 @@ final class ApplicationBuilder
             return 'is disabled; ' . $rebuild;
         }
 
-        return 'is disabled and excludes ' . MessageValue::quoteList($extra) . '; declare ' . (count($extra) === 1 ? 'it' : 'them') . ' in security.csrf.exceptions, then '
-            . $rebuild;
+        return 'is disabled and excludes ' . MessageValue::quoteList($extra) . '; declare '
+            . (count($extra) === 1 ? 'it' : 'them') . ' in security.csrf.exceptions, then ' . $rebuild;
     }
 
     /**
