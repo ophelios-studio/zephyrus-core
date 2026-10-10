@@ -232,6 +232,69 @@ final class ContainerTest extends TestCase
         $this->container->get('Zephyrus\NoSuchClass');
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function malformedIdProvider(): iterable
+    {
+        yield 'parent segment' => ['../x'];
+        yield 'space' => ['A B'];
+        yield 'nul byte' => ["\0"];
+        yield 'empty' => [''];
+        yield 'leading digit' => ['1abc'];
+        yield 'double backslash' => ['Vendor\\\\Name'];
+        yield 'trailing backslash' => ['Vendor\\'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('malformedIdProvider')]
+    public function testGetRefusesMalformedIdWithoutAutoloading(string $id): void
+    {
+        $calls = $this->countAutoloadCalls(function () use ($id): void {
+            try {
+                $this->container->get($id);
+                self::fail('A malformed id must not resolve.');
+            } catch (NotFoundException) {
+            }
+        });
+
+        self::assertSame(0, $calls);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('malformedIdProvider')]
+    public function testMakeRefusesMalformedIdWithoutAutoloading(string $id): void
+    {
+        $calls = $this->countAutoloadCalls(function () use ($id): void {
+            try {
+                $this->container->make($id);
+                self::fail('A malformed id must not resolve.');
+            } catch (NotFoundException) {
+            }
+        });
+
+        self::assertSame(0, $calls);
+    }
+
+    /**
+     * Runs $callback with a counting autoloader registered and returns the number of calls.
+     */
+    private function countAutoloadCalls(callable $callback): int
+    {
+        $calls = 0;
+        $spy = static function () use (&$calls): void {
+            $calls++;
+        };
+
+        spl_autoload_register($spy);
+
+        try {
+            $callback();
+        } finally {
+            spl_autoload_unregister($spy);
+        }
+
+        return $calls;
+    }
+
     public function testAutoWireThrowsContainerExceptionForAbstractClass(): void
     {
         $this->expectException(ContainerException::class);

@@ -172,7 +172,7 @@ final class Container implements ContainerInterface
      */
     private function autoWire(string $className): object
     {
-        if (!class_exists($className)) {
+        if (preg_match(self::CLASS_NAME_PATTERN, $className) !== 1 || !class_exists($className)) {
             throw new NotFoundException(
                 "No binding found and [{$className}] is not a resolvable class."
             );
