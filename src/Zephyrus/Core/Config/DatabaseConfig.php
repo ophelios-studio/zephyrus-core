@@ -216,7 +216,11 @@ final readonly class DatabaseConfig
     /**
      * @throws ConfigurationException if value is empty or holds DSN syntax or a control character.
      */
-    private static function assertDsnSafeValue(string $value, string $field, bool $singleHost = false): void
+    private static function assertDsnSafeValue(
+        #[\SensitiveParameter] string $value,
+        string $field,
+        bool $singleHost = false,
+    ): void
     {
         if ($singleHost && $value === '') {
             throw ConfigurationException::invalidValue(
@@ -236,7 +240,7 @@ final readonly class DatabaseConfig
             throw ConfigurationException::invalidValue(
                 'database',
                 $field,
-                $singleHost ? self::withoutUserinfo($value) : $value,
+                self::withoutCredentials($value),
                 'must be non-empty, valid UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, '
                     . 'quotes, backslashes or control characters, any of which would truncate or extend the DSN'
                     . ($singleHost && str_contains($value, ',')
@@ -247,12 +251,17 @@ final readonly class DatabaseConfig
     }
 
     /**
-     * The host with the credentials of a URL (before the last @ that precedes the first / after the scheme)
-     * replaced by ***.
+     * The value with everything after a password= key (any case) replaced by ***, then everything before its
+     * last remaining @ (after a URL scheme).
      */
-    private static function withoutUserinfo(string $host): string
+    private static function withoutCredentials(string $value): string
     {
-        return preg_replace('#^([^/]*://)?[^/]*@#', '$1***@', $host) ?? '***';
+        // The password mask runs first: a password holding @ would otherwise lose its key to the userinfo mask.
+        return preg_replace(
+            ['#(password\s*=\s*).*#is', '#^([A-Za-z][A-Za-z0-9+.\-]*://)?.*@#s'],
+            ['$1***', '$1***@'],
+            $value,
+        ) ?? '***';
     }
 
     private static function conflictingSpellings(string $first, string $second): ConfigurationException

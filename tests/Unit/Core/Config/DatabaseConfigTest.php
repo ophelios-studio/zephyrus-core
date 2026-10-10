@@ -892,30 +892,98 @@ final class DatabaseConfigTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}>
+     * @return iterable<string, array{string, string, string}>
      */
-    public static function hostsWithCredentials(): iterable
+    public static function connectionValuesWithCredentials(): iterable
     {
-        yield 'url' => ['postgres://app:s3cr=t@db.example.test/app', '"postgres://***@db.example.test/app"'];
-        yield 'at sign in the password' => ['postgres://app:p@ss=1@db.example.test', '"postgres://***@db.example.test"'];
-        yield 'no scheme' => ['app:s3cr=t@db.example.test', '"***@db.example.test"'];
-        yield 'at sign after the path only' => ['db.example.test/a=b@c', '"db.example.test/a=b@c"'];
+        yield 'url' => ['host', 'postgres://app:s3cr=t@db.example.test/app', '"postgres://***@db.example.test/app"'];
+        yield 'at sign in the password' => [
+            'host',
+            'postgres://app:p@ss=1@db.example.test',
+            '"postgres://***@db.example.test"',
+        ];
+        yield 'no scheme' => ['host', 'app:s3cr=t@db.example.test', '"***@db.example.test"'];
+        yield 'at sign after the path' => ['host', 'db.example.test/a=b@c', '"***@c"'];
+        yield 'base64 password with a slash' => [
+            'host',
+            'postgres://app:q8/Zx+Tk1w==@db.example.test/app',
+            '"postgres://***@db.example.test/app"',
+        ];
+        yield 'password in the query' => [
+            'host',
+            'db.example.test/app?password=s3cr3t&sslmode=require',
+            '"db.example.test/app?password=***"',
+        ];
+        yield 'single-slash scheme' => ['host', 'postgres:/app:pw=@db.example.test', '"***@db.example.test"'];
+        yield 'conninfo' => ['host', 'host=db.example.test password=s3cr3t', '"host=db.example.test password=***"'];
+        yield 'conninfo with a quoted password' => [
+            'host',
+            "host=db.example.test PASSWORD = 's3 cr3t' port=5432",
+            '"host=db.example.test PASSWORD = ***"',
+        ];
+        yield 'database' => [
+            'database',
+            'postgres://app:s3cr=t@db.example.test/app',
+            '"postgres://***@db.example.test/app"',
+        ];
+        yield 'root certificate' => ['sslRootCert', '/certs/root.crt?password=s3cr3t', '"/certs/root.crt?password=***"'];
+        yield 'conninfo with an at sign in the password' => [
+            'host',
+            'host=db.example.test user=app password=Tr0ub@SEKRET',
+            '"host=db.example.test user=app password=***"',
+        ];
+        yield 'PDO DSN with an at sign in the password' => [
+            'host',
+            'pgsql:host=db.example.test;dbname=app;password=p@SEKRET',
+            '"pgsql:host=db.example.test;dbname=app;password=***"',
+        ];
+        yield 'query with an at sign in the password' => [
+            'host',
+            'db.example.test/app?password=SE@KRET&sslmode=require',
+            '"db.example.test/app?password=***"',
+        ];
+        yield 'database with an at sign in the password' => ['database', 'app?password=SE@KRET', '"app?password=***"'];
+        yield 'at sign in both the userinfo and the query password' => [
+            'host',
+            'postgres://app:p@ss@db.example.test/app?password=SE@KRET',
+            '"postgres://***@db.example.test/app?password=***"',
+        ];
     }
 
-    #[DataProvider('hostsWithCredentials')]
-    public function testHostRefusalHidesTheCredentialsOfAUrl(string $host, string $shown): void
+    #[DataProvider('connectionValuesWithCredentials')]
+    public function testARefusedConnectionValueHidesItsCredentials(string $field, string $value, string $shown): void
     {
         try {
-            DatabaseConfig::fromArray(['host' => $host, 'database' => 'db', 'username' => 'u']);
+            DatabaseConfig::fromArray(['host' => 'db', 'database' => 'db', 'username' => 'u', $field => $value]);
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
             self::assertSame(
-                "Configuration section 'database' field 'host' has invalid value $shown: must be non-empty, valid "
+                "Configuration section 'database' field '$field' has invalid value $shown: must be non-empty, valid "
                 . 'UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, quotes, backslashes or '
                 . 'control characters, any of which would truncate or extend the DSN.',
                 $e->getMessage(),
             );
         }
+    }
+
+    public function testTheConnectionValueCheckKeepsTheValueOutOfItsTraceArguments(): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            DatabaseConfig::fromArray(['host' => 'postgres://app:s3cr=t@db', 'database' => 'db', 'username' => 'u']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            $frames = array_values(array_filter(
+                $e->getTrace(),
+                static fn (array $frame): bool => $frame['function'] === 'assertDsnSafeValue',
+            ));
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+
+        self::assertCount(1, $frames);
+        self::assertInstanceOf(\SensitiveParameterValue::class, $frames[0]['args'][0] ?? null);
     }
 
     public function testHostRefusalWithoutACommaDoesNotMentionAList(): void
