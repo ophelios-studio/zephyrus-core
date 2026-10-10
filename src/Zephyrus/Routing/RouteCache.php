@@ -619,7 +619,7 @@ final class RouteCache
             return 'an invalid route count';
         }
 
-        if (!is_int($meta['generated_at'] ?? null)) {
+        if (!is_int($meta['generated_at'] ?? null) || $meta['generated_at'] < 0) {
             return 'an invalid generation timestamp';
         }
 

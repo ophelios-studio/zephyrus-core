@@ -581,6 +581,10 @@ final class RouteCacheTest extends TestCase
         yield 'route count invalid' => [['meta' => ['route_count' => -1] + $meta, 'routes' => []], true];
         yield 'generated_at missing' => [['meta' => array_diff_key($meta, ['generated_at' => true]), 'routes' => []], true];
         yield 'generated_at string' => [['meta' => ['generated_at' => '1700000000'] + $meta, 'routes' => []], true];
+        yield 'generated_at negative' => [['meta' => ['generated_at' => -1] + $meta, 'routes' => []], true];
+        yield 'generated_at minimum' => [['meta' => ['generated_at' => PHP_INT_MIN] + $meta, 'routes' => []], true];
+        yield 'generated_at negative maximum' => [['meta' => ['generated_at' => -PHP_INT_MAX] + $meta, 'routes' => []], true];
+        yield 'generated_at zero' => [['meta' => ['generated_at' => 0] + $meta, 'routes' => []], false];
     }
 
     public function testVersionIsCheckedBeforeTheRoutesHash(): void
@@ -602,6 +606,29 @@ final class RouteCacheTest extends TestCase
         file_put_contents($this->cacheFile, json_encode(['meta' => ['generated_at' => 1700000000] + self::metadataFor([]), 'routes' => []], JSON_THROW_ON_ERROR));
 
         self::assertSame(PHP_INT_MAX, $cache->expiresAt(PHP_INT_MAX));
+    }
+
+    #[DataProvider('negativeGeneratedAtProvider')]
+    public function testNegativeGeneratedAtIsRefusedWithoutOverflowing(int $generatedAt): void
+    {
+        file_put_contents($this->cacheFile, json_encode(['meta' => ['generated_at' => $generatedAt] + self::metadataFor([]), 'routes' => []], JSON_THROW_ON_ERROR));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        self::assertNull($cache->age(1700000000));
+        self::assertFalse($cache->canUseWithin(new RouteCollection(), 60, 1700000000));
+        self::assertSame('invalid-metadata', $cache->inspect(new RouteCollection(), 60, 1700000000)['reason']);
+        $this->assertLoadRefused($cache, 'an invalid generation timestamp');
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function negativeGeneratedAtProvider(): iterable
+    {
+        yield 'minus one' => [-1];
+        yield 'minimum' => [PHP_INT_MIN];
+        yield 'negative maximum' => [-PHP_INT_MAX];
     }
 
     public function testIsFreshWithinReturnsTrueWhenFreshAndWithinAgeWindow(): void
