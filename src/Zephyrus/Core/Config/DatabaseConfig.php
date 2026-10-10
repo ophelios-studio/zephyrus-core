@@ -75,26 +75,8 @@ final readonly class DatabaseConfig
             );
         }
 
-        if ($this->sslMode !== null && !in_array($this->sslMode, self::SSL_MODES, true)) {
-            throw ConfigurationException::invalidValue(
-                'database',
-                'sslmode',
-                $this->sslMode,
-                'must be null (leave the parameter out of the DSN) or one of: ' . implode(', ', self::SSL_MODES),
-            );
-        }
-
-        // Whitespace, semicolons, quotes and backslashes are DSN syntax to libpq; whether the
-        // file exists is reported at connect time.
-        if ($this->sslRootCert !== null && preg_match('/^[^\\s;\'"\\\\]+$/D', $this->sslRootCert) !== 1) {
-            throw ConfigurationException::invalidValue(
-                'database',
-                'sslrootcert',
-                $this->sslRootCert,
-                'must be null or a non-empty path free of whitespace, semicolons, quotes and backslashes, '
-                    . 'any of which would truncate or extend the DSN',
-            );
-        }
+        self::assertSslMode($this->sslMode, 'sslMode');
+        self::assertSslRootCert($this->sslRootCert, 'sslRootCert');
     }
 
     /**
@@ -124,18 +106,21 @@ final readonly class DatabaseConfig
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
-        $sslMode = self::optionalSetting($values, ['sslMode', 'sslmode', 'ssl_mode']);
-        $sslRootCert = self::optionalSetting($values, ['sslRootCert', 'sslrootcert', 'ssl_root_cert']);
+        [$sslModeKey, $sslMode] = self::optionalSetting($values, ['sslMode', 'sslmode', 'ssl_mode']);
+        [$sslRootCertKey, $sslRootCert] = self::optionalSetting($values, ['sslRootCert', 'sslrootcert', 'ssl_root_cert']);
         $columnCacheVersion = self::optionalSetting(
             $values,
             ['columnCacheVersion', 'column_cache_version'],
             ": quote a number such as '1.10' to keep its digits",
-        ) ?? '';
+        )[1] ?? '';
 
         // libpq matches sslmode exactly, so REQUIRE is folded. The cert path is case-sensitive.
         if ($sslMode !== null) {
             $sslMode = strtolower($sslMode);
         }
+
+        self::assertSslMode($sslMode, $sslModeKey);
+        self::assertSslRootCert($sslRootCert, $sslRootCertKey);
 
         if (trim($database) === '') {
             throw ConfigurationException::missingRequired('database', 'database');
@@ -202,14 +187,49 @@ final readonly class DatabaseConfig
     }
 
     /**
+     * @throws ConfigurationException if sslMode is not null and not an accepted value.
+     */
+    private static function assertSslMode(?string $sslMode, string $field): void
+    {
+        if ($sslMode !== null && !in_array($sslMode, self::SSL_MODES, true)) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                $field,
+                $sslMode,
+                'must be null (leave the parameter out of the DSN) or one of: ' . implode(', ', self::SSL_MODES),
+            );
+        }
+    }
+
+    /**
+     * @throws ConfigurationException if sslRootCert is not null and not a DSN-safe path.
+     */
+    private static function assertSslRootCert(?string $sslRootCert, string $field): void
+    {
+        // Whitespace, semicolons, quotes and backslashes are DSN syntax to libpq; whether the
+        // file exists is reported at connect time.
+        if ($sslRootCert !== null && preg_match('/^[^\\s;\'"\\\\]+$/D', $sslRootCert) !== 1) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                $field,
+                $sslRootCert,
+                'must be null or a non-empty path free of whitespace, semicolons, quotes and backslashes, '
+                    . 'any of which would truncate or extend the DSN',
+            );
+        }
+    }
+
+    /**
      * Reads an optional string from the first spelling set to a non-null value.
      *
      * @param array<string, mixed> $values
      * @param list<string>         $spellings Accepted keys, the first one winning.
      * @param string               $hint      Appended to the refusal message.
+     * @return array{string, ?string} The key read (the first spelling when none is set) and its
+     *                                trimmed value, null when absent or blank.
      * @throws ConfigurationException if the value is neither a string nor an integer.
      */
-    private static function optionalSetting(array $values, array $spellings, string $hint = ''): ?string
+    private static function optionalSetting(array $values, array $spellings, string $hint = ''): array
     {
         foreach ($spellings as $key) {
             $value = $values[$key] ?? null;
@@ -228,9 +248,9 @@ final readonly class DatabaseConfig
 
             $normalized = trim((string) $value);
 
-            return $normalized === '' ? null : $normalized;
+            return [$key, $normalized === '' ? null : $normalized];
         }
 
-        return null;
+        return [$spellings[0], null];
     }
 }

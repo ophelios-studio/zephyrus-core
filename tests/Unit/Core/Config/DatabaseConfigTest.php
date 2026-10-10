@@ -344,7 +344,7 @@ final class DatabaseConfigTest extends TestCase
     {
         // The value goes into the DSN verbatim, so the constructor validates it too.
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('sslmode');
+        $this->expectExceptionMessage('sslMode');
 
         new DatabaseConfig(
             driver: 'pgsql',
@@ -421,9 +421,33 @@ final class DatabaseConfigTest extends TestCase
     public function testThrowsForSslRootCertContainingABackslashThroughTheConstructor(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('sslrootcert');
+        $this->expectExceptionMessage('sslRootCert');
 
         new DatabaseConfig('pgsql', 'localhost', 5432, 'db', 'u', '', 'utf8', null, '/etc/ssl/a\\b.crt');
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function refusedSslValues(): iterable
+    {
+        yield 'sslMode' => ['sslMode', 'bogus', 'sslMode'];
+        yield 'sslmode' => ['sslmode', 'bogus', 'sslmode'];
+        yield 'ssl_mode' => ['ssl_mode', 'bogus', 'ssl_mode'];
+        yield 'sslRootCert' => ['sslRootCert', 'a b', 'sslRootCert'];
+        yield 'sslrootcert' => ['sslrootcert', 'a b', 'sslrootcert'];
+        yield 'ssl_root_cert' => ['ssl_root_cert', 'a b', 'ssl_root_cert'];
+    }
+
+    #[DataProvider('refusedSslValues')]
+    public function testValueRefusalNamesTheKeyAsWritten(string $key, string $value, string $expected): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', $key => $value]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field '" . $expected . "' has invalid value", $e->getMessage());
+        }
     }
 
     public function testColumnCacheVersionDefaultsToEmptyString(): void
@@ -607,7 +631,7 @@ final class DatabaseConfigTest extends TestCase
     public function testThrowsForSslRootCertEndingInANewlineThroughTheConstructor(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('sslrootcert');
+        $this->expectExceptionMessage('sslRootCert');
 
         new DatabaseConfig('pgsql', 'localhost', 5432, 'db', 'u', '', 'utf8', null, "/etc/ssl/root.crt\n");
     }
