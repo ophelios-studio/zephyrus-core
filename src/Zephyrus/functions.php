@@ -229,14 +229,14 @@ if (!function_exists('format')) {
      *
      * @param string $type    The formatter name.
      * @param mixed  ...$args Arguments to pass to the formatter.
-     * @throws FormatterException when $type is neither a registered custom
-     *         formatter nor a built-in formatter.
+     * @throws FormatterException when no Formatter is set, or when $type is
+     *         neither a registered custom formatter nor a built-in formatter.
      */
     function format(string $type, mixed ...$args): string
     {
         $formatter = App::getFormatter();
         if ($formatter === null) {
-            return (string) ($args[0] ?? '');
+            throw FormatterException::formatterRequired($type);
         }
 
         return $formatter->format($type, ...$args);

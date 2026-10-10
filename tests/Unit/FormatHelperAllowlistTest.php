@@ -93,11 +93,12 @@ final class FormatHelperAllowlistTest extends TestCase
         self::assertSame('HELLO', format('shout', 'hello'));
     }
 
-    public function testTheHelperStillNoOpsWithoutAFormatter(): void
+    public function testTheHelperRefusesToRunWithoutAFormatter(): void
     {
         App::reset();
 
-        self::assertSame('19.99', format('money', '19.99'));
-        self::assertSame('', format('definitelyNotAFormatter'));
+        $this->expectException(FormatterException::class);
+
+        format('money', '19.99');
     }
 }

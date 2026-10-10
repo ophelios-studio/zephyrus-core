@@ -26,6 +26,14 @@ final class FormatterException extends ZephyrusRuntimeException
         );
     }
 
+    public static function formatterRequired(string $type): self
+    {
+        return new self(sprintf(
+            'format(\'%s\') needs a Formatter: call App::setFormatter() first.',
+            $type,
+        ));
+    }
+
     public static function invalidLocale(string $locale): self
     {
         return new self(sprintf('Invalid locale: %s', $locale));

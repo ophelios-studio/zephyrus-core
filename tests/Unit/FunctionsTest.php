@@ -303,14 +303,29 @@ final class FunctionsTest extends TestCase
 
     // ─── format() ─────────────────────────────────────────────────────
 
-    public function testFormatReturnsStringCastWhenNoFormatterSet(): void
+    public function testFormatThrowsWhenNoFormatterSetInsteadOfEchoingTheValue(): void
     {
-        self::assertSame('42', format('decimal', 42));
+        $this->expectException(FormatterException::class);
+        $this->expectExceptionMessage('format(\'mask\') needs a Formatter');
+
+        format('mask', '123-45-6789');
     }
 
-    public function testFormatReturnsEmptyStringWhenNoFormatterAndNoArgs(): void
+    public function testFormatWithoutFormatterNeverLeaksTheValueInTheMessage(): void
     {
-        self::assertSame('', format('decimal'));
+        try {
+            format('mask', '123-45-6789');
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
+            self::assertStringNotContainsString('123-45-6789', $exception->getMessage());
+        }
+    }
+
+    public function testFormatWithoutFormatterAndNoArgsStillThrows(): void
+    {
+        $this->expectException(FormatterException::class);
+
+        format('decimal');
     }
 
     public function testFormatDelegatesDecimal(): void
