@@ -50,8 +50,8 @@ final readonly class Configuration
      *        Section name => ConfigSection subclass.
      * @throws ConfigurationException if any section value violates its constraints, a top-level key misspells
      *        a built-in or registered section name, or a custom section is written under two spellings.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromArray(array $config, array $sectionFactories = []): self
     {
@@ -158,7 +158,7 @@ final readonly class Configuration
     }
 
     /**
-     * Refuse a top-level key that misspells a canonical name, ignoring case, underscores and spaces, unless accepted.
+     * Refuse a top-level key that misspells a canonical name, ignoring case and underscores, unless accepted.
      *
      * @param array<int|string, mixed> $config
      * @param array<string, string> $canonicalNames Folded spelling => canonical name.
@@ -182,16 +182,26 @@ final readonly class Configuration
     }
 
     /**
-     * Map the folded spelling of each name to the name.
+     * Map the folded spelling of each name to the name, refusing two names that fold to the same section.
      *
      * @param list<string> $names
      * @return array<string, string>
+     * @throws \InvalidArgumentException
      */
     private static function canonicalNames(array $names): array
     {
         $canonical = [];
         foreach ($names as $name) {
-            $canonical[self::foldName($name)] = $name;
+            $folded = self::foldName($name);
+            if (isset($canonical[$folded])) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Section factories "%s" and "%s" name the same section: keep one.',
+                    $canonical[$folded],
+                    $name,
+                ));
+            }
+
+            $canonical[$folded] = $name;
         }
 
         return $canonical;
@@ -248,8 +258,8 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file is missing or unparsable, an !env tag is refused,
      *        or the configuration is refused by fromArray().
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromYamlFile(string $path, array $sectionFactories = []): self
     {
@@ -266,8 +276,8 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a file is missing or unparsable,
      *        an !env tag is refused, or the configuration is refused by fromArray().
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -283,8 +293,8 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a present file is unparsable,
      *        an !env tag is refused, or the configuration is refused by fromArray().
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromOptionalYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -297,8 +307,8 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file is missing, is a YAML file that does not parse, fails to load,
      *        or does not return an array, an !env tag is refused, or the configuration is refused by fromArray().
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromFile(string $path, array $sectionFactories = []): self
     {
@@ -336,8 +346,8 @@ final readonly class Configuration
      * @throws ConfigurationException when a path is not a non-empty string, a file is missing, is a YAML file
      *        that does not parse, fails to load or does not return an array, an !env tag is refused,
      *        or the configuration is refused by fromArray().
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromFiles(array $paths, array $sectionFactories = []): self
     {
@@ -352,8 +362,8 @@ final readonly class Configuration
      * @throws ConfigurationException when a path is not a non-empty string, a present file is a YAML file
      *        that does not parse, fails to load or does not return an array, an !env tag is refused,
      *        or the configuration is refused by fromArray().
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
-     *        name (any spelling).
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
+     *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromOptionalFiles(array $paths, array $sectionFactories = []): self
     {

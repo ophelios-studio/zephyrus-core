@@ -677,6 +677,33 @@ final class ConfigurationTest extends TestCase
         Configuration::fromArray([$key => ['name' => 'x']], [$factoryName => FactoryNameSectionConfig::class]);
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function factoryNamesFoldingToTheSameSection(): iterable
+    {
+        yield 'lower then capitalised' => ['payment', 'Payment'];
+        yield 'capitalised then lower' => ['Payment', 'payment'];
+        yield 'snake_case then camelCase' => ['payment_gateway', 'paymentGateway'];
+    }
+
+    #[DataProvider('factoryNamesFoldingToTheSameSection')]
+    public function testFromArrayRefusesTwoFactoriesNamingTheSameSection(string $first, string $second): void
+    {
+        try {
+            Configuration::fromArray([], [
+                $first => FactoryNameSectionConfig::class,
+                $second => FactoryNameSectionConfig::class,
+            ]);
+            self::fail('Two factories naming the same section must be refused.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                sprintf('Section factories "%s" and "%s" name the same section: keep one.', $first, $second),
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testFromYamlFilesRefusesACaseVariantOfACustomSectionAfterTheMerge(): void
     {
         $firstBase = tempnam(sys_get_temp_dir(), 'zcfg');
