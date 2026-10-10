@@ -99,7 +99,7 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         }
 
         if (str_contains($entry, ',')) {
-            return 'use list items or one comma-separated string, not a comma inside one item';
+            return 'use list items, not a comma inside one item';
         }
 
         if (trim($entry) !== $entry) {

@@ -238,7 +238,7 @@ final readonly class SecurityConfig
                 default => IpRange::invalidEntryReason($proxy),
             };
             if ($reason !== null && is_string($proxy) && str_contains($proxy, ',')) {
-                $reason .= '; use list items or one comma-separated string, not a comma inside one item';
+                $reason .= '; use list items, not a comma inside one item';
             }
             if ($reason !== null) {
                 throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", self::shownValue($proxy), $reason);

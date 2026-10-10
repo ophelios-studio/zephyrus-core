@@ -319,7 +319,7 @@ final class SecurityConfigTest extends TestCase
     public function testCommaSeparatedTrustedProxiesAskForOneEntryPerListItem(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('use list items or one comma-separated string');
+        $this->expectExceptionMessage('use list items, not a comma inside one item');
 
         SecurityConfig::fromArray(['trustedProxies' => ['10.0.0.0/8,172.16.0.0/12']]);
     }
@@ -732,7 +732,7 @@ final class SecurityConfigTest extends TestCase
     public function testCommaSeparatedAllowedHostsAskForOneEntryPerListItem(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('use list items or one comma-separated string');
+        $this->expectExceptionMessage('use list items, not a comma inside one item');
 
         SecurityConfig::fromArray(['allowedHosts' => ['a.example.com,b.example.com']]);
     }
