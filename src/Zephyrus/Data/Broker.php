@@ -5,41 +5,9 @@ declare(strict_types=1);
 namespace Zephyrus\Data;
 
 /**
- * Abstract base for domain-specific data brokers.
+ * Base class for domain data brokers: the SQL of one domain area lives in a subclass.
  *
- * A broker is responsible for all database interactions for a single
- * entity/domain area. Extend this class to get typed query helpers
- * without repetitive PDO boilerplate.
- *
- * Design rules:
- *   - All SQL lives inside the broker subclass, not in controllers or
- *     service objects.
- *   - Every method accepts and returns stdClass objects or scalars;
- *     no ORM magic, no ActiveRecord coupling.
- *   - Transactions are composable via the transaction() helper.
- *
- * Example:
- *
- *   final class UserBroker extends Broker
- *   {
- *       public function findById(int $id): ?\stdClass
- *       {
- *           return $this->selectOne('SELECT * FROM users WHERE id = ?', [$id]);
- *       }
- *
- *       public function findAll(): array
- *       {
- *           return $this->select('SELECT * FROM users ORDER BY name');
- *       }
- *
- *       public function insert(array $data): int
- *       {
- *           return (int) $this->insertRowGetId(
- *               'INSERT INTO users (name, email) VALUES (?, ?) RETURNING id',
- *               [$data['name'], $data['email']]
- *           );
- *       }
- *   }
+ * Methods take and return stdClass rows or scalars. Transactions compose through transaction().
  */
 abstract class Broker
 {
@@ -48,8 +16,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a SELECT (or any multi-row query) and return all rows as
-     * an array of stdClass objects.
+     * Execute a multi-row query and return all rows.
      *
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
@@ -72,9 +39,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a scalar query and return the first column of the first row.
-     *
-     * Returns $default when the query yields no rows.
+     * Return the first column of the first row, or $default when the query yields no rows.
      *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
@@ -85,7 +50,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a scalar query and return the value cast to int.
+     * Return the first column of the first row cast to int.
      *
      * @param array<int|string, mixed> $params
      */
@@ -95,7 +60,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a scalar query and return the value cast to string or null.
+     * Return the first column of the first row cast to string, or null.
      *
      * @param array<int|string, mixed> $params
      */
@@ -105,7 +70,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a scalar query and return the value cast to bool.
+     * Return the first column of the first row cast to bool.
      *
      * @param array<int|string, mixed> $params
      */
@@ -115,7 +80,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a scalar query and return the value cast to float.
+     * Return the first column of the first row cast to float.
      *
      * @param array<int|string, mixed> $params
      */
@@ -125,8 +90,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a scalar aggregate query (e.g. COUNT, SUM) and return the
-     * first column of the first row cast to int.
+     * Return the first column of the first row of an aggregate query, cast to int.
      *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
@@ -137,7 +101,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a paginated SELECT query by applying LIMIT/OFFSET.
+     * Execute a SELECT limited to one page with LIMIT/OFFSET.
      *
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
@@ -148,7 +112,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a paginated SELECT query using a PaginationRequest.
+     * Execute a SELECT limited to the page described by a PaginationRequest.
      *
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
@@ -159,7 +123,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a sorted SELECT query.
+     * Execute a SELECT ordered by a SortRequest.
      *
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
@@ -170,7 +134,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a filtered SELECT query using FilterRequest column mapping.
+     * Execute a SELECT filtered through a FilterRequest and its column map.
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
@@ -182,7 +146,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a filtered + sorted SELECT query.
+     * Execute a filtered and sorted SELECT.
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
@@ -199,7 +163,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a sorted paginated SELECT query.
+     * Execute a sorted SELECT limited to one page.
      *
      * @param array<int|string, mixed> $params
      * @return \stdClass[]
@@ -210,7 +174,7 @@ abstract class Broker
     }
 
     /**
-     * Execute coordinated count + paginated data queries.
+     * Run a count query and a page query, returning the page with its totals.
      *
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
@@ -221,7 +185,7 @@ abstract class Broker
     }
 
     /**
-     * Execute coordinated count + paginated data queries with PaginationRequest.
+     * Same as paginate(), with the page described by a PaginationRequest.
      *
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
@@ -232,7 +196,7 @@ abstract class Broker
     }
 
     /**
-     * Execute coordinated count + sorted paginated data queries.
+     * Same as paginateWith(), with the data query sorted by a SortRequest.
      *
      * @param array<int|string, mixed> $params
      * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
@@ -248,7 +212,7 @@ abstract class Broker
     }
 
     /**
-     * Execute coordinated count + paginated data queries and return object envelope.
+     * Run a count query and a page query, returning a PaginatedResult.
      *
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
@@ -259,7 +223,7 @@ abstract class Broker
     }
 
     /**
-     * Execute coordinated count + paginated data queries and return object envelope.
+     * Same as paginateResult(), with the page described by a PaginationRequest.
      *
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
@@ -270,7 +234,7 @@ abstract class Broker
     }
 
     /**
-     * Execute paginated query and map each item through a transformer.
+     * Same as paginateResult(), mapping each item through $mapper.
      *
      * @param callable(\stdClass): mixed $mapper
      * @param array<int|string, mixed> $params
@@ -288,7 +252,7 @@ abstract class Broker
     }
 
     /**
-     * Execute paginated query using PaginationRequest and map each item.
+     * Same as paginateResultWith(), mapping each item through $mapper.
      *
      * @param callable(\stdClass): mixed $mapper
      * @param array<int|string, mixed> $params
@@ -305,7 +269,7 @@ abstract class Broker
     }
 
     /**
-     * Build pagination request from query params then execute typed pagination.
+     * Build the pagination request from query parameters, then paginate.
      *
      * @param array<string, mixed> $query
      * @param array<int|string, mixed> $params
@@ -330,7 +294,7 @@ abstract class Broker
     }
 
     /**
-     * Execute coordinated count + sorted paginated data queries and return typed envelope.
+     * Same as paginateResultWith(), with the data query sorted by a SortRequest.
      *
      * @param array<int|string, mixed> $params
      * @return PaginatedResult<\stdClass>
@@ -346,7 +310,7 @@ abstract class Broker
     }
 
     /**
-     * Execute filtered + sorted pagination using shared WHERE bindings.
+     * Same as paginateSortedResultWith(), with the WHERE clause filtered by a FilterRequest.
      *
      * @param array<string, string> $columnMap
      * @param array<int|string, mixed> $params
@@ -373,8 +337,7 @@ abstract class Broker
     }
 
     /**
-     * Execute an INSERT, UPDATE, or DELETE statement and return the number
-     * of affected rows.
+     * Execute an INSERT, UPDATE or DELETE and return the affected row count.
      *
      * @param array<int|string, mixed> $params
      * @throws DatabaseException on query failure.
@@ -385,7 +348,7 @@ abstract class Broker
     }
 
     /**
-     * Execute an INSERT and return affected row count.
+     * Execute an INSERT and return the affected row count.
      *
      * @param array<int|string, mixed> $params
      */
@@ -406,7 +369,7 @@ abstract class Broker
     }
 
     /**
-     * Execute an UPDATE and return affected row count.
+     * Execute an UPDATE and return the affected row count.
      *
      * @param array<int|string, mixed> $params
      */
@@ -416,7 +379,7 @@ abstract class Broker
     }
 
     /**
-     * Execute a DELETE and return affected row count.
+     * Execute a DELETE and return the affected row count.
      *
      * @param array<int|string, mixed> $params
      */
@@ -426,7 +389,7 @@ abstract class Broker
     }
 
     /**
-     * Execute an existence query and return true when at least one row matches.
+     * Return true when at least one row matches.
      *
      * @param array<int|string, mixed> $params
      */
@@ -436,8 +399,9 @@ abstract class Broker
     }
 
     /**
-     * Return the last generated ID of this broker's connection. Refused on PostgreSQL: use
-     * insertRowGetId('INSERT ... RETURNING id', ...) instead.
+     * Return the last generated ID of the connection, or false when the driver cannot report it.
+     *
+     * Refused on PostgreSQL: use insertRowGetId() with RETURNING instead.
      *
      * @throws DatabaseException on PostgreSQL, or when the driver cannot report the ID.
      */
@@ -447,8 +411,7 @@ abstract class Broker
     }
 
     /**
-     * Delegate to Database::transaction() so broker subclasses can open
-     * transactions without holding a reference to the Database directly.
+     * Run $work inside a transaction, delegating to Database::transaction().
      *
      * @template T
      * @param callable(Database): T $work
