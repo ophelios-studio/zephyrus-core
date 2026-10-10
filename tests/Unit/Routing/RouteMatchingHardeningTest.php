@@ -176,6 +176,16 @@ final class RouteMatchingHardeningTest extends TestCase
         Route::define('GET', $path, 'C@show');
     }
 
+    public function testFrameworkAttributeNameIsRefusedByTheNamePattern(): void
+    {
+        try {
+            Route::define('GET', '/x/{' . Request::ATTRIBUTE_UNMATCHED_ROUTE . '}', 'C@show');
+            self::fail('The framework attribute name must not register as a placeholder.');
+        } catch (RouteSignatureException $e) {
+            self::assertStringContainsString('Invalid route parameter name', $e->getMessage());
+        }
+    }
+
     public function testOrdinaryPlaceholderNamesStillRegister(): void
     {
         $route = Route::define('GET', '/users/{id}/posts/{postId}', 'C@show');

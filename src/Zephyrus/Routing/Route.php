@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
-use Zephyrus\Http\Request;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final readonly class Route
@@ -21,7 +20,7 @@ final readonly class Route
      * Parameter names the framework publishes itself, which a URL segment must not supply.
      *
      * "client_ip" is read by Request::clientIp() as a fallback source for the client address.
-     * Names under the "_zephyrus" prefix are refused too, Request::ATTRIBUTE_UNMATCHED_ROUTE included.
+     * Names under the "_zephyrus" prefix are refused too.
      */
     public const RESERVED_PARAMETER_NAMES = ['client_ip'];
 
@@ -84,7 +83,6 @@ final readonly class Route
             if (
                 in_array($name, self::RESERVED_PARAMETER_NAMES, true)
                 || str_starts_with($name, self::RESERVED_PARAMETER_PREFIX)
-                || $name === Request::ATTRIBUTE_UNMATCHED_ROUTE
             ) {
                 throw new RouteSignatureException(sprintf(
                     'Reserved route parameter name "%s" on route "%s": the framework publishes this '
