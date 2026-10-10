@@ -501,7 +501,7 @@ final class RequestTest extends TestCase
 
     public function testFromGlobalsTrustsIpv6CidrRange(): void
     {
-        // Mirrors the real deployment, whose internal network is fd00::/8.
+        // Mirrors Fly.io's private network, fdaa::/16.
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'       => 'GET',
