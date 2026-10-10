@@ -176,12 +176,14 @@ final class RouteCollectionTest extends TestCase
         $collection->match('GET', '/users/42');
     }
 
-    public function testWithLastRouteNameOnEmptyCollectionReturnsUnchanged(): void
+    public function testWithLastRouteNameOnEmptyCollectionThrowsNamingTheRoute(): void
     {
         $collection = new RouteCollection();
-        $result = $collection->withLastRouteName('orphan');
 
-        self::assertSame([], $result->all());
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('name("orphan") must follow a route: add one before naming it.');
+
+        $collection->withLastRouteName('orphan');
     }
 
     public function testFindByNameReturnsNullWhenNameNotFound(): void

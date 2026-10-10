@@ -156,6 +156,14 @@ final class RouterTest extends TestCase
         self::assertSame(['api', 'auth'], $routes[1]->middlewares);
     }
 
+    public function testNameBeforeAnyRouteIsRefused(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('name("health.show") must follow a route: add one before naming it.');
+
+        (new Router())->name('health.show');
+    }
+
     public function testNameAssignsNameToMostRecentlyRegisteredRoute(): void
     {
         $router = (new Router())

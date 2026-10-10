@@ -38,12 +38,14 @@ final class RouteCollection
     }
 
     /**
-     * Names the last added route; returns the collection unchanged when it is empty.
+     * Names the last added route.
+     *
+     * @throws \LogicException When the collection is empty.
      */
     public function withLastRouteName(string $name): self
     {
         if ($this->routes === []) {
-            return $this;
+            throw new \LogicException(sprintf('name("%s") must follow a route: add one before naming it.', $name));
         }
 
         $collection = new self($this->trailingSlashTolerant);

@@ -95,6 +95,11 @@ final class Router
         );
     }
 
+    /**
+     * Names the most recently added route.
+     *
+     * @throws \LogicException When no route has been added yet.
+     */
     public function name(string $routeName): self
     {
         return new self($this->routes->withLastRouteName($routeName), $this->attributeReader, $this->middlewareGroups);
