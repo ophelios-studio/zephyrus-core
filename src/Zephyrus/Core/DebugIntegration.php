@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use Closure;
+use ReflectionFunction;
+use SensitiveParameterValue;
 use Tracy\Debugger;
 use Tracy\Dumper;
 use Tracy\Dumper\Describer;
@@ -107,11 +109,11 @@ final class DebugIntegration
     ];
 
     /**
-     * Name patterns the Bluescreen scrubber masks.
+     * Name patterns the Bluescreen scrubber masks, and every renderer for a variable a closure captures.
      *
-     * dump() and the debug bar do not apply this pattern; only the exact names
-     * (SENSITIVE_KEYS, SENSITIVE_PROPERTIES and the session name) reach them.
-     * The Bluescreen skips int, float, bool and null values; exact names mask any value.
+     * Elsewhere dump() and the debug bar apply only the exact names (SENSITIVE_KEYS,
+     * SENSITIVE_PROPERTIES and the session name), and the Bluescreen skips int,
+     * float, bool and null values; exact names mask any value.
      */
     public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
@@ -177,7 +179,7 @@ final class DebugIntegration
     }
 
     /**
-     * Teach Tracy the framework's own secret-bearing key names and how to render config sections.
+     * Teach Tracy the framework's own secret-bearing key names and how to render config sections and closures.
      *
      * Both registries are written because they feed different renderers:
      * Debugger::$keysToHide reaches dump() and the debug bar, while the
@@ -196,6 +198,9 @@ final class DebugIntegration
                 $describer->addPropertyTo($value, (string) $key, $entry, Value::PropertyPublic, null, $section::class);
             }
         };
+
+        // @phpstan-ignore assign.propertyType (same as above)
+        Dumper::$objectExporters[Closure::class] = self::exposeClosure(...);
 
         $hidden = array_values(array_unique([
             ...self::SENSITIVE_KEYS,
@@ -224,6 +229,51 @@ final class DebugIntegration
 
         self::$frameworkScrubber = $frameworkScrubber;
         $blueScreen->scrubber = $frameworkScrubber;
+    }
+
+    /**
+     * Render a closure as Tracy does, but with its captured variables subject to masking.
+     *
+     * Tracy adds them as virtual properties, which it never checks for sensitivity.
+     */
+    private static function exposeClosure(Closure $closure, Value $value, Describer $describer): void
+    {
+        $reflection = new ReflectionFunction($closure);
+        if ($describer->location) {
+            $describer->addPropertyTo($value, 'file', $reflection->getFileName() . ':' . $reflection->getStartLine());
+        }
+
+        $parameters = [];
+        foreach ($reflection->getParameters() as $parameter) {
+            $parameters[] = '$' . $parameter->getName();
+        }
+
+        $value->value .= '(' . implode(', ', $parameters) . ')';
+
+        $boundThis = $reflection->getClosureThis();
+        if ($boundThis !== null) {
+            $describer->addPropertyTo($value, 'this', null, described: new Value(Value::TypeText, get_debug_type($boundThis)));
+        }
+
+        $bindings = $reflection->getStaticVariables();
+        if ($bindings === []) {
+            return;
+        }
+
+        $use = new Value(Value::TypeObject);
+        $use->depth = $value->depth + 1;
+        foreach ($bindings as $name => $binding) {
+            // Tracy masks a SensitiveParameterValue on the property path, whatever its key.
+            if (self::isSensitiveKey($name) || isset($describer->keysToHide[strtolower($name)])) {
+                $binding = new SensitiveParameterValue($binding);
+            }
+
+            $describer->addPropertyTo($use, '$' . $name, $binding, Value::PropertyPublic);
+        }
+
+        $use->value = '$' . implode(', $', array_keys($bindings));
+        $use->collapsed = true;
+        $describer->addPropertyTo($value, 'use', null, described: $use);
     }
 
     /**

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core;
 
+use Closure;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+use SensitiveParameterValue;
 use Tracy\Debugger;
+use Tracy\Dumper;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Data\DatabaseException;
@@ -463,6 +466,145 @@ final class DebugIntegrationTest extends TestCase
 
         self::assertFalse(str_contains($html, $appOnly), 'The application scrubber was ignored.');
         self::assertFalse(str_contains($html, $pattern), 'Setting an application scrubber dropped the pattern.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksVariablesClosuresCapture(): void
+    {
+        $secrets = self::capturedSecrets();
+        $count = random_int(100_000_000, 999_999_999);
+
+        $html = $this->renderBlueScreenWithArgument(self::capturingClosures($secrets, $count));
+
+        self::assertSecretsAbsent($html, $secrets);
+        self::assertStringContainsString((string) $count, $html, 'Control: an ordinary captured variable must still render.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksVariablesClosuresCapture(): void
+    {
+        $secrets = self::capturedSecrets();
+        $count = random_int(100_000_000, 999_999_999);
+        DebugIntegration::initialize(debug: true);
+
+        $html = Dumper::toHtml(self::capturingClosures($secrets, $count), [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText(self::capturingClosures($secrets, $count));
+
+        self::assertSecretsAbsent($html, $secrets);
+        self::assertSecretsAbsent($text, $secrets);
+        self::assertStringContainsString((string) $count, $html, 'Control: an ordinary captured variable must still render.');
+        self::assertStringContainsString((string) $count, $text, 'Control: an ordinary captured variable must still render.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksACapturedVariableTheApplicationAddedToKeysToHide(): void
+    {
+        $handle = self::marker('handle');
+        DebugIntegration::initialize(debug: true);
+        Debugger::$keysToHide[] = 'stripeHandle';
+
+        $stripeHandle = $handle;
+        $html = Dumper::toHtml(static fn (): string => $stripeHandle, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        self::assertStringContainsString('$stripeHandle', $html, 'Control: the binding name must still render.');
+        self::assertStringNotContainsString($handle, $html);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testCapturedClosuresAreMaskedAtEveryDepth(): void
+    {
+        $password = self::marker('password');
+        DebugIntegration::initialize(debug: true);
+
+        $inner = static function () use ($password): string {
+            return $password;
+        };
+        $outer = static fn (): string => $inner();
+
+        self::assertStringNotContainsString($password, Dumper::toText($outer));
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testABoundThisRendersAsItsClassNameOnly(): void
+    {
+        $holder = new class (self::marker('credential')) {
+            public function __construct(public string $value)
+            {
+            }
+
+            public function reader(): Closure
+            {
+                return fn (): string => $this->value;
+            }
+        };
+        DebugIntegration::initialize(debug: true);
+
+        $text = Dumper::toText($holder->reader());
+
+        self::assertStringContainsString('this: ' . get_debug_type($holder), $text);
+        self::assertStringNotContainsString($holder->value, $text);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function capturedSecrets(): array
+    {
+        return [
+            'use' => self::marker('password'),
+            'arrow' => self::marker('apikey'),
+            'static' => self::marker('token'),
+            'sensitive' => self::marker('sensitive'),
+            'pattern' => self::marker('webhook'),
+        ];
+    }
+
+    /**
+     * @param array<string, string> $secrets
+     * @return array<string, Closure>
+     */
+    private static function capturingClosures(array $secrets, int $count): array
+    {
+        $password = $secrets['use'];
+        $apiKey = $secrets['arrow'];
+        $wrapped = new SensitiveParameterValue($secrets['sensitive']);
+        $webhookSecret = $secrets['pattern'];
+
+        $withStatic = static function (string $value): void {
+            static $token;
+            $token = $value;
+        };
+        $withStatic($secrets['static']);
+
+        return [
+            'use' => static function () use ($password): string {
+                return $password;
+            },
+            'arrow' => static fn (): string => $apiKey,
+            'static' => $withStatic,
+            'sensitive' => static function () use ($wrapped): SensitiveParameterValue {
+                return $wrapped;
+            },
+            'pattern' => static fn (): string => $webhookSecret,
+            'ordinary' => static function () use ($count): int {
+                return $count;
+            },
+        ];
+    }
+
+    /**
+     * @param array<string, string> $secrets
+     */
+    private static function assertSecretsAbsent(string $output, array $secrets): void
+    {
+        foreach ($secrets as $case => $secret) {
+            self::assertStringNotContainsString($secret, $output, sprintf('The "%s" closure rendered its captured secret.', $case));
+        }
     }
 
     /**
