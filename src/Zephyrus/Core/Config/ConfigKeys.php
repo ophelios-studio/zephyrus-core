@@ -36,11 +36,20 @@ final readonly class ConfigKeys
      *
      * @param array<array-key, mixed>     $values
      * @param array<string, list<string>> $spellings Property => accepted keys, preferred first.
+     * @param list<string>                $unlisted  Properties accepted but left out of the keys a refusal lists.
      * @throws ConfigurationException when a key is not accepted, or two keys of one property are written.
      */
-    public static function read(string $section, #[\SensitiveParameter] array $values, array $spellings): self
-    {
-        self::assertKnown($section, $values, $spellings);
+    public static function read(
+        string $section,
+        #[\SensitiveParameter] array $values,
+        array $spellings,
+        array $unlisted = [],
+    ): self {
+        $listed = array_values(array_map(
+            static fn (array $paths): string => $paths[0],
+            array_diff_key($spellings, array_flip($unlisted)),
+        ));
+        self::assertKnown($section, $values, $spellings, $listed);
 
         $written = [];
         foreach ($spellings as $property => $paths) {
@@ -111,13 +120,17 @@ final readonly class ConfigKeys
     /**
      * @param array<array-key, mixed>     $values
      * @param array<string, list<string>> $spellings
+     * @param list<string>                $listed    The keys a refusal lists.
      * @throws ConfigurationException when a key is not accepted.
      */
-    private static function assertKnown(string $section, #[\SensitiveParameter] array $values, array $spellings): void
-    {
+    private static function assertKnown(
+        string $section,
+        #[\SensitiveParameter] array $values,
+        array $spellings,
+        array $listed,
+    ): void {
         $levels = self::levels($spellings);
         $mappings = array_keys(array_diff_key($levels, ['' => true]));
-        $preferred = array_map(static fn (array $paths): string => $paths[0], array_values($spellings));
 
         foreach ($values as $key => $value) {
             $key = (string) $key;
@@ -126,7 +139,7 @@ final readonly class ConfigKeys
                     $path = $key . '.' . $nestedKey;
                     if (!isset($levels[$key][$path])) {
                         $suggestion = self::closest($path, array_keys($levels[$key]));
-                        throw ConfigurationException::unknownKey($section, $path, $suggestion, $preferred);
+                        throw ConfigurationException::unknownKey($section, $path, $suggestion, $listed);
                     }
                 }
 
@@ -136,7 +149,7 @@ final readonly class ConfigKeys
             if (!isset($levels[''][$key])) {
                 // A misspelled mapping name is compared with the section's own keys.
                 $suggestion = self::closest($key, [...array_keys($levels[''] ?? []), ...$mappings]);
-                throw ConfigurationException::unknownKey($section, $key, $suggestion, $preferred);
+                throw ConfigurationException::unknownKey($section, $key, $suggestion, $listed);
             }
         }
     }

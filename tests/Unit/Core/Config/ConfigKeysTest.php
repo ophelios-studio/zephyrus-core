@@ -32,6 +32,34 @@ final class ConfigKeysTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    public function testAnUnlistedPropertyIsAcceptedAndSuggestedButLeftOutOfTheList(): void
+    {
+        ConfigKeys::read('example', ['host' => 'db.example.com'], self::SPELLINGS, unlisted: ['host']);
+
+        try {
+            ConfigKeys::read('example', ['timeout' => 30], self::SPELLINGS, unlisted: ['host']);
+
+            self::fail('An unknown key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'example' field 'timeout' is an unknown key: the accepted keys are "
+                    . 'forceHttps, csrf.enabled, password.',
+                $exception->getMessage(),
+            );
+        }
+
+        try {
+            ConfigKeys::read('example', ['hots' => 'x'], self::SPELLINGS, unlisted: ['host']);
+
+            self::fail('A misspelled key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'example' field 'hots' is an unknown key: did you mean \"host\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testAMisspelledKeyIsRefusedWithTheClosestSpelling(): void
     {
         try {

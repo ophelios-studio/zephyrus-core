@@ -142,7 +142,7 @@ final readonly class SecurityConfig
      */
     public static function fromArray(array $values): self
     {
-        $keys = ConfigKeys::read('security', $values, self::SPELLINGS);
+        $keys = ConfigKeys::read('security', $values, self::SPELLINGS, unlisted: ['csrfAutoHtml']);
 
         $headers = $keys->value('headers');
         if ($headers !== null && !is_array($headers)) {

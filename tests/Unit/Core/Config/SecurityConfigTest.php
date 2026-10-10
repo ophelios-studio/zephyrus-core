@@ -1005,7 +1005,7 @@ final class SecurityConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertSame(
                 "Configuration section 'security' field 'timeout' is an unknown key: the accepted keys are "
-                . 'forceHttps, csrf.enabled, csrf.autoHtml, csrf.exceptions, allowedHosts, maxBodySize, '
+                . 'forceHttps, csrf.enabled, csrf.exceptions, allowedHosts, maxBodySize, '
                 . 'trustedProxies, trustedHeaders, encryption.key, headers.',
                 $exception->getMessage(),
             );

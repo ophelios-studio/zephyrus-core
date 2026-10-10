@@ -131,6 +131,21 @@ final class CsrfConfigTest extends TestCase
         }
     }
 
+    public function testAnUnknownKeyNearNoSettingListsTheSettingsThatAcceptMoreThanFalse(): void
+    {
+        try {
+            CsrfConfig::fromArray(['timeout' => 5]);
+
+            self::fail('An unknown key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'csrf' field 'timeout' is an unknown key: the accepted keys are enabled, "
+                    . 'bodyField, headerName, excludedPathPatterns.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testFromArrayRefusesTwoSpellingsOfOneSetting(): void
     {
         $this->expectException(ConfigurationException::class);

@@ -146,7 +146,7 @@ final class CsrfConfig
      */
     public static function fromArray(array $config): self
     {
-        $keys = ConfigKeys::read('csrf', $config, self::SPELLINGS);
+        $keys = ConfigKeys::read('csrf', $config, self::SPELLINGS, unlisted: ['injectToken']);
 
         return new self(
             enabled: $keys->boolean('enabled', true),
