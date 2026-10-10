@@ -105,10 +105,6 @@ final class FormatterInputTest extends TestCase
         self::assertNull(FormatterInput::groupingSeparatorRefusal($separator));
     }
 
-    public function testAcceptsEmptyToTurnGroupingOff(): void
-    {
-        self::assertNull(FormatterInput::groupingSeparatorRefusal(''));
-    }
 
     #[DataProvider('refusedGroupingSeparators')]
     public function testRefusesAnythingOutsideTheList(string $separator): void

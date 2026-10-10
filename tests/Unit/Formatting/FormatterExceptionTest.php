@@ -41,7 +41,7 @@ final class FormatterExceptionTest extends TestCase
     {
         $message = FormatterException::reservedGroupingSeparator('fr_CA')->getMessage();
 
-        self::assertStringContainsString('minus sign of locale fr_CA', $message);
+        self::assertSame('Invalid grouping separator: it is the decimal or monetary decimal sign of locale fr_CA.', $message);
     }
 
     public function testInvalidCurrencyCodeStatesTheExpectedShape(): void

@@ -28,7 +28,7 @@ final class FormatterException extends ZephyrusRuntimeException
     public static function reservedGroupingSeparator(string $locale): self
     {
         return new self(sprintf(
-            'Invalid grouping separator: it is the decimal, monetary decimal or minus sign of locale %s.',
+            'Invalid grouping separator: it is the decimal or monetary decimal sign of locale %s.',
             $locale,
         ));
     }

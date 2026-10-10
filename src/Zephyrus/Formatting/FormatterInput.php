@@ -24,15 +24,11 @@ final class FormatterInput
     private const array GROUPING_SEPARATORS = [',', '.', "'", "\u{2019}", ' ', "\u{00A0}", "\u{202F}", "\u{2009}"];
 
     /**
-     * Returns why the grouping separator is refused, or null when it is accepted.
+     * Returns why the grouping separator is refused, or null when it is accepted. Callers handle '' before asking.
      */
     public static function groupingSeparatorRefusal(string $separator): ?string
     {
-        if ($separator === '' || in_array($separator, self::GROUPING_SEPARATORS, true)) {
-            return null;
-        }
-
-        return self::SEPARATOR_RULE;
+        return in_array($separator, self::GROUPING_SEPARATORS, true) ? null : self::SEPARATOR_RULE;
     }
 
     /**

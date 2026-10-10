@@ -842,11 +842,6 @@ final class FormatterTest extends TestCase
         new Formatter('en_US', groupingSeparator: 'ABCDE');
     }
 
-    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMinusSign(): void
-    {
-        $this->expectException(FormatterException::class);
-        new Formatter('en_US', groupingSeparator: '-');
-    }
 
     public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMonetarySeparator(): void
     {

@@ -83,7 +83,7 @@ final class Formatter
      * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and ordinal().
      *                                             Null keeps the locale's ICU default, '' disables grouping. Otherwise
      *                                             one of `,` `.` `'` U+2019, a space, U+00A0, U+202F or U+2009, and not
-     *                                             the locale's decimal, monetary decimal or minus sign.
+     *                                             the locale's decimal or monetary decimal sign.
      *                                             In a right-to-left locale, or inside right-to-left text, only `,` `.`
      *                                             U+00A0 and U+202F keep the groups in order; a space, U+2009, `'` or
      *                                             U+2019 reverses them.
@@ -524,7 +524,7 @@ final class Formatter
     }
 
     /**
-     * Rejects a separator refused by FormatterInput, or equal to the locale's decimal, monetary decimal or minus sign.
+     * Rejects a separator refused by FormatterInput, or equal to the locale's decimal or monetary decimal sign.
      *
      * @throws FormatterException
      */
@@ -576,7 +576,6 @@ final class Formatter
         return [
             $this->localeSymbol(NumberFormatter::DECIMAL_SEPARATOR_SYMBOL),
             $this->localeSymbol(NumberFormatter::MONETARY_SEPARATOR_SYMBOL),
-            $this->localeSymbol(NumberFormatter::MINUS_SIGN_SYMBOL),
         ];
     }
 
