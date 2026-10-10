@@ -107,9 +107,10 @@ final class Container implements ContainerInterface
     }
 
     /**
-     * Shape a string must have before has() passes it to the autoloader: a fully-qualified class name.
+     * Shape a string must have before it reaches the autoloader: a fully-qualified class name.
+     * Guards has(), get() and make().
      */
-    private const string CLASS_NAME_PATTERN = '/^\\\\?[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(\\\\[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*)*$/';
+    private const string CLASS_NAME_PATTERN = '/^\\\\?[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(\\\\[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*)*$/D';
 
     /**
      * Return true when $id has a binding, a cached value or a loadable class.
@@ -127,15 +128,16 @@ final class Container implements ContainerInterface
             return true;
         }
 
-        if (class_exists($id, autoload: false)) {
-            return true;
-        }
+        return $this->isLoadableClass($id);
+    }
 
-        if (preg_match(self::CLASS_NAME_PATTERN, $id) !== 1) {
-            return false;
-        }
-
-        return class_exists($id);
+    /**
+     * Return true when $id is an already-loaded class or a well-formed name that autoloads.
+     */
+    private function isLoadableClass(string $id): bool
+    {
+        return class_exists($id, autoload: false)
+            || (preg_match(self::CLASS_NAME_PATTERN, $id) === 1 && class_exists($id));
     }
 
     /**
@@ -172,7 +174,7 @@ final class Container implements ContainerInterface
      */
     private function autoWire(string $className): object
     {
-        if (preg_match(self::CLASS_NAME_PATTERN, $className) !== 1 || !class_exists($className)) {
+        if (!$this->isLoadableClass($className)) {
             throw new NotFoundException(
                 "No binding found and [{$className}] is not a resolvable class."
             );

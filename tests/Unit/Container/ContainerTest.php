@@ -179,6 +179,16 @@ final class ContainerTest extends TestCase
         self::assertTrue($this->container->has(SimpleService::class));
     }
 
+    public function testLoadedAnonymousClassIsHasAndResolvableThroughGetAndMake(): void
+    {
+        $instance = new class {};
+        $id = $instance::class;
+
+        self::assertTrue($this->container->has($id));
+        self::assertInstanceOf($id, $this->container->get($id));
+        self::assertInstanceOf($id, $this->container->make($id));
+    }
+
     public function testHasReturnsFalseForUnknownIdentifier(): void
     {
         self::assertFalse($this->container->has('Zephyrus\NoSuchClass'));
