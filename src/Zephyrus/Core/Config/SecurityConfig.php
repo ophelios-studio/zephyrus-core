@@ -65,6 +65,28 @@ final readonly class SecurityConfig
     private const int SHOWN_VALUE_MAX_LENGTH = 64;
 
     /**
+     * The spellings fromArray() reads each setting from, in the order it prefers
+     * them: [section, key], where section 'values' is the top level.
+     */
+    private const array SPELLINGS = [
+        'forceHttps'     => [['values', 'forceHttps'], ['values', 'force_https']],
+        'csrfEnabled'    => [
+            ['csrf', 'enabled'], ['csrf', 'csrf_enabled'], ['values', 'csrfEnabled'], ['values', 'csrf_enabled'],
+        ],
+        'csrfAutoHtml'   => [
+            ['csrf', 'autoHtml'], ['csrf', 'auto_html'], ['values', 'csrfAutoHtml'], ['values', 'csrf_auto_html'],
+        ],
+        'csrfExceptions' => [
+            ['csrf', 'exceptions'], ['csrf', 'csrf_exceptions'], ['values', 'csrfExceptions'], ['values', 'csrf_exceptions'],
+        ],
+        'allowedHosts'   => [['values', 'allowedHosts'], ['values', 'allowed_hosts']],
+        'maxBodySize'    => [['values', 'maxBodySize'], ['values', 'max_body_size']],
+        'trustedProxies' => [['values', 'trustedProxies'], ['values', 'trusted_proxies']],
+        'trustedHeaders' => [['values', 'trustedHeaders'], ['values', 'trusted_headers']],
+        'encryptionKey'  => [['encryption', 'key'], ['values', 'encryptionKey'], ['values', 'encryption_key']],
+    ];
+
+    /**
      * @param bool     $forceHttps      Redirect plain-HTTP requests to HTTPS.
      * @param bool     $csrfEnabled     Enable CSRF token verification on mutating requests.
      * @param bool     $csrfAutoHtml    Pass false: fromArray() refuses true, and the constructor ignores it.
@@ -129,49 +151,24 @@ final readonly class SecurityConfig
      */
     public static function fromArray(array $values): self
     {
-        $forceHttps = (bool) ($values['forceHttps'] ?? $values['force_https'] ?? false);
-
-        // CSRF: nested 'csrf' section takes precedence over flat keys
         $csrf = isset($values['csrf']) && is_array($values['csrf']) ? $values['csrf'] : [];
-        $csrfEnabled = (bool) (
-            $csrf['enabled']
-            ?? $csrf['csrf_enabled']
-            ?? $values['csrfEnabled']
-            ?? $values['csrf_enabled']
-            ?? true
-        );
-        $csrfAutoHtml = (bool) (
-            $csrf['autoHtml']
-            ?? $csrf['auto_html']
-            ?? $values['csrfAutoHtml']
-            ?? $values['csrf_auto_html']
-            ?? false
-        );
-        $csrfExceptions = (array) (
-            $csrf['exceptions']
-            ?? $csrf['csrf_exceptions']
-            ?? $values['csrfExceptions']
-            ?? $values['csrf_exceptions']
-            ?? []
-        );
+        $encryption = isset($values['encryption']) && is_array($values['encryption']) ? $values['encryption'] : [];
+        $sections = ['values' => $values, 'csrf' => $csrf, 'encryption' => $encryption];
 
-        $allowedHosts = (array) ($values['allowedHosts'] ?? $values['allowed_hosts'] ?? []);
-        $maxBodySize = (int) ($values['maxBodySize'] ?? $values['max_body_size'] ?? 2_097_152);
-        $trustedProxies = (array) ($values['trustedProxies'] ?? $values['trusted_proxies'] ?? []);
+        $forceHttps = (bool) (self::read('forceHttps', $sections) ?? false);
+        $csrfEnabled = (bool) (self::read('csrfEnabled', $sections) ?? true);
+        $autoHtml = self::findWritten('csrfAutoHtml', $sections);
+        $csrfAutoHtml = (bool) ($autoHtml[1] ?? false);
+        $csrfExceptions = (array) (self::read('csrfExceptions', $sections) ?? []);
+
+        $allowedHosts = (array) (self::read('allowedHosts', $sections) ?? []);
+        $maxBodySize = (int) (self::read('maxBodySize', $sections) ?? 2_097_152);
+        $trustedProxies = (array) (self::read('trustedProxies', $sections) ?? []);
         // An ABSENT key takes the default set; an explicitly empty list is a
         // valid, maximally strict setting and must not be confused with it.
-        $trustedHeaders = (array) (
-            $values['trustedHeaders']
-            ?? $values['trusted_headers']
-            ?? Request::TRUSTED_HEADERS_DEFAULT
-        );
+        $trustedHeaders = (array) (self::read('trustedHeaders', $sections) ?? Request::TRUSTED_HEADERS_DEFAULT);
 
-        // Encryption: nested 'encryption' section takes precedence
-        $encryption = isset($values['encryption']) && is_array($values['encryption']) ? $values['encryption'] : [];
-        $encryptionKey = $encryption['key']
-            ?? $values['encryptionKey']
-            ?? $values['encryption_key']
-            ?? null;
+        $encryptionKey = self::read('encryptionKey', $sections);
         if (is_string($encryptionKey)) {
             $encryptionKey = trim($encryptionKey);
             if ($encryptionKey === '') {
@@ -181,10 +178,8 @@ final readonly class SecurityConfig
             $encryptionKey = null;
         }
 
-        $sections = ['values' => $values, 'csrf' => $csrf, 'encryption' => $encryption];
-
-        if ($csrfAutoHtml) {
-            [$written, $rawValue] = self::writtenSpelling('csrfAutoHtml', $sections);
+        if ($autoHtml !== null && $csrfAutoHtml) {
+            [$written, $rawValue] = $autoHtml;
 
             throw ConfigurationException::invalidValue(
                 'security',
@@ -276,28 +271,6 @@ final readonly class SecurityConfig
     }
 
     /**
-     * The spellings fromArray() reads each setting from, in the order it prefers
-     * them: [section, key], where section 'values' is the top level.
-     */
-    private const SPELLINGS = [
-        'forceHttps'     => [['values', 'forceHttps'], ['values', 'force_https']],
-        'csrfEnabled'    => [
-            ['csrf', 'enabled'], ['csrf', 'csrf_enabled'], ['values', 'csrfEnabled'], ['values', 'csrf_enabled'],
-        ],
-        'csrfAutoHtml'   => [
-            ['csrf', 'autoHtml'], ['csrf', 'auto_html'], ['values', 'csrfAutoHtml'], ['values', 'csrf_auto_html'],
-        ],
-        'csrfExceptions' => [
-            ['csrf', 'exceptions'], ['csrf', 'csrf_exceptions'], ['values', 'csrfExceptions'], ['values', 'csrf_exceptions'],
-        ],
-        'allowedHosts'   => [['values', 'allowedHosts'], ['values', 'allowed_hosts']],
-        'maxBodySize'    => [['values', 'maxBodySize'], ['values', 'max_body_size']],
-        'trustedProxies' => [['values', 'trustedProxies'], ['values', 'trusted_proxies']],
-        'trustedHeaders' => [['values', 'trustedHeaders'], ['values', 'trusted_headers']],
-        'encryptionKey'  => [['encryption', 'key'], ['values', 'encryptionKey'], ['values', 'encryption_key']],
-    ];
-
-    /**
      * The canonical names the source array actually mentioned, under any of the
      * aliases fromArray() accepts. See isDeclared().
      *
@@ -321,13 +294,23 @@ final readonly class SecurityConfig
     }
 
     /**
+     * The value fromArray() uses for a setting, or null when no spelling wrote it.
+     *
+     * @param array<string, array<string, mixed>> $sections
+     */
+    private static function read(string $canonical, array $sections): mixed
+    {
+        return self::findWritten($canonical, $sections)[1] ?? null;
+    }
+
+    /**
      * The spelling that supplied the value fromArray() used, as a path such as
      * "csrf.auto_html", with its raw value. A null spelling is skipped, as fromArray() does.
      *
      * @param array<string, array<string, mixed>> $sections
-     * @return array{string, mixed}
+     * @return array{string, mixed}|null
      */
-    private static function writtenSpelling(string $canonical, array $sections): array
+    private static function findWritten(string $canonical, array $sections): ?array
     {
         foreach (self::SPELLINGS[$canonical] as [$section, $key]) {
             $value = $sections[$section][$key] ?? null;
@@ -337,7 +320,7 @@ final readonly class SecurityConfig
             }
         }
 
-        return [$canonical, null];
+        return null;
     }
 
     private static function rawValueForMessage(mixed $value): string
