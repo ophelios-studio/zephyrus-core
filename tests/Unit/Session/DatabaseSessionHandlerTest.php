@@ -1091,16 +1091,59 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertSame(1, $calls);
     }
 
-    public function testClosureReturningAnotherTypeIsRefused(): void
+    public function testClosureReturningAnotherTypeNamesTheTypeItReturned(): void
     {
-        $handler = new DatabaseSessionHandler(fn () => 'not a database', 'session'); // @phpstan-ignore argument.type
+        $handler = new DatabaseSessionHandler(fn () => null, 'core.session'); // @phpstan-ignore argument.type
 
         try {
             $handler->gc(1440);
             self::fail('Expected a SessionException.');
         } catch (SessionException $exception) {
-            self::assertSame('Session database for table "session" could not be resolved.', $exception->getMessage());
+            self::assertSame(
+                'Session database for table "core.session" could not be resolved: the Closure returned null instead of a Zephyrus\\Data\\Database.',
+                $exception->getMessage(),
+            );
+            self::assertNull($exception->getPrevious());
         }
+    }
+
+    public function testEveryCallbackThatNeedsTheDatabaseThrowsTheSameFailureAfterAFailedRead(): void
+    {
+        $failure = new \RuntimeException('connection refused');
+        $handler = new DatabaseSessionHandler(function () use ($failure): Database {
+            throw $failure;
+        }, 'core.session');
+        $id = '43e880c2447ca10d3092d51d258c050c';
+        $first = null;
+
+        try {
+            $handler->read($id);
+            self::fail('Expected a SessionException.');
+        } catch (SessionException $exception) {
+            $first = $exception;
+        }
+
+        $callbacks = [
+            'write' => fn () => $handler->write($id, 'foo=bar'),
+            'updateTimestamp' => fn () => $handler->updateTimestamp($id, 'foo=bar'),
+            'destroy' => fn () => $handler->destroy($id),
+            'gc' => fn () => $handler->gc(1440),
+            'validateId' => fn () => $handler->validateId($id),
+            'read' => fn () => $handler->read($id),
+        ];
+        $warnings = $this->collectWarnings(function () use ($callbacks, $first, $failure): void {
+            foreach ($callbacks as $name => $callback) {
+                try {
+                    $callback();
+                    self::fail("$name did not throw.");
+                } catch (SessionException $exception) {
+                    self::assertSame($first, $exception, $name);
+                    self::assertSame($failure, $exception->getPrevious(), $name);
+                }
+            }
+        });
+
+        self::assertSame([], $warnings);
     }
 
     public function testCreatedSessionWithoutDataStoresNoRow(): void

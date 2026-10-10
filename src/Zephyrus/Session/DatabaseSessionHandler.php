@@ -168,7 +168,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         if ($this->unavailable !== null) {
-            throw SessionException::databaseUnavailable($this->table, $this->unavailable->getPrevious());
+            throw $this->unavailable;
         }
 
         if ($this->database instanceof Database) {
@@ -183,7 +183,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         if (!$database instanceof Database) {
-            throw $this->unavailable = SessionException::databaseUnavailable($this->table);
+            throw $this->unavailable = SessionException::databaseNotReturned($this->table, get_debug_type($database));
         }
 
         return $this->resolved = $database;
@@ -374,6 +374,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             return false;
         }
 
+        $this->database();
         $state = $this->idStates[$id] ?? null;
 
         try {
@@ -493,21 +494,22 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      */
     private function waitForLock(array $key): bool
     {
-        $nested = $this->database()->inTransaction();
+        $database = $this->database();
+        $nested = $database->inTransaction();
 
         try {
             if ($nested) {
-                $this->database()->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $database->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
             } else {
-                $this->database()->pdo()->beginTransaction();
+                $database->pdo()->beginTransaction();
             }
         } catch (Throwable) {
             return false;
         }
 
         try {
-            $this->database()->query("SELECT set_config('lock_timeout', ?, true)", [self::LOCK_WAIT_SECONDS . 's']);
-            $this->database()->query('SELECT pg_advisory_lock(?, ?)', $key);
+            $database->query("SELECT set_config('lock_timeout', ?, true)", [self::LOCK_WAIT_SECONDS . 's']);
+            $database->query('SELECT pg_advisory_lock(?, ?)', $key);
             $granted = true;
         } catch (Throwable) {
             $granted = false;
@@ -515,10 +517,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         try {
             if ($nested) {
-                $this->database()->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
-                $this->database()->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $database->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $database->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
             } else {
-                $this->database()->pdo()->rollBack();
+                $database->pdo()->rollBack();
             }
         } catch (Throwable) {
             // Only a lost connection gets here.

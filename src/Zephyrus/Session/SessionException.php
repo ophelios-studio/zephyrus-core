@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Session;
 
+use Zephyrus\Data\Database;
 use Zephyrus\Exceptions\ZephyrusException;
 
 /**
@@ -74,16 +75,23 @@ final class SessionException extends ZephyrusException
         ));
     }
 
-    public static function databaseUnavailable(string $table, ?\Throwable $previous = null): self
+    public static function databaseUnavailable(string $table, \Throwable $previous): self
     {
         return new self(
-            sprintf(
-                'Session database for table %s could not be resolved.',
-                (string) json_encode($table, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
-            ),
+            sprintf('Session database for table %s could not be resolved.', self::quoteKey($table)),
             0,
             $previous,
         );
+    }
+
+    public static function databaseNotReturned(string $table, string $type): self
+    {
+        return new self(sprintf(
+            'Session database for table %s could not be resolved: the Closure returned %s instead of a %s.',
+            self::quoteKey($table),
+            $type,
+            Database::class,
+        ));
     }
 
     public static function noActiveSession(string $operation): self
