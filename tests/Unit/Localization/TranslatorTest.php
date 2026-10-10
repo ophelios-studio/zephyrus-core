@@ -96,7 +96,7 @@ final class TranslatorTest extends TestCase
     }
 
     // -----------------------------------------------------------------
-    // number pipe — grouping separators
+    // number pipe
     // -----------------------------------------------------------------
 
     public function testNumberPipeWithThousandsSeparator(): void
@@ -113,7 +113,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // Existing behaviour: number:2 uses "." decimal, no thousands sep.
         self::assertSame(
             'Invoice total: 12.35',
             $translator->trans('messages.pipe_number', ['total' => 12.3456]),
@@ -124,7 +123,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // Inline value: use direct parameter without a catalog key.
         self::assertSame('n/a', $translator->trans('{v|number:2}', ['v' => 'n/a']));
     }
 
@@ -136,7 +134,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // "Hello" (5 chars) ≤ 8 → untouched
         self::assertSame('Title: Hello', $translator->trans('messages.pipe_truncate', ['title' => 'Hello']));
     }
 
@@ -144,7 +141,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // "12345678" (8 chars) == limit → untouched
         self::assertSame('Tag: Hello', $translator->trans('messages.pipe_truncate_exact', ['tag' => 'Hello']));
     }
 
@@ -152,7 +148,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // "Long title here" > 8 chars → "Long tit…"
         self::assertSame('Title: Long tit…', $translator->trans('messages.pipe_truncate', ['title' => 'Long title here']));
     }
 
@@ -167,7 +162,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // "Hello World" (11 chars) > 5 → "Hello" + "…" = "Hello…", then upper → "HELLO…"
         self::assertSame('HELLO…', $translator->trans('messages.pipe_chained_truncate_upper', ['title' => 'Hello World']));
     }
 
@@ -257,7 +251,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // plural:duck → "duck" for 1, "ducks" for 2
         self::assertSame('1 duck', $translator->trans('messages.pipe_plural_auto', ['count' => 1]));
         self::assertSame('3 ducks', $translator->trans('messages.pipe_plural_auto', ['count' => 3]));
     }
@@ -288,7 +281,6 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // ltrim removes only leading whitespace; trailing spaces are preserved.
         self::assertSame('hello   ', $translator->trans('{v|ltrim}', ['v' => '   hello   ']));
     }
 
@@ -296,17 +288,15 @@ final class TranslatorTest extends TestCase
     {
         $translator = $this->buildTranslator();
 
-        // rtrim removes only trailing whitespace; leading spaces are preserved.
         self::assertSame('   hello', $translator->trans('{v|rtrim}', ['v' => '   hello   ']));
     }
 
     // -----------------------------------------------------------------
-    // resolveLocaleChain — regional default locale
+    // resolveLocaleChain: regional default locale
     // -----------------------------------------------------------------
 
     public function testLocaleChainWithRegionalDefaultLocaleFallsThroughToRegionalDefault(): void
     {
-        // defaultLocale 'fr-CA': chain for 'de' → ['de', 'fr-CA', 'fr']
         $loader = new class implements \Zephyrus\Localization\LocaleLoaderInterface {
             public function load(string $locale): array
             {
@@ -320,7 +310,6 @@ final class TranslatorTest extends TestCase
 
         $translator = new Translator($loader, 'fr-CA');
 
-        // 'de' has no catalog → falls through to 'fr-CA' (regional default)
         self::assertSame('Bonjour (CA)', $translator->trans('greeting', locale: 'de'));
     }
 
@@ -343,8 +332,7 @@ final class TranslatorTest extends TestCase
 
     public function testLocaleChainWithRegionalDefaultLocaleDeduplicatesBaseLanguage(): void
     {
-        // defaultLocale 'fr-CA': chain for 'fr' → ['fr', 'fr-CA'] (base already in chain so 'fr'
-        // is not appended again from the defaultBase extraction).
+        // 'fr' is already in the chain, so the base language is not appended twice.
         $loader = new class implements \Zephyrus\Localization\LocaleLoaderInterface {
             public function load(string $locale): array
             {
@@ -358,36 +346,34 @@ final class TranslatorTest extends TestCase
 
         $translator = new Translator($loader, 'fr-CA');
 
-        // Requesting 'fr' directly hits the 'fr' catalog first
         self::assertSame('Bonjour', $translator->trans('greeting', locale: 'fr'));
     }
 
     // -----------------------------------------------------------------
-    // applyTruncate — zero-length guard
+    // applyTruncate: zero-length guard
     // -----------------------------------------------------------------
 
     public function testTruncatePipeZeroLengthReturnsUnchanged(): void
     {
         $translator = $this->buildTranslator();
 
-        // truncate:0 → length ≤ 0 → value returned untouched
         self::assertSame('hello', $translator->trans('{v|truncate:0}', ['v' => 'hello']));
     }
 
     // -----------------------------------------------------------------
-    // applyPipes — empty segment guard (trailing pipe)
+    // applyPipes: empty segment guard (trailing pipe)
     // -----------------------------------------------------------------
 
     public function testEmptyPipeSegmentFromTrailingPipeIsIgnored(): void
     {
         $translator = $this->buildTranslator();
 
-        // trailing '|' splits into ['upper', ''] — the empty segment must be skipped
+        // A trailing '|' yields an empty segment, which must be skipped.
         self::assertSame('HELLO', $translator->trans('{v|upper|}', ['v' => 'hello']));
     }
 
     // -----------------------------------------------------------------
-    // applyPipes — Formatter bridge (custom formatters)
+    // applyPipes: Formatter bridge (custom formatters)
     // -----------------------------------------------------------------
 
     public function testUnknownPipeDelegatesToFormatterBuiltInMethod(): void

@@ -10,24 +10,9 @@ use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\Config\ConfigurationException;
 
 /**
- * A configuration value the framework cannot read must stop the boot, not
- * resolve to the unsafe answer.
+ * A configuration value the framework cannot read must stop the boot, not resolve to the unsafe answer.
  *
- * getBool() called filter_var() WITHOUT FILTER_NULL_ON_FAILURE, so every value
- * the filter did not recognise became false AND the caller's default was
- * thrown away on the way past. The section that most needed this was the one
- * most likely to be typed by hand:
- *
- *   requireMfa: enabled  ->  getBool('requireMfa', default: true) === false
- *   requireMfa: oui      ->  false
- *   requireMfa: vrai     ->  false
- *   maxAttempts: unlimited -> getInt('maxAttempts', 5) === 0
- *
- * A protection an operator explicitly wrote down turned itself off, silently,
- * while the config file still read as if it were on. The neighbouring parsers
- * (SessionConfig, SecurityConfig) use a plain (bool) cast and fail CLOSED, so
- * the subsystem carried two boolean readers with opposite failure directions,
- * and the one advertised to consumers was the one that failed open.
+ * An unrecognised boolean must throw rather than become false or silently drop the caller's default.
  */
 final class ConfigSectionStrictValuesTest extends TestCase
 {
@@ -69,8 +54,7 @@ final class ConfigSectionStrictValuesTest extends TestCase
     }
 
     /**
-     * The exact reproduction: the caller asked for true, the file said
-     * something unrecognised, and the answer used to be false.
+     * An unrecognised value must throw even when the default is true, never resolve to a value.
      */
     public function testTheCallerDefaultIsNeverSilentlyDiscarded(): void
     {
@@ -159,9 +143,7 @@ final class ConfigSectionStrictValuesTest extends TestCase
     }
 
     /**
-     * An array in a string slot used to become the literal 'Array' plus a PHP
-     * warning. 'Array' is a value no configuration ever meant, and it is one a
-     * caller can go on to use as a hostname or a path.
+     * An array in a scalar slot is rejected: the literal 'Array' must never reach a caller.
      */
     public function testAnArrayInAStringSlotThrowsInsteadOfBecomingTheWordArray(): void
     {
@@ -179,8 +161,7 @@ final class ConfigSectionStrictValuesTest extends TestCase
     }
 
     /**
-     * The refusal has to be findable: it names the section class, the key and
-     * why the value was rejected.
+     * The refusal names the section class, the key and why the value was rejected.
      */
     public function testTheRefusalNamesTheSectionAndTheKey(): void
     {

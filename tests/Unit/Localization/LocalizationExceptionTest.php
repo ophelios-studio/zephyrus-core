@@ -17,17 +17,8 @@ final class LocalizationExceptionTest extends TestCase
     }
 
     /**
-     * WHAT THIS USED TO PIN, AND WHY IT CHANGED.
-     *
-     * This asserted that the ABSOLUTE SERVER PATH was present in getMessage().
-     * Locale loading runs at BOOT, before the kernel's error handling exists,
-     * so this message is among the likeliest in the framework to land raw in a
-     * log line, an alert email or a bluescreen. It disclosed the deployment's
-     * filesystem layout to every one of those readers for nothing.
-     *
-     * The file NAME stays, because that is the diagnostic. The path moved to
-     * path(), the same shape RenderException::templateNotFound() already uses
-     * and the same posture unreadableDirectory() already took.
+     * The file name is kept in the message, but the absolute path moves to path(): boot-time messages
+     * reach logs and error pages.
      */
     public function testUnreadableFileKeepsTheServerPathOutOfTheMessage(): void
     {
@@ -40,12 +31,7 @@ final class LocalizationExceptionTest extends TestCase
     }
 
     /**
-     * Previously asserted '/locales/en.json' inside the message. See
-     * testUnreadableFileKeepsTheServerPathOutOfTheMessage for the ruling.
-     *
-     * The JsonException message IS kept: it says "Syntax error" or "Control
-     * character error", never a path, and it is the entire reason a developer
-     * reads this line.
+     * The JsonException message is kept: it names the syntax error, never a path.
      */
     public function testInvalidJsonKeepsTheServerPathOutOfTheMessage(): void
     {
@@ -70,10 +56,6 @@ final class LocalizationExceptionTest extends TestCase
         self::assertSame('/srv/app/locale/en/messages.json', $e->path());
     }
 
-    /**
-     * Previously asserted '/locales/en.json' inside the message. See
-     * testUnreadableFileKeepsTheServerPathOutOfTheMessage for the ruling.
-     */
     public function testInvalidFormatKeepsTheServerPathOutOfTheMessage(): void
     {
         $e = LocalizationException::invalidFormat('/srv/app/locale/en/messages.json');
@@ -85,14 +67,8 @@ final class LocalizationExceptionTest extends TestCase
     }
 
     /**
-     * basename() alone was ambiguous: a catalog is nested as
-     * locale/<tag>/<file>.json, so fr/legal.json and en/legal.json produced the
-     * SAME sentence, and the locale tag is the single most useful
-     * disambiguator when a translation file fails to parse.
-     *
-     * The message therefore carries the last TWO segments. That is not an
-     * invented convention, it is the catalog's own structure, and a directory
-     * NAME is not a server path: nothing above the catalog is disclosed.
+     * The message carries the last two path segments: the locale tag tells catalogs apart, and a
+     * directory name is not a server path.
      */
     public function testALocaleFileIsNamedByItsCatalogRelativePathNotJustItsBasename(): void
     {
@@ -121,9 +97,7 @@ final class LocalizationExceptionTest extends TestCase
     }
 
     /**
-     * unreadableDirectory() was already correct: the caller hands it a
-     * basename, never a path, so there is no path to expose and the accessor
-     * says so rather than returning a misleading ''.
+     * unreadableDirectory() receives a basename, so there is no path to expose.
      */
     public function testUnreadableDirectoryReportsNoPathBecauseItNeverReceivesOne(): void
     {

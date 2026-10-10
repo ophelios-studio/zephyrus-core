@@ -21,19 +21,9 @@ use Zephyrus\Security\ForceHttpsMiddleware;
 use Zephyrus\Security\MaxBodySizeMiddleware;
 
 /**
- * The whole `security:` block was inert.
- *
- * withConfiguration() wires localization, application.debug and the timezone;
- * KernelBuilder::build() never reads Configuration at all. So forceHttps,
- * csrfEnabled, allowedHosts and maxBodySize were parsed, type-validated,
- * range-checked, unit-tested, echoed by Configuration::toArray() and connected
- * to nothing. Measured against the pre-fix code with all four declared ON: a
- * plain-HTTP, forged-Host, tokenless 5 MiB POST was served with 200.
- *
- * The framework still wires NOTHING, on purpose. Applications register their
- * own CsrfMiddleware from their own bootstrap, and a framework that started
- * registering one too would hand them two on every request. So build() refuses
- * to start and names the gap instead.
+ * The security: block must not be inert: declared keys have to reach a middleware. The framework
+ * registers none itself (applications register their own, and a second copy would run a second
+ * CsrfMiddleware on every request), so build() refuses to start and names the missing middleware.
  */
 final class SecurityConfigurationWiringTest extends TestCase
 {
@@ -90,16 +80,13 @@ final class SecurityConfigurationWiringTest extends TestCase
 
         self::assertInstanceOf(Application::class, $application);
 
-        // And the settings now actually DO something: a plain-HTTP request is
-        // redirected instead of being served, which is the whole point.
+        // A plain-HTTP request is redirected rather than served.
         self::assertSame(308, $application->handle(Request::fromArray('GET', 'http://app.test/x'))->status);
     }
 
     public function testAConfigurationWithNoSecuritySectionIsUnaffected(): void
     {
-        // Non-breakage, and the reason declared-key tracking exists: an absent
-        // section still yields csrfEnabled = true and maxBodySize = 2 MB from
-        // the DEFAULTS, and must not be reported.
+        // An absent section is not reported, although the defaults still yield values for it.
         $application = ApplicationBuilder::create()
             ->withConfigurationArray(['application' => ['debug' => false]])
             ->withRouter(new Router())
@@ -228,9 +215,7 @@ final class SecurityConfigurationWiringTest extends TestCase
 
     public function testAWrappingDecoratorIsNotDetectedAndMustBeAcknowledged(): void
     {
-        // The stated limit of the check, asserted rather than assumed. The
-        // framework's security middlewares are final, so a consumer that needs
-        // to decorate one WRAPS it, and instanceof cannot see through that.
+        // Limit of the check: the middleware is final, so a wrapper hides it from instanceof.
         $wrapped = new WrappingMiddleware(new ForceHttpsMiddleware());
 
         try {
@@ -256,7 +241,7 @@ final class SecurityConfigurationWiringTest extends TestCase
     }
 
     // =====================================================================
-    // The middleware the key had no consumer for
+    // Body size limit middleware
     // =====================================================================
 
     public function testMaxBodySizeMiddlewareRefusesAnOversizedBody(): void

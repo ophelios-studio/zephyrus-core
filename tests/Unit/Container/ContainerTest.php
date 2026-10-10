@@ -76,7 +76,7 @@ final class ContainerTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // bind() — transient factories
+    // bind(): transient factories
     // ------------------------------------------------------------------
 
     public function testBindReturnsNewInstanceEachCall(): void
@@ -102,7 +102,7 @@ final class ContainerTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // singleton() — shared factories
+    // singleton(): shared factories
     // ------------------------------------------------------------------
 
     public function testSingletonReturnsSameInstance(): void
@@ -130,7 +130,7 @@ final class ContainerTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // instance() — pre-built values
+    // instance(): pre-built values
     // ------------------------------------------------------------------
 
     public function testInstanceAlwaysReturnsSameObject(): void
@@ -175,7 +175,6 @@ final class ContainerTest extends TestCase
 
     public function testHasReturnsTrueForAutoWireableClass(): void
     {
-        // SimpleService has no dependencies, so it should be auto-wireable.
         self::assertTrue($this->container->has(SimpleService::class));
     }
 
@@ -196,7 +195,6 @@ final class ContainerTest extends TestCase
 
     public function testAutoWireClassWithTypedDependency(): void
     {
-        // DependentService needs SimpleService — resolved automatically.
         $dep = $this->container->get(DependentService::class);
         self::assertInstanceOf(DependentService::class, $dep);
         self::assertInstanceOf(SimpleService::class, $dep->simple);
@@ -244,9 +242,7 @@ final class ContainerTest extends TestCase
 
     public function testAutoWireThrowsContainerExceptionWhenInstantiationFails(): void
     {
-        // ProtectedConstructorService has a protected constructor with a dependency.
-        // newInstanceArgs() raises ReflectionException for non-public constructors
-        // when called from outside the class; the container wraps it in ContainerException.
+        // The container wraps the ReflectionException from newInstanceArgs() in ContainerException.
         $this->expectException(ContainerException::class);
         $this->expectExceptionMessageMatches('/Failed to construct/');
 
@@ -266,7 +262,7 @@ final class ContainerTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // make() — always-fresh resolution
+    // make(): always-fresh resolution
     // ------------------------------------------------------------------
 
     public function testMakeReturnsFreshInstanceFromTransientBinding(): void
@@ -333,7 +329,6 @@ final class ContainerTest extends TestCase
         });
         $this->container->get(SimpleService::class); // resolve + cache
 
-        // Re-register as singleton with new factory.
         $this->container->singleton(SimpleService::class, function () {
             $s = new SimpleService();
             $s->tag = 'new';

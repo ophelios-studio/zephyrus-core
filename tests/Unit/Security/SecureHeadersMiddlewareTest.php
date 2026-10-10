@@ -13,7 +13,6 @@ use Zephyrus\Security\SecureHeadersMiddleware;
 
 final class SecureHeadersMiddlewareTest extends TestCase
 {
-    // Helper — build a minimal HTTP request.
     private function makeRequest(bool $secure = false): Request
     {
         $uri = $secure ? 'https://example.com/test' : 'http://example.com/test';
@@ -21,7 +20,6 @@ final class SecureHeadersMiddlewareTest extends TestCase
         return new Request('GET', $uri);
     }
 
-    // Helper — run the middleware against a plain text 200 OK response.
     private function process(SecureHeadersMiddleware $mw, Request $request): Response
     {
         $inner = Response::text('ok');
@@ -119,36 +117,13 @@ final class SecureHeadersMiddlewareTest extends TestCase
     }
 
     /**
-     * THE TRAP THIS PINS. Uri::__construct fell back to "http" and "localhost"
-     * when parse_url() failed, silently, so a malformed authority collapsed the
-     * whole URI and uri()->isSecure() answered false on a request the SAPI had
-     * reported as HTTPS. HSTS was then dropped with no error anywhere.
-     *
-     * "https://example.com:port/secure" is a URL parse_url() rejects outright,
-     * and Request::fromGlobals builds exactly that shape from an attacker-chosen
-     * Host header on an HTTPS connection.
-     *
-     * ## WHAT CHANGED, AND WHY THESE TWO ASSERTIONS ARE INVERTED
-     *
-     * The two lines below used to read:
-     *
-     *     self::assertFalse($request->uri()->isSecure());
-     *     self::assertSame('localhost', $request->uri()->host());
-     *
-     * and were commented "the collapse itself, asserted rather than assumed".
-     * They pinned the DEFECT as a precondition of the workaround, so they had to
-     * flip the moment the defect was fixed at its root in Uri::__construct,
-     * which no longer invents an authority it failed to parse. The headline
-     * guarantee of this test, that HSTS survives a malformed authority, is
-     * unchanged and still asserted below; what changed is that it is now true
-     * for the right reason. The assertions were strengthened, not relaxed: the
-     * scheme and the host are now the ones actually reported.
+     * A malformed authority, as Request::fromGlobals builds it from the attacker-chosen Host header on HTTPS,
+     * must not hide the scheme: HSTS is still emitted.
      */
     public function testHstsIsStillEmittedWhenAMalformedAuthorityDefeatsUriParsing(): void
     {
         $request = new Request('GET', 'https://example.com:port/secure');
-        // The URI no longer collapses: the scheme and host survive the parse
-        // failure, so isSecure() answers correctly on its own.
+        // The scheme survives the parse failure, so isSecure() is true.
         self::assertTrue($request->uri()->isSecure());
         self::assertSame('example.com:port', $request->uri()->host());
 
@@ -241,7 +216,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
         self::assertStringNotContainsString('x-xss-protection', $headerString);
     }
 
-    // ── response is immutable — original not mutated ──────────────────────────
+    // ── response is immutable: original not mutated ──────────────────────────
 
     public function testOriginalResponseIsNotMutated(): void
     {
@@ -250,7 +225,6 @@ final class SecureHeadersMiddlewareTest extends TestCase
 
         $mw->process($this->makeRequest(), fn (Request $r): Response => $inner);
 
-        // The captured inner response should still have no security headers.
         $headerString = implode("\n", $inner->toHeaderLines());
 
         self::assertStringNotContainsString('x-frame-options', $headerString);
@@ -285,9 +259,7 @@ final class SecureHeadersMiddlewareTest extends TestCase
     // ── a header the route already set is kept ───────────────────────────────
 
     /**
-     * A route that set its own non-empty value for a configured name keeps it.
-     * The route's value differs from the configured one, so an overwrite cannot
-     * pass as a coincidence.
+     * The route's value differs from the configured one, so an overwrite cannot pass as a coincidence.
      *
      * @return iterable<string, array{string, string}>
      */

@@ -31,13 +31,6 @@ final class SessionConfigTest extends TestCase
     // secure: the three states
     // -------------------------------------------------------------------------
 
-    /**
-     * SessionConfig::fromArray([]) used to emit
-     * "PHPSESSID=...; path=/; HttpOnly; SameSite=Lax" with no Secure, so an
-     * HTTPS deployment that did not set the flag itself shipped a session
-     * cookie a downgraded request could carry. The default is now "auto", the
-     * same one Symfony ships.
-     */
     public function testSecureDefaultsToAutoSoAnHttpsRequestGetsASecureCookie(): void
     {
         $config = SessionConfig::fromArray([]);
@@ -72,7 +65,6 @@ final class SessionConfigTest extends TestCase
         self::assertFalse($config->resolveSecure(false));
     }
 
-    /** Positional construction keeps the exact behaviour it had: no auto. */
     public function testDirectConstructionDoesNotOptIntoAuto(): void
     {
         $config = new SessionConfig('PHPSESSID', 0, true, false, 'Lax', '/');
@@ -95,7 +87,7 @@ final class SessionConfigTest extends TestCase
 
     public function testSameSiteNoneIsAllowedWhenSecureCanStillApply(): void
     {
-        // "auto" is correct on the HTTPS origin the setting is for.
+        // SameSite=None requires Secure: "auto" keeps it on HTTPS origins.
         $config = SessionConfig::fromArray(['sameSite' => 'None']);
 
         self::assertSame('None', $config->sameSite);
@@ -134,10 +126,6 @@ final class SessionConfigTest extends TestCase
         self::assertSame('/', $config->cookiePath);
     }
 
-    /**
-     * The rules live in the constructor, not only in fromArray(), because
-     * building the object directly is what the framework's own middlewares do.
-     */
     public function testTheRulesAlsoApplyToDirectConstruction(): void
     {
         $this->expectException(ConfigurationException::class);

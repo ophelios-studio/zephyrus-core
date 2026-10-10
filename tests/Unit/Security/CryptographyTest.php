@@ -133,7 +133,6 @@ final class CryptographyTest extends TestCase
         $second = Cryptography::hashPassword('same-password');
 
         self::assertNotSame($first, $second);
-        // But both should verify.
         self::assertTrue(Cryptography::verifyPassword('same-password', $first));
         self::assertTrue(Cryptography::verifyPassword('same-password', $second));
     }
@@ -307,7 +306,6 @@ final class CryptographyTest extends TestCase
 
     public function testRandomIntCanReturnBoundaryValues(): void
     {
-        // With a tight range, we should hit both boundaries.
         $seen = [];
         for ($i = 0; $i < 100; $i++) {
             $seen[Cryptography::randomInt(0, 1)] = true;
@@ -374,12 +372,9 @@ final class CryptographyTest extends TestCase
     // ─── Documented hazard: the pepper carries no delimiter ───────────
 
     /**
-     * NOT A BUG REPORT, A PIN. The pepper is prepended with no separator, so the
-     * pepper/password boundary is not recoverable and different pairs hash the
-     * same input. This test exists so the hazard cannot be "fixed" by accident:
-     * adding a delimiter would invalidate every peppered hash already stored,
-     * which is a forced password reset for every account that has one. The
-     * hazard is documented on hashPassword() and deliberately left in place.
+     * Pins a known hazard so it is not fixed by accident: the pepper has no delimiter, so
+     * different pepper and password pairs can hash the same input. Adding one would invalidate
+     * every stored peppered hash. See hashPassword().
      */
     public function testPepperConcatenationIsAmbiguousAndIsLeftThatWayDeliberately(): void
     {
@@ -393,10 +388,7 @@ final class CryptographyTest extends TestCase
     // ─── Keyed hashing must not degrade into an unkeyed public hash ───
 
     /**
-     * libsodium treats an empty key as "no key at all", so an empty string used
-     * to produce the plain unkeyed digest while looking like a MAC. Every other
-     * invalid length was already rejected; the one input that switches
-     * authentication off was the one accepted.
+     * An empty key must be rejected: libsodium treats it as no key, which yields the plain unkeyed digest.
      */
     public function testHashRejectsAnEmptyKeyInsteadOfSilentlyDroppingAuthentication(): void
     {
@@ -455,8 +447,7 @@ final class CryptographyTest extends TestCase
     // ─── Key material must be a real key ──────────────────────────────
 
     /**
-     * decodeKey('') decoded to zero bytes and returned it, which is the
-     * shortest route to handing a keyed operation something that is not a key.
+     * An empty key must not decode to zero bytes, the shortest route to a keyed operation without a key.
      */
     public function testDecodeKeyRejectsAnEmptyEncodedKey(): void
     {
@@ -510,9 +501,7 @@ final class CryptographyTest extends TestCase
     }
 
     /**
-     * The transplant this closes: a ciphertext lifted out of one column and read
-     * back as another decrypted cleanly, because nothing bound the ciphertext to
-     * where it came from.
+     * Binds a ciphertext to its context, so a value lifted from one column cannot decrypt as another.
      */
     public function testCiphertextBoundToOneContextDoesNotDecryptUnderAnother(): void
     {
@@ -542,8 +531,7 @@ final class CryptographyTest extends TestCase
     }
 
     /**
-     * The default must stay byte-identical to the pre-context behaviour, or
-     * every ciphertext already in a database stops opening.
+     * The empty context keeps the original ciphertext format, or stored values stop opening.
      */
     public function testOmittedContextDecryptsCiphertextWrittenWithoutOne(): void
     {

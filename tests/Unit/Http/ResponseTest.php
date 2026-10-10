@@ -292,7 +292,7 @@ final class ResponseTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // send() — body output (captured via output buffering, no headers needed)
+    // send(): body output (captured via output buffering, no headers needed)
     // -------------------------------------------------------------------------
 
     public function testSendWritesBodyToOutputStream(): void
@@ -364,7 +364,7 @@ final class ResponseTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // toHeaderLines() — pure header-line builder (testable without SAPI)
+    // toHeaderLines(): pure header-line builder (testable without SAPI)
     // -------------------------------------------------------------------------
 
     public function testToHeaderLinesReturnsEmptyArrayWhenNoHeaders(): void
@@ -413,12 +413,9 @@ final class ResponseTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // send() — status code emission (isolated per-process via http_response_code)
+    // send(): status code emission
     //
-    // Note: PHP CLI SAPI does not surface headers through headers_list(); header
-    // content is verified via toHeaderLines() tests above.  Status-code tracking
-    // via http_response_code() does work in CLI, so we use that for the SAPI
-    // integration signal.
+    // headers_list() is not visible under the CLI SAPI; headers are checked via toHeaderLines().
     // -------------------------------------------------------------------------
 
     #[RunInSeparateProcess]
@@ -480,14 +477,12 @@ final class ResponseTest extends TestCase
         ob_end_clean();
 
         self::assertSame(405, http_response_code());
-        // Header content is validated via toHeaderLines(); SAPI header list is
-        // only available in CGI/FPM contexts, not PHP CLI.
         self::assertSame(['allow: GET, POST'], $response->toHeaderLines());
     }
 
     /**
-     * A target taken from a request must stay on this site. Anything that a
-     * browser could read as another origin, or as a header break, falls back.
+     * A request target must stay on this site: anything a browser could read as
+     * another origin, or a header break, falls back.
      *
      * @return iterable<string, array{string, string}>
      */

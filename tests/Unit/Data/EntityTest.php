@@ -260,8 +260,7 @@ final class EntityTest extends TestCase
         $entity = UnionTypeEntity::build($row);
 
         $this->assertSame(1, $entity->id);
-        // Union type property should remain at its default (uninitialized),
-        // so we just verify the entity was built without error.
+        // The union property stays uninitialized; building must not fail.
     }
 
     public function testBuildSkipsIntersectionTypes(): void
@@ -273,10 +272,7 @@ final class EntityTest extends TestCase
         $entity = IntersectionTypeEntity::build($row);
 
         $this->assertSame(1, $entity->id);
-        // An intersection type is no more resolvable to a single type than a
-        // union is, so the property is skipped and left uninitialized instead
-        // of reaching isBuiltin()/getName(), which ReflectionIntersectionType
-        // does not declare.
+        // Intersection types are left uninitialized: ReflectionIntersectionType lacks isBuiltin() and getName().
         $this->assertFalse((new ReflectionProperty($entity, 'bag'))->isInitialized($entity));
     }
 
@@ -393,9 +389,9 @@ final class EntityTest extends TestCase
     {
         $row = new stdClass();
         $row->id = '99';
-        $row->name = 42;       // int → string
-        $row->active = '';     // empty string → false
-        $row->score = '3';    // string → float
+        $row->name = 42;       // int coerced to string
+        $row->active = '';     // empty string coerced to false
+        $row->score = '3';    // string coerced to float
 
         $entity = SimpleEntity::build($row);
 
@@ -405,14 +401,10 @@ final class EntityTest extends TestCase
         $this->assertSame(3.0, $entity->score);
     }
 
-    // ── partial rows and reserved names (findings 3 and 6) ───────────────────
+    // ── partial rows and reserved names ──────────────────────────────────────
 
     /**
-     * REGRESSION. jsonSerialize() called getValue() on EVERY declared public
-     * property, but build() only assigns the ones present in the row, so a partial
-     * SELECT left a typed property uninitialized and json_encode() died with
-     * "Typed property must not be accessed before initialization". Selecting a
-     * subset of columns and then serializing is an ordinary, innocent pattern.
+     * A partial SELECT leaves unselected typed properties uninitialized, so serialization must skip them.
      */
     public function testJsonSerializeSkipsPropertiesAPartialRowNeverAssigned(): void
     {
@@ -442,10 +434,8 @@ final class EntityTest extends TestCase
     }
 
     /**
-     * REGRESSION. A row carrying a column literally named rawData threw a
-     * ReflectionException: property_exists() answered from Entity's own scope, where
-     * the base class's private $rawData slot IS visible, while getProperty() on the
-     * subclass reflection could not address it.
+     * A column named rawData must not throw: the base class's private slot is visible from Entity's
+     * scope but not from the subclass reflection.
      */
     public function testBuildIgnoresARowColumnNamedRawDataInsteadOfThrowing(): void
     {
@@ -463,10 +453,8 @@ final class EntityTest extends TestCase
     }
 
     /**
-     * REGRESSION. A subclass that DECLARES a public $rawData shadows the base
-     * class's private slot, so the assignment made from Entity's scope landed on the
-     * private ?stdClass and raised a TypeError. rawData is reserved: the column is
-     * skipped rather than fatalling.
+     * rawData is reserved: a subclass declaring a public $rawData shadows the private slot, so the
+     * column is skipped rather than raising a TypeError.
      */
     public function testBuildSkipsAReservedRawDataPropertyInsteadOfFatalling(): void
     {
@@ -481,9 +469,7 @@ final class EntityTest extends TestCase
     }
 
     /**
-     * Guard for the property_exists() to hasProperty() swap: a private property
-     * declared on the SUBCLASS is invisible from Entity's scope and must stay
-     * skipped, not become an "Cannot access private property" Error.
+     * A private property declared on the subclass stays skipped: it is invisible from Entity's scope.
      */
     public function testBuildSkipsAPrivatePropertyDeclaredOnTheSubclass(): void
     {
@@ -498,8 +484,7 @@ final class EntityTest extends TestCase
     }
 
     /**
-     * The enum coercion failure used to interpolate the RAW DATABASE VALUE into the
-     * exception message, which then travelled into logs and error pages.
+     * The enum coercion error must not echo the raw database value, since messages reach logs and error pages.
      */
     public function testEnumCoercionFailureDoesNotEchoTheDatabaseValue(): void
     {

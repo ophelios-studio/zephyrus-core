@@ -10,10 +10,7 @@ use Zephyrus\Http\Request;
 use Zephyrus\Localization\LocaleLoaderInterface;
 
 /**
- * Unit + light-integration tests for Application::transFromRequest().
- *
- * All translation catalog lookups use an in-memory loader so no file I/O
- * or real HTTP infrastructure is required.
+ * Unit and light-integration tests for Application::transFromRequest(), using an in-memory loader.
  */
 final class ApplicationLocalizationTest extends TestCase
 {
@@ -42,7 +39,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // trans() — existing behaviour unchanged
+    // trans(): existing behaviour unchanged
     // -------------------------------------------------------------------------
 
     public function testTransWithExplicitLocale(): void
@@ -60,7 +57,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
             ->build();
 
-        // 'bye' exists only in en and fr; requesting 'de' falls through to en
         self::assertSame('Goodbye', $app->trans('bye', locale: 'de'));
     }
 
@@ -91,7 +87,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — no signals → translator default locale
+    // transFromRequest(): no signals, so the translator default locale
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestNoRequestNoLocaleUsesTranslatorDefault(): void
@@ -113,7 +109,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — Accept-Language header
+    // transFromRequest(): Accept-Language header
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestUsesAcceptLanguageHeader(): void
@@ -133,7 +129,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
             ->build();
 
-        // fr;q=0.9 beats de;q=0.5 and en;q=0.8
         $response = $app->transFromRequest('greeting', request: $this->requestWithHeader('de;q=0.5, fr;q=0.9, en;q=0.8'));
 
         self::assertSame('Bonjour', $response);
@@ -151,7 +146,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — explicit requestedLocale
+    // transFromRequest(): explicit requestedLocale
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestExplicitRequestedLocaleWins(): void
@@ -160,7 +155,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
             ->build();
 
-        // Header says de, but explicit fr wins
         $response = $app->transFromRequest(
             'greeting',
             request:         $this->requestWithHeader('de'),
@@ -176,7 +170,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
             ->build();
 
-        // No HTTP request at all; just an explicit locale token
         self::assertSame('Bonjour', $app->transFromRequest('greeting', requestedLocale: 'fr'));
     }
 
@@ -186,12 +179,11 @@ final class ApplicationLocalizationTest extends TestCase
             ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
             ->build();
 
-        // FR-fr should normalize to fr, which the loader handles
         self::assertSame('Bonjour', $app->transFromRequest('greeting', requestedLocale: 'FR'));
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — per-call supportedLocales override
+    // transFromRequest(): per-call supportedLocales override
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestPerCallSupportedLocalesFilter(): void
@@ -200,7 +192,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withLocaleLoader($this->makeLoader(), defaultLocale: 'en')
             ->build();
 
-        // de has highest q but is not in per-call supported list; fr is → fr wins
         $response = $app->transFromRequest(
             'greeting',
             request:         $this->requestWithHeader('de;q=0.9, fr;q=0.8, en;q=0.7'),
@@ -217,7 +208,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withSupportedLocales(['en', 'fr'])          // app-level: only en/fr
             ->build();
 
-        // Per-call allows 'de' → de wins even though app level would block it
         $response = $app->transFromRequest(
             'greeting',
             request:         $this->requestWithHeader('de, fr'),
@@ -228,7 +218,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — app-level supportedLocales
+    // transFromRequest(): app-level supportedLocales
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestAppLevelSupportedLocalesUsedByDefault(): void
@@ -238,7 +228,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withSupportedLocales(['en', 'fr'])
             ->build();
 
-        // de not in app-level supported list → skipped; fr is next → fr
         $response = $app->transFromRequest(
             'greeting',
             request: $this->requestWithHeader('de, fr'),
@@ -263,7 +252,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — regional fallback
+    // transFromRequest(): regional fallback
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestRegionalFallbackViaSupportedList(): void
@@ -273,7 +262,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withSupportedLocales(['en', 'fr'])
             ->build();
 
-        // fr-CA not in supported list but base 'fr' is → fr
         $response = $app->transFromRequest(
             'greeting',
             request: $this->requestWithHeader('fr-CA'),
@@ -289,7 +277,6 @@ final class ApplicationLocalizationTest extends TestCase
             ->withSupportedLocales(['en', 'fr'])
             ->build();
 
-        // Explicit fr-CA; supported has fr but not fr-CA → return fr
         $response = $app->transFromRequest(
             'greeting',
             requestedLocale: 'fr-CA',
@@ -299,7 +286,7 @@ final class ApplicationLocalizationTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // transFromRequest() — parameter interpolation
+    // transFromRequest(): parameter interpolation
     // -------------------------------------------------------------------------
 
     public function testTransFromRequestInterpolatesParameters(): void

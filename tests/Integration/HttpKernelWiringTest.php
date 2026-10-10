@@ -23,11 +23,7 @@ use Zephyrus\Security\RequestAttributeGuard;
 use Zephyrus\Security\NotAuthGuard;
 
 /**
- * End-to-end tests for the full HttpKernel → Router → RouteDispatcher
- * → HandlerResolver → Controller dispatch pipeline.
- *
- * Each test builds a real kernel via KernelBuilder with real controllers,
- * real middleware, and real routing — no mocking involved.
+ * End-to-end tests for the HttpKernel dispatch pipeline, with real controllers, middleware and routing.
  */
 final class HttpKernelWiringTest extends TestCase
 {
@@ -208,7 +204,6 @@ final class HttpKernelWiringTest extends TestCase
 
         $kernel->handle(Request::fromArray('GET', '/ping'));
 
-        // Outer wraps inner: outer-before, inner-before, inner-after, outer-after.
         self::assertSame(['outer-before', 'inner-before', 'inner-after', 'outer-after'], $trace);
     }
 
@@ -228,10 +223,7 @@ final class HttpKernelWiringTest extends TestCase
             public function process(Request $request, callable $next): Response
             {
                 $response = $next($request);
-                // After inner execution request attributes (route params) were set.
-                // We capture them from a follow-up attribute read.
-                // Actually the pipeline receives the enriched request:
-                // attributes are set BEFORE the pipeline runs in RouteDispatcher.
+                // Route attributes are set before the pipeline runs, so $request already has them.
                 $this->capture = $request->attributes;
 
                 return $response;
@@ -650,7 +642,6 @@ final class HttpKernelWiringTest extends TestCase
 
         $kernel = KernelBuilder::create()->withRouter($router)->build();
 
-        // No token → before() returns 401.
         $response = $kernel->handle(Request::fromArray('GET', '/secure'));
 
         self::assertSame(401, $response->status);
@@ -692,7 +683,6 @@ final class HttpKernelWiringTest extends TestCase
 
         $kernel = KernelBuilder::create()->withRouter($router)->build();
 
-        // before() returns 403 → after() should never add X-Combo.
         $response = $kernel->handle(
             Request::fromArray('GET', '/combo', headers: ['X-Halt' => '1']),
         );
@@ -758,7 +748,6 @@ final class HttpKernelWiringTest extends TestCase
         $kernel->handle(Request::fromArray('GET', '/hello'));
         $kernel->handle(Request::fromArray('GET', '/hello'));
 
-        // Singleton: factory called only once even with two requests.
         self::assertCount(1, $instances);
     }
 

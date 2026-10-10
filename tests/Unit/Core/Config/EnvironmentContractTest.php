@@ -8,23 +8,13 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\EnvironmentContract;
 
 /**
- * The boot-time environment contract.
- *
- * Unknown environment values fail open, and the result is a confident,
- * healthy-looking, wrong process: APP_ENV=prod (not `production`) served
- * absolute-path stack traces at HTTP 200 while a health check reported the
- * machine healthy. These tests pin the refusal, and pin that declaring nothing
- * changes nothing.
+ * Boot-time environment contract: an unrecognised value must refuse to boot,
+ * and declaring no rules must change nothing.
  */
 final class EnvironmentContractTest extends TestCase
 {
     // -- Non-breakage: declaring nothing ------------------------------------
 
-    /**
-     * David's condition. A consumer that declares no rules has no violations
-     * and enforce() returns normally rather than terminating, so adding this
-     * class to the framework changes nothing for anyone who does not use it.
-     */
     public function testAContractWithNoRulesIsAlwaysSatisfied(): void
     {
         $contract = EnvironmentContract::create();
@@ -32,8 +22,7 @@ final class EnvironmentContractTest extends TestCase
         self::assertSame([], $contract->violations());
         self::assertTrue($contract->isSatisfied());
 
-        // Returns rather than exiting. If this ever terminated, the whole test
-        // run would stop here, which is itself the assertion.
+        // Returning rather than exiting is the assertion.
         $contract->enforce();
     }
 
@@ -52,7 +41,6 @@ final class EnvironmentContractTest extends TestCase
 
         self::assertSame([], $contract->violations($values));
         self::assertTrue($contract->isSatisfied($values));
-        // Satisfied means enforce() is a no-op, not a different code path.
         $contract->enforce($values);
     }
 
@@ -75,7 +63,7 @@ final class EnvironmentContractTest extends TestCase
         $contract = EnvironmentContract::create()
             ->requireOneOf('APP_ENV', ['dev', 'staging', 'production']);
 
-        // The exact failure that served stack traces at HTTP 200.
+        // 'prod' is not 'production': it must refuse, not fall back.
         $violations = $contract->violations(['APP_ENV' => 'prod']);
 
         self::assertCount(1, $violations);
@@ -85,7 +73,6 @@ final class EnvironmentContractTest extends TestCase
 
     public function testRequireOneOfRejectsAnUnrecognisedTier(): void
     {
-        // MODE=INGESTT served a green health check over an empty router.
         $contract = EnvironmentContract::create()->requireOneOf('MODE', ['WEB', 'INGEST']);
 
         self::assertCount(1, $contract->violations(['MODE' => 'INGESTT']));
@@ -96,7 +83,7 @@ final class EnvironmentContractTest extends TestCase
     {
         $contract = EnvironmentContract::create()->requireOneOf('MODE', ['WEB', 'API']);
 
-        // Two parts of an application must not disagree about the same value.
+        // Normalisation is the default so that readers of the value agree.
         self::assertSame([], $contract->violations(['MODE' => 'web']));
         self::assertSame([], $contract->violations(['MODE' => '  WEB  ']));
         self::assertSame([], $contract->violations(['MODE' => 'Api']));
@@ -177,8 +164,7 @@ final class EnvironmentContractTest extends TestCase
 
         $violations = $contract->violations(['APP_ENV' => 'prod']);
 
-        // An operator should learn everything wrong in one restart, not one
-        // problem per deploy cycle.
+        // All problems surface in one restart, not one per deploy cycle.
         self::assertCount(3, $violations);
     }
 
@@ -202,9 +188,7 @@ final class EnvironmentContractTest extends TestCase
             ->requireOneOf('CONTRACT_TEST_MODE', ['WEB', 'API'], canonicalise: true)
             ->enforce(['CONTRACT_TEST_MODE' => '  web ']);
 
-        // The canonical literal from the allowlist, never the caller's input.
-        // Readers using a strict === against 'WEB' and readers that uppercase
-        // now agree.
+        // Writes the allowlist literal, never the caller's input.
         self::assertSame('WEB', $_ENV['CONTRACT_TEST_MODE']);
         self::assertSame('WEB', getenv('CONTRACT_TEST_MODE'));
 
@@ -303,8 +287,7 @@ final class EnvironmentContractTest extends TestCase
     // -- The refusal payload --------------------------------------------------
 
     /**
-     * During a refusal this response is the entire site, on every URL. It was
-     * shipping framable and sniffable in the project this came from.
+     * During a refusal this response is the whole site, so it must forbid framing and sniffing.
      */
     public function testRefusalResponseIs500WithAnEmptyBodyAndSecurityHeaders(): void
     {
@@ -339,7 +322,6 @@ final class EnvironmentContractTest extends TestCase
 
         self::assertSame(0, $result['exit']);
         self::assertStringContainsString('BOOTED', $result['stdout']);
-        // Canonicalised to the allowlist literal for the child process.
         self::assertStringContainsString('MODE=WEB', $result['stdout']);
         self::assertSame('', trim($result['stderr']));
     }
@@ -392,8 +374,7 @@ final class EnvironmentContractTest extends TestCase
 
     public function testCliEntryPointDeclaringNothingBootsWhateverTheEnvironment(): void
     {
-        // The non-breakage proof at the process level: with no rules declared
-        // the same entry point boots even with the values that refuse above.
+        // With no rules declared, the same entry point boots with the refused values.
         $result = $this->runEntryPoint([
             'CONTRACT_EMPTY' => '1',
             'APP_ENV' => 'prod',
