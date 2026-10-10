@@ -193,10 +193,60 @@ final class MailerExceptionTest extends TestCase
         self::assertNotFalse(json_encode($message));
     }
 
+    public function testAttachmentNotFoundKeepsTheEndOfALongPath(): void
+    {
+        $path = str_repeat('a', 138) . '/invoice.pdf';
+
+        self::assertSame(
+            'Attachment not found: "...' . str_repeat('a', 52) . '/invoice.pdf" (150 bytes)',
+            MailerException::attachmentNotFound($path)->getMessage(),
+        );
+    }
+
+    public function testAttachmentRejectedKeepsTheEndOfALongPath(): void
+    {
+        $path = str_repeat('a', 138) . '/invoice.pdf';
+
+        self::assertSame(
+            'Attachment rejected: path "...' . str_repeat('a', 52) . '/invoice.pdf" (150 bytes) contains a NUL byte.',
+            MailerException::attachmentRejected('path', $path, 'contains a NUL byte')->getMessage(),
+        );
+    }
+
+    public function testAttachmentRejectedKeepsTheEndOfALongDirectory(): void
+    {
+        $directory = str_repeat('a', 138) . '/allowed';
+
+        self::assertSame(
+            'Attachment rejected: directory "...' . str_repeat('a', 56) . '/allowed" (146 bytes) is not an existing directory.',
+            MailerException::attachmentRejected('directory', $directory, 'is not an existing directory')->getMessage(),
+        );
+    }
+
+    public function testLongPathTailIsCutOnACharacterBoundary(): void
+    {
+        $path = str_repeat('é', 40) . 'x';
+
+        self::assertSame(
+            'Attachment not found: "...' . str_repeat('é', 31) . 'x" (81 bytes)',
+            MailerException::attachmentNotFound($path)->getMessage(),
+        );
+    }
+
+    public function testLongDisplayNameKeepsTheStartNotTheEnd(): void
+    {
+        $name = 'name-' . str_repeat('a', 70);
+
+        self::assertSame(
+            'Attachment rejected: display name "name-' . str_repeat('a', 59) . '..." (75 bytes) is not usable.',
+            MailerException::attachmentRejected('display name', $name, 'is not usable')->getMessage(),
+        );
+    }
+
     public function testAttachmentRejectedNeverSplitsAnEscapeSequence(): void
     {
         self::assertSame(
-            'Attachment rejected: path "ab' . str_repeat('\\001', 62) . '..." (72 bytes) contains a NUL byte.',
+            'Attachment rejected: path "...' . str_repeat('\\001', 64) . '" (72 bytes) contains a NUL byte.',
             MailerException::attachmentRejected('path', 'ab' . str_repeat("\x01", 70), 'contains a NUL byte')->getMessage(),
         );
     }

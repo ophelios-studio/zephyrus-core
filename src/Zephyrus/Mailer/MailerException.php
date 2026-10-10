@@ -86,7 +86,7 @@ final class MailerException extends ZephyrusRuntimeException
     public static function attachmentNotFound(string $path): self
     {
         return new self(
-            sprintf('Attachment not found: %s', self::quotedValue($path)),
+            sprintf('Attachment not found: %s', self::quotedValue($path, true)),
             MailerFailure::AttachmentNotFound,
         );
     }
@@ -99,13 +99,15 @@ final class MailerException extends ZephyrusRuntimeException
      * a caller logging them should be able to tell them apart.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", control characters and backslashes are escaped, and values over 64 bytes are cut on a character boundary.
+     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", control characters and backslashes are escaped, and values over 64 bytes are cut on a character boundary: paths keep their last 64 bytes, other values their first 64.
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
     {
+        $isPath = in_array($subject, ['path', 'directory'], true);
+
         return new self(
-            sprintf('Attachment rejected: %s %s %s.', $subject, self::quotedValue($value), $reason),
+            sprintf('Attachment rejected: %s %s %s.', $subject, self::quotedValue($value, $isPath), $reason),
             MailerFailure::AttachmentRejected,
         );
     }
@@ -113,10 +115,19 @@ final class MailerException extends ZephyrusRuntimeException
     /**
      * Quote a value for a message, escaped and cut as attachmentRejected() documents.
      */
-    private static function quotedValue(string $value): string
+    private static function quotedValue(string $value, bool $keepEnd): string
     {
         if (strlen($value) <= self::SHOWN_VALUE_MAX_LENGTH) {
             return '"' . self::escaped($value) . '"';
+        }
+
+        if ($keepEnd) {
+            $start = strlen($value) - self::SHOWN_VALUE_MAX_LENGTH;
+            while ($start < strlen($value) && (ord($value[$start]) & 0xC0) === 0x80) {
+                ++$start;
+            }
+
+            return sprintf('"...%s" (%d bytes)', self::escaped(substr($value, $start)), strlen($value));
         }
 
         $cut = mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8');
