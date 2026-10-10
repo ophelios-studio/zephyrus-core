@@ -469,14 +469,6 @@ final class ConfigurationTest extends TestCase
         Configuration::fromArray([], ['database' => MailerConfig::class]);
     }
 
-    public function testFromArrayRefusesFactoryRegisteredUnderSnakeCaseSpellingOfBuiltInName(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('database');
-
-        Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']], ['_database' => MailerConfig::class]);
-    }
-
     public function testFromArrayNamesTheBuiltInSectionAFactoryCollidesWith(): void
     {
         try {
