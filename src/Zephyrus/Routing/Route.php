@@ -69,8 +69,9 @@ final readonly class Route
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
      * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
-     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved, a placeholder
-     *                                  shares its segment with text, or a segment wrapped in braces is not a valid placeholder.
+     * @throws RouteSignatureException When a path holds "?" or "#" outside braces, a placeholder is optional, malformed,
+     *                                  duplicated or reserved, a placeholder shares its segment with text, or a segment
+     *                                  wrapped in braces is not a valid placeholder.
      * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
      *                                  security middleware.
      */
@@ -83,6 +84,7 @@ final readonly class Route
         public ?string $name = null,
         array $excludedMiddlewares = [],
     ) {
+        self::assertNoQueryOrFragmentMark($path);
         self::assertValidParameterNames($path);
         $this->excludedMiddlewares = self::skippableMiddlewares(
             $excludedMiddlewares,
@@ -149,6 +151,44 @@ final readonly class Route
     }
 
     /**
+     * Refuses a path whose first "?" or "#" outside braces cuts the request path: the route would only match its prefix.
+     *
+     * @throws RouteSignatureException
+     */
+    private static function assertNoQueryOrFragmentMark(string $path): void
+    {
+        $masked = (string) preg_replace_callback(
+            self::PLACEHOLDER_PATTERN,
+            static fn (array $match): string => str_repeat('_', strlen($match[0])),
+            $path,
+        );
+        $position = strcspn($masked, '?#');
+
+        if ($position === strlen($path)) {
+            return;
+        }
+
+        $prefix = substr($path, 0, $position);
+        $prefix = str_starts_with($prefix, '/') ? $prefix : '/' . $prefix;
+
+        throw new RouteSignatureException($path[$position] === '?'
+            ? sprintf(
+                'Invalid route path "%s": the request path ends at "?", so this route would only match "%s"; '
+                . 'declare "%s" and read the query string from the request',
+                $path,
+                $prefix,
+                $prefix,
+            )
+            : sprintf(
+                'Invalid route path "%s": a browser never sends the "#" fragment, so this route would only match '
+                . '"%s"; declare "%s"',
+                $path,
+                $prefix,
+                $prefix,
+            ));
+    }
+
+    /**
      * Validates every placeholder in a route path: each must fill a whole segment, with a valid, unique name.
      *
      * @throws RouteSignatureException
@@ -165,6 +205,15 @@ final readonly class Route
             }
 
             $name = substr($segment, 1, -1);
+
+            if (str_ends_with($name, '?') && preg_match(self::PARAMETER_NAME_PATTERN, substr($name, 0, -1)) === 1) {
+                throw new RouteSignatureException(sprintf(
+                    'Invalid route parameter name "%s" on route "%s": optional placeholders are not supported; '
+                    . 'declare a second route without that segment',
+                    $name,
+                    $path,
+                ));
+            }
 
             if (preg_match(self::PARAMETER_NAME_PATTERN, $name) !== 1) {
                 throw new RouteSignatureException(sprintf(
@@ -247,8 +296,9 @@ final readonly class Route
      * @param array<int, string> $middlewares
      * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
      *
-     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved, a placeholder
-     *                                  shares its segment with text, or a segment wrapped in braces is not a valid placeholder.
+     * @throws RouteSignatureException When a path holds "?" or "#" outside braces, a placeholder is optional, malformed,
+     *                                  duplicated or reserved, a placeholder shares its segment with text, or a segment
+     *                                  wrapped in braces is not a valid placeholder.
      * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
      *                                  security middleware.
      */

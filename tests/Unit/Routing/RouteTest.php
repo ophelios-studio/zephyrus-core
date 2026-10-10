@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Security\AllowedHostsMiddleware;
 use Zephyrus\Security\AuthGuardMiddleware;
@@ -205,5 +206,105 @@ final class RouteTest extends TestCase
         self::assertFalse(Route::isSkippable('zephyrus\\security\\csrfmiddleware'));
         self::assertTrue(Route::isSkippable('\\' . SessionMiddleware::class));
         self::assertFalse(Route::isSkippable('Missing\\Middleware'));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function pathsHoldingAQueryOrFragmentMark(): iterable
+    {
+        yield 'query after a literal' => ['/a?b', 'Invalid route path "/a?b": the request path ends at "?", '
+            . 'so this route would only match "/a"; declare "/a" and read the query string from the request'];
+        yield 'fragment after a literal' => ['/a#b', 'Invalid route path "/a#b": a browser never sends the "#" '
+            . 'fragment, so this route would only match "/a"; declare "/a"'];
+        yield 'bare query mark at the root' => ['/?', 'Invalid route path "/?": the request path ends at "?", '
+            . 'so this route would only match "/"; declare "/" and read the query string from the request'];
+        yield 'query after a placeholder' => ['/users/{id}?x', 'Invalid route path "/users/{id}?x": the request '
+            . 'path ends at "?", so this route would only match "/users/{id}"; declare "/users/{id}" and read the '
+            . 'query string from the request'];
+        yield 'query after a trailing slash' => ['/a/?x', 'Invalid route path "/a/?x": the request path ends at "?", '
+            . 'so this route would only match "/a/"; declare "/a/" and read the query string from the request'];
+        yield 'fragment after a trailing slash' => ['/a/#b', 'Invalid route path "/a/#b": a browser never sends the "#" '
+            . 'fragment, so this route would only match "/a/"; declare "/a/"'];
+        yield 'query after a search segment' => ['/search?q', 'Invalid route path "/search?q": the request path ends '
+            . 'at "?", so this route would only match "/search"; declare "/search" and read the query string from the '
+            . 'request'];
+        yield 'query before a fragment' => ['/a?b#c', 'Invalid route path "/a?b#c": the request path ends at "?", '
+            . 'so this route would only match "/a"; declare "/a" and read the query string from the request'];
+        yield 'fragment before a query' => ['/a#b?c', 'Invalid route path "/a#b?c": a browser never sends the "#" '
+            . 'fragment, so this route would only match "/a"; declare "/a"'];
+    }
+
+    #[DataProvider('pathsHoldingAQueryOrFragmentMark')]
+    public function testConstructorRefusesAPathHoldingAQueryOrFragmentMark(string $path, string $message): void
+    {
+        try {
+            new Route('GET', $path, 'HomeController@index');
+            self::fail('A path holding "?" or "#" must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame($message, $exception->getMessage());
+        }
+    }
+
+    public function testDefineRefusesAPathHoldingAQueryMarkWithTheNormalizedPath(): void
+    {
+        try {
+            Route::define('GET', 'a?b/', 'HomeController@index');
+            self::fail('A path holding "?" must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route path "/a?b": the request path ends at "?", so this route would only match "/a"; '
+                . 'declare "/a" and read the query string from the request',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testConstructorNamesAnOptionalPlaceholderAsUnsupported(): void
+    {
+        try {
+            new Route('GET', '/users/{id?}', 'HomeController@index');
+            self::fail('An optional placeholder must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route parameter name "id?" on route "/users/{id?}": optional placeholders are not supported; '
+                . 'declare a second route without that segment',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testConstructorNamesAPlaceholderWithoutANameAsInvalid(): void
+    {
+        try {
+            new Route('GET', '/{?}', 'HomeController@index');
+            self::fail('A placeholder without a name must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route parameter name "?" on route "/{?}": a placeholder must match '
+                . Route::PARAMETER_NAME_PATTERN,
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testConstructorNamesAnOptionalPlaceholderWithAnInvalidNameAsInvalid(): void
+    {
+        try {
+            new Route('GET', '/{1?}', 'HomeController@index');
+            self::fail('A placeholder whose name is not valid must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route parameter name "1?" on route "/{1?}": a placeholder must match '
+                . Route::PARAMETER_NAME_PATTERN,
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testConstructorAcceptsPathsWithoutQueryOrFragmentMarks(): void
+    {
+        self::assertSame('/a', (new Route('GET', '/a', 'HomeController@index'))->path);
+        self::assertSame('/users/{id}', (new Route('GET', '/users/{id}', 'HomeController@index'))->path);
     }
 }

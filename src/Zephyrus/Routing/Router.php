@@ -366,7 +366,8 @@ final class Router
      * @param class-string $className
      *
      * @throws RouteAttributeException When the class cannot be reflected or declares a duplicate route name.
-     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved, or a path holds
+     *                                  "?" or "#".
      * @throws RouteMiddlewareException When middleware groups reference each other in a cycle, or a
      *                                  #[WithoutMiddleware] names a class it may not skip.
      */
