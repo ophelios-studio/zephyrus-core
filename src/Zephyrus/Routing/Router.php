@@ -7,6 +7,7 @@ namespace Zephyrus\Routing;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
+use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
@@ -171,8 +172,10 @@ final class Router
         $router = $this;
 
         $scopedRoutes = $scopedResult->routes()->all();
-        $excludedMiddlewares = array_values($excludedMiddlewares);
-        $this->assertSkippable($excludedMiddlewares, sprintf('Group "%s"', $this->joinPath($prefix, '')));
+        $excludedMiddlewares = $this->assertSkippable(
+            array_values($excludedMiddlewares),
+            sprintf('Group "%s"', $this->joinPath($prefix, '')),
+        );
 
         foreach ($scopedRoutes as $route) {
             $routeName = $route->name;
@@ -202,13 +205,15 @@ final class Router
 
     /**
      * @param array<int, string> $names
+     * @return list<class-string<MiddlewareInterface>>
      *
      * @throws RouteMiddlewareException
      */
-    private function assertSkippable(array $names, string $subject): void
+    private function assertSkippable(array $names, string $subject): array
     {
         $this->assertNoMiddlewareGroup($names, $subject);
-        Route::skippableMiddlewares($names, $subject);
+
+        return Route::skippableMiddlewares($names, $subject);
     }
 
     /**
