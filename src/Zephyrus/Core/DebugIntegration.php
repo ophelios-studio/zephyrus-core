@@ -104,7 +104,10 @@ final class DebugIntegration
         'tracy-debug',
     ];
 
-    /** Class properties masked by Tracy's Class::$property form. Tracy's own "POST (preview)" still shows the request body. */
+    /**
+     * Class properties masked by Tracy's Class::$property form. Tracy's own "POST (preview)" still shows the request body.
+     * Exception and Error traces are masked whole, arguments included; the bluescreen's stack section is unchanged.
+     */
     public const array SENSITIVE_PROPERTIES = [
         'Zephyrus\Http\RequestBody::$raw',
         'Zephyrus\Data\DatabaseException::$driverMessage',
@@ -123,8 +126,8 @@ final class DebugIntegration
      *
      * Elsewhere dump() and the debug bar apply only the exact names (SENSITIVE_KEYS,
      * SENSITIVE_PROPERTIES and the session name). The pattern skips int, float,
-     * bool and null values; exact names mask any value. To mask a numeric secret under a name the
-     * pattern skips, add the name to Debugger::getBlueScreen()->keysToHide and Debugger::$keysToHide.
+     * bool and null values; exact names mask any value. To mask a numeric secret, which the pattern
+     * skips, add its name to Debugger::getBlueScreen()->keysToHide and Debugger::$keysToHide.
      */
     public const string SENSITIVE_KEY_PATTERN = '/password|passwd|passphrase|secret|token|pepper|api[_-]?key|private[_-]?key|credential|authorization|auth_pw|cookie|sessid|throttle|tracy-debug/i';
 
@@ -193,7 +196,7 @@ final class DebugIntegration
     }
 
     /**
-     * Teach Tracy the framework's own secret-bearing key names and how to render config sections and closures.
+     * Teach Tracy the framework's own secret-bearing key names and how to render config sections, closures, array iterators and PHPMailer objects.
      *
      * Both registries are written because they feed different renderers:
      * Debugger::$keysToHide reaches dump() and the debug bar, while the
@@ -298,6 +301,8 @@ final class DebugIntegration
 
     /**
      * Render an ArrayIterator's elements as a storage property, so masking applies to them.
+     *
+     * @see \Tracy\Dumper\Exposer::exposeArrayObject()
      *
      * @param ArrayIterator<array-key, mixed> $iterator
      */
