@@ -649,6 +649,7 @@ final class ApplicationBuilder
                         . ') than security.maxBodySize (' . $declaredLimit . ' bytes); '
                         . 'give it a positive limit no larger than security.maxBodySize';
                 },
+                requirement: 'enforce the declared limit or a stricter one',
             );
         }
 
@@ -683,12 +684,14 @@ final class ApplicationBuilder
      * @param Closure(T, bool): ?string $differenceOf What an instance carries instead and how to fix it, or null;
      *                                                 the flag is true when it is the only global instance.
      * @param string $routeOnlyHint Added to the mount instruction when only route names hold the middleware.
+     * @param string $requirement What every global instance must do, completing "every global instance must".
      */
     private function describeUnwiredValue(
         string $middleware,
         string $declaredValue,
         Closure $differenceOf,
         string $routeOnlyHint = '',
+        string $requirement = 'carry the declared value',
     ): ?string {
         $mounted = $this->kernelBuilder->globalMiddlewaresOf($middleware);
 
@@ -699,9 +702,10 @@ final class ApplicationBuilder
                 . ($names === [] ? '' : $routeOnlyHint) . self::routeNameClause($names);
         }
 
+        $total = count($mounted);
         $differences = [];
         foreach ($mounted as $index => $instance) {
-            $difference = $differenceOf($instance, count($mounted) === 1);
+            $difference = $differenceOf($instance, $total === 1);
             if ($difference !== null) {
                 $differences[$index] = $difference;
             }
@@ -711,8 +715,6 @@ final class ApplicationBuilder
             return null;
         }
 
-        $total = count($mounted);
-
         if ($total === 1) {
             return 'the global ' . $middleware . ' ' . $differences[0];
         }
@@ -720,10 +722,10 @@ final class ApplicationBuilder
         $count = count($differences);
         $summary = $count === $total
             ? 'none of the ' . $total . ' global ' . $middleware . ' instances enforces it as declared, '
-                . 'and every global instance must carry the declared value: fix each one'
+                . 'and every global instance must ' . $requirement . ': fix each one'
             : $count . ' of the ' . $total . ' global ' . $middleware . ' instances '
                 . ($count === 1 ? 'does' : 'do') . ' not enforce it as declared, '
-                . 'and every global instance must carry the declared value: fix or remove ' . ($count === 1 ? 'it' : 'them');
+                . 'and every global instance must ' . $requirement . ': fix or remove ' . ($count === 1 ? 'it' : 'them');
 
         foreach ($differences as $index => $difference) {
             $summary .= "\n    - instance " . ($index + 1) . ' of ' . $total . ' ' . $difference;
@@ -820,7 +822,7 @@ final class ApplicationBuilder
      */
     private static function quoted(array $values): string
     {
-        // JSON-escaped so a control character in a value never reaches a log line raw.
+        // JSON-escaped, with DEL, C1 and bidi format characters escaped too, so none reaches a log line raw.
         return implode(', ', array_map(
             static fn (string $value): string => self::escapeDeleteAndC1(json_encode(
                 $value,
@@ -830,11 +832,11 @@ final class ApplicationBuilder
         ));
     }
 
-    /** Escapes DEL and U+0080 to U+009F, which json_encode leaves raw, as JSON and YAML double-quoted escapes. */
+    /** Escapes DEL, the C1 controls and the bidi format characters, which json_encode leaves raw, as \uXXXX. */
     private static function escapeDeleteAndC1(string $json): string
     {
         return preg_replace_callback(
-            '/[\x{7f}\x{80}-\x{9f}]/u',
+            '/[\x{7f}\x{80}-\x{9f}\x{061C}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u',
             static fn (array $match): string => sprintf('\\u%04x', mb_ord($match[0])),
             $json,
         ) ?? $json;

@@ -473,7 +473,7 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
                 'security.maxBodySize is not enforced as declared: 1 of the 2 global ' . MaxBodySizeMiddleware::class
-                . ' instances does not enforce it as declared, and every global instance must carry the declared value: fix or remove it'
+                . ' instances does not enforce it as declared, and every global instance must enforce the declared limit or a stricter one: fix or remove it'
                 . "\n    - instance 2 of 2 carries a looser limit (" . $describedLimit . ') than security.maxBodySize '
                 . '(11534336 bytes); give it a positive limit no larger than security.maxBodySize',
                 $exception->getMessage(),
@@ -506,7 +506,7 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
                 'security.maxBodySize is not enforced as declared: none of the 2 global ' . MaxBodySizeMiddleware::class
-                . ' instances enforces it as declared, and every global instance must carry the declared value: fix each one'
+                . ' instances enforces it as declared, and every global instance must enforce the declared limit or a stricter one: fix each one'
                 . "\n    - instance 1 of 2 carries a looser limit (0, unlimited) than security.maxBodySize "
                 . '(2097152 bytes); give it a positive limit no larger than security.maxBodySize'
                 . "\n    - instance 2 of 2 carries a looser limit (4194304 bytes) than security.maxBodySize "
@@ -847,7 +847,25 @@ final class SecurityConfigurationWiringTest extends TestCase
 
         self::assertStringStartsWith(
             '2 of the 3 global ' . MaxBodySizeMiddleware::class . ' instances do not enforce it as declared, '
-            . 'and every global instance must carry the declared value: fix or remove them' . "\n",
+            . 'and every global instance must enforce the declared limit or a stricter one: fix or remove them' . "\n",
+            $instruction,
+        );
+    }
+
+    public function testAStricterGlobalBodyLimitIsAcceptedAndTheCountLineSaysSo(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['max_body_size' => 1_000]],
+            'security.maxBodySize',
+            new MaxBodySizeMiddleware(500),
+            new MaxBodySizeMiddleware(0),
+        );
+
+        self::assertSame(
+            '1 of the 2 global ' . MaxBodySizeMiddleware::class . ' instances does not enforce it as declared, '
+            . 'and every global instance must enforce the declared limit or a stricter one: fix or remove it'
+            . "\n    - instance 2 of 2 carries a looser limit (0, unlimited) than security.maxBodySize "
+            . '(1000 bytes); give it a positive limit no larger than security.maxBodySize',
             $instruction,
         );
     }
@@ -968,19 +986,20 @@ final class SecurityConfigurationWiringTest extends TestCase
             'security.csrf',
             new CsrfMiddleware(
                 new WiringTokenManager(),
-                new CsrfConfig(excludedPathPatterns: ["#^/a\x7f\u{85}\u{9f}/#"]),
+                new CsrfConfig(excludedPathPatterns: ["#^/a\x7f\u{85}\u{9f}\u{202e}/#"]),
             ),
         );
 
-        self::assertStringContainsString(' excludes "#^/a\u007f\u0085\u009f/#", which', $instruction);
+        self::assertStringContainsString(' excludes "#^/a\u007f\u0085\u009f\u202e/#", which', $instruction);
         self::assertSame(1, preg_match('/^[^\x00-\x1f\x7f]*$/u', str_replace("\n", '', $instruction)));
         self::assertStringNotContainsString("\x7f", $instruction);
         self::assertStringNotContainsString("\u{85}", $instruction);
+        self::assertStringNotContainsString("\u{202e}", $instruction);
     }
 
     public function testAnEscapedPatternPastedBackIntoYamlLoadsAsTheSameString(): void
     {
-        $pattern = "#^/a\x7f\u{85}/#";
+        $pattern = "#^/a\x7f\u{85}\u{202e}/#";
         $instruction = $this->instructionFor(
             ['security' => ['csrf' => ['exceptions' => []]]],
             'security.csrf',

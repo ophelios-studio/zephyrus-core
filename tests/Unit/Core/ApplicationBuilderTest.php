@@ -83,13 +83,22 @@ final class ApplicationBuilderTest extends TestCase
         yield 'nul byte' => ["csrf\0", 'Unknown security key "csrf\u0000". ' . $accepted];
     }
 
-    public function testEveryAcceptedAcknowledgedSecurityKeyNameIsAccepted(): void
+    public function testEveryAcceptedAcknowledgedSecurityKeyNameSilencesItsRefusal(): void
     {
-        $builder = ApplicationBuilder::create()->withAcknowledgedSecurityKeys([
-            'forceHttps', 'security.allowedHosts', 'csrf', 'security.maxBodySize', 'headers',
-        ]);
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => [
+                'force_https' => true,
+                'allowed_hosts' => ['app.test'],
+                'max_body_size' => 1_024,
+                'csrf' => ['enabled' => true],
+                'headers' => ['csp' => "default-src 'self'"],
+            ]])
+            ->withAcknowledgedSecurityKeys([
+                'forceHttps', 'security.allowedHosts', 'csrf', 'security.maxBodySize', 'headers',
+            ])
+            ->build();
 
-        self::assertInstanceOf(ApplicationBuilder::class, $builder);
+        self::assertInstanceOf(Application::class, $application);
     }
 
     public function testBuildReturnsApplication(): void
