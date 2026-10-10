@@ -37,13 +37,11 @@ use Zephyrus\Http\Request;
  *
  * HttpKernel catches anything a listener throws and carries on building the
  * response. A broken reporter must never turn a handled 404 into a dead
- * connection.
+ * connection. Each listener is isolated: a failure is written to the error log
+ * and the remaining listeners still run.
  *
- * Two consequences worth knowing. A listener failure is SILENT, so a listener
- * should do its own error handling rather than rely on this. And listeners are
- * not isolated from each other: the dispatcher runs them in priority order in
- * one loop, so the first one to throw stops the rest for that event. If two
- * independent reporters must both run, make each one catch its own errors.
+ * This is the hook for an error alerting listener. It fires once per throwable,
+ * including when the exception responder itself fails.
  *
  * ## Firing rules
  *
