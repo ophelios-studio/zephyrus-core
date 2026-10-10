@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
+use Zephyrus\Tests\Support\IsolatedSessionSavePath;
 
 /**
  * Integration tests for SessionManager against real PHP sessions.
@@ -17,6 +18,18 @@ use Zephyrus\Session\SessionManager;
  */
 final class SessionManagerRealSessionTest extends TestCase
 {
+    use IsolatedSessionSavePath;
+
+    protected function setUp(): void
+    {
+        $this->useIsolatedSessionSavePath();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeIsolatedSessionSavePath();
+    }
+
     // ── isStarted ─────────────────────────────────────────────────────────────
 
     public function testIsStartedReturnsFalseWhenNoSessionStarted(): void

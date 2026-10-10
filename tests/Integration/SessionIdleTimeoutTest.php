@@ -13,6 +13,7 @@ use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Data\Database;
 use Zephyrus\Session\DatabaseSessionHandler;
 use Zephyrus\Session\SessionManager;
+use Zephyrus\Tests\Support\IsolatedSessionSavePath;
 
 /**
  * The configured idle timeout reaching storage through SessionManager::start(),
@@ -20,6 +21,18 @@ use Zephyrus\Session\SessionManager;
  */
 final class SessionIdleTimeoutTest extends TestCase
 {
+    use IsolatedSessionSavePath;
+
+    protected function setUp(): void
+    {
+        $this->useIsolatedSessionSavePath();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeIsolatedSessionSavePath();
+    }
+
     #[RunInSeparateProcess]
     public function testStartAppliesTheIdleTimeoutToTheStoredExpiry(): void
     {
