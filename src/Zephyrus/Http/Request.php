@@ -12,93 +12,41 @@ use Zephyrus\Upload\UploadException;
 /**
  * Immutable HTTP request value object.
  *
- * Composes structured sub-objects for the major HTTP concerns:
- *   - uri()     → Uri          (parsed URL components)
- *   - body()    → RequestBody  (parsed body data + raw content)
- *   - headers() → HeaderBag    (case-insensitive header lookup)
- *   - cookies() → CookieJar    (cookie value lookup)
- *
- * Query parameters, uploaded files, route attributes, and client IP remain
- * as flat properties with convenience accessors.
+ * Exposes uri(), body(), headers() and cookies() as sub-objects. Query
+ * parameters, uploaded files, route attributes and client IP are flat
+ * properties with convenience accessors.
  */
 final readonly class Request
 {
     /**
-     * Attribute set by HttpKernel when the request matched NO route, i.e. the
-     * response is going to be a 404 or a 405. Its value is always true; the
-     * attribute is absent whenever a route did match.
+     * Set to true by HttpKernel when no route matched (the response is a 404 or 405).
      *
-     * It exists so that a global middleware which VALIDATES a request can tell
-     * "this request is invalid" from "this request is fine, the URL just does
-     * not exist", and decline to answer for a resource that never existed. See
-     * CsrfMiddleware for the reference use, and HttpKernel::resolveAndPipe()
-     * for where it is set.
-     *
-     * Middlewares that DECORATE a response (security headers, CSP) must ignore
-     * this and keep running, otherwise an error response loses the very headers
-     * the pipeline exists to add.
-     *
-     * The attribute is deliberately never set on a matched route: it describes
-     * a routing FAILURE, and a request that matched has none to describe.
-     *
-     * That is now a statement of meaning rather than a precaution.
-     * HandlerResolver used to fall back to injecting handler arguments by
-     * position over ALL of $request->attributes, so any extra entry shifted
-     * that binding; its positional pool is the matched route's own parameters
-     * now, and an attribute cannot reach a handler except by name.
+     * Validating middlewares can read it to decline answering for a resource that
+     * does not exist. Decorating middlewares (security headers, CSP) must ignore it
+     * and keep running, so error responses still get their headers. Never set on a
+     * matched route. See CsrfMiddleware for the reference use.
      */
     public const ATTRIBUTE_UNMATCHED_ROUTE = '_zephyrus.unmatched_route';
 
     /**
-     * The names this request took FROM ITS URL, i.e. the matched route's
-     * placeholders. Empty for a request that matched no route, and empty for
-     * any Request built outside the kernel.
+     * The placeholders this request took from its URL, keyed by name. Empty when no route matched
+     * or the Request was built outside the kernel; use withRouteParameters() in tests.
      *
-     * WHY PROVENANCE IS RECORDED AT ALL. The matched route parameters are
-     * merged into $attributes before the global pipeline runs, and the
-     * attribute namespace is shared with everything a middleware publishes.
-     * Nothing distinguished the two, so an attribute a middleware publishes
-     * CONDITIONALLY could be supplied unconditionally by a URL segment. The
-     * exploitable ordering is the natural one, because a publishing middleware
-     * normally only sets its attribute when there is a session to read:
-     *
-     *   route /reports/{role}, guard on the "role" attribute
-     *   anonymous, no session:  GET /reports/admin -> 200 CONFIDENTIAL REPORTS
-     *   logged-in viewer:       GET /reports/admin -> 401 (session overwrites it)
-     *
-     * Merging is KEPT, because route parameters reaching $attributes is the
-     * documented contract five production applications are built on, and
-     * withdrawing it would break every one of them. What changes is that a
-     * consumer of an attribute can now ask where the value came from, and the
-     * framework's own RequestAttributeGuard refuses to authorise on a
-     * route-sourced name. Route registration refuses a placeholder named after
-     * a framework attribute outright; see Route::RESERVED_PARAMETER_NAMES.
-     *
-     * Provenance is recorded BY NAME and survives an overwrite, which is
-     * deliberate and fail-closed: a middleware that sets the same name later
-     * does not make the URL-supplied value safe, it only makes the attack
-     * conditional on the middleware not running.
+     * They are also merged into $attributes, so a guard must check isRouteParameter()
+     * before trusting an attribute. Provenance is kept by name and survives an
+     * overwrite: a later middleware setting the same name does not make the URL value
+     * safe. Route registration refuses a placeholder named after a framework attribute;
+     * see Route::RESERVED_PARAMETER_NAMES. See RequestAttributeGuard.
      *
      * @var array<string, string>
      */
 
     /**
-     * The forwarding headers read by default once REMOTE_ADDR is a trusted
-     * proxy: the X-Forwarded-* family, and nothing else.
+     * Forwarding headers read by default once REMOTE_ADDR is a trusted proxy: the X-Forwarded-* family only.
      *
-     * WHY THE SET IS NARROWER THAN "EVERY FORWARDING HEADER". Trusting a proxy is
-     * not the same as trusting every header a caller can name. A proxy manages
-     * ONE family and passes the rest through untouched, so reading a header the
-     * proxy never writes hands the caller a field it fully controls. Under the
-     * previous "read whatever is present" behaviour, a deployment behind an
-     * nginx that manages only X-Forwarded-* could be told any client IP the
-     * caller liked, just by sending a Forwarded or an X-Real-IP header of its
-     * own. Walking the X-Forwarded-For chain correctly does not help when the
-     * chain being walked is not the one the proxy wrote.
-     *
-     * The X-Forwarded-* family is what the overwhelmingly common proxy actually
-     * writes. Everything else is opt-in by name, so an operator running a proxy
-     * that emits RFC 7239 Forwarded declares it and gets it.
+     * A proxy overwrites the family it manages and passes other forwarding headers
+     * through, so reading one of those would trust a value the caller controls. Opt
+     * into Forwarded or a vendor header by name through $trustedHeaders.
      */
     public const TRUSTED_HEADERS_DEFAULT = [
         'x-forwarded-for',
@@ -108,11 +56,8 @@ final readonly class Request
     ];
 
     /**
-     * Every forwarding header this class knows how to read, in any role. A name
-     * outside this list cannot change behaviour whatever it is set to, which is
-     * why configuration layers validate against it: silently accepting a typo
-     * would leave an operator believing they trust a header they do not. See
-     * SecurityConfig::fromArray(), which rejects an unknown name outright.
+     * Every forwarding header this class can read. Configuration rejects any other
+     * name (SecurityConfig::fromArray()), since an unknown name would have no effect.
      */
     public const TRUSTED_HEADERS_SUPPORTED = [
         'x-forwarded-for',
@@ -141,9 +86,7 @@ final readonly class Request
      * @param CookieJar|array<string, string> $cookies
      * @param array<string, mixed> $attributes
      * @param array<string, mixed> $files Native $_FILES entries or FileUpload values.
-     * @param array<string, string> $routeParameters Names this request took from
-     *   its URL. See the property docblock; the values are also present in
-     *   $attributes, this records WHERE THEY CAME FROM.
+     * @param array<string, string> $routeParameters Placeholders taken from the URL, see $routeParameters.
      * @param Route|null $matchedRoute The route this request was dispatched to, see route().
      */
     public function __construct(
@@ -211,9 +154,7 @@ final readonly class Request
         $headers = self::extractHeadersFromServer($server);
         $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
         $trustForwarded = self::isProxyTrusted($remoteAddr, $trustedProxies);
-        // An untrusted peer collapses to an empty allowlist, so the two gates
-        // ("is this proxy trusted" and "may this header be read") stay a single
-        // question everywhere downstream.
+        // An untrusted peer yields an empty header allowlist, so downstream code checks one gate.
         $trusted = $trustForwarded ? self::normalizeTrustedHeaders($trustedHeaders) : [];
         $uri     = self::buildUri($server, $trusted, $trustedProxies);
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
@@ -285,46 +226,13 @@ final readonly class Request
     }
 
     /**
-     * The canonical request path: the raw, still percent-encoded target, with a
-     * leading run of slashes collapsed. For which route a request reached, use
-     * route(), since a trailing slash stays in this path.
+     * The request path as sent: still percent-encoded, with a leading run of slashes collapsed.
      *
-     * ALWAYS PREFER THIS over uri()->path() for any decision about a request:
-     * guards, allowlists, exclusion patterns, rate-limit keys, audit records.
-     * The two used to be able to disagree, and a leading "//" was enough to do
-     * it: uri()->path() reported "//x/admin/secret" while the router dispatched
-     * "/admin/secret", so a path-based guard inspected one route and a different
-     * one executed. See canonicalizeUrl() for the mechanism.
-     *
-     * ## What this string is, exactly, and what it is not
-     *
-     * This docblock used to claim the value was "the exact path the router
-     * dispatches on". IT WAS NOT, and the pattern it recommended was the
-     * exploitable one. The router rawurldecode()d every segment before
-     * matching, so "/%61dmin/secret" dispatched "/admin/secret" while this
-     * method returned "/%61dmin/secret" and a guard written as
-     * str_starts_with($request->path(), '/admin') waved it through. Measured
-     * through the real kernel, 401 became 200.
-     *
-     * The router was changed rather than this method: a LITERAL route segment
-     * is now compared byte for byte against the raw request segment, so the
-     * literal part of the dispatched route and the literal part of this string
-     * are the same bytes. That is the property a prefix guard or an anchored
-     * exclusion pattern actually needs. See
-     * RouteCollection::extractParameters(), which also explains why decoding
-     * this string instead would have been lossy.
-     *
-     * Two residual differences remain, and both are safe to rely on:
-     *
-     *   - A PARAMETER segment appears here percent-encoded and reaches the
-     *     handler decoded. Read the decoded value with routeParameter().
-     *   - A trailing slash survives here; the router ignores it unless
-     *     trailing-slash tolerance is switched off. A pattern anchored with "$"
-     *     therefore does not match the slashed form, which fails closed.
-     *
-     * Every construction path canonicalises through the constructor, so this
-     * equals uri()->path() for any Request that exists. The extra normalisation
-     * here is belt and braces and is a no-op in practice.
+     * Use this rather than uri()->path() for any decision (guards, allowlists, rate-limit
+     * keys): a literal route segment is matched against these raw bytes, so a prefix
+     * check here sees what the router dispatches. A parameter segment stays encoded
+     * here, so read its decoded value with routeParameter(). A trailing slash is kept
+     * here; the router ignores it unless trailing-slash tolerance is off.
      */
     public function path(): string
     {
@@ -384,11 +292,9 @@ final readonly class Request
     }
 
     /**
-     * The value this request took from its URL under $name, and nothing else.
+     * The value this request took from its URL under $name, or $default.
      *
-     * Namespaced on purpose: unlike attribute(), it cannot return a value a
-     * middleware published, and it cannot be shadowed by one. Use it wherever
-     * the URL is the intended source. See $routeParameters.
+     * Unlike attribute(), it never returns a value a middleware published.
      */
     public function routeParameter(string $name, ?string $default = null): ?string
     {
@@ -398,9 +304,8 @@ final readonly class Request
     /**
      * Whether $name was supplied by a URL segment of the matched route.
      *
-     * A security decision keyed on an attribute must consult this: a value the
-     * caller chose in the URL is not evidence about the caller. See
-     * $routeParameters and RequestAttributeGuard.
+     * An authorisation decision keyed on an attribute must check this first: a URL
+     * value says nothing about the caller. See RequestAttributeGuard.
      */
     public function isRouteParameter(string $name): bool
     {
@@ -412,6 +317,9 @@ final readonly class Request
         return $this->method === strtoupper($method);
     }
 
+    /**
+     * The client IP: REMOTE_ADDR for an untrusted peer, or $default when the client is unknown.
+     */
     public function clientIp(?string $default = null): ?string
     {
         if ($this->clientIp !== null) {
@@ -507,9 +415,7 @@ final readonly class Request
     }
 
     /**
-     * Publish placeholders onto the request. They land in $attributes as
-     * withAttributes() would put them, and in $routeParameters, which records
-     * that the URL is where they came from. See withMatchedRoute().
+     * Publish placeholders into $attributes and record them in $routeParameters.
      *
      * @param array<string, string> $parameters
      */
@@ -519,8 +425,7 @@ final readonly class Request
     }
 
     /**
-     * Record the matched route, and publish its parameters as
-     * withRouteParameters() does. HttpKernel uses this for every routed request.
+     * Record the matched route and publish its parameters, as withRouteParameters() does.
      */
     public function withMatchedRoute(RouteMatch $match): self
     {
@@ -587,17 +492,9 @@ final readonly class Request
     }
 
     /**
-     * THE single canonicalization point. Every Request funnels through here,
-     * because every construction path ends at the constructor: fromGlobals(),
-     * fromArray(), the with*() clones, and a hand-rolled `new Request(...)`.
+     * Canonicalise the URI of every Request, whichever construction path it came from.
      *
-     * It was three separate call sites before, one per entry point, and that is
-     * how fromArray() came to disagree with fromGlobals() for the same request:
-     * the absolute-URL branch simply never called it. Three places that each
-     * have to remember a rule is the same hazard the rule exists to fix.
-     *
-     * An already-canonical Uri is returned untouched rather than rebuilt, so
-     * the with*() clones cost nothing.
+     * An already canonical Uri is returned unchanged.
      */
     private static function canonicalizeUri(Uri|string $uri): Uri
     {
@@ -621,12 +518,9 @@ final readonly class Request
     }
 
     /**
-     * Canonicalize a URL in either form: an origin-form request target
-     * ("/admin", "//x/admin") or an absolute URL ("https://host//x/admin").
+     * Canonicalise an origin-form target ("/admin") or an absolute URL ("https://host/admin").
      *
-     * Only the PATH component is touched. The "//" separating a scheme from its
-     * authority is structural and must survive, which is the whole reason this
-     * cannot just collapse leading slashes on the raw string.
+     * Only the path is touched: the "//" after a scheme is structural and must survive.
      */
     private static function canonicalizeUrl(string $url): string
     {
@@ -645,34 +539,10 @@ final readonly class Request
     /**
      * Collapse a leading run of slashes in an origin-form request target.
      *
-     * WHY THIS EXISTS. The path was being parsed twice, by two callers, from
-     * two different strings, and they disagreed:
-     *
-     *   - Here, parse_url() runs on the FULL url ("scheme://host" . target), so
-     *     "//x/admin/secret" keeps its leading slashes and uri()->path()
-     *     reports "//x/admin/secret".
-     *   - RouteCollection::normalizePath() runs parse_url() on the BARE path,
-     *     where a leading "//token" reads as an AUTHORITY, so it returned
-     *     "/admin/secret" and dispatched the protected route.
-     *
-     * The request therefore executed one route while every path-based check saw
-     * another: a guard doing str_starts_with($request->path(), '/admin') was
-     * handed "//x/admin/secret", returned false, and waved the request through
-     * to /admin/secret. The framework's own CsrfMiddleware was bypassable this
-     * way whenever an exclusion pattern was unanchored.
-     *
-     * Collapsing was chosen over rejecting the target. It is a normalisation
-     * rather than a new failure path, so nothing that used to be served starts
-     * erroring: request construction happens at the very top of the lifecycle,
-     * before the kernel's error handling exists, which is a poor place to
-     * introduce a throw. After collapsing, "//x/admin/secret" resolves to
-     * "/x/admin/secret" and 404s, and "//admin" resolves to "/admin" where the
-     * guard now sees "/admin" and blocks correctly. Either way the two views
-     * agree, which is the property that actually closes the hole.
-     *
-     * No legitimate client sends a "//"-prefixed origin-form target, so no real
-     * request changes behaviour. Interior duplicate slashes ("/a//b") are left
-     * alone: both parsers already agree on those, so there is nothing to fix.
+     * Same collapse as RouteCollection::normalizePath(): on a bare path parse_url() reads a
+     * leading "//token" as an authority, so path() and the dispatched route would otherwise
+     * disagree. Collapsing rather than rejecting keeps request construction free of a new
+     * failure path. Interior duplicate slashes are left alone.
      */
     private static function collapseLeadingSlashes(string $requestUri): string
     {
@@ -684,18 +554,11 @@ final readonly class Request
     }
 
     /**
-     * Build the absolute request URL.
+     * Build the absolute request URL from the server values and the forwarded headers.
      *
-     * Every forwarded input here is gated on the SAME allowlist that gates the
-     * client IP. An operator who drops x-forwarded-host from the list must stop
-     * having their Host decided by that header, otherwise the setting would only
-     * govern half of what it names.
-     *
-     * $trustedHeaders is already empty when the peer is not a trusted proxy, so
-     * an empty list means "read nothing forwarded" and needs no separate flag.
-     *
-     * X-Forwarded-Host, -Proto and -Port are read from their first value only, so
-     * the proxy in front of us must overwrite them, not append to them.
+     * Forwarded inputs are gated by $trustedHeaders, the same allowlist as the client
+     * IP. An empty list means nothing is read forwarded. X-Forwarded-Host, -Proto and
+     * -Port keep their first value, so the proxy in front must overwrite them, not append.
      *
      * @param array<string, mixed> $server
      * @param list<string>         $trustedHeaders
@@ -742,8 +605,7 @@ final readonly class Request
             ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost'));
 
         if (!str_contains($host, ':')) {
-            // A proxy-supplied scheme without a forwarded port means the default port
-            // of that scheme. SERVER_PORT belongs to the hop to the proxy, not to the client.
+            // SERVER_PORT is the hop to the proxy, so it is ignored when a forwarded scheme is present.
             $port = self::portNumber($forwarded['port'] ?? null)
                 ?? (in_array('x-forwarded-port', $trustedHeaders, true)
                     ? self::portNumber(self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null))
@@ -864,12 +726,8 @@ final readonly class Request
             return $method;
         }
 
-        // A NON-SCALAR "_method" used to reach a (string) cast and raise
-        // "Array to string conversion" from inside fromGlobals(). In the
-        // reference bootstrap that runs BEFORE the kernel exists, so the notice
-        // escapes every error-handling seam the framework has: "_method[]=PUT"
-        // was a one-parameter way to make the entry point emit a PHP warning.
-        // A body override that is not a scalar simply is not an override.
+        // A non-scalar body override is ignored: casting it would raise an E_WARNING
+        // ("Array to string conversion") before the kernel's error handling exists.
         $bodyOverride = $parsedBody['_method'] ?? null;
 
         $override = $headers['x-http-method-override']
@@ -888,39 +746,14 @@ final readonly class Request
     }
 
     /**
-     * Resolve the IP of the ORIGINAL caller, i.e. the value a rate limiter, an
-     * allowlist or an audit record should key on.
+     * Resolve the IP of the original caller, for rate limiting, allowlists and audit records.
      *
-     * A forwarding header is only ever read when the peer we actually spoke to
-     * (REMOTE_ADDR) is a configured trusted proxy. REMOTE_ADDR is the one address
-     * the SAPI hands us that a caller cannot forge; every header can be sent by
-     * anyone. When the peer is not trusted, NO header is consulted at all.
-     *
-     * Once the peer IS trusted, the header still cannot be believed at face
-     * value. Every conforming reverse proxy APPENDS the peer it saw to the RIGHT
-     * of whatever chain came in, so the LEFTMOST entry is simply what the
-     * original caller wrote there. Reading it let a caller choose its own
-     * throttle bucket, rotate it at will, or pin somebody else's:
-     *
-     *   caller sends      X-Forwarded-For: 192.0.2.66
-     *   proxy appends     X-Forwarded-For: 192.0.2.66, 198.51.100.7
-     *   REMOTE_ADDR       (the proxy)
-     *
-     * The chain is therefore ordered outermost (the caller) first and innermost
-     * (the nearest proxy) last, with REMOTE_ADDR closing it as the innermost hop
-     * of all. It is walked from the RIGHT, popping hops that are themselves
-     * trusted proxies; the first hop that is NOT trusted is the furthest point we
-     * can still vouch for, and that is the client. Above, the proxy pops and
-     * 198.51.100.7 answers, so the forged 192.0.2.66 is never reached.
-     *
-     * A header is only ever read when it appears in $trustedHeaders. Trusting the
-     * peer is a separate question from trusting a given header: a proxy manages
-     * one family and passes the rest through untouched, so a header the proxy
-     * does not write is still caller-controlled no matter who the peer is. See
-     * TRUSTED_HEADERS_DEFAULT.
-     *
-     * A malformed trusted Forwarded header means the client is unknown, not the
-     * proxy: null is returned rather than REMOTE_ADDR, so an allowlist denies it.
+     * Headers are read only when REMOTE_ADDR is a trusted proxy and the header is in
+     * $trustedHeaders. The forwarded chain is walked from the right, skipping trusted
+     * proxies: a conforming proxy appends to the right, so a caller can only prepend.
+     * The first untrusted hop is the client. The leftmost entry is the answer only
+     * when every hop is a trusted proxy. A malformed Forwarded header yields null, not
+     * REMOTE_ADDR, so an allowlist denies it.
      *
      * @param array<string, mixed>  $server
      * @param array<string, string> $headers
@@ -953,12 +786,8 @@ final readonly class Request
             return self::walkForwardedChain($chain, $trustedProxies);
         }
 
-        // Single-value vendor headers, opt-in by name and consulted only when
-        // neither chain header yielded a hop. They carry no ordering, so the walk
-        // above has nothing to work on: they are worth exactly as much as the
-        // nearest proxy's willingness to OVERWRITE, rather than pass through,
-        // whatever the caller sent under the same name. That is precisely why
-        // they are absent from TRUSTED_HEADERS_DEFAULT.
+        // Single-value vendor headers are read only when no chain header yielded a hop. They
+        // are trusted only if the nearest proxy overwrites them, which is why they are not in TRUSTED_HEADERS_DEFAULT.
         foreach (['x-real-ip', 'cf-connecting-ip', 'x-client-ip'] as $header) {
             if (!in_array($header, $trustedHeaders, true)) {
                 continue;
@@ -974,24 +803,11 @@ final readonly class Request
     }
 
     /**
-     * The forwarded hops as IP addresses, ordered outermost (the original caller)
-     * first and innermost (the proxy nearest to us) last. REMOTE_ADDR is NOT
-     * included here; the caller appends it.
+     * The forwarded hops as IP addresses, outermost first, without REMOTE_ADDR.
      *
-     * The RFC 7239 Forwarded header wins over the de facto X-Forwarded-For when
-     * both yield hops. Both are comma separated and both are appended to by each
-     * hop, so the same ordering holds for either.
-     *
-     * Entries that do not normalize to an IP (junk, "unknown", an empty slot from
-     * a trailing comma) are DROPPED rather than failing the whole chain, and that
-     * is deliberate. Junk to the LEFT of the real client is never reached, since
-     * the walk starts from the right and stops at the first untrusted hop. Junk
-     * cannot appear to the RIGHT of the real client either, because everything
-     * right of it was appended by our own trusted proxies. Please do not turn
-     * this back into a hard failure.
-     *
-     * Either header is skipped entirely when it is not in $trustedHeaders. A malformed
-     * Forwarded header yields null, and the caller must not fall back to other headers.
+     * RFC 7239 Forwarded wins over X-Forwarded-For when both yield hops. Entries that
+     * are not IPs are dropped, not fatal: the walk never reaches junk left of the client.
+     * A malformed Forwarded header yields null, and the caller must not fall back to other headers.
      *
      * @param  array<string, string> $headers
      * @param  list<string>          $trustedHeaders
@@ -1036,10 +852,9 @@ final readonly class Request
     }
 
     /**
-     * Return the outermost hop that is not itself a trusted proxy, scanning from
-     * the innermost end. Popping by the configured trusted LIST rather than by a
-     * hop count is what keeps this correct when a deployment adds or removes a
-     * layer of proxies.
+     * Return the outermost hop that is not a trusted proxy, scanning from the innermost end.
+     *
+     * Hops are popped by membership in $trustedProxies, not by count, so adding or removing a proxy layer needs no change.
      *
      * @param list<string> $chain          outermost first, innermost last
      * @param string[]     $trustedProxies
@@ -1052,9 +867,7 @@ final readonly class Request
             }
         }
 
-        // Every hop is trusted infrastructure, so the caller itself sits inside
-        // it and the outermost entry is the best answer available. This is also
-        // what keeps trustedProxies: ['*'] returning the leftmost entry.
+        // Every hop is trusted, so the outermost entry is the best answer available (also for ['*']).
         return $chain[0] ?? null;
     }
 
@@ -1092,17 +905,10 @@ final readonly class Request
     }
 
     /**
-     * Lowercase, trim and de-duplicate the configured header names, so a YAML
-     * file may spell them "X-Forwarded-For", and drop any name this class cannot
-     * read.
+     * Lowercase, trim and de-duplicate the header names, dropping any not in TRUSTED_HEADERS_SUPPORTED.
      *
-     * DROPPING rather than throwing is deliberate HERE, and it is not the whole
-     * story. A name outside TRUSTED_HEADERS_SUPPORTED cannot enable anything, so
-     * keeping it would change nothing, while a throw would introduce a new
-     * failure path at the very top of the lifecycle, before the kernel's error
-     * handling exists. The loud half lives where an operator's typo actually
-     * originates: SecurityConfig::fromArray() REJECTS an unknown name at boot,
-     * so a misspelling is reported rather than silently believed.
+     * Dropping is safe because an unknown name enables nothing; SecurityConfig::fromArray()
+     * rejects it at boot, so the typo is reported there.
      *
      * @param  array<mixed> $trustedHeaders
      * @return list<string>
@@ -1164,11 +970,11 @@ final readonly class Request
     }
 
     /**
-     * The connection parameters of the forwarding element appended by the outermost
-     * trusted proxy, for buildUri(). A client can prepend elements, never append
-     * them, so the walk starts at the right and stops at the first element whose
-     * "for" is not a trusted proxy. When every element is trusted, the first one wins.
-     * A malformed header, one whose quoted string is never closed, yields null.
+     * The proto, host and port of the Forwarded element that the outermost trusted proxy appended, for buildUri().
+     *
+     * The walk starts from the right, where a conforming proxy appends: a caller can only
+     * prepend. It stops at the first element whose "for" is not a
+     * trusted proxy. When every element is trusted, the first one wins. An unclosed quoted string yields null.
      *
      * @param string[] $trustedProxies
      * @return array{proto?: string, host?: string, port?: string}|null
@@ -1245,9 +1051,7 @@ final readonly class Request
     }
 
     /**
-     * Parse ONE RFC 7239 forwarding element ("for=1.2.3.4;proto=https") into its
-     * parameters: lowercased names mapped to unquoted values. Values keep their
-     * original case, callers normalize when they need to.
+     * Parse one RFC 7239 forwarding element ("for=1.2.3.4;proto=https") into lowercased names mapped to unquoted values.
      *
      * @return array<string, string>
      */

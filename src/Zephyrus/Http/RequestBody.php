@@ -5,11 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Http;
 
 /**
- * Immutable value object wrapping the parsed request body data.
- *
- * Provides typed accessors for individual fields and bulk access to the
- * entire body array. Optionally holds the raw body string for use cases
- * like webhook signature verification.
+ * Immutable value object wrapping the parsed request body data and the raw body string.
  */
 final readonly class RequestBody
 {
@@ -57,9 +53,7 @@ final readonly class RequestBody
     }
 
     /**
-     * Raw body content as received from php://input.
-     *
-     * Useful for webhook signature verification or custom parsing.
+     * Raw body content as received, e.g. for webhook signature verification.
      */
     public function raw(): string
     {
