@@ -350,7 +350,7 @@ final class RouteCollection
         }
 
         return array_values(array_filter(
-            $this->routes,
+            $this->routesInMatchOrder(),
             fn (Route $route): bool => $this->extractParameters($route, $normalizedPath) !== null,
         ));
     }
@@ -441,10 +441,9 @@ final class RouteCollection
     /**
      * Matches a method and path, or throws.
      *
-     * Routes are tried in registration order and the first one matching both path and method
-     * wins, so a static route must be registered before a parameterised route that could match
-     * the same path. A 405 is raised only when a route matches the path but none accepts the
-     * method; a GET route also accepts HEAD.
+     * Routes without a parameter are tried before parameterised ones, each group in registration
+     * order, and the first route matching both path and method wins. A 405 is raised only when a
+     * route matches the path but none accepts the method; a GET route also accepts HEAD.
      *
      * @throws RouteNotFoundException When no route matches, or the path is not valid UTF-8 or contains a control character.
      * @throws MethodNotAllowedException When the path matches but no route accepts the method.
@@ -463,7 +462,7 @@ final class RouteCollection
 
         $allowedMethods = [];
 
-        foreach ($this->routes as $route) {
+        foreach ($this->routesInMatchOrder() as $route) {
             $parameters = $this->extractParameters($route, $normalizedPath);
 
             if ($parameters === null) {
@@ -588,6 +587,37 @@ final class RouteCollection
         return preg_match('/[\x00-\x1F\x7F]/', $path) === 1 || !self::isWellFormedValue($path);
     }
 
+    /**
+     * The routes in the order they are tried: static routes first, then parameterised ones.
+     *
+     * @return list<Route>
+     */
+    private function routesInMatchOrder(): array
+    {
+        $static = [];
+        $parameterized = [];
+
+        foreach ($this->routes as $route) {
+            if ($this->isStaticRoute($route)) {
+                $static[] = $route;
+            } else {
+                $parameterized[] = $route;
+            }
+        }
+
+        return [...$static, ...$parameterized];
+    }
+
+    private function isStaticRoute(Route $route): bool
+    {
+        foreach (explode('/', $route->path) as $segment) {
+            if ($this->isParameterSegment($segment)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     /**
      * Reduces a request path to the form routes are matched against.

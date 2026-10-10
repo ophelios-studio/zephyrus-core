@@ -649,6 +649,74 @@ final class RouteCollectionTest extends TestCase
         self::assertSame([], $match->parameters);
     }
 
+    public function testStaticRouteRegisteredAfterParameterizedOneWins(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('GET', '/users/me', 'UserController@me'));
+
+        $match = $collection->match('GET', '/users/me');
+
+        self::assertSame('UserController@me', $match->route->handler);
+        self::assertSame([], $match->parameters);
+    }
+
+    public function testStaticRouteRegisteredBeforeParameterizedOneStillWins(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/me', 'UserController@me'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        self::assertSame('UserController@me', $collection->match('GET', '/users/me')->route->handler);
+    }
+
+    public function testParameterizedRoutesKeepRegistrationOrder(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('GET', '/users/{slug}', 'UserController@bySlug'));
+
+        $match = $collection->match('GET', '/users/42');
+
+        self::assertSame('UserController@show', $match->route->handler);
+        self::assertSame('42', $match->parameter('id'));
+    }
+
+    public function testStaticRouteWithAnotherMethodFallsThroughToParameterizedRoute(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('POST', '/users/me', 'UserController@store'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $match = $collection->match('GET', '/users/me');
+
+        self::assertSame('UserController@show', $match->route->handler);
+        self::assertSame('me', $match->parameter('id'));
+    }
+
+    public function testMethodNotAllowedListsMethodsOfStaticAndParameterizedRoutes(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('POST', '/users/me', 'UserController@store'));
+        $collection->add(Route::define('PUT', '/users/{id}', 'UserController@update'));
+
+        $this->expectException(MethodNotAllowedException::class);
+        $this->expectExceptionMessage('Method not allowed for /users/me. Allowed: GET, HEAD, POST, PUT');
+        $collection->match('DELETE', '/users/me');
+    }
+
+    public function testRoutesForPathListsStaticRouteBeforeParameterizedOnes(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $collection->add(Route::define('POST', '/users/me', 'UserController@store'));
+
+        $routes = $collection->routesForPath('/users/me');
+
+        self::assertSame(['/users/me', '/users/{id}'], [$routes[0]->path, $routes[1]->path]);
+    }
+
     public function testWithRoutePreservesTrailingSlashTolerantSetting(): void
     {
         $collection = new RouteCollection(trailingSlashTolerant: false);
