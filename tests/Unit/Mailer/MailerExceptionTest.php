@@ -225,4 +225,20 @@ final class MailerExceptionTest extends TestCase
             MailerException::configurationMissing('SMTP host not set')->failure,
         );
     }
+
+    public function testAttachmentNotFoundKeepsAnInvalidUtf8PathEncodable(): void
+    {
+        $exception = MailerException::attachmentNotFound("/tmp/\xFFmissing.pdf");
+
+        self::assertNotFalse(json_encode($exception->getMessage()));
+    }
+
+    public function testAttachmentNotFoundEscapesControlCharactersInThePath(): void
+    {
+        $exception = MailerException::attachmentNotFound("/tmp/a\nb\x1B.pdf");
+
+        self::assertStringNotContainsString("\n", $exception->getMessage());
+        self::assertStringNotContainsString("\x1B", $exception->getMessage());
+        self::assertStringContainsString('\\n', $exception->getMessage());
+    }
 }

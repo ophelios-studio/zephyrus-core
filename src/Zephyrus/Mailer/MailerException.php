@@ -85,7 +85,10 @@ final class MailerException extends ZephyrusRuntimeException
 
     public static function attachmentNotFound(string $path): self
     {
-        return new self(sprintf('Attachment not found: %s', $path), MailerFailure::AttachmentNotFound);
+        return new self(
+            sprintf('Attachment not found: %s', self::quotedValue($path)),
+            MailerFailure::AttachmentNotFound,
+        );
     }
 
     /**
@@ -96,27 +99,34 @@ final class MailerException extends ZephyrusRuntimeException
      * a caller logging them should be able to tell them apart.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Control characters and backslashes are escaped; values over 64 bytes are cut to 64 bytes on a character boundary.
+     * @param string $value   The refused value. Invalid UTF-8 is replaced by "?", control characters and backslashes are escaped, and values over 64 bytes are cut on a character boundary.
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
     {
-        $cut = strlen($value) > self::SHOWN_VALUE_MAX_LENGTH;
-        $shown = addcslashes(
-            mb_scrub($cut ? mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8') : $value, 'UTF-8'),
-            "\\\0..\37\177",
-        );
-        $length = '';
-
-        if ($cut) {
-            $shown .= '...';
-            $length = sprintf(' (%d bytes)', strlen($value));
-        }
-
         return new self(
-            sprintf('Attachment rejected: %s "%s"%s %s.', $subject, $shown, $length, $reason),
+            sprintf('Attachment rejected: %s %s %s.', $subject, self::quotedValue($value), $reason),
             MailerFailure::AttachmentRejected,
         );
+    }
+
+    /**
+     * Quote a value for a message, escaped and cut as attachmentRejected() documents.
+     */
+    private static function quotedValue(string $value): string
+    {
+        if (strlen($value) <= self::SHOWN_VALUE_MAX_LENGTH) {
+            return '"' . self::escaped($value) . '"';
+        }
+
+        $cut = mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8');
+
+        return sprintf('"%s..." (%d bytes)', self::escaped($cut), strlen($value));
+    }
+
+    private static function escaped(string $value): string
+    {
+        return addcslashes(mb_scrub($value, 'UTF-8'), "\\\0..\37\177");
     }
 
     public static function configurationMissing(string $detail): self
