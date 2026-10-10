@@ -68,7 +68,7 @@ final class ServiceWithUntypedParam
     public function __construct($value) {}
 }
 
-final class ServiceWithScalarVariadic
+final class ServiceWithStringVariadic
 {
     /** @var list<string> */
     public readonly array $tags;
@@ -133,6 +133,20 @@ final class ServiceWithUnionClassVariadic
 final class ServiceWithByReferenceClassVariadic
 {
     public function __construct(SimpleService &...$services) {}
+}
+
+final class ServiceWithArrayVariadic
+{
+    /** @var list<array<mixed>> */
+    public readonly array $items;
+
+    /**
+     * @param array<mixed> ...$items
+     */
+    public function __construct(array ...$items)
+    {
+        $this->items = $items;
+    }
 }
 
 final class ServiceWithBuiltinUnionVariadic
@@ -427,11 +441,18 @@ final class ContainerTest extends TestCase
         }
     }
 
-    public function testAutoWireResolvesScalarVariadicToNoArguments(): void
+    public function testAutoWireResolvesStringVariadicToNoArguments(): void
     {
-        $svc = $this->container->get(ServiceWithScalarVariadic::class);
-        self::assertInstanceOf(ServiceWithScalarVariadic::class, $svc);
+        $svc = $this->container->get(ServiceWithStringVariadic::class);
+        self::assertInstanceOf(ServiceWithStringVariadic::class, $svc);
         self::assertSame([], $svc->tags);
+    }
+
+    public function testAutoWireResolvesArrayVariadicToNoArguments(): void
+    {
+        $svc = $this->container->get(ServiceWithArrayVariadic::class);
+        self::assertInstanceOf(ServiceWithArrayVariadic::class, $svc);
+        self::assertSame([], $svc->items);
     }
 
     public function testAutoWireResolvesBuiltinUnionVariadicToNoArguments(): void
@@ -441,7 +462,7 @@ final class ContainerTest extends TestCase
         self::assertSame([], $svc->values);
     }
 
-    public function testAutoWireResolvesNullableScalarUnionVariadicToNoArguments(): void
+    public function testAutoWireResolvesNullableBuiltinUnionVariadicToNoArguments(): void
     {
         $svc = $this->container->get(ServiceWithNullableUnionVariadic::class);
         self::assertInstanceOf(ServiceWithNullableUnionVariadic::class, $svc);
@@ -468,7 +489,11 @@ final class ContainerTest extends TestCase
     }
 
     #[DataProvider('refusedVariadicProvider')]
-    public function testAutoWireRefusesVariadicWhoseTypeIsNotScalar(string $id, string $param, string $kind): void
+    public function testAutoWireRefusesVariadicNotTypedStringIntFloatBoolOrArray(
+        string $id,
+        string $param,
+        string $kind,
+    ): void
     {
         $this->assertAutoWireRefusesVariadic($id, $param, $kind);
     }
