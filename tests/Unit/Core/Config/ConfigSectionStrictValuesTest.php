@@ -51,6 +51,9 @@ final class ConfigSectionStrictValuesTest extends TestCase
             'French for true' => ['vrai'],
             'a number that is not 0 or 1' => ['2'],
             'an empty-ish word' => ['nope'],
+            'an empty string' => [''],
+            'a whitespace-only string' => ["  \t"],
+            'a NUL byte' => ["\0"],
             'an array' => [['a', 'b']],
         ];
     }

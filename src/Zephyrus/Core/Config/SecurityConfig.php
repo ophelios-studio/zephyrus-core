@@ -159,8 +159,8 @@ final readonly class SecurityConfig
         $encryption = isset($values['encryption']) && is_array($values['encryption']) ? $values['encryption'] : [];
         $sections = ['values' => $values, 'csrf' => $csrf, 'encryption' => $encryption];
 
-        $forceHttps = (bool) (self::read('forceHttps', $sections) ?? false);
-        $csrfEnabled = (bool) (self::read('csrfEnabled', $sections) ?? true);
+        $forceHttps = self::readBool('forceHttps', $sections, false);
+        $csrfEnabled = self::readBool('csrfEnabled', $sections, true);
         $autoHtml = self::findWritten('csrfAutoHtml', $sections);
         $csrfAutoHtml = (bool) ($autoHtml[1] ?? false);
         $csrfExceptions = (array) (self::read('csrfExceptions', $sections) ?? []);
@@ -331,6 +331,17 @@ final readonly class SecurityConfig
         }
 
         return $declared;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $sections
+     * @throws ConfigurationException when the written value is not a boolean.
+     */
+    private static function readBool(string $canonical, array $sections, bool $default): bool
+    {
+        $written = self::findWritten($canonical, $sections);
+
+        return $written === null ? $default : ConfigBoolean::parse('security', $written[0], $written[1]);
     }
 
     /**

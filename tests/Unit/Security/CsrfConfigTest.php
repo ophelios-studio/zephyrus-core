@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Security;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Security\CsrfConfig;
 
@@ -76,5 +77,24 @@ final class CsrfConfigTest extends TestCase
         $this->expectExceptionMessage('security.csrf.exceptions[0]');
 
         CsrfConfig::fromSecurityConfig($this->security(true, ['']));
+    }
+
+    public function testAnEmptyEnabledValueIsRefusedInsteadOfDisablingCsrf(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        CsrfConfig::fromArray(['enabled' => '']);
+    }
+
+    public function testAWhitespaceOnlyEnabledValueIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        CsrfConfig::fromArray(['csrf_enabled' => "  \t"]);
+    }
+
+    public function testTheStringZeroDisablesCsrfExplicitly(): void
+    {
+        self::assertFalse(CsrfConfig::fromArray(['enabled' => '0'])->enabled);
     }
 }

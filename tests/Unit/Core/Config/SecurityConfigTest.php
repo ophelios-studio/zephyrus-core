@@ -763,4 +763,23 @@ final class SecurityConfigTest extends TestCase
 
         self::assertSame(['*.example.com', '[2001:db8::1]', 'my_app.example.com'], $config->allowedHosts);
     }
+
+    public function testAnEmptyCsrfSwitchIsRefusedInsteadOfDisablingCsrf(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SecurityConfig::fromArray(['csrfEnabled' => '']);
+    }
+
+    public function testAnEmptyForceHttpsIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SecurityConfig::fromArray(['forceHttps' => '']);
+    }
+
+    public function testTheStringZeroDisablesCsrfExplicitly(): void
+    {
+        self::assertFalse(SecurityConfig::fromArray(['csrfEnabled' => '0'])->csrfEnabled);
+    }
 }

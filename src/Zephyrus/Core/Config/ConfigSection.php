@@ -32,19 +32,9 @@ namespace Zephyrus\Core\Config;
  *
  * ## The typed getters REFUSE a value they cannot read
  *
- * They used to guess, and they guessed in the unsafe direction. getBool() ran
- * filter_var() without FILTER_NULL_ON_FAILURE, so every value the filter did
- * not recognise came back as FALSE and the caller's default was discarded on
- * the way past:
- *
- *   requireMfa: enabled   ->  getBool('requireMfa', true) === false
- *   requireMfa: oui       ->  false
- *   maxAttempts: unlimited->  getInt('maxAttempts', 5) === 0
- *
- * A protection an operator explicitly asked for therefore turned itself off,
- * quietly, on a typo, while the config file still read as if it were on. So an
- * unreadable value now throws ConfigurationException instead, and the process
- * stops at boot where somebody can see it.
+ * getBool() accepts only the spellings ConfigBoolean documents. Any other value,
+ * including an empty string, throws ConfigurationException, so a protection
+ * written in the config file cannot switch itself off on a typo.
  *
  * Two coercions are kept deliberately, because they are unambiguous and
  * because existing configuration relies on them: a float in an int slot
@@ -265,19 +255,7 @@ abstract class ConfigSection
             return $default;
         }
 
-        $parsed = filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
-
-        if ($parsed === null) {
-            throw $this->rejected(
-                $key,
-                $value,
-                "is not a boolean; use true/false, 1/0, on/off or yes/no. It used to resolve to "
-                . 'FALSE and discard the caller default, so a protection asked for in the config '
-                . 'file turned itself off',
-            );
-        }
-
-        return $parsed;
+        return ConfigBoolean::parse(static::class, $key, $value);
     }
 
     /**
