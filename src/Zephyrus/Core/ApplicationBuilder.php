@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use Closure;
+use InvalidArgumentException;
 use Zephyrus\Container\ContainerInterface;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
@@ -37,6 +38,8 @@ final class ApplicationBuilder
         . 'stack-trace argument values and the process environment to whichever client triggers an error. '
         . 'If this is deliberate, call ApplicationBuilder::withProductionDebugAcknowledged(); '
         . 'even then, only clients named by withDebugClientAllowlist() (or loopback) can see it.';
+
+    private const array ACKNOWLEDGEABLE_SECURITY_KEYS = ['forceHttps', 'allowedHosts', 'csrf', 'maxBodySize', 'headers'];
 
     private KernelBuilder $kernelBuilder;
 
@@ -432,24 +435,54 @@ final class ApplicationBuilder
      *
      * Accepted names: forceHttps, allowedHosts, csrf, maxBodySize and headers, short or qualified
      * ("security.maxBodySize").
-     * Any other name is ignored.
      *
      * @param string[] $keys
+     * @throws InvalidArgumentException when a name is not one of the accepted names.
      */
     public function withAcknowledgedSecurityKeys(array $keys): self
     {
+        $names = [];
+        foreach ($keys as $key) {
+            $names[] = self::acknowledgedSecurityKeyName($key);
+        }
+
         $clone = clone $this;
         $clone->acknowledgedSecurityKeys = array_values(array_unique(array_merge(
             $this->acknowledgedSecurityKeys,
-            array_map(
-                static fn (string $key): string => str_starts_with($key, 'security.')
-                    ? substr($key, strlen('security.'))
-                    : $key,
-                $keys,
-            ),
+            $names,
         )));
 
         return $clone;
+    }
+
+    /**
+     * The short setting name for an accepted key, short or qualified.
+     *
+     * @throws InvalidArgumentException when the key is not an accepted name.
+     */
+    private static function acknowledgedSecurityKeyName(string $key): string
+    {
+        $short = str_starts_with($key, 'security.') ? substr($key, strlen('security.')) : $key;
+        if (in_array($short, self::ACKNOWLEDGEABLE_SECURITY_KEYS, true)) {
+            return $short;
+        }
+
+        $message = 'Unknown security key ' . self::quoted([$key]) . '. Accepted names: '
+            . implode(', ', self::ACKNOWLEDGEABLE_SECURITY_KEYS) . ', each short or prefixed with "security.".';
+        $spelling = self::looseSpelling(str_starts_with(strtolower($key), 'security.') ? substr($key, 9) : $key);
+        foreach (self::ACKNOWLEDGEABLE_SECURITY_KEYS as $accepted) {
+            if ($spelling === self::looseSpelling($accepted)) {
+                $message .= ' Did you mean ' . self::quoted([$accepted]) . '?';
+                break;
+            }
+        }
+
+        throw new InvalidArgumentException($message);
+    }
+
+    private static function looseSpelling(string $name): string
+    {
+        return str_replace('_', '', strtolower($name));
     }
 
     /**

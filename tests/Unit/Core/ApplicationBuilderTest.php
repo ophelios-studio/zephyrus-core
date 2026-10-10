@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core;
 
+use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Core\Application;
@@ -25,6 +27,69 @@ final class ApplicationBuilderTest extends TestCase
     protected function tearDown(): void
     {
         App::reset();
+    }
+
+    #[DataProvider('unknownAcknowledgedKeyProvider')]
+    public function testAnUnknownAcknowledgedSecurityKeyIsRefused(string $name, string $expected): void
+    {
+        try {
+            ApplicationBuilder::create()->withAcknowledgedSecurityKeys(['csrf', $name]);
+
+            self::fail('withAcknowledgedSecurityKeys() accepted an unknown name.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame($expected, $exception->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function unknownAcknowledgedKeyProvider(): iterable
+    {
+        $accepted = 'Accepted names: forceHttps, allowedHosts, csrf, maxBodySize, headers, '
+            . 'each short or prefixed with "security.".';
+
+        yield 'misspelled' => [
+            'maxBodysize',
+            'Unknown security key "maxBodysize". ' . $accepted . ' Did you mean "maxBodySize"?',
+        ];
+        yield 'upper case' => ['CSRF', 'Unknown security key "CSRF". ' . $accepted . ' Did you mean "csrf"?'];
+        yield 'qualified, wrong case' => [
+            'security.ForceHttps',
+            'Unknown security key "security.ForceHttps". ' . $accepted . ' Did you mean "forceHttps"?',
+        ];
+        yield 'snake case' => [
+            'max_body_size',
+            'Unknown security key "max_body_size". ' . $accepted . ' Did you mean "maxBodySize"?',
+        ];
+        yield 'snake case force_https' => [
+            'force_https',
+            'Unknown security key "force_https". ' . $accepted . ' Did you mean "forceHttps"?',
+        ];
+        yield 'snake case allowed_hosts' => [
+            'allowed_hosts',
+            'Unknown security key "allowed_hosts". ' . $accepted . ' Did you mean "allowedHosts"?',
+        ];
+        yield 'capitalised prefix' => [
+            'Security.csrf',
+            'Unknown security key "Security.csrf". ' . $accepted . ' Did you mean "csrf"?',
+        ];
+        yield 'upper case prefix' => [
+            'SECURITY.csrf',
+            'Unknown security key "SECURITY.csrf". ' . $accepted . ' Did you mean "csrf"?',
+        ];
+        yield 'unrelated' => ['trustedProxies', 'Unknown security key "trustedProxies". ' . $accepted];
+        yield 'empty' => ['', 'Unknown security key "". ' . $accepted];
+        yield 'nul byte' => ["csrf\0", 'Unknown security key "csrf\u0000". ' . $accepted];
+    }
+
+    public function testEveryAcceptedAcknowledgedSecurityKeyNameIsAccepted(): void
+    {
+        $builder = ApplicationBuilder::create()->withAcknowledgedSecurityKeys([
+            'forceHttps', 'security.allowedHosts', 'csrf', 'security.maxBodySize', 'headers',
+        ]);
+
+        self::assertInstanceOf(ApplicationBuilder::class, $builder);
     }
 
     public function testBuildReturnsApplication(): void
