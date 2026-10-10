@@ -247,6 +247,8 @@ final readonly class Request
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
      * @param array<string, mixed> $files Native $_FILES entries or FileUpload values.
+     *
+     * @throws \InvalidArgumentException When a file field holds no readable upload.
      */
     public static function fromArray(
         string $method,
@@ -268,7 +270,7 @@ final readonly class Request
             headers:    new HeaderBag(self::normalizeHeaders($headers)),
             cookies:    new CookieJar($cookies),
             attributes: $attributes,
-            files:      $files,
+            files:      self::normalizeFileUploads($files, strict: true),
             clientIp:   $clientIp,
         );
     }
@@ -1227,44 +1229,61 @@ final readonly class Request
 
     /**
      * @param array<string, mixed> $files
+     * @param bool $strict Throw on an unreadable entry instead of skipping it.
      * @return array<string, FileUpload|array<int, FileUpload>>
+     *
+     * @throws \InvalidArgumentException When $strict and a field holds no readable upload.
      */
-    private static function normalizeFileUploads(array $files): array
+    private static function normalizeFileUploads(array $files, bool $strict = false): array
     {
         $normalized = [];
 
         foreach ($files as $field => $entry) {
-            if ($entry instanceof FileUpload) {
-                $normalized[(string) $field] = $entry;
+            $uploads = self::uploadsOf($entry);
+
+            if ($uploads === null) {
+                if ($strict) {
+                    throw new \InvalidArgumentException(sprintf('File field "%s" holds no readable upload.', $field));
+                }
 
                 continue;
             }
 
-            if (!is_array($entry)) {
-                continue;
-            }
-
-            $uploads = self::uploadObjectsOf($entry);
-            if ($uploads !== null) {
-                $normalized[(string) $field] = $uploads;
-
-                continue;
-            }
-
-            try {
-                $group = FileUpload::listFromPhpArray($entry);
-            } catch (UploadException) {
-                continue;
-            }
-
-            if ($group === []) {
-                continue;
-            }
-
-            $normalized[(string) $field] = count($group) === 1 ? $group[0] : $group;
+            $normalized[(string) $field] = $uploads;
         }
 
         return $normalized;
+    }
+
+    /**
+     * @return FileUpload|list<FileUpload>|null Null when the entry is not an upload.
+     */
+    private static function uploadsOf(mixed $entry): FileUpload|array|null
+    {
+        if ($entry instanceof FileUpload) {
+            return $entry;
+        }
+
+        if (!is_array($entry)) {
+            return null;
+        }
+
+        $uploads = self::uploadObjectsOf($entry);
+        if ($uploads !== null) {
+            return $uploads;
+        }
+
+        try {
+            $group = FileUpload::listFromPhpArray($entry);
+        } catch (UploadException) {
+            return null;
+        }
+
+        if ($group === []) {
+            return null;
+        }
+
+        return count($group) === 1 ? $group[0] : $group;
     }
 
     /**

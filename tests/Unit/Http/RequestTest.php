@@ -1830,6 +1830,29 @@ final class RequestTest extends TestCase
         self::assertSame('/tmp/c2', $files[1]->tmpPath);
     }
 
+    #[DataProvider('unreadableFileEntries')]
+    public function testFromArrayRefusesUnreadableFileEntryWithoutEchoingIt(mixed $entry): void
+    {
+        try {
+            Request::fromArray('POST', '/upload', files: ['avatar' => $entry]);
+        } catch (\InvalidArgumentException $exception) {
+            self::assertStringContainsString('avatar', $exception->getMessage());
+            self::assertStringNotContainsString('secret', $exception->getMessage());
+
+            return;
+        }
+
+        self::fail('An unreadable file entry must be refused by fromArray().');
+    }
+
+    public static function unreadableFileEntries(): iterable
+    {
+        yield 'scalar value' => ['secret-content'];
+        yield 'empty array' => [[]];
+        yield 'missing tmp_name' => [['name' => 'secret.png', 'error' => UPLOAD_ERR_OK, 'size' => 1]];
+        yield 'missing error' => [['name' => 'secret.png', 'tmp_name' => '/tmp/phpA', 'size' => 1]];
+    }
+
     public function testFromGlobalsSkipsMalformedSingleFileEntry(): void
     {
         $request = Request::fromGlobals(
