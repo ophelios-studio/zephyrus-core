@@ -158,7 +158,7 @@ if (!function_exists('format')) {
     /**
      * Format a value with the Formatter service. Built-in names are listed in Formatter::BUILT_IN_FORMATTERS.
      *
-     * Examples:
+     * Examples assume an en_US Formatter: other locales print USD as "US$" or "$ US".
      *   format('money', 19.99)           => "$19.99"
      *   format('date', new DateTime())   => "Mar 9, 2026"
      *   format('filesize', 1048576)      => "1.0 MB"

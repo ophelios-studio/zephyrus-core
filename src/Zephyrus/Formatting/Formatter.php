@@ -154,8 +154,8 @@ final class Formatter
      * Formats a monetary amount.
      *
      * The currency is the explicit $currency, else the default currency, else the locale's native currency. An empty
-     * string counts as no currency. A locale without a region (en, fr) has no native currency, so pass a currency or
-     * set $defaultCurrency.
+     * string counts as no currency. A locale without a country (en, fr, es_419) has no native currency, so pass a
+     * currency or set $defaultCurrency.
      *
      * @param float       $amount   The monetary value.
      * @param string|null $currency ISO 4217 code, three ASCII letters (e.g. 'USD', 'EUR'). Null or '' uses the default
@@ -183,7 +183,7 @@ final class Formatter
     /**
      * Formats a number with grouping separators and exactly $precision fraction digits.
      *
-     * @throws FormatterException When ICU cannot format the value.
+     * @throws FormatterException When $precision is outside 0 to 20, or when ICU cannot format the value.
      */
     public function decimal(float $value, int $precision = 2): string
     {
@@ -203,7 +203,7 @@ final class Formatter
     /**
      * Formats a fraction as a percentage (0.85 gives "85%").
      *
-     * @throws FormatterException When ICU cannot format the value.
+     * @throws FormatterException When $precision is outside 0 to 20, or when ICU cannot format the value.
      */
     public function percent(float $value, int $precision = 0): string
     {
@@ -333,8 +333,8 @@ final class Formatter
     }
 
     /**
-     * Formats a duration in seconds: "2h 10m 30s" in English, "2 h 10 min 30 s" in French (language fr), English for
-     * any other language. Negative values get a leading "-".
+     * Formats a duration in seconds: "2h 10m 30s" in English, "2 h 10 min 30 s" in French (language fr, U+00A0 between
+     * number and unit), English for any other language. Negative values get a leading "-".
      */
     public function duration(int $seconds): string
     {
@@ -365,7 +365,10 @@ final class Formatter
 
     /**
      * Formats a byte count in 1024-based units: "1.5 MB" in English, "1,5 Mo" in French (language fr, decimal mark
-     * of the locale), English for any other language. Bytes are shown without decimals. No grouping separator.
+     * of the locale, U+00A0 between number and unit), English for any other language. Bytes are shown without
+     * decimals. No grouping separator.
+     *
+     * @throws FormatterException When $precision is outside 0 to 20.
      */
     public function filesize(int $bytes, int $precision = 1): string
     {
