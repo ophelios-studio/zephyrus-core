@@ -363,4 +363,26 @@ final class MailerAttachmentGuardTest extends TestCase
             self::assertStringNotContainsString('second argument', $e->getMessage());
         }
     }
+
+    public function testAFileNameLongerThan255BytesIsRefusedAsAFileName(): void
+    {
+        $fileName = str_repeat('é', 128) . '.pdf';
+        $path = $this->root . '/' . $fileName;
+
+        if (@file_put_contents($path, 'payload') === false) {
+            self::markTestSkipped('The file system refuses a file name longer than 255 bytes.');
+        }
+
+        try {
+            $mailer = new Mailer($this->config);
+
+            $this->expectException(MailerException::class);
+            $this->expectExceptionMessage('Attachment rejected: file name');
+            $this->expectExceptionMessage('is longer than 255 bytes; pass a display name as the second argument of attach()');
+
+            $mailer->attach($path);
+        } finally {
+            @unlink($path);
+        }
+    }
 }
