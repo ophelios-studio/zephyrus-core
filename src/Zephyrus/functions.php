@@ -54,11 +54,13 @@ if (!function_exists('config')) {
      *
      * Built-in sections: application, session, security, localization, database.
      * Custom sections are accessible when their factory is passed in the
-     * $sectionFactories argument of Configuration::fromArray() or fromYamlFile().
+     * $sectionFactories argument of the Configuration factories (fromArray(),
+     * fromYamlFile(), fromFiles(), ...).
      *
      * @param string      $section  Section name (e.g. 'application', 'database', or custom).
      * @param string|null $property Dot-notation property within the section.
      * @param mixed       $default  Default value when the property is not found.
+     * @throws \InvalidArgumentException when $section is a spelling of a built-in section (see Configuration::section()).
      */
     function config(string $section, ?string $property = null, mixed $default = null): mixed
     {
@@ -67,18 +69,14 @@ if (!function_exists('config')) {
             return $default;
         }
 
-        // Try built-in sections first (public readonly properties on Configuration).
-        $builtIn = match ($section) {
+        $configSection = match ($section) {
             'application' => $configuration->application,
             'session' => $configuration->session,
             'security' => $configuration->security,
             'localization' => $configuration->localization,
             'database' => $configuration->database,
-            default => null,
+            default => $configuration->section($section),
         };
-
-        // Fall back to custom sections.
-        $configSection = $builtIn ?? ($configuration->hasSection($section) ? $configuration->section($section) : null);
         if ($configSection === null) {
             return $default;
         }

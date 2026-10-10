@@ -169,6 +169,16 @@ final class FunctionsTest extends TestCase
         self::assertSame('fallback', config('database', 'host', 'fallback'));
     }
 
+    public function testConfigRefusesASpellingOfABuiltInSectionName(): void
+    {
+        App::setConfiguration(Configuration::fromArray([]));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('$configuration->database');
+
+        config('database_');
+    }
+
     public function testConfigReturnsSessionSection(): void
     {
         $config = Configuration::fromArray([
