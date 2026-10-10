@@ -56,7 +56,7 @@ final class Mailer
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
     /**
-     * C0 controls, DEL and the bidi controls U+200F, U+202A to U+202E, U+2066 to U+2069, matched on bytes so an invalid UTF-8 name cannot bypass it.
+     * C0 controls, DEL and the bidi controls U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069. Matched on bytes, so invalid UTF-8 is covered too.
      */
     private const string CONTROL_OR_BIDI_PATTERN = '~[\x00-\x1F\x7F]|\xE2\x80[\x8E\x8F\xAA-\xAE]|\xE2\x81[\xA6-\xA9]~';
 
@@ -227,7 +227,7 @@ final class Mailer
         }
 
         $sentName = $name !== '' ? $name : basename($path);
-        $this->assertDisplayName($sentName, false, $name === '');
+        $this->assertSentName($sentName, false, $name === '');
 
         if ($allowedRoot !== null) {
             $this->assertWithinRoot($path, $allowedRoot);
@@ -255,7 +255,7 @@ final class Mailer
      */
     public function attachContent(string $content, string $name, ?string $mimeType = null): self
     {
-        $this->assertDisplayName($name, true);
+        $this->assertSentName($name, true);
 
         if ($mimeType !== null && strlen($mimeType) > self::MAX_MEDIA_TYPE_BYTES) {
             throw MailerException::attachmentRejected('media type', $mimeType, 'is longer than ' . self::MAX_MEDIA_TYPE_BYTES . ' bytes');
@@ -318,11 +318,11 @@ final class Mailer
     }
 
     /**
-     * Refuse a display name that could split a MIME header, name a path, or be dropped by the mail library.
+     * Refuse a sent name, display or file name, that could split a MIME header, name a path, or be dropped by the mail library.
      *
      * @param bool $fromFileName True when the name is the file's own name, because the caller gave no display name.
      */
-    private function assertDisplayName(string $name, bool $isStringAttachment, bool $fromFileName = false): void
+    private function assertSentName(string $name, bool $isStringAttachment, bool $fromFileName = false): void
     {
         if (strlen($name) > self::MAX_HEADER_VALUE_BYTES) {
             $this->refuseName($name, $fromFileName, 'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes');
