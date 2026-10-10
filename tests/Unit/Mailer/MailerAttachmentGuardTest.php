@@ -191,6 +191,24 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer->attach($this->inside, $name);
     }
 
+    public function testADisplayNameOf255BytesIsAcceptedByAttach(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attach($this->inside, str_repeat('a', 255));
+
+        self::assertSame(str_repeat('a', 255), $mailer->getPhpMailer()->getAttachments()[0][2]);
+    }
+
+    public function testADisplayNameLongerThan255BytesIsRefusedByAttach(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('is longer than 255 bytes');
+
+        $mailer->attach($this->inside, str_repeat('a', 957));
+    }
+
     public function testAnEmptyDisplayNameMeansTheFileName(): void
     {
         $mailer = new Mailer($this->config);

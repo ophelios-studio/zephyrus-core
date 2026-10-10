@@ -55,6 +55,9 @@ final class Mailer
 
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
+    /** Longest media type and display name: PHPMailer folds header lines over 998 bytes unindented. */
+    private const int MAX_HEADER_VALUE_BYTES = 255;
+
     public function __construct(MailerConfig $config, ?RenderEngine $renderEngine = null)
     {
         $this->renderEngine = $renderEngine;
@@ -247,6 +250,10 @@ final class Mailer
 
         $this->assertDisplayName($name);
 
+        if ($mimeType !== null && strlen($mimeType) > self::MAX_HEADER_VALUE_BYTES) {
+            throw MailerException::attachmentRejected('media type', $mimeType, 'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes');
+        }
+
         if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {
             throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype optionally followed by ; name=value parameters other than name, filename or boundary');
         }
@@ -298,6 +305,14 @@ final class Mailer
      */
     private function assertDisplayName(string $name): void
     {
+        if (strlen($name) > self::MAX_HEADER_VALUE_BYTES) {
+            throw MailerException::attachmentRejected(
+                'display name',
+                $name,
+                'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes',
+            );
+        }
+
         if (preg_match(self::DISPLAY_NAME_PATTERN, $name) === 1) {
             throw MailerException::attachmentRejected(
                 'display name',
