@@ -35,8 +35,10 @@ use function strtolower;
  * public API endpoints protected by other means (bearer tokens, HMAC, …), or
  * health-check routes.
  *
- *   $config = CsrfConfig::fromSecurityConfig($securityConfig);
- *   $mw = new CsrfMiddleware($sessionManager, $config);
+ *   $mw = new CsrfMiddleware(
+ *       new SessionCsrfTokenManager($session),
+ *       CsrfConfig::fromSecurityConfig($configuration->security),
+ *   );
  *
  * fromSecurityConfig() reads csrfEnabled and csrfExceptions from the
  * application's security section. See CsrfConfig for the pattern rules.
@@ -59,12 +61,13 @@ use function strtolower;
  *
  * Usage:
  *
+ *   $csrf = new SessionCsrfTokenManager($session);
  *   $kernel = KernelBuilder::create()
- *       ->withMiddleware(new CsrfMiddleware($sessionManager))
+ *       ->withMiddleware(new CsrfMiddleware($csrf))
  *       ->build();
  *
  *   // In a template, embed the token:
- *   <input type="hidden" name="_csrf_token" value="<?= $manager->getToken() ?>">
+ *   <input type="hidden" name="_csrf_token" value="<?= $csrf->getToken() ?>">
  *
  *   // Or via AJAX header:
  *   fetch('/api/action', {
