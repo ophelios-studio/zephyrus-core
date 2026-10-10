@@ -13,6 +13,7 @@ GITHUB_COMMITTER='noreply@github.com'
 CI_SKIP_RE='\[(skip ci|ci skip|no ci|skip actions|actions skip)\]'
 # Random per run, so untrusted text cannot contain the token that resumes command processing.
 stop_token="untrusted-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+[ "${#stop_token}" -eq 42 ] || exit 1
 
 if [ "${1:-}" = --title ]; then
   title_mode=1
@@ -46,7 +47,7 @@ escape() {
 # Prints untrusted text with runner workflow commands stopped, so it cannot run one.
 print_untrusted() {
   local prefix=$1 text=$2
-  printf '::stop-commands::%s\n%s%s\n::%s::\n' "$stop_token" "$prefix" "$text" "$stop_token"
+  printf '::stop-commands::%s\n%s%s\n::%s::\n' "$stop_token" "$prefix" "$(escape "$text")" "$stop_token"
 }
 
 is_allowed_type() {
