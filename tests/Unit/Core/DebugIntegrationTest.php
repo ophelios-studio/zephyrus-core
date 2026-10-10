@@ -515,6 +515,22 @@ final class DebugIntegrationTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
+    public function testApplicationScrubberMasksACapturedVariableByItsBareName(): void
+    {
+        $iban = self::marker('iban');
+        $count = random_int(100_000_000, 999_999_999);
+        Debugger::getBlueScreen()->scrubber = static fn (string $key): bool => $key === 'iban';
+
+        $html = $this->renderBlueScreenWithArgument([
+            'handler' => static fn (): array => [$iban, $count],
+        ]);
+
+        self::assertStringContainsString((string) $count, $html, 'Control: an ordinary captured variable must still render.');
+        self::assertStringNotContainsString($iban, $html, 'The application scrubber did not mask a captured variable.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testCapturedClosuresAreMaskedAtEveryDepth(): void
     {
         $password = self::marker('password');

@@ -264,7 +264,7 @@ final class DebugIntegration
         $use->depth = $value->depth + 1;
         foreach ($bindings as $name => $binding) {
             // Tracy masks a SensitiveParameterValue on the property path, whatever its key.
-            if (self::isSensitiveKey($name) || isset($describer->keysToHide[strtolower($name)])) {
+            if (self::isSensitiveCapture($name, $binding, $describer)) {
                 $binding = new SensitiveParameterValue($binding);
             }
 
@@ -274,6 +274,16 @@ final class DebugIntegration
         $use->value = '$' . implode(', $', array_keys($bindings));
         $use->collapsed = true;
         $describer->addPropertyTo($value, 'use', null, described: $use);
+    }
+
+    /**
+     * Tracy checks a capture under its '$name' key, so the renderer's own registries are consulted here with the bare name.
+     */
+    private static function isSensitiveCapture(string $name, mixed $binding, Describer $describer): bool
+    {
+        return self::isSensitiveKey($name)
+            || isset($describer->keysToHide[strtolower($name)])
+            || ($describer->scrubber !== null && ($describer->scrubber)($name, $binding, null));
     }
 
     /**
