@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Localization\JsonLocaleLoader;
+use Zephyrus\Localization\LocalizationException;
 use Zephyrus\Localization\Translator;
 
 final class TranslatorTest extends TestCase
@@ -424,17 +425,66 @@ final class TranslatorTest extends TestCase
         self::assertSame('hello', $result);
     }
 
-    public function testUnknownPipeReturnValueUnchangedWhenFormatterMethodFails(): void
+    public function testFormatterMethodFailureIsNotSwallowed(): void
     {
         $formatter = new Formatter('en_US');
         App::setFormatter($formatter);
 
         $translator = $this->buildTranslator();
-        // 'ordinal' expects int, passing non-numeric string should not crash
-        $result = $translator->trans('{v|ordinal}', ['v' => 'not-a-number']);
 
-        // Should gracefully return the original value
-        self::assertSame('not-a-number', $result);
+        $this->expectException(\TypeError::class);
+        try {
+            $translator->trans('{v|ordinal}', ['v' => 'not-a-number']);
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testMisspelledFormatterPipeThrowsLocalizationException(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $translator = $this->buildTranslator();
+
+        try {
+            $translator->trans('Rank: {n|ordnial}', ['n' => '4111-secret']);
+            self::fail('An unknown pipe must not render silently.');
+        } catch (LocalizationException $e) {
+            self::assertStringContainsString('"ordnial"', $e->getMessage());
+            self::assertStringContainsString('Rank: {n|ordnial}', $e->getMessage());
+            self::assertStringNotContainsString('4111-secret', $e->getMessage());
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testCustomFormatterExceptionPropagatesInsteadOfRawValue(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('mask', static function (string $card): string {
+            throw new \RuntimeException('masking failed');
+        });
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        try {
+            $translator->trans('{card|mask}', ['card' => '4111111111111111']);
+            self::fail('A failing formatter must not print the unmasked value.');
+        } catch (\RuntimeException $e) {
+            self::assertSame('masking failed', $e->getMessage());
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testBuiltInFormatterPipeMatchesNameIgnoringCase(): void
+    {
+        App::setFormatter(new Formatter('en_US', 'USD'));
+
+        $translator = $this->buildTranslator();
+
+        self::assertStringContainsString('19.99', $translator->trans('{amount|MONEY}', ['amount' => '19.99']));
 
         App::reset();
     }
@@ -485,12 +535,15 @@ final class TranslatorTest extends TestCase
         App::setFormatter($formatter);
 
         $translator = $this->buildTranslator();
-        $result = $translator->trans('{v|' . $pipe . '}', ['v' => 'de_DE']);
 
-        self::assertSame('de_DE', $result);
-        self::assertSame('en_US', $formatter->getLocale());
-
-        App::reset();
+        try {
+            $translator->trans('{v|' . $pipe . '}', ['v' => 'de_DE']);
+            self::fail('A pipe that is not a formatter must not be called.');
+        } catch (LocalizationException) {
+            self::assertSame('en_US', $formatter->getLocale());
+        } finally {
+            App::reset();
+        }
     }
 
     public function testPipeMatchesBuiltInFormatterNameCaseInsensitively(): void

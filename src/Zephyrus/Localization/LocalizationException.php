@@ -67,6 +67,15 @@ final class LocalizationException extends ZephyrusRuntimeException
         return self::withPath($message, $path, $previous);
     }
 
+    /**
+     * A pipe that is neither a text pipe nor a registered formatter. Names the
+     * pipe and the key, never the value being rendered.
+     */
+    public static function unknownPipe(string $pipe, string $key): self
+    {
+        return new self(sprintf('Unknown pipe "%s" in translation key "%s".', $pipe, $key));
+    }
+
     public static function invalidFormat(string $path): self
     {
         return self::withPath(

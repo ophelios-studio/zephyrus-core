@@ -32,11 +32,11 @@ final class Translator
             $catalog = $this->catalog($candidateLocale);
             $value = $this->resolveKey($key, $catalog);
             if ($value !== null) {
-                return $this->interpolate($value, $parameters, $candidateLocale);
+                return $this->interpolate($key, $value, $parameters, $candidateLocale);
             }
         }
 
-        return $this->interpolate($key, $parameters, $chain[0]);
+        return $this->interpolate($key, $key, $parameters, $chain[0]);
     }
 
     /**
@@ -140,13 +140,13 @@ final class Translator
     /**
      * @param array<string, scalar|null> $parameters
      */
-    private function interpolate(string $value, array $parameters, string $locale): string
+    private function interpolate(string $key, string $value, array $parameters, string $locale): string
     {
         if ($parameters === []) {
             return $value;
         }
 
-        return preg_replace_callback('/\{([a-zA-Z0-9_]+)(\|[^}]+)?\}/', function (array $matches) use ($parameters, $locale): string {
+        return preg_replace_callback('/\{([a-zA-Z0-9_]+)(\|[^}]+)?\}/', function (array $matches) use ($key, $parameters, $locale): string {
             $name = $matches[1];
             $pipeExpression = $matches[2] ?? '';
 
@@ -157,14 +157,14 @@ final class Translator
             $resolved = (string) $parameters[$name];
 
             if ($pipeExpression !== '') {
-                $resolved = $this->applyPipes($resolved, ltrim($pipeExpression, '|'), $locale);
+                $resolved = $this->applyPipes($key, $resolved, ltrim($pipeExpression, '|'), $locale);
             }
 
             return $resolved;
         }, $value) ?? $value;
     }
 
-    private function applyPipes(string $value, string $pipeExpression, string $locale): string
+    private function applyPipes(string $key, string $value, string $pipeExpression, string $locale): string
     {
         $current = $value;
 
@@ -187,7 +187,7 @@ final class Translator
                 'truncate' => $this->applyTruncate($current, $pipeArgument),
                 'plural'   => $this->applyPlural($current, $pipeArgument, $locale),
                 'default'  => ($current === '' ? ($pipeArgument ?? '') : $current),
-                default    => $this->applyFormatterPipe($pipeName, $current),
+                default    => $this->applyFormatterPipe($key, $pipeName, $current),
             };
         }
 
@@ -304,23 +304,36 @@ final class Translator
      * Supports both built-in Formatter methods (money, date, decimal, …) and
      * custom formatters registered via Formatter::register().
      *
-     * If no Formatter is available or no formatter has this name, the value
-     * passes through unchanged.
+     * The value passes through unchanged when no Formatter is registered in App.
+     * A name no formatter answers to throws LocalizationException, and a
+     * formatter's own exception propagates.
+     *
+     * @throws LocalizationException
      */
-    private function applyFormatterPipe(string $pipeName, string $value): string
+    private function applyFormatterPipe(string $key, string $pipeName, string $value): string
     {
         $formatter = App::getFormatter();
         if ($formatter === null) {
             return $value;
         }
 
-        $argument = $formatter->hasCustomFormatter($pipeName) ? $value : $this->castPipeValue($value);
-
-        try {
-            return $formatter->format($pipeName, $argument);
-        } catch (\Throwable) {
-            return $value;
+        $isCustom = $formatter->hasCustomFormatter($pipeName);
+        if (!$isCustom && !$this->isBuiltInFormatter($pipeName)) {
+            throw LocalizationException::unknownPipe($pipeName, $key);
         }
+
+        return $formatter->format($pipeName, $isCustom ? $value : $this->castPipeValue($value));
+    }
+
+    private function isBuiltInFormatter(string $pipeName): bool
+    {
+        foreach (Formatter::BUILT_IN_FORMATTERS as $builtIn) {
+            if (strcasecmp($builtIn, $pipeName) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
