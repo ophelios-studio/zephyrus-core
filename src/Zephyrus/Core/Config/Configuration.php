@@ -42,8 +42,7 @@ final readonly class Configuration
     /**
      * Build a Configuration tree from a nested key-value array.
      *
-     * The built-in keys are application, session, security, localization and database
-     * (omit database to leave it null). A custom factory runs only when its key holds
+     * The built-in keys are the BUILT_IN_SECTIONS constant (omit database to leave it null). A custom factory runs only when its key holds
      * an array, and is read back with section().
      *
      * @param array<string, mixed> $config

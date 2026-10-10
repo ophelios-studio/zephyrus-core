@@ -43,7 +43,7 @@ if (!function_exists('config')) {
      * Read a config section, or a dot-notation property of it.
      * Returns $default when no configuration is set, the custom section is unknown or the property is missing.
      *
-     * Built-in sections are application, session, security, localization and database; custom sections
+     * Built-in sections are listed in Configuration::BUILT_IN_SECTIONS; custom sections
      * need their factory in the $sectionFactories argument of the Configuration factories.
      *
      * @param string      $section  Section name (e.g. 'application', 'database', or custom).
