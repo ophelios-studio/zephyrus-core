@@ -93,24 +93,24 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * Raised when a `security:` setting asks for a protection that no registered middleware enforces.
+     * Raised when a `security:` setting asks for a protection that no global middleware enforces.
      *
      * Fails at boot on purpose: the framework must not add middlewares from configuration,
-     * or an application that registers its own would get a second copy of each.
+     * or an application that mounts its own would get a second copy of each.
      *
-     * @param array<string, class-string> $unwired setting name => the middleware that consumes it
+     * @param array<string, string> $unwired setting name => instruction for enforcing it
      */
     public static function unwiredSecurity(array $unwired): self
     {
         $lines = [];
-        foreach ($unwired as $setting => $middleware) {
-            $lines[] = sprintf('  - %s is not enforced: register %s', $setting, $middleware);
+        foreach ($unwired as $setting => $instruction) {
+            $lines[] = sprintf('  - %s is not enforced: %s', $setting, $instruction);
         }
 
         return new self(
             "Configuration declares security settings that nothing in this application enforces:\n"
             . implode("\n", $lines)
-            . "\n\nRegister the middleware(s) on the builder, or acknowledge the gap explicitly with "
+            . "\n\nMount the middleware(s) globally with withMiddleware(), or acknowledge the gap explicitly with "
             . 'ApplicationBuilder::withAcknowledgedSecurityKeys([...]) when the protection is provided '
             . 'elsewhere (a reverse proxy, a wrapping middleware, the web server).',
         );

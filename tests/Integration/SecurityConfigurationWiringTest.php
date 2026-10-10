@@ -23,12 +23,14 @@ use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
 
 /**
- * The security: block must not be inert: declared keys have to reach a middleware. The framework
- * registers none itself (applications register their own, and a second copy would run a second
- * CsrfMiddleware on every request), so build() refuses to start and names the missing middleware.
+ * The security: block must not be inert: declared keys have to reach a global middleware. The framework
+ * registers none itself (applications mount their own, and a second copy would run each security middleware
+ * twice on every request), so build() refuses to start and says how to mount the missing middleware.
  */
 final class SecurityConfigurationWiringTest extends TestCase
 {
+    private const array DECLARED_HEADERS = ['security' => ['headers' => ['csp' => "default-src 'self'"]]];
+
     /**
      * @return array<string, mixed>
      */
@@ -62,10 +64,29 @@ final class SecurityConfigurationWiringTest extends TestCase
             self::assertStringContainsString('security.maxBodySize', $message);
 
             // It must say what to DO, not merely that something is wrong.
-            self::assertStringContainsString(ForceHttpsMiddleware::class, $message);
-            self::assertStringContainsString(AllowedHostsMiddleware::class, $message);
-            self::assertStringContainsString(CsrfMiddleware::class, $message);
-            self::assertStringContainsString(MaxBodySizeMiddleware::class, $message);
+            self::assertStringContainsString(
+                'security.forceHttps is not enforced: mount ' . ForceHttpsMiddleware::class . ' with withMiddleware()',
+                $message,
+            );
+            self::assertStringContainsString(
+                'security.allowedHosts is not enforced: mount ' . AllowedHostsMiddleware::class
+                . ' with withMiddleware()',
+                $message,
+            );
+            self::assertStringContainsString(
+                'security.csrf is not enforced: mount ' . CsrfMiddleware::class . ' with withMiddleware()',
+                $message,
+            );
+            self::assertStringContainsString(
+                'security.maxBodySize is not enforced: mount ' . MaxBodySizeMiddleware::class
+                . ' with withMiddleware()',
+                $message,
+            );
+            self::assertStringContainsString(
+                'Mount the middleware(s) globally with withMiddleware(), or acknowledge the gap explicitly with',
+                $message,
+            );
+            self::assertStringNotContainsString('register', $message);
         }
     }
 
@@ -101,26 +122,25 @@ final class SecurityConfigurationWiringTest extends TestCase
     {
         try {
             ApplicationBuilder::create()
-                ->withConfigurationArray(['security' => ['headers' => ['csp' => "default-src 'self'"]]])
+                ->withConfigurationArray(self::DECLARED_HEADERS)
                 ->withRouter(new Router())
                 ->build();
 
             self::fail('build() accepted declared security headers that nothing sends.');
         } catch (ConfigurationException $exception) {
-            self::assertStringContainsString('security.headers', $exception->getMessage());
-            self::assertStringContainsString(SecureHeadersMiddleware::class, $exception->getMessage());
+            self::assertStringContainsString(
+                'security.headers is not enforced: mount new ' . SecureHeadersMiddleware::class
+                . "(...) globally with withMiddleware(), built from the configuration's security->headers",
+                $exception->getMessage(),
+            );
         }
     }
 
-    private const array DECLARED_HEADERS = ['security' => ['headers' => ['csp' => "default-src 'self'"]]];
-
     public function testDeclaredHeadersWithTheMiddlewareMountedBootNormally(): void
     {
-        $application = ApplicationBuilder::create()
-            ->withConfigurationArray(self::DECLARED_HEADERS)
-            ->withRouter(new Router())
-            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])))
-            ->build();
+        $application = $this->bootWithDeclaredHeaders(
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+        );
 
         self::assertInstanceOf(Application::class, $application);
     }
@@ -128,21 +148,99 @@ final class SecurityConfigurationWiringTest extends TestCase
     public function testDeclaredHeadersWithTheMiddlewareMountedWithAnotherConfigurationRefuseToBoot(): void
     {
         try {
+            $this->bootWithDeclaredHeaders(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()));
+
+            self::fail('build() accepted a declared csp that the mounted middleware never sends.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'security.headers is not enforced: give the global ' . SecureHeadersMiddleware::class
+                . " the configuration's security->headers: the global instance carries another configuration",
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString('remove the extra ones', $exception->getMessage());
+        }
+    }
+
+    public function testAGlobalInstanceOnAnotherConfigurationIsNotDescribedAsRouteOnly(): void
+    {
+        try {
             ApplicationBuilder::create()
                 ->withConfigurationArray(self::DECLARED_HEADERS)
                 ->withRouter(new Router())
                 ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+                ->registerMiddleware(
+                    'sec',
+                    new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+                )
                 ->build();
 
-            self::fail('build() accepted a declared csp that the mounted middleware never sends.');
+            self::fail('build() accepted a global SecureHeadersMiddleware with another configuration.');
         } catch (ConfigurationException $exception) {
-            self::assertStringContainsString('security.headers', $exception->getMessage());
-            self::assertStringContainsString('a configuration other than security.headers', $exception->getMessage());
             self::assertStringContainsString(
-                'new SecureHeadersMiddleware($configuration->security->headers)',
+                'the global instance carries another configuration',
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString("registered only under route name 'sec'", $exception->getMessage());
+        }
+    }
+
+    public function testDeclaredHeadersRefuseToBootWhenBothMountedMiddlewaresDiffer(): void
+    {
+        try {
+            $this->bootWithDeclaredHeaders(
+                new SecureHeadersMiddleware(SecureHeadersConfig::defaults()),
+                new SecureHeadersMiddleware(SecureHeadersConfig::defaults()),
+            );
+
+            self::fail('build() accepted two global SecureHeadersMiddleware with another configuration.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'all 2 global instances carry another configuration',
+                $exception->getMessage(),
+            );
+            self::assertStringNotContainsString('remove the extra ones', $exception->getMessage());
+        }
+    }
+
+    public function testDeclaredHeadersRefuseToBootWhenTheFirstOfTwoMountedMiddlewaresDiffers(): void
+    {
+        try {
+            $this->bootWithDeclaredHeaders(
+                new SecureHeadersMiddleware(SecureHeadersConfig::defaults()),
+                new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+            );
+
+            self::fail('build() accepted a second global SecureHeadersMiddleware with another configuration.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                '1 of the 2 global instances carries another configuration',
+                $exception->getMessage(),
+            );
+            self::assertStringContainsString(
+                'give every global ' . SecureHeadersMiddleware::class,
                 $exception->getMessage(),
             );
         }
+    }
+
+    public function testDeclaredHeadersRefuseToBootWhenTheLastOfTwoMountedMiddlewaresDiffers(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        $this->bootWithDeclaredHeaders(
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+            new SecureHeadersMiddleware(SecureHeadersConfig::defaults()),
+        );
+    }
+
+    public function testDeclaredHeadersBootWhenBothMountedMiddlewaresCarryThem(): void
+    {
+        $application = $this->bootWithDeclaredHeaders(
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])),
+        );
+
+        self::assertInstanceOf(Application::class, $application);
     }
 
     public function testDeclaredHeadersWithAnotherConfigurationAcknowledgedBootNormally(): void
@@ -157,22 +255,10 @@ final class SecurityConfigurationWiringTest extends TestCase
         self::assertInstanceOf(Application::class, $application);
     }
 
-    public function testDeclaredHeadersBootWhenOneOfTwoMountedMiddlewaresCarriesThem(): void
-    {
-        $application = ApplicationBuilder::create()
-            ->withConfigurationArray(self::DECLARED_HEADERS)
-            ->withRouter(new Router())
-            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
-            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])))
-            ->build();
-
-        self::assertInstanceOf(Application::class, $application);
-    }
-
     public function testDeclaredHeadersAcknowledgedBootNormally(): void
     {
         $application = ApplicationBuilder::create()
-            ->withConfigurationArray(['security' => ['headers' => ['csp' => "default-src 'self'"]]])
+            ->withConfigurationArray(self::DECLARED_HEADERS)
             ->withAcknowledgedSecurityKeys(['headers'])
             ->withRouter(new Router())
             ->build();
@@ -253,6 +339,31 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString($qualifiedSetting, $exception->getMessage());
             self::assertStringContainsString('withMiddleware()', $exception->getMessage());
+            self::assertStringContainsString(
+                "it is registered only under route name 'guard'",
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testARouteNameOnlyCsrfMiddlewareAlsoPointsAtTheExemptions(): void
+    {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(['security' => ['csrf' => ['enabled' => true]]])
+                ->withRouter(new Router())
+                ->registerMiddleware('api', new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+                ->registerMiddleware('admin', new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+                ->build();
+
+            self::fail('build() accepted a csrf middleware that only route names reference');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString(
+                'security.csrf is not enforced: mount ' . CsrfMiddleware::class
+                . ' with withMiddleware() and exempt routes through security.csrf.exceptions; '
+                . "it is registered only under route names 'api', 'admin'",
+                $exception->getMessage(),
+            );
         }
     }
 
@@ -384,6 +495,22 @@ final class SecurityConfigurationWiringTest extends TestCase
             'HANDLED',
             $middleware->process($request, static fn (): Response => Response::text('HANDLED'))->body,
         );
+    }
+
+    /**
+     * Builds an application declaring security.headers with the given middlewares mounted globally.
+     */
+    private function bootWithDeclaredHeaders(MiddlewareInterface ...$middlewares): Application
+    {
+        $builder = ApplicationBuilder::create()
+            ->withConfigurationArray(self::DECLARED_HEADERS)
+            ->withRouter(new Router());
+
+        foreach ($middlewares as $middleware) {
+            $builder = $builder->withMiddleware($middleware);
+        }
+
+        return $builder->build();
     }
 }
 

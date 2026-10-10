@@ -23,7 +23,6 @@ use Zephyrus\Security\AllowedHostsMiddleware;
 use Zephyrus\Security\CsrfMiddleware;
 use Zephyrus\Security\ForceHttpsMiddleware;
 use Zephyrus\Security\MaxBodySizeMiddleware;
-use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
 
 final class ApplicationBuilder
@@ -526,7 +525,7 @@ final class ApplicationBuilder
      * applications that mount their own a second CSRF or header middleware. Checked: forceHttps, a non-empty
      * allowedHosts, a finite maxBodySize and the headers section, each only when declared, and csrfEnabled when
      * any csrf key is declared; a protection counts as enforced only when its middleware is mounted with
-     * withMiddleware(), and the headers only when a mounted SecureHeadersMiddleware carries security.headers.
+     * withMiddleware(), and the headers only when every global SecureHeadersMiddleware carries security.headers.
      * Not checked: trustedProxies, trustedHeaders and encryptionKey, which are consumed outside the builder.
      *
      * @throws ConfigurationException when a declared protection is not mounted and not acknowledged.
@@ -544,7 +543,7 @@ final class ApplicationBuilder
             && $security->forceHttps
             && !$this->kernelBuilder->hasGlobalMiddleware(ForceHttpsMiddleware::class)
         ) {
-            $unwired['forceHttps'] = ForceHttpsMiddleware::class;
+            $unwired['forceHttps'] = $this->describeUnwiredMiddleware(ForceHttpsMiddleware::class);
         }
 
         if (
@@ -552,7 +551,7 @@ final class ApplicationBuilder
             && $security->allowedHosts !== []
             && !$this->kernelBuilder->hasGlobalMiddleware(AllowedHostsMiddleware::class)
         ) {
-            $unwired['allowedHosts'] = AllowedHostsMiddleware::class;
+            $unwired['allowedHosts'] = $this->describeUnwiredMiddleware(AllowedHostsMiddleware::class);
         }
 
         if (
@@ -562,7 +561,7 @@ final class ApplicationBuilder
             && $security->csrfEnabled
             && !$this->kernelBuilder->hasGlobalMiddleware(CsrfMiddleware::class)
         ) {
-            $unwired['csrf'] = CsrfMiddleware::class;
+            $unwired['csrf'] = $this->describeUnwiredMiddleware(CsrfMiddleware::class);
         }
 
         if (
@@ -570,14 +569,19 @@ final class ApplicationBuilder
             && $security->maxBodySize > 0
             && !$this->kernelBuilder->hasGlobalMiddleware(MaxBodySizeMiddleware::class)
         ) {
-            $unwired['maxBodySize'] = MaxBodySizeMiddleware::class;
+            $unwired['maxBodySize'] = $this->describeUnwiredMiddleware(MaxBodySizeMiddleware::class);
         }
 
-        if (
-            $security->isDeclared('headers')
-            && !$this->secureHeadersMountedWith($security->headers)
-        ) {
-            $unwired['headers'] = SecureHeadersMiddleware::class;
+        if ($security->isDeclared('headers')) {
+            $mounted = $this->kernelBuilder->globalMiddlewaresOf(SecureHeadersMiddleware::class);
+            $mismatched = array_values(array_filter(
+                $mounted,
+                static fn (SecureHeadersMiddleware $instance): bool => $instance->config() != $security->headers,
+            ));
+
+            if ($mounted === [] || $mismatched !== []) {
+                $unwired['headers'] = $this->describeUnwiredHeaders($mounted, $mismatched);
+            }
         }
 
         foreach ($this->acknowledgedSecurityKeys as $acknowledged) {
@@ -586,54 +590,83 @@ final class ApplicationBuilder
 
         if ($unwired !== []) {
             $qualified = [];
-            foreach ($unwired as $setting => $middleware) {
-                $qualified['security.' . $setting] = $this->describeUnwiredMiddleware($middleware);
+            foreach ($unwired as $setting => $instruction) {
+                $qualified['security.' . $setting] = $instruction;
             }
 
             throw ConfigurationException::unwiredSecurity($qualified);
         }
     }
 
-    private function secureHeadersMountedWith(SecureHeadersConfig $headers): bool
-    {
-        foreach ($this->kernelBuilder->globalMiddlewaresOf(SecureHeadersMiddleware::class) as $middleware) {
-            if ($middleware->config() == $headers) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /**
-     * Names the middleware a boot error should ask for, noting when the class
-     * is registered under a route name only.
+     * Returns the instruction that enforces a class, naming the route names that already hold it.
      *
      * @param class-string $middleware
      */
     private function describeUnwiredMiddleware(string $middleware): string
     {
-        if (
-            $middleware === SecureHeadersMiddleware::class
-            && $this->kernelBuilder->hasGlobalMiddleware($middleware)
-        ) {
-            return $middleware . ' (mounted with a configuration other than security.headers, so the declared headers'
-                . ' are never sent: mount new SecureHeadersMiddleware($configuration->security->headers))';
+        $instruction = 'mount ' . $middleware . ' with withMiddleware()';
+
+        if ($middleware === CsrfMiddleware::class && $this->kernelBuilder->routeNamesOf($middleware) !== []) {
+            $instruction .= ' and exempt routes through security.csrf.exceptions';
         }
 
-        if (!$this->kernelBuilder->hasMiddleware($middleware)) {
-            return $middleware;
-        }
-
-        $hint = $middleware . ' (currently registered under a route name only, so it guards just the routes that name it: mount it with withMiddleware()';
-
-        return $middleware === CsrfMiddleware::class
-            ? $hint . ' and exempt routes through security.csrf.exceptions)'
-            : $hint . ')';
+        return $instruction . $this->routeNameClause($middleware);
     }
 
     /**
-     * Assembles the application.
+     * Describes how to mount or correct SecureHeadersMiddleware, given the global instances and those that differ.
+     *
+     * @param list<SecureHeadersMiddleware> $mounted
+     * @param list<SecureHeadersMiddleware> $mismatched
+     */
+    private function describeUnwiredHeaders(array $mounted, array $mismatched): string
+    {
+        $middleware = SecureHeadersMiddleware::class;
+
+        if ($mounted === []) {
+            return 'mount new ' . $middleware . '(...) globally with withMiddleware(), '
+                . "built from the configuration's security->headers" . $this->routeNameClause($middleware);
+        }
+
+        $total = count($mounted);
+        $mismatchedCount = count($mismatched);
+
+        if ($total === 1) {
+            return 'give the global ' . $middleware . " the configuration's security->headers: "
+                . 'the global instance carries another configuration';
+        }
+
+        $fix = 'give every global ' . $middleware . " the configuration's security->headers";
+
+        if ($mismatchedCount === $total) {
+            return $fix . ': all ' . $total . ' global instances carry another configuration';
+        }
+
+        return $fix . ', or remove the extra ones: ' . $mismatchedCount . ' of the ' . $total . ' global instances '
+            . ($mismatchedCount === 1 ? 'carries' : 'carry')
+            . ' another configuration (an outer instance fills any header an inner one leaves out)';
+    }
+
+    /**
+     * The route names holding the class, as a clause to append to an instruction (empty when there are none).
+     *
+     * @param class-string $middleware
+     */
+    private function routeNameClause(string $middleware): string
+    {
+        $names = $this->kernelBuilder->routeNamesOf($middleware);
+
+        if ($names === []) {
+            return '';
+        }
+
+        return '; it is registered only under route ' . (count($names) > 1 ? 'names ' : 'name ')
+            . implode(', ', array_map(static fn (string $name): string => "'" . $name . "'", $names));
+    }
+
+    /**
+     * Assembles the application, replacing App's configuration with the builder's (null when none was given).
      *
      * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
      * unless withProductionDebugAcknowledged() is called. Refusing to boot instead would turn a diagnostic
