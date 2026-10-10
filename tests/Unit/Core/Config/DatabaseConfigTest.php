@@ -1078,4 +1078,143 @@ final class DatabaseConfigTest extends TestCase
             );
         }
     }
+
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function nonStringHosts(): iterable
+    {
+        yield 'list' => [['db.example.com'], 'array'];
+        yield 'integer' => [10, '10'];
+        yield 'float' => [1.5, '1.5'];
+        yield 'boolean' => [true, 'true'];
+    }
+
+    #[DataProvider('nonStringHosts')]
+    public function testANonStringHostIsRefused(mixed $host, string $shown): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'host' => $host]);
+            self::fail('A host that is not a string was accepted.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value $shown: must be a string, "
+                . 'such as db.example.com.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function nonIntegerPorts(): iterable
+    {
+        yield 'fractional float' => [1.5, '1.5'];
+        yield 'whole float' => [5432.0, '5432.0'];
+        yield 'decimal string' => ['5432.5', '"5432.5"'];
+        yield 'word' => ['abc', '"abc"'];
+        yield 'empty string' => ['', '""'];
+        yield 'digits then letters' => ['5432abc', '"5432abc"'];
+        yield 'plus sign' => ['+5432', '"+5432"'];
+        yield 'inner space' => ['54 32', '"54 32"'];
+        yield 'inner NUL byte' => ["54\u{0}32", '"54\u000032"'];
+        yield 'boolean' => [true, 'true'];
+        yield 'list' => [[5432], 'array'];
+    }
+
+    #[DataProvider('nonIntegerPorts')]
+    public function testANonIntegerPortIsRefused(mixed $port, string $shown): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => $port]);
+            self::fail('A port that is not a whole number was accepted.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'port' has invalid value $shown: must be a whole number "
+                . 'between 1 and 65535.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function outOfRangePorts(): iterable
+    {
+        yield 'zero string' => ['0', '"0"'];
+        yield 'negative' => [-1, '-1'];
+        yield 'one above' => ['65536', '"65536"'];
+        yield 'beyond PHP_INT_MAX' => ['99999999999999999999', '"99999999999999999999"'];
+    }
+
+    #[DataProvider('outOfRangePorts')]
+    public function testAnOutOfRangePortIsRefusedShowingTheWrittenValue(mixed $port, string $shown): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => $port]);
+            self::fail('An out-of-range port was accepted.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'port' has invalid value $shown: must be between 1 and 65535.",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAPortWrittenAsDigitsIsAccepted(): void
+    {
+        self::assertSame(6543, DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => '6543'])->port);
+        self::assertSame(6543, DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => '06543'])->port);
+        self::assertSame(5432, DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => null])->port);
+    }
+
+    public function testAPortIsTrimmedLikeTheHost(): void
+    {
+        self::assertSame(5432, DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => ' 5432'])->port);
+        self::assertSame(6543, DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'port' => "\t6543\n"])->port);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function hostsWithCredentials(): iterable
+    {
+        yield 'url' => ['postgres://app:s3cret@db.example.com:5432/app', '"postgres://***@db.example.com:5432/app"'];
+        yield 'user and password' => ['app:s3cret@db.example.com', '"***@db.example.com"'];
+        yield 'user only' => ['app@db.example.com', '"***@db.example.com"'];
+        yield 'at sign alone' => ['@', '"***@"'];
+    }
+
+    #[DataProvider('hostsWithCredentials')]
+    public function testAHostWithAnAtSignIsRefusedWithItsCredentialsMasked(string $host, string $shown): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'host' => $host]);
+            self::fail('A host with an at sign was accepted.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value $shown: must be a host name, an IP "
+                . 'address or a socket directory, without a user name or password.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testTheConstructorRefusesAnAtSignInTheHost(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("field 'host' has invalid value \"***@db.example.com\": must be a host name");
+
+        new DatabaseConfig(
+            driver: 'pgsql',
+            host: 'app:s3cret@db.example.com',
+            port: 5432,
+            database: 'app',
+            username: 'app',
+            password: '',
+            charset: 'utf8',
+        );
+    }
 }

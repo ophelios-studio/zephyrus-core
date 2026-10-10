@@ -13,7 +13,8 @@ namespace Zephyrus\Core\Config;
  * Validation (fromArray, and the constructor for host, database, charset, sslMode and sslRootCert):
  *   - database: non-empty; fromArray reports a blank one as missing.
  *   - username: a non-empty string (fromArray only).
- *   - port: 1-65535 (fromArray only).
+ *   - host: a string (fromArray only).
+ *   - port: an integer or a string of digits, 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
  *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
  *   - keys: a key no setting reads is refused (fromArray only).
@@ -21,9 +22,9 @@ namespace Zephyrus\Core\Config;
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
  *   - host, database and sslRootCert: non-empty, valid UTF-8, with no ASCII whitespace, semicolons, equals
  *     signs, quotes, backslashes or control characters, as they are interpolated into the PDO DSN.
- *     host also refuses commas: it is a single host name or address, not a libpq host list.
+ *     host also refuses commas and "@": it is a single host name or address, not a libpq host list or a URL.
  *   - sslMode: one of SSL_MODES.
- *   - fromArray trims host and database first.
+ *   - fromArray trims host, port and database first.
  *
  * Prepared statements are always PostgreSQL server-side (extended query protocol).
  * The emulate_prepares keys are refused, see REMOVED_EMULATE_PREPARES_KEYS.
@@ -127,8 +128,7 @@ final readonly class DatabaseConfig
         $keys = ConfigKeys::read('database', $values, self::SPELLINGS);
 
         $driver   = (string) ($keys->value('driver') ?? 'pgsql');
-        $host     = trim((string) ($keys->value('host') ?? 'localhost'));
-        $port     = (int) ($keys->value('port') ?? 5432);
+        $host     = self::host($keys->value('host'));
         $database = trim((string) ($keys->value('database') ?? ''));
         $username = (string) ($keys->value('username') ?? '');
         $password = (string) ($keys->value('password') ?? '');
@@ -159,14 +159,7 @@ final readonly class DatabaseConfig
             throw ConfigurationException::missingRequired('database', 'username');
         }
 
-        if ($port < 1 || $port > 65535) {
-            throw ConfigurationException::invalidValue(
-                'database',
-                'port',
-                $port,
-                'must be between 1 and 65535',
-            );
-        }
+        $port = self::port($keys->value('port'));
 
         if ($driver !== 'pgsql') {
             throw ConfigurationException::invalidValue(
@@ -216,6 +209,51 @@ final readonly class DatabaseConfig
     }
 
     /**
+     * @throws ConfigurationException if the host is neither null (localhost) nor a string.
+     */
+    private static function host(#[\SensitiveParameter] mixed $value): string
+    {
+        if ($value === null) {
+            return 'localhost';
+        }
+
+        if (!is_string($value)) {
+            throw ConfigurationException::invalidValue('database', 'host', $value, 'must be a string, such as db.example.com');
+        }
+
+        return trim($value);
+    }
+
+    /**
+     * @throws ConfigurationException if the port is neither null (5432), an integer nor a string of digits once
+     *         trimmed, or is outside 1-65535.
+     */
+    private static function port(mixed $value): int
+    {
+        if ($value === null) {
+            return 5432;
+        }
+
+        $digits = match (true) {
+            is_int($value) => (string) $value,
+            is_string($value) && preg_match('/\A[0-9]+\z/', trim($value)) === 1 => ltrim(trim($value), '0'),
+            default => throw ConfigurationException::invalidValue(
+                'database',
+                'port',
+                $value,
+                'must be a whole number between 1 and 65535',
+            ),
+        };
+
+        $port = filter_var($digits, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+        if ($port === false) {
+            throw ConfigurationException::invalidValue('database', 'port', $value, 'must be between 1 and 65535');
+        }
+
+        return $port;
+    }
+
+    /**
      * @throws ConfigurationException if sslMode is not null and not an accepted value.
      */
     private static function assertSslMode(?string $sslMode, string $field): void
@@ -262,6 +300,15 @@ final readonly class DatabaseConfig
                     . ($singleHost && str_contains($value, ',')
                         ? '; it must be a single host name or address, not a comma-separated list'
                         : ''),
+            );
+        }
+
+        if ($singleHost && str_contains($value, '@')) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                $field,
+                self::withoutCredentials($value),
+                'must be a host name, an IP address or a socket directory, without a user name or password',
             );
         }
     }
