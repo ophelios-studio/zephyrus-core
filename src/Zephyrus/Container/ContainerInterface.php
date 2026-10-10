@@ -5,20 +5,14 @@ declare(strict_types=1);
 namespace Zephyrus\Container;
 
 /**
- * Dependency injection container contract (mirrors PSR-11 semantics without
- * requiring the psr/container package).
+ * Dependency injection container contract, with PSR-11 semantics and no psr/container dependency.
  *
- * Implementations must resolve entries by their string identifier (typically a
- * fully-qualified class name) and throw ContainerException (or a subclass) for
- * any failure.
+ * Entries are resolved by string identifier, usually a fully-qualified class name.
  */
 interface ContainerInterface
 {
     /**
      * Return the entry for the given identifier.
-     *
-     * @param string $id Identifier of the entry to look up.
-     * @return mixed The resolved entry.
      *
      * @throws NotFoundException    When no entry is found and cannot be auto-wired.
      * @throws ContainerException   When an error occurs while resolving the entry.
@@ -26,12 +20,9 @@ interface ContainerInterface
     public function get(string $id): mixed;
 
     /**
-     * Return true if the container can resolve the given identifier.
+     * Return true when a binding or an auto-wireable class exists for the identifier.
      *
-     * Returning true does NOT guarantee that get() will not throw — it only
-     * means that a binding or auto-wireable class exists.
-     *
-     * @param string $id Identifier to check.
+     * This does not guarantee that get() succeeds.
      */
     public function has(string $id): bool;
 }

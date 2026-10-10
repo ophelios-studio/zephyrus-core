@@ -5,22 +5,10 @@ declare(strict_types=1);
 namespace Zephyrus\Event;
 
 /**
- * Marker interface for event subscribers.
+ * Groups several listeners in one class, registered with EventDispatcher::addSubscriber().
  *
- * A subscriber groups multiple event listeners into a single class.
- * Pass an instance to EventDispatcher::addSubscriber() and the dispatcher
- * will automatically register all listeners declared by getSubscribedEvents().
- *
- * Each map entry may be one of:
- *
- *   EventClass::class => 'methodName'
- *       Register $this->methodName at priority 0.
- *
- *   EventClass::class => ['methodName', 10]
- *       Register $this->methodName at priority 10.
- *       Higher priority values are called before lower ones.
- *
- * Example:
+ * Each map entry is either 'methodName' (priority 0) or ['methodName', priority]:
+ * higher priorities run first.
  *
  *   class NotificationSubscriber implements EventSubscriberInterface
  *   {
@@ -41,11 +29,7 @@ namespace Zephyrus\Event;
 interface EventSubscriberInterface
 {
     /**
-     * Return the event-to-listener map for this subscriber.
-     *
-     * Keys are fully-qualified event class names.
-     * Values are either a method name string (priority 0) or a two-element
-     * array of [methodName, priority].
+     * Return the event-to-listener map of this subscriber.
      *
      * @return array<class-string<Event>, string|array{0: string, 1: int}>
      */

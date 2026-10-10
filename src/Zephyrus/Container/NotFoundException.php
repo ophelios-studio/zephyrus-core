@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Container;
 
 /**
- * Thrown when the container cannot locate a binding for the requested
- * identifier and it is not an auto-wireable class.
+ * Thrown when no binding exists for an identifier and it is not auto-wireable.
  */
 class NotFoundException extends ContainerException
 {

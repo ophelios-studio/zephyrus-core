@@ -11,76 +11,23 @@ use Zephyrus\Validation\FormValidator;
 use Zephyrus\Validation\ValidationException;
 
 /**
- * Optional base class for route controllers.
+ * Optional base class for controllers, with response helpers and no-op lifecycle hooks.
  *
- * Provides convenience factory methods for building common Response values,
- * plus default no-op implementations of the `ControllerLifecycleInterface`
- * before/after hooks.
- *
- * Controllers are not required to extend this class — HandlerResolver works
- * with any plain object whose methods return a Response. This class exists
- * only to reduce boilerplate in concrete controller implementations.
- *
- * ## Usage
- *
- * ```php
- * final class UserController extends Controller
- * {
- *     public function show(int $id): Response
- *     {
- *         return $this->json(['id' => $id]);
- *     }
- *
- *     public function store(Request $request): Response
- *     {
- *         $name = $request->body()->get('name');
- *         return $this->created(['name' => $name]);
- *     }
- * }
- * ```
- *
- * Handler methods may declare any combination of:
- * - A `Request $request` parameter — receives the current request.
- * - Scalar parameters whose names match route path parameters (e.g. `int $id`)
- *   — resolved from request attributes populated by RouteDispatcher.
- *
- * ## Lifecycle hooks
- *
- * Override `before()` to guard access (return a Response to halt dispatch):
- * ```php
- * public function before(Request $request): ?Response
- * {
- *     if (!$this->isAuthenticated($request)) {
- *         return $this->respond(['error' => 'Unauthorized'], 401);
- *     }
- *     return null;
- * }
- * ```
- *
- * Override `after()` to decorate responses (add headers, audit-log, etc.):
- * ```php
- * public function after(Request $request, Response $response): Response
- * {
- *     return $response->withHeader('X-Frame-Options', 'DENY');
- * }
- * ```
+ * Handler methods may take a `Request $request` parameter and scalar parameters named
+ * after route path parameters (e.g. `int $id`). Hooks are described in ControllerLifecycleInterface.
+ * Any plain object whose handler methods return a Response also works.
  */
 abstract class Controller implements ControllerLifecycleInterface
 {
     /**
-     * The current request, automatically set before each handler invocation.
-     *
-     * Available in handler methods and after() without needing to declare a
-     * Request parameter. Set by the default before() implementation.
+     * The current request, set by the default before().
      */
     protected Request $request;
 
     /**
-     * Pre-dispatch hook — stores the request and returns null by default.
+     * Store the request and return null.
      *
-     * Override to short-circuit dispatch (e.g. auth guard): return a Response
-     * to halt immediately, or return null to continue to the handler method.
-     * Always call parent::before($request) when overriding to keep $this->request.
+     * Overrides must call parent::before($request), or $this->request stays unset.
      */
     public function before(Request $request): ?Response
     {
@@ -89,9 +36,7 @@ abstract class Controller implements ControllerLifecycleInterface
     }
 
     /**
-     * Post-dispatch hook — passthrough by default.
-     *
-     * Override to inspect or decorate the response produced by the handler.
+     * Return the handler's Response unchanged.
      */
     public function after(Request $request, Response $response): Response
     {
@@ -180,23 +125,11 @@ abstract class Controller implements ControllerLifecycleInterface
     }
 
     /**
-     * Validates $data against the given FormValidator.
-     *
-     * Returns an empty ErrorBag on success, or throws ValidationException
-     * when any field fails — so callers can let the exception propagate to
-     * HttpExceptionResponder for an automatic 422 response.
-     *
-     * ```php
-     * public function store(Request $request): Response
-     * {
-     *     $this->validate($this->storeForm(), $request->all());
-     *     // … proceed with valid data
-     * }
-     * ```
+     * Validate $data against the form and return its ErrorBag, which holds no errors on success.
      *
      * @param array<string, mixed> $data
      *
-     * @throws ValidationException
+     * @throws ValidationException when a field fails (a 422 unless caught)
      */
     protected function validate(FormValidator $form, array $data): ErrorBag
     {

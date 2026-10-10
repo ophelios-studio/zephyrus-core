@@ -5,43 +5,20 @@ declare(strict_types=1);
 namespace Zephyrus\Event;
 
 /**
- * Synchronous, priority-ordered event dispatcher.
+ * Synchronous event dispatcher.
  *
- * Listeners receive events in descending priority order (higher priority =
- * invoked first).  Ties are broken by registration order (first registered,
- * first called).  Any listener may halt propagation by calling
- * $event->stopPropagation().
+ * Listeners run in descending priority order, ties in registration order.
+ * A listener halts the dispatch by calling $event->stopPropagation().
  *
- * ## Basic usage
- *
- *   $dispatcher = new EventDispatcher();
- *
- *   $dispatcher->addListener(OrderPlacedEvent::class, function (OrderPlacedEvent $e): void {
- *       // handle order
- *   });
- *
- *   $event = $dispatcher->dispatch(new OrderPlacedEvent($order));
- *
- * ## Subscriber usage
- *
- *   $dispatcher->addSubscriber(new NotificationSubscriber());
- *   // All listeners declared in NotificationSubscriber::getSubscribedEvents()
- *   // are registered automatically.
+ *   $dispatcher->addListener(OrderPlacedEvent::class, $listener);
+ *   $dispatcher->dispatch(new OrderPlacedEvent($order));
  */
 final class EventDispatcher
 {
     /**
-     * Raw listener registry: eventClass → list of [callable, priority].
-     *
-     * Entries are stored in registration order; sorting happens on dispatch.
-     *
      * @var array<class-string<Event>, list<array{0: callable, 1: int}>>
      */
     private array $listeners = [];
-
-    // -------------------------------------------------------------------------
-    // Listener management
-    // -------------------------------------------------------------------------
 
     /**
      * Register a listener callable for the given event class.
@@ -79,10 +56,7 @@ final class EventDispatcher
     }
 
     /**
-     * Register all listeners declared by an EventSubscriberInterface instance.
-     *
-     * Each entry returned by getSubscribedEvents() is converted to an
-     * addListener() call on this dispatcher.
+     * Register every listener declared by the subscriber's getSubscribedEvents().
      */
     public function addSubscriber(EventSubscriberInterface $subscriber): void
     {
@@ -107,37 +81,15 @@ final class EventDispatcher
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Dispatch
-    // -------------------------------------------------------------------------
-
     /**
      * Dispatch an event to every applicable listener and return it.
      *
-     * ## Applicable means the hierarchy, not the exact class
+     * Applicable listeners are those registered on the event class, its parent
+     * classes and its interfaces. Among equal priorities, the exact class runs
+     * first, then parents, then interfaces, each in registration order.
      *
-     * Matching used to be `$event::class` and nothing else, so a listener
-     * registered on RequestEvent did not run for a subclass of RequestEvent.
-     * Subclassing a framework event is the normal way to carry extra data, and
-     * doing it silently disabled every listener already watching the parent --
-     * an audit or authorisation listener among them. Listeners registered on
-     * any ancestor class or implemented interface now run too.
-     *
-     * Ordering is unchanged in spirit: descending priority across the whole
-     * collected set, ties broken by registration order (PHP sorts are stable),
-     * with the exact class contributing its listeners before its ancestors.
-     *
-     * ## Listener failures
-     *
-     * By default a throwing listener propagates immediately, exactly as before:
-     * a listener that fails is a real failure, and swallowing it by default
-     * would be the silent-success trap this framework keeps removing.
-     *
-     * $onListenerError is the seam for the callers that genuinely must survive
-     * one: pass a reporter and each listener is wrapped individually, so the
-     * first failure no longer cancels the ones after it. HttpKernel uses it for
-     * ExceptionEvent, where it previously wrapped the ENTIRE dispatch in one
-     * try/catch and therefore lost every reporter after the first that threw.
+     * A throwing listener aborts the dispatch, unless $onListenerError is given:
+     * the failure is passed to it and the remaining listeners still run.
      *
      * @template T of Event
      * @param  T $event
@@ -172,16 +124,8 @@ final class EventDispatcher
         return $event;
     }
 
-    // -------------------------------------------------------------------------
-    // Introspection
-    // -------------------------------------------------------------------------
-
     /**
-     * Return true when at least one listener is registered ON $eventClass itself.
-     *
-     * Deliberately exact, like getListeners() and removeListener(): this is the
-     * registry view. Use applicableListeners() to ask what a dispatch would
-     * actually run.
+     * Return true when listeners are registered on $eventClass itself, not on its ancestors.
      *
      * @param class-string<Event> $eventClass
      */
@@ -191,12 +135,9 @@ final class EventDispatcher
     }
 
     /**
-     * Return the listeners registered ON $eventClass, in dispatch order.
+     * Return the listeners registered on $eventClass itself, in priority order.
      *
-     * Exact-class only, so it stays the mirror of addListener() and
-     * removeListener(): a caller enumerating listeners in order to remove them
-     * must not be handed listeners that belong to a parent class and that
-     * removeListener($eventClass, ...) could never remove.
+     * Exact class only, so each result can be passed back to removeListener().
      *
      * @param  class-string<Event> $eventClass
      * @return list<callable>
@@ -212,9 +153,6 @@ final class EventDispatcher
 
     /**
      * Return every listener a dispatch of $eventClass would invoke, in order.
-     *
-     * This is the honest answer to "what will run": the exact class plus every
-     * ancestor class and implemented interface that carries listeners.
      *
      * @param  class-string<Event>|string $eventClass
      * @return list<callable>
@@ -233,8 +171,7 @@ final class EventDispatcher
             return [];
         }
 
-        // PHP's sort is stable, so equal priorities keep the order built above:
-        // the exact class first, then ancestors, each in registration order.
+        // Stable sort: equal priorities keep the exact-class-first order built above.
         usort($entries, static fn(array $a, array $b): int => $b[1] <=> $a[1]);
 
         return array_column($entries, 0);
@@ -242,9 +179,6 @@ final class EventDispatcher
 
     /**
      * Registry keys that apply to $eventClass, most specific first.
-     *
-     * Only keys that actually carry listeners are returned, so the common case
-     * (no inheritance in play) costs one array lookup plus nothing.
      *
      * @return list<string>
      */
@@ -274,10 +208,6 @@ final class EventDispatcher
 
         return $keys;
     }
-
-    // -------------------------------------------------------------------------
-    // Internals
-    // -------------------------------------------------------------------------
 
     /**
      * Return the listener callables for $eventClass sorted by descending priority.

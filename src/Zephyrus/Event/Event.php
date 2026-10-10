@@ -5,13 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Event;
 
 /**
- * Base class for all application events.
- *
- * Extend this class to carry domain-specific data from the publisher to its
- * listeners.  Call stopPropagation() from inside a listener to prevent any
- * remaining (lower-priority) listeners from being invoked.
- *
- * Example:
+ * Base class for application events, carrying data from the publisher to its listeners.
  *
  *   class UserRegisteredEvent extends Event
  *   {
@@ -28,7 +22,7 @@ class Event
     private bool $propagationStopped = false;
 
     /**
-     * Return true when a listener has halted propagation for this event.
+     * Return true when a listener has stopped propagation.
      */
     final public function isPropagationStopped(): bool
     {
@@ -36,10 +30,9 @@ class Event
     }
 
     /**
-     * Halt propagation so that no further listeners are invoked.
+     * Skip every remaining listener, whatever its priority.
      *
-     * Calling this from within a listener means any listeners registered with
-     * a lower priority will not receive the event.
+     * The flag is never reset: dispatch a new event instance rather than re-dispatching this one.
      */
     final public function stopPropagation(): void
     {
