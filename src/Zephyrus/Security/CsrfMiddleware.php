@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use Closure;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -51,6 +52,9 @@ use function preg_match;
  * The token is validated by the injected CsrfTokenManagerInterface using a
  * constant-time comparison; the middleware itself does not generate tokens.
  *
+ * A refused request is answered by the optional $onFailure closure, called as
+ * ($onFailure)(Request, CsrfFailure) and returning the Response to send.
+ *
  * Usage:
  *
  *   $kernel = KernelBuilder::create()
@@ -74,6 +78,7 @@ final class CsrfMiddleware implements MiddlewareInterface
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,
         private readonly CsrfConfig $config = new CsrfConfig(),
+        private readonly ?Closure $onFailure = null,
     ) {
     }
 
@@ -83,15 +88,31 @@ final class CsrfMiddleware implements MiddlewareInterface
             && !$this->isUnmatchedRoute($request)
             && !in_array($request->method, self::SAFE_METHODS, true)
             && !$this->isPathExcluded($request)
-            && !$this->isTokenValid($request)
         ) {
-            return Response::json(
-                ['error' => 'Invalid or missing CSRF token.'],
-                403,
-            );
+            $failure = $this->tokenFailure($request);
+
+            if ($failure !== null) {
+                return $this->refuse($request, $failure);
+            }
         }
 
         return $next($request);
+    }
+
+    /**
+     * Answers a refused request with the application's failure callback, or
+     * with the default 403 when none was given.
+     */
+    private function refuse(Request $request, CsrfFailure $failure): Response
+    {
+        if ($this->onFailure !== null) {
+            return ($this->onFailure)($request, $failure);
+        }
+
+        return Response::json(
+            ['error' => 'Invalid or missing CSRF token.'],
+            403,
+        );
     }
 
     /**
@@ -144,17 +165,19 @@ final class CsrfMiddleware implements MiddlewareInterface
     /**
      * Resolve the submitted CSRF token from the request (body or header) and
      * delegate validation to the injected token manager.
+     *
+     * @return CsrfFailure|null null when the token is valid
      */
-    private function isTokenValid(Request $request): bool
+    private function tokenFailure(Request $request): ?CsrfFailure
     {
         // Body field takes precedence over the header.
         $submitted = $request->body()->get($this->config->bodyField)
             ?? $request->headers()->get($this->config->headerName);
 
         if ($submitted === null || !is_string($submitted) || $submitted === '') {
-            return false;
+            return CsrfFailure::TokenMissing;
         }
 
-        return $this->tokenManager->isTokenValid($submitted);
+        return $this->tokenManager->isTokenValid($submitted) ? null : CsrfFailure::TokenInvalid;
     }
 }

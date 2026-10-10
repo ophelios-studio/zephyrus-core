@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Security\CsrfConfig;
+use Zephyrus\Security\CsrfFailure;
 use Zephyrus\Security\CsrfMiddleware;
 use Zephyrus\Security\CsrfTokenManagerInterface;
 
@@ -606,5 +607,105 @@ final class CsrfMiddlewareTest extends TestCase
         $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(403, $response->status);
+    }
+
+    // ── refusal callback ──────────────────────────────────────────────────────
+
+    public function testMissingTokenReachesFailureCallbackAsTokenMissing(): void
+    {
+        $seen    = [];
+        $mw      = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            function (Request $r, CsrfFailure $failure) use (&$seen): Response {
+                $seen[] = $failure;
+
+                return Response::text('custom', 418);
+            },
+        );
+        $request = new Request('POST', 'https://example.com/submit');
+
+        $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame([CsrfFailure::TokenMissing], $seen);
+    }
+
+    public function testEmptyTokenFieldCountsAsTokenMissing(): void
+    {
+        $seen    = [];
+        $mw      = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            function (Request $r, CsrfFailure $failure) use (&$seen): Response {
+                $seen[] = $failure;
+
+                return Response::text('custom', 418);
+            },
+        );
+        $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => '']);
+
+        $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame([CsrfFailure::TokenMissing], $seen);
+    }
+
+    public function testRejectedTokenReachesFailureCallbackAsTokenInvalid(): void
+    {
+        $seen    = [];
+        $mw      = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            function (Request $r, CsrfFailure $failure) use (&$seen): Response {
+                $seen[] = $failure;
+
+                return Response::text('custom', 418);
+            },
+        );
+        $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => 'forged']);
+
+        $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame([CsrfFailure::TokenInvalid], $seen);
+    }
+
+    public function testFailureCallbackResponseIsReturnedAndNextIsNotCalled(): void
+    {
+        $called  = false;
+        $mw      = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            fn (Request $r, CsrfFailure $failure): Response => Response::text('custom refusal', 418),
+        );
+        $request = new Request('POST', 'https://example.com/submit');
+
+        $response = $mw->process($request, function (Request $r) use (&$called): Response {
+            $called = true;
+
+            return Response::text('never');
+        });
+
+        self::assertFalse($called);
+        self::assertSame(418, $response->status);
+        self::assertSame('custom refusal', $response->body);
+    }
+
+    public function testFailureCallbackIsNotCalledForAValidToken(): void
+    {
+        $called  = false;
+        $mw      = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            function (Request $r, CsrfFailure $failure) use (&$called): Response {
+                $called = true;
+
+                return Response::text('custom', 418);
+            },
+        );
+        $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => self::VALID_TOKEN]);
+
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('ok'));
+
+        self::assertFalse($called);
+        self::assertSame(200, $response->status);
     }
 }
