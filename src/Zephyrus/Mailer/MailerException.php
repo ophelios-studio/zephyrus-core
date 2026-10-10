@@ -25,6 +25,11 @@ final class MailerException extends ZephyrusRuntimeException
     }
 
     /**
+     * Longest refused value copied into an attachment rejection message.
+     */
+    private const SHOWN_VALUE_MAX_LENGTH = 64;
+
+    /**
      * The transport did not accept the message. Its reply goes to transportMessage(), not the message, because it can name recipients.
      *
      * @param string $transportMessage The transport's own reply.
@@ -91,14 +96,23 @@ final class MailerException extends ZephyrusRuntimeException
      * a caller logging them should be able to tell them apart.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Control characters and backslashes are escaped in the message.
+     * @param string $value   The refused value. Control characters and backslashes are escaped, and values over 64 characters are cut in the message.
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
     {
         $shown = addcslashes($value, "\\\0..\37\177");
+        $length = '';
 
-        return new self(sprintf('Attachment rejected: %s "%s" %s.', $subject, $shown, $reason), MailerFailure::AttachmentRejected);
+        if (strlen($shown) > self::SHOWN_VALUE_MAX_LENGTH) {
+            $shown = substr($shown, 0, self::SHOWN_VALUE_MAX_LENGTH) . '...';
+            $length = sprintf(' (%d bytes)', strlen($value));
+        }
+
+        return new self(
+            sprintf('Attachment rejected: %s "%s"%s %s.', $subject, $shown, $length, $reason),
+            MailerFailure::AttachmentRejected,
+        );
     }
 
     public static function configurationMissing(string $detail): self

@@ -156,6 +156,35 @@ final class MailerExceptionTest extends TestCase
         );
     }
 
+    public function testAttachmentRejectedTruncatesAnOversizedValueAndStatesItsLength(): void
+    {
+        $message = MailerException::attachmentRejected('media type', str_repeat('a', 1048576), 'is longer than 255 bytes')->getMessage();
+
+        self::assertLessThan(300, strlen($message));
+        self::assertSame(
+            'Attachment rejected: media type "' . str_repeat('a', 64) . '..." (1048576 bytes) is longer than 255 bytes.',
+            $message,
+        );
+    }
+
+    public function testAttachmentRejectedKeepsAValueOf64BytesWhole(): void
+    {
+        $value = str_repeat('a', 64);
+
+        self::assertSame(
+            'Attachment rejected: media type "' . $value . '" is longer than 255 bytes.',
+            MailerException::attachmentRejected('media type', $value, 'is longer than 255 bytes')->getMessage(),
+        );
+    }
+
+    public function testAttachmentRejectedCutsAValueOf65BytesAndStatesItsLength(): void
+    {
+        self::assertSame(
+            'Attachment rejected: media type "' . str_repeat('a', 64) . '..." (65 bytes) is longer than 255 bytes.',
+            MailerException::attachmentRejected('media type', str_repeat('a', 65), 'is longer than 255 bytes')->getMessage(),
+        );
+    }
+
     public function testConfigurationMissingCarriesConfigurationMissingFailure(): void
     {
         self::assertSame(
