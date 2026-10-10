@@ -287,7 +287,6 @@ final readonly class Configuration
         return in_array($folded, self::BUILT_IN_SECTIONS, true) ? $folded : null;
     }
 
-
     /**
      * Build a Configuration tree from a YAML file.
      *

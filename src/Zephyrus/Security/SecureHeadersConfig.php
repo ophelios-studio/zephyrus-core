@@ -126,7 +126,6 @@ final readonly class SecureHeadersConfig
         );
     }
 
-
     /**
      * @throws ConfigurationException
      */

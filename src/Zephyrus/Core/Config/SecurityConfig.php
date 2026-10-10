@@ -343,5 +343,4 @@ final readonly class SecurityConfig
 
         return $entries;
     }
-
 }

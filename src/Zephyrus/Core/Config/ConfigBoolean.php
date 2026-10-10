@@ -55,5 +55,4 @@ final class ConfigBoolean
                 . ($value === null ? '; ' . self::UNSET_ENV_HINT : ''),
         );
     }
-
 }
