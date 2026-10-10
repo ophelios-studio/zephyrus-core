@@ -35,7 +35,7 @@ use Zephyrus\Security\SecureHeadersConfig;
  *   - csrfEnabled:    true. CSRF protection is opt-out.
  *   - csrfExceptions: [] (no excluded paths).
  *   - allowedHosts:   [] (any host). Populate it in production.
- *   - maxBodySize:    2097152 (2 MB). 0 = unlimited.
+ *   - maxBodySize:    2097152 (2 MB). 0 = unlimited. An integer or a string of at most 18 digits, no unit suffix.
  *   - trustedProxies: [] (no proxy trusted, so forwarded headers are ignored).
  *   - trustedHeaders: the X-Forwarded-* family (Request::TRUSTED_HEADERS_DEFAULT). 'forwarded',
  *                     'x-real-ip', 'cf-connecting-ip' and 'x-client-ip' are opt-in. [] reads none.
@@ -43,7 +43,7 @@ use Zephyrus\Security\SecureHeadersConfig;
  *   - encryptionKey:  null. Required for Cryptography usage.
  *
  * Validation:
- *   - maxBodySize: 0 or greater.
+ *   - maxBodySize: 0 or greater, an integer or a string of at most 18 digits.
  *   - allowedHosts: each entry a non-empty host name without a scheme, such as example.com.
  *     allowedHosts and trustedProxies also accept one comma-separated string (typically from !env).
  *     A string naming nothing is an empty
@@ -141,7 +141,7 @@ final readonly class SecurityConfig
      *
      * @param array<string, mixed> $values
      * @throws ConfigurationException if a value is not a boolean, csrf.autoHtml is true, allowedHosts
-     *         is null or names nothing, maxBodySize is negative, or a list entry is invalid
+     *         is null or names nothing, maxBodySize is negative or not a number of bytes, or a list entry is invalid
      *         (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders), or headers is neither null nor a
      *         mapping, or a header setting is invalid (see SecureHeadersConfig::fromArray()).
      */
@@ -178,7 +178,10 @@ final readonly class SecurityConfig
             throw ConfigurationException::invalidValue('security', 'allowedHosts', self::shownValue($allowedHostsValue), 'set the variable to at least one entry, or remove it');
         }
 
-        $maxBodySize = (int) (self::read('maxBodySize', $sections) ?? 2_097_152);
+        $writtenMaxBodySize = self::findWritten('maxBodySize', $sections);
+        $maxBodySize = $writtenMaxBodySize === null
+            ? 2_097_152
+            : self::byteCount($writtenMaxBodySize[0], $writtenMaxBodySize[1]);
         $trustedProxies = self::listValue(self::read('trustedProxies', $sections));
         // An absent key takes the default set. An explicit [] is a valid, strictest setting.
         $trustedHeaders = (array) (self::read('trustedHeaders', $sections) ?? Request::TRUSTED_HEADERS_DEFAULT);
@@ -201,15 +204,6 @@ final readonly class SecurityConfig
                 $written,
                 self::rawValueForMessage($rawValue),
                 'remove this line. ' . sprintf(CsrfConfig::INJECTION_REFUSAL, '_csrf_token'),
-            );
-        }
-
-        if ($maxBodySize < 0) {
-            throw ConfigurationException::invalidValue(
-                'security',
-                'maxBodySize',
-                $maxBodySize,
-                'must be 0 (unlimited) or a positive byte count',
             );
         }
 
@@ -286,6 +280,37 @@ final readonly class SecurityConfig
             trustedHeaders: $normalizedTrustedHeaders,
             declaredKeys: $declaredKeys,
             headers: is_array($headers) ? SecureHeadersConfig::fromArray($headers) : null,
+        );
+    }
+
+    /**
+     * @param string $written The key as the file wrote it, named in the refusal.
+     * @throws ConfigurationException if the value is negative, or neither an integer nor a string of at most 18 digits.
+     */
+    private static function byteCount(string $written, mixed $value): int
+    {
+        if (is_int($value)) {
+            if ($value < 0) {
+                throw ConfigurationException::invalidValue(
+                    'security',
+                    $written,
+                    $value,
+                    'must be 0 (unlimited) or a positive byte count',
+                );
+            }
+
+            return $value;
+        }
+
+        if (is_string($value) && preg_match('/^\d{1,18}$/D', $value) === 1) {
+            return (int) $value;
+        }
+
+        throw ConfigurationException::invalidValue(
+            'security',
+            $written,
+            is_string($value) ? self::shownValue($value) : get_debug_type($value),
+            'must be a number of bytes, for example 2097152 (no unit suffix)',
         );
     }
 

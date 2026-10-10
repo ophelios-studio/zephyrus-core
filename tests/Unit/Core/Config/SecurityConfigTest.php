@@ -114,6 +114,77 @@ final class SecurityConfigTest extends TestCase
         SecurityConfig::fromArray(['maxBodySize' => -1]);
     }
 
+    public function testAcceptsMaxBodySizeAsDigitString(): void
+    {
+        self::assertSame(1024, SecurityConfig::fromArray(['maxBodySize' => '1024'])->maxBodySize);
+        self::assertSame(0, SecurityConfig::fromArray(['maxBodySize' => '0'])->maxBodySize);
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function invalidMaxBodySizes(): iterable
+    {
+        yield 'unit suffix' => ['2MB'];
+        yield 'letters' => ['abc'];
+        yield 'leading space' => [' 2'];
+        yield 'negative string' => ['-1'];
+        yield 'trailing newline' => ["2\n"];
+        yield 'empty string' => [''];
+        yield 'float' => [1.5];
+        yield 'true' => [true];
+        yield 'false' => [false];
+        yield 'array' => [[2]];
+        yield '19 digits' => ['1000000000000000000'];
+        yield '310 digits' => ['1' . str_repeat('0', 309)];
+    }
+
+    public function testAcceptsMaxBodySizeOfEighteenDigits(): void
+    {
+        self::assertSame(
+            999_999_999_999_999_999,
+            SecurityConfig::fromArray(['maxBodySize' => '999999999999999999'])->maxBodySize,
+        );
+    }
+
+    #[DataProvider('invalidMaxBodySizes')]
+    public function testThrowsForMaxBodySizeThatIsNotAByteCount(mixed $value): void
+    {
+        try {
+            SecurityConfig::fromArray(['maxBodySize' => $value]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("'security' field 'maxBodySize'", $e->getMessage());
+            self::assertStringContainsString(
+                'must be a number of bytes, for example 2097152 (no unit suffix)',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function refusedSnakeCaseMaxBodySizes(): iterable
+    {
+        yield 'unit suffix' => ['8MB', "'8MB'"];
+        yield 'bool' => [true, "'bool'"];
+        yield 'float' => [1e7, "'float'"];
+        yield 'array' => [[1], "'array'"];
+        yield 'negative integer' => [-5, "'-5'"];
+    }
+
+    #[DataProvider('refusedSnakeCaseMaxBodySizes')]
+    public function testMaxBodySizeRefusalNamesTheKeyAsWrittenAndShowsTheTypeHonestly(mixed $value, string $shown): void
+    {
+        try {
+            SecurityConfig::fromArray(['max_body_size' => $value]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("'security' field 'max_body_size' has invalid value " . $shown, $e->getMessage());
+        }
+    }
+
     public function testThrowsForEmptyStringInAllowedHosts(): void
     {
         $this->expectException(ConfigurationException::class);
