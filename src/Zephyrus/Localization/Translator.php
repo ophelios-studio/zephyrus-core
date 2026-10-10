@@ -191,7 +191,9 @@ final class Translator
                 continue;
             }
 
-            [$pipeName, $pipeArgument] = array_pad(explode(':', $pipeSegment, 2), 2, null);
+            $pipeParts = explode(':', $pipeSegment, 2);
+            $pipeName = $pipeParts[0];
+            $pipeArgument = $pipeParts[1] ?? null;
 
             $current = match (strtolower($pipeName)) {
                 'lower'    => mb_strtolower($current),
