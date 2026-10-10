@@ -198,6 +198,8 @@ final class Mailer
      *                                 exceed 255 bytes, have surrounding spaces, nor be blank,
      *                                 "0", "." or "..", nor end with a dot: it lands in a MIME
      *                                 header and is what the recipient's client writes to disk.
+     *                                 The media type follows the extension of the sent name, else
+     *                                 the extension of the file.
      * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
      *                                 the historical behaviour of trusting the caller.
      */
@@ -227,7 +229,7 @@ final class Mailer
         }
 
         try {
-            $this->mail->addAttachment($path, $sentName, PHPMailer::ENCODING_BASE64, PHPMailer::filenameToType($sentName));
+            $this->mail->addAttachment($path, $sentName, PHPMailer::ENCODING_BASE64, $this->mediaTypeOf($sentName, $path));
         } catch (PHPMailerException) {
             throw MailerException::attachmentRejected('path', $path, 'could not be attached');
         }
@@ -298,6 +300,16 @@ final class Mailer
         return $recipientsRefused
             ? MailerException::recipientsRefused($e->getMessage())
             : MailerException::sendFailed($e->getMessage());
+    }
+
+    /**
+     * The sent name's type, or the file's when the sent name has no known extension.
+     */
+    private function mediaTypeOf(string $sentName, string $path): string
+    {
+        $type = PHPMailer::filenameToType($sentName);
+
+        return $type === 'application/octet-stream' ? PHPMailer::filenameToType(basename($path)) : $type;
     }
 
     /**

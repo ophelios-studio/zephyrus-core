@@ -317,6 +317,37 @@ final class MailerAttachmentGuardTest extends TestCase
         }
     }
 
+    public function testTheMediaTypeFallsBackToTheFileNameWhenTheSentNameHasNoExtension(): void
+    {
+        self::assertStringContainsString('Content-Type: application/pdf', $this->sentMessage($this->inside, 'Monthly report'));
+    }
+
+    public function testTheMediaTypeFallsBackToTheFileNameWhenTheFileHasNoExtension(): void
+    {
+        $path = $this->root . '/export';
+        file_put_contents($path, 'pdf');
+
+        try {
+            self::assertStringContainsString('Content-Type: application/pdf', $this->sentMessage($path, 'invoice.pdf'));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testTheMediaTypeOfAnAttachmentWithoutDisplayNameFollowsItsFileName(): void
+    {
+        self::assertStringContainsString('Content-Type: application/pdf', $this->sentMessage($this->inside));
+    }
+
+    private function sentMessage(string $path, string $name = ''): string
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->to('good@example.test')->subject('s')->text('t')->attach($path, $name);
+        $mailer->getPhpMailer()->preSend();
+
+        return $mailer->getPhpMailer()->getSentMIMEMessage();
+    }
+
     public function testAMissingFileIsReportedAsMissingBeforeItsNameIsChecked(): void
     {
         foreach (['', '/nope/x.pdf'] as $path) {
