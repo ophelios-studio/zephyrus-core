@@ -153,6 +153,42 @@ class ItemApiController extends Controller
 }
 ```
 
+#### Skipping a global middleware on a route
+
+A route can opt out of a global middleware with `#[WithoutMiddleware]`, for instance a public page that needs no session cookie and should stay cacheable. Every global middleware that is an instance of the class is skipped, so a parent class or an interface skips all its implementations. A class-level attribute is inherited by subclasses and merged with the method-level ones:
+
+```php
+use Zephyrus\Controller\Controller;
+use Zephyrus\Http\Response;
+use Zephyrus\Routing\Attribute\Get;
+use Zephyrus\Routing\Attribute\WithoutMiddleware;
+use Zephyrus\Session\SessionMiddleware;
+
+class PricingController extends Controller
+{
+    #[Get('/pricing')]
+    #[WithoutMiddleware(SessionMiddleware::class)]
+    public function show(): Response
+    {
+        return Response::html('<h1>Pricing</h1>');
+    }
+}
+```
+
+The fluent form applies to the route added just before it:
+
+```php
+$router = $router
+    ->get('/pricing', 'PricingController@show')
+    ->withoutMiddleware(SessionMiddleware::class);
+```
+
+`withoutMiddleware()` affects only the last route registered, even after `controller()`, `group()`, `resource()` or `discoverControllers()`: to cover a whole controller, put the attribute on the class.
+
+Only a matched route skips: a 404 or 405 still runs every global middleware. Route middlewares named with `#[Middleware]` are not affected. The framework security middlewares (`ForceHttpsMiddleware`, `AllowedHostsMiddleware`, `CsrfMiddleware`, `MaxBodySizeMiddleware`, `SecureHeadersMiddleware`, `ContentSecurityPolicyMiddleware`) cannot be skipped, nor can a parent of one: the route registration throws a `RouteMiddlewareException`. To exempt a path from the CSRF check, use `security.csrf.exceptions`.
+
+Excluding `AuthGuardMiddleware` skips every guard mounted globally: mount a guard that must stay on that route under a name, or in a middleware class of your own. A consumer's wrapper around a security middleware is not recognised, so excluding the wrapper skips the security middleware inside it. A route that skips `SessionMiddleware` has no session: no CSRF-protected form (the token it renders is never saved), no flash message, no signed-in user.
+
 ### Request
 
 The `Request` object is immutable and composed of typed sub-objects:

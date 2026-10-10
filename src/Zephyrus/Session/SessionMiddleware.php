@@ -18,10 +18,10 @@ use Zephyrus\Http\Response;
  *       ->build();
  *
  * Global middleware also runs on 404 and 405 responses, and start() is eager, so a request that matches no
- * route starts a session. To skip 404s, test Request::ATTRIBUTE_UNMATCHED_ROUTE. To skip sessions for some
- * paths, wrap this middleware and test $request->path() (not uri()->path(), which can differ from the
- * dispatched route). Register short-circuiting middleware
- * such as ForceHttpsMiddleware before this one, so rejected requests never open a session.
+ * route starts a session. To skip 404s, test Request::ATTRIBUTE_UNMATCHED_ROUTE. To skip sessions on some
+ * routes, use #[WithoutMiddleware(SessionMiddleware::class)] or Router::withoutMiddleware(). Register
+ * short-circuiting middleware such as ForceHttpsMiddleware before this one, so rejected requests never
+ * open a session.
  */
 final class SessionMiddleware implements MiddlewareInterface
 {

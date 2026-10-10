@@ -107,6 +107,8 @@ final class Router
     /**
      * Skips the given global middlewares on the most recently added route.
      *
+     * Only that last route is affected, even right after controller(), group(), resource() or
+     * discoverControllers(): use the attribute at class level to cover a whole controller.
      * Each class may be a parent class or an interface. Route middlewares are not affected, and a 404 or
      * 405 still runs every global middleware (see the WithoutMiddleware attribute).
      *
