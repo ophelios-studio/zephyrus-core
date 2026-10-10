@@ -70,7 +70,7 @@ final readonly class Request
         'x-client-ip',
     ];
 
-    /** @var array<string, mixed> */
+    /** @var array<int|string, mixed> */
     public array $query;
     /** @var array<string, FileUpload|array<int, FileUpload>> */
     public array $files;
@@ -81,7 +81,7 @@ final readonly class Request
 
     /**
      * @param RequestBody|array<string, mixed> $body
-     * @param array<string, mixed>|null $query Null derives the query from the URI.
+     * @param array<int|string, mixed>|null $query Null derives the query from the URI.
      * @param HeaderBag|array<string, mixed> $headers
      * @param CookieJar|array<string, string> $cookies
      * @param array<string, mixed> $attributes
@@ -183,7 +183,7 @@ final readonly class Request
      * a malformed body, use the constructor with `new RequestBody([], $raw, malformed: true)`.
      *
      * @param array<string, mixed> $body
-     * @param array<string, mixed>|null $query Null derives the query from the URI.
+     * @param array<int|string, mixed>|null $query Null derives the query from the URI.
      * @param array<string, string> $headers
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
@@ -356,7 +356,7 @@ final readonly class Request
     /**
      * Get all parameters merged from body and query.
      *
-     * @return array<string, mixed>
+     * @return array<int|string, mixed>
      */
     public function getParameters(): array
     {
@@ -509,7 +509,7 @@ final readonly class Request
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<int|string, mixed>
      */
     private static function parseQueryString(string $queryString): array
     {

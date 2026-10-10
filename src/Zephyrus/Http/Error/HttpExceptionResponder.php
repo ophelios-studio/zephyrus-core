@@ -160,7 +160,7 @@ class HttpExceptionResponder
             return self::FORMAT_TEXT;
         }
 
-        $acceptHeader = $request->headers()->get('accept', '');
+        $acceptHeader = $request->headers()->get('accept') ?? '';
         $ranges = $this->parseAcceptHeader($acceptHeader);
 
         if ($ranges === []) {
