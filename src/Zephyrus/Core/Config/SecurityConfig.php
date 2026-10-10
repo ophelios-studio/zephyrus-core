@@ -213,7 +213,8 @@ final readonly class SecurityConfig
                     'security',
                     "csrfExceptions[$i]",
                     self::shownValue($pattern),
-                    'each entry must be a non-empty string',
+                    'each entry must be a non-empty string'
+                        . ($pattern === null ? '; quote a pattern that starts with "#" in YAML' : ''),
                 );
             }
         }

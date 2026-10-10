@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Http\IpRange;
@@ -206,6 +207,68 @@ final class SecurityConfigTest extends TestCase
         $this->expectExceptionMessage('csrfExceptions');
 
         SecurityConfig::fromArray(['csrfExceptions' => ['#^/ok$#', '']]);
+    }
+
+    public function testAnUnquotedYamlPatternStartingWithAHashIsRefusedWithAQuotingHint(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'zephyrus-yaml-');
+        self::assertIsString($file);
+
+        try {
+            file_put_contents($file, "security:\n  csrf:\n    exceptions:\n      - #^/webhooks/#\n");
+            Configuration::fromYamlFile($file);
+
+            self::fail('An empty csrf exception entry was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field 'csrfExceptions[0]' has invalid value '': "
+                . 'each entry must be a non-empty string; quote a pattern that starts with "#" in YAML.',
+                $exception->getMessage(),
+            );
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testAQuotedYamlPatternStartingWithAHashIsAccepted(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'zephyrus-yaml-');
+        self::assertIsString($file);
+
+        try {
+            file_put_contents($file, "security:\n  csrf:\n    exceptions:\n      - \"#^/webhooks/#\"\n");
+            $configuration = Configuration::fromYamlFile($file);
+        } finally {
+            unlink($file);
+        }
+
+        self::assertSame(['#^/webhooks/#'], $configuration->security->csrfExceptions);
+    }
+
+    public function testAnEmptyStringCsrfExceptionEntryGetsNoQuotingHint(): void
+    {
+        try {
+            SecurityConfig::fromArray(['csrfExceptions' => ['']]);
+
+            self::fail('An empty csrf exception entry was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field 'csrfExceptions[0]' has invalid value '': "
+                . 'each entry must be a non-empty string.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testANonStringCsrfExceptionEntryGetsNoQuotingHint(): void
+    {
+        try {
+            SecurityConfig::fromArray(['csrfExceptions' => [123]]);
+
+            self::fail('A numeric csrf exception entry was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringNotContainsString('quote a pattern', $exception->getMessage());
+        }
     }
 
     public function testThrowsForNonStringInCsrfExceptions(): void
