@@ -196,6 +196,14 @@ final class SortRequestTest extends TestCase
         new SortRequest('drop table users;');
     }
 
+    public function testColumnWithTrailingNewlineIsRejected(): void
+    {
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid sort column');
+
+        new SortRequest("name\n");
+    }
+
     public function testInvalidDirectionThrows(): void
     {
         $this->expectException(DatabaseException::class);

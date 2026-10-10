@@ -215,6 +215,6 @@ final readonly class RouteSignature
 
     private function isValidExpiry(string $expiry): bool
     {
-        return preg_match('/^\d+$/', $expiry) === 1;
+        return preg_match('/^\d+$/D', $expiry) === 1;
     }
 }

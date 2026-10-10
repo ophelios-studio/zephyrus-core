@@ -21,7 +21,7 @@ final class SortRequest implements \JsonSerializable
         string $direction = 'ASC',
     ) {
         // The pattern forbids quotes; quoteIdentifier() also quotes every dotted part.
-        if ($column === '' || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_\.]*$/', $column)) {
+        if ($column === '' || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_\.]*$/D', $column)) {
             throw DatabaseException::queryFailed('sorting', 'Invalid sort column');
         }
 

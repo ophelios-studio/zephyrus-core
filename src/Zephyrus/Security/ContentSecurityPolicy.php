@@ -154,7 +154,7 @@ final readonly class ContentSecurityPolicy
             throw new InvalidArgumentException('CSP nonce/hash value cannot be empty.');
         }
 
-        if (preg_match('/^[A-Za-z0-9+\/_-]+={0,2}$/', $normalized) !== 1) {
+        if (preg_match('/^[A-Za-z0-9+\/_-]+={0,2}$/D', $normalized) !== 1) {
             throw new InvalidArgumentException('CSP nonce/hash value must be valid base64 content.');
         }
 
@@ -164,7 +164,7 @@ final readonly class ContentSecurityPolicy
     private static function normalizeDirectiveName(string $name): string
     {
         $normalized = strtolower(trim($name));
-        if ($normalized === '' || preg_match('/^[a-z][a-z0-9-]*$/', $normalized) !== 1) {
+        if ($normalized === '' || preg_match('/^[a-z][a-z0-9-]*$/D', $normalized) !== 1) {
             throw new InvalidArgumentException('Invalid CSP directive name.');
         }
 

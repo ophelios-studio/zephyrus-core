@@ -232,6 +232,14 @@ final class RouteSignatureTest extends TestCase
         new RouteSignature('');
     }
 
+    public function testExpiryWithTrailingNewlineIsRefused(): void
+    {
+        $signer = new RouteSignature('top-secret');
+        $signed = $signer->sign('https://example.com/users/42?_exp=' . (time() + 3600) . '%0A');
+
+        self::assertFalse($signer->verify($signed));
+    }
+
     public function testConstructorRejectsAWhitespaceOnlySecret(): void
     {
         $this->expectException(RouteSignatureException::class);

@@ -182,6 +182,13 @@ final class ContentSecurityPolicyTest extends TestCase
         ContentSecurityPolicy::create()->withDirective('script-src', "'self'\r\nX-Injected: 1");
     }
 
+    public function testNonceWithEmbeddedNewlineIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ContentSecurityPolicy::create()->appendNonce('script-src', "abc\ndef");
+    }
+
     public function testSemicolonIsRejectedOnTheStringPath(): void
     {
         $this->expectException(InvalidArgumentException::class);

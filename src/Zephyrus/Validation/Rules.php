@@ -85,7 +85,7 @@ final class Rules
     public static function integerString(string $message = 'Must be an integer string.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^-?\d+$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^-?\d+$/D', $v) === 1,
             $message,
         );
     }
@@ -97,8 +97,8 @@ final class Rules
     public static function decimalString(int $scale = 2, string $message = ''): Rule
     {
         $pattern = $scale <= 0
-            ? '/^-?\d+$/'
-            : '/^-?\d+(?:\.\d{1,' . $scale . '})?$/';
+            ? '/^-?\d+$/D'
+            : '/^-?\d+(?:\.\d{1,' . $scale . '})?$/D';
 
         return Rule::of(
             fn (mixed $v) => is_string($v) && preg_match($pattern, $v) === 1,
@@ -189,7 +189,7 @@ final class Rules
     public static function ascii(string $message = 'Must contain only ASCII characters.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[\x00-\x7F]*$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[\x00-\x7F]*$/D', $v) === 1,
             $message,
         );
     }
@@ -200,7 +200,7 @@ final class Rules
     public static function alphaNumeric(string $message = 'Must contain only letters and numbers.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-zA-Z0-9]+$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-zA-Z0-9]+$/D', $v) === 1,
             $message,
         );
     }
@@ -322,7 +322,7 @@ final class Rules
     {
         return Rule::of(
             fn (mixed $v) => is_string($v) && preg_match(
-                '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i',
+                '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD',
                 $v,
             ) === 1,
             $message,
@@ -376,7 +376,7 @@ final class Rules
                     return false;
                 }
 
-                if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/', $v) !== 1) {
+                if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/D', $v) !== 1) {
                     return false;
                 }
 
@@ -416,7 +416,7 @@ final class Rules
     public static function time24(string $message = 'Must be a valid 24-hour time (HH:MM).'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $v) === 1,
             $message,
         );
     }
@@ -427,7 +427,7 @@ final class Rules
     public static function phoneE164(string $message = 'Must be a valid E.164 phone number.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^\+[1-9]\d{1,14}$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^\+[1-9]\d{1,14}$/D', $v) === 1,
             $message,
         );
     }
@@ -438,7 +438,7 @@ final class Rules
     public static function hexColor(string $message = 'Must be a valid hex color.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/D', $v) === 1,
             $message,
         );
     }
@@ -450,7 +450,7 @@ final class Rules
     {
         return Rule::of(
             fn (mixed $v) => is_string($v)
-                && preg_match('/^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/', $v) === 1,
+                && preg_match('/^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/D', $v) === 1,
             $message,
         );
     }
@@ -482,7 +482,7 @@ final class Rules
     public static function postalCode(string $message = 'Must be a valid postal code.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9][A-Za-z0-9\- ]{1,11}[A-Za-z0-9]$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9][A-Za-z0-9\- ]{1,11}[A-Za-z0-9]$/D', $v) === 1,
             $message,
         );
     }
@@ -565,7 +565,7 @@ final class Rules
                         return false;
                     }
 
-                    if (preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/', $label) !== 1) {
+                    if (preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/D', $label) !== 1) {
                         return false;
                     }
                 }
@@ -680,7 +680,7 @@ final class Rules
 
                 $mask = sprintf('%032b', $long);
 
-                return preg_match('/^1*0*$/', $mask) === 1;
+                return preg_match('/^1*0*$/D', $mask) === 1;
             },
             $message,
         );
@@ -773,7 +773,7 @@ final class Rules
     public static function slug(string $message = 'Must be a valid slug.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $v) === 1,
             $message,
         );
     }
@@ -802,12 +802,11 @@ final class Rules
 
     /**
      * Accepts a non-empty string without ASCII whitespace; the empty string fails.
-     * A single trailing LF currently passes.
      */
     public static function noWhitespace(string $message = 'Must not contain whitespace.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^\S+$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^\S+$/D', $v) === 1,
             $message,
         );
     }
@@ -846,7 +845,7 @@ final class Rules
                     return false;
                 }
 
-                if (preg_match('/^[A-Za-z0-9\-_]+$/', $v) !== 1) {
+                if (preg_match('/^[A-Za-z0-9\-_]+$/D', $v) !== 1) {
                     return false;
                 }
 
@@ -871,7 +870,6 @@ final class Rules
     /**
      * Accepts SemVer 2.0 versions: no leading 'v'.
      * No leading zeros in major, minor or patch; pre-release identifiers are not checked for them.
-     * A single trailing LF currently passes.
      */
     public static function semver(string $message = 'Must be a valid semantic version.'): Rule
     {
@@ -879,7 +877,7 @@ final class Rules
             fn (mixed $v) => is_string($v) && preg_match(
                 '/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
                 . '(?:-((?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*))*))?'
-                . '(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/',
+                . '(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/D',
                 $v,
             ) === 1,
             $message,
@@ -892,7 +890,7 @@ final class Rules
     public static function ulid(string $message = 'Must be a valid ULID.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/D', $v) === 1,
             $message,
         );
     }
@@ -903,7 +901,7 @@ final class Rules
     public static function sha256(string $message = 'Must be a valid SHA-256 hash.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-f0-9]{64}$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-f0-9]{64}$/D', $v) === 1,
             $message,
         );
     }
@@ -935,7 +933,7 @@ final class Rules
                 && !str_contains($v, "\\")
                 && $v !== '.'
                 && $v !== '..'
-                && preg_match('/^[A-Za-z0-9._-]+$/', $v) === 1,
+                && preg_match('/^[A-Za-z0-9._-]+$/D', $v) === 1,
             $message,
         );
     }
@@ -947,7 +945,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/', $v) === 1
+                && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/D', $v) === 1
                 && !str_contains($v, '..'),
             $message,
         );
@@ -959,7 +957,7 @@ final class Rules
     public static function fileExtension(string $message = 'Must be a valid file extension.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Za-z0-9]{1,10}$/', $v) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Za-z0-9]{1,10}$/D', $v) === 1,
             $message,
         );
     }
@@ -1003,7 +1001,7 @@ final class Rules
                     return false;
                 }
 
-                return preg_match('/^(?:%[0-9A-Fa-f]{2}|[A-Za-z0-9\-._~])*$/', $v) === 1;
+                return preg_match('/^(?:%[0-9A-Fa-f]{2}|[A-Za-z0-9\-._~])*$/D', $v) === 1;
             },
             $message,
         );
@@ -1054,7 +1052,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^HTTP\/(?:1\.0|1\.1|2(?:\.0)?|3(?:\.0)?)$/i', $v) === 1,
+                && preg_match('/^HTTP\/(?:1\.0|1\.1|2(?:\.0)?|3(?:\.0)?)$/iD', $v) === 1,
             $message,
         );
     }
@@ -1065,19 +1063,19 @@ final class Rules
     public static function mimeType(string $message = 'Must be a valid MIME type.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/iD', $v) === 1,
             $message,
         );
     }
 
     /**
      * Accepts a non-empty RFC 6750 b64token (letters, digits, -._~+/) with optional trailing '=' padding.
-     * The 'Bearer ' prefix fails. A single trailing LF currently passes.
+     * The 'Bearer ' prefix fails.
      */
     public static function bearerToken(string $message = 'Must be a valid bearer token.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9\-._~+\/]+=*$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9\-._~+\/]+=*$/D', $v) === 1,
             $message,
         );
     }
@@ -1088,7 +1086,7 @@ final class Rules
     public static function languageTag(string $message = 'Must be a valid language tag.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/D', $v) === 1,
             $message,
         );
     }
@@ -1107,7 +1105,7 @@ final class Rules
                 $part = '[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*|\*';
                 $q = '(?:0(?:\.\d{1,3})?|1(?:\.0{1,3})?)';
 
-                return preg_match('/^\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?(?:\s*,\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?)*\s*$/', $v) === 1;
+                return preg_match('/^\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?(?:\s*,\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?)*\s*$/D', $v) === 1;
             },
             $message,
         );
@@ -1119,19 +1117,19 @@ final class Rules
     public static function httpHeaderName(string $message = 'Must be a valid HTTP header name.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[!#$%&\'\*+\-.\^_`\|~0-9A-Za-z]+$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[!#$%&\'\*+\-.\^_`\|~0-9A-Za-z]+$/D', $v) === 1,
             $message,
         );
     }
 
     /**
      * Accepts visible ASCII, spaces and tabs; the empty string passes.
-     * CR, LF and other control bytes fail, except a single trailing LF, which currently passes.
+     * CR, LF and other control bytes fail.
      */
     public static function httpHeaderValue(string $message = 'Must be a valid HTTP header value.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[\x09\x20-\x7E]*$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^[\x09\x20-\x7E]*$/D', $v) === 1,
             $message,
         );
     }
@@ -1144,7 +1142,7 @@ final class Rules
     {
         return Rule::of(
             fn (mixed $v) => is_string($v)
-                && preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/', $v) === 1,
+                && preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/D', $v) === 1,
             $message,
         );
     }
@@ -1161,7 +1159,7 @@ final class Rules
                 }
 
                 if (str_starts_with($v, '[')) {
-                    if (!preg_match('/^\[(.+)]:(\d+)$/', $v, $matches)) {
+                    if (!preg_match('/^\[(.+)]:(\d+)$/D', $v, $matches)) {
                         return false;
                     }
 
@@ -1187,7 +1185,7 @@ final class Rules
     public static function countryCode(string $message = 'Must be a valid ISO country code.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{2}$/', strtoupper($v)) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{2}$/D', strtoupper($v)) === 1,
             $message,
         );
     }
@@ -1198,7 +1196,7 @@ final class Rules
     public static function locale(string $message = 'Must be a valid locale (e.g. en_CA).'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[a-z]{2}_[A-Z]{2}$/', $v) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[a-z]{2}_[A-Z]{2}$/D', $v) === 1,
             $message,
         );
     }
@@ -1210,7 +1208,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
     }
@@ -1222,7 +1220,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
     }
@@ -1235,7 +1233,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-6[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-6[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
     }
@@ -1248,7 +1246,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
     }
@@ -1261,7 +1259,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $v) === 1,
+                && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
     }
@@ -1272,7 +1270,7 @@ final class Rules
     public static function currencyCode(string $message = 'Must be a valid ISO currency code.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{3}$/', strtoupper($v)) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{3}$/D', strtoupper($v)) === 1,
             $message,
         );
     }
@@ -1285,7 +1283,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$/', strtoupper(str_replace(' ', '', $v))) === 1,
+                && preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$/D', strtoupper(str_replace(' ', '', $v))) === 1,
             $message,
         );
     }
@@ -1297,7 +1295,7 @@ final class Rules
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && preg_match('/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/', strtoupper($v)) === 1,
+                && preg_match('/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/D', strtoupper($v)) === 1,
             $message,
         );
     }
@@ -1318,7 +1316,7 @@ final class Rules
                     return false;
                 }
 
-                return preg_match('/^\d{12,19}$/', $digits) === 1;
+                return preg_match('/^\d{12,19}$/D', $digits) === 1;
             },
             $message,
         );
@@ -1336,7 +1334,7 @@ final class Rules
                 }
 
                 $digits = preg_replace('/[\s-]+/', '', $v);
-                if (!is_string($digits) || preg_match('/^\d{12,19}$/', $digits) !== 1) {
+                if (!is_string($digits) || preg_match('/^\d{12,19}$/D', $digits) !== 1) {
                     return false;
                 }
 
@@ -1366,7 +1364,7 @@ final class Rules
     public static function cardCvv(string $message = 'Must be a valid card CVV.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^\d{3,4}$/', $v) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^\d{3,4}$/D', $v) === 1,
             $message,
         );
     }
@@ -1377,7 +1375,7 @@ final class Rules
     public static function cardExpiryMmyy(string $message = 'Must be a valid card expiry (MM/YY).'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{2}$/', $v) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{2}$/D', $v) === 1,
             $message,
         );
     }
@@ -1388,7 +1386,7 @@ final class Rules
     public static function cardExpiryMmyyyy(string $message = 'Must be a valid card expiry (MM/YYYY).'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{4}$/', $v) === 1,
+            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{4}$/D', $v) === 1,
             $message,
         );
     }
@@ -1438,7 +1436,7 @@ final class Rules
                     return false;
                 }
 
-                return preg_match('/^(?:\/(?:[^~\/]|~0|~1)*)+$/', $v) === 1;
+                return preg_match('/^(?:\/(?:[^~\/]|~0|~1)*)+$/D', $v) === 1;
             },
             $message,
         );
@@ -1518,7 +1516,7 @@ final class Rules
     public static function etag(string $message = 'Must be a valid HTTP ETag.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^(?:W\/)?"[\x21\x23-\x7E]*"$/', $v) === 1,
+            fn (mixed $v) => is_string($v) && preg_match('/^(?:W\/)?"[\x21\x23-\x7E]*"$/D', $v) === 1,
             $message,
         );
     }
@@ -1659,18 +1657,18 @@ final class Rules
                 foreach ($ranges as $range) {
                     $range = trim($range);
 
-                    if (preg_match('/^(\d+)-(\d+)$/', $range, $m) === 1) {
+                    if (preg_match('/^(\d+)-(\d+)$/D', $range, $m) === 1) {
                         if ((int) $m[1] > (int) $m[2]) {
                             return false;
                         }
                         continue;
                     }
 
-                    if (preg_match('/^\d+-$/', $range) === 1) {
+                    if (preg_match('/^\d+-$/D', $range) === 1) {
                         continue;
                     }
 
-                    if (preg_match('/^-\d+$/', $range) === 1) {
+                    if (preg_match('/^-\d+$/D', $range) === 1) {
                         continue;
                     }
 
@@ -1697,11 +1695,11 @@ final class Rules
 
                 $value = substr($v, 6);
 
-                if (preg_match('/^\*\/\d+$/', $value) === 1) {
+                if (preg_match('/^\*\/\d+$/D', $value) === 1) {
                     return true;
                 }
 
-                if (preg_match('/^(\d+)-(\d+)\/(\d+|\*)$/', $value, $m) !== 1) {
+                if (preg_match('/^(\d+)-(\d+)\/(\d+|\*)$/D', $value, $m) !== 1) {
                     return false;
                 }
 
