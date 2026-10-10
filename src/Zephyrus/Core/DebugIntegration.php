@@ -113,6 +113,8 @@ final class DebugIntegration
         'Zephyrus\Mailer\Mailer::$textBody',
         'Exception::$trace',
         'Error::$trace',
+        'Exception::$string',
+        'Error::$string',
     ];
 
     /**

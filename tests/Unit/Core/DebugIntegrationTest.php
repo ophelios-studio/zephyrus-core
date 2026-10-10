@@ -313,6 +313,31 @@ final class DebugIntegrationTest extends TestCase
         self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered a secret passed as a trace argument.');
     }
 
+    /**
+     * PHP stores the rendered trace in Exception::$string on the first string cast, with arguments cut to 15 characters.
+     */
+    #[DataProvider('traceArgumentExceptionProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksATraceArgumentRenderedByAStringCast(string $case): void
+    {
+        ini_set('zend.exception_ignore_args', '0');
+        DebugIntegration::initialize(debug: true);
+        $secret = 'tok-' . bin2hex(random_bytes(4));
+
+        try {
+            self::failAuthentication($secret, $case);
+        } catch (\Throwable $exception) {
+            $logged = (string) $exception;
+            $html = self::blueScreenHtml($exception);
+            $text = Dumper::toText($exception, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide, Dumper::TRUNCATE => PHP_INT_MAX]);
+        }
+
+        self::assertStringContainsString($secret, $logged, 'Control: the string cast must carry the trace argument.');
+        self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered a trace argument from a string cast.');
+        self::assertStringNotContainsString($secret, $text, 'toText() rendered a trace argument from a string cast.');
+    }
+
     private static function failAuthentication(string $password, string $case): never
     {
         throw match ($case) {
