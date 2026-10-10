@@ -215,21 +215,19 @@ final class Mailer
             throw MailerException::attachmentRejected('path', $path, 'is a stream wrapper, not a local file');
         }
 
-        $this->assertDisplayName(
-            $name !== '' ? $name : basename($path),
-            false,
-        );
-
         if (!is_file($path)) {
             throw MailerException::attachmentNotFound($path);
         }
+
+        $sentName = $name !== '' ? $name : basename($path);
+        $this->assertDisplayName($sentName, false, $name === '');
 
         if ($allowedRoot !== null) {
             $this->assertWithinRoot($path, $allowedRoot);
         }
 
         try {
-            $this->mail->addAttachment($path, $name);
+            $this->mail->addAttachment($path, $sentName, PHPMailer::ENCODING_BASE64, PHPMailer::filenameToType($sentName));
         } catch (PHPMailerException) {
             throw MailerException::attachmentRejected('path', $path, 'could not be attached');
         }
@@ -304,42 +302,52 @@ final class Mailer
 
     /**
      * Refuse a display name that could split a MIME header, name a path, or be dropped by the mail library.
+     *
+     * @param bool $fromFileName True when the name is the file's own name, because the caller gave no display name.
      */
-    private function assertDisplayName(string $name, bool $isStringAttachment): void
+    private function assertDisplayName(string $name, bool $isStringAttachment, bool $fromFileName = false): void
     {
         if (strlen($name) > self::MAX_HEADER_VALUE_BYTES) {
-            throw MailerException::attachmentRejected(
-                'display name',
-                $name,
-                'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes',
-            );
+            $this->refuseName($name, $fromFileName, 'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes');
         }
 
         if (preg_match(self::DISPLAY_NAME_PATTERN, $name) === 1) {
-            throw MailerException::attachmentRejected(
-                'display name',
-                $name,
-                'contains a NUL byte, a line break or a path separator; pass a bare file name',
-            );
+            $this->refuseName($name, $fromFileName, 'contains a NUL byte, a line break or a path separator', 'pass a bare file name');
         }
 
         if (str_contains($name, '=?')) {
-            throw MailerException::attachmentRejected(
-                'display name',
-                $name,
-                'contains "=?", an encoded word; pass a plain file name',
-            );
+            $this->refuseName($name, $fromFileName, 'contains "=?", an encoded word', 'pass a plain file name');
         }
 
         $sent = trim((string) ($isStringAttachment ? PHPMailer::mb_pathinfo($name, PATHINFO_BASENAME) : $name));
 
         if ($sent !== $name || str_ends_with($name, '.') || in_array($name, ['', '0', '.', '..'], true)) {
-            throw MailerException::attachmentRejected(
-                'display name',
+            $this->refuseName(
                 $name,
+                $fromFileName,
                 'is not a usable file name (blank, "0", "." or "..", ends with a dot, or the mailer would trim or shorten it)',
             );
         }
+    }
+
+    /**
+     * @throws MailerException always.
+     */
+    private function refuseName(string $name, bool $fromFileName, string $reason, string $advice = ''): never
+    {
+        if ($fromFileName) {
+            throw MailerException::attachmentRejected(
+                'file name',
+                $name,
+                $reason . '; pass a display name as the second argument of attach()',
+            );
+        }
+
+        throw MailerException::attachmentRejected(
+            'display name',
+            $name,
+            $advice === '' ? $reason : $reason . '; ' . $advice,
+        );
     }
 
     /**

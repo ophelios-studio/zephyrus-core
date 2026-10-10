@@ -274,7 +274,7 @@ final class MailerAttachmentGuardTest extends TestCase
             $mailer = new Mailer($this->config);
 
             $this->expectException(MailerException::class);
-            $this->expectExceptionMessage('Attachment rejected: display name');
+            $this->expectExceptionMessage('Attachment rejected: file name');
 
             $mailer->attach($path);
         } finally {
@@ -290,5 +290,77 @@ final class MailerAttachmentGuardTest extends TestCase
         $this->expectExceptionMessage('Attachment not found');
 
         $mailer->attach('/nonexistent/file.pdf');
+    }
+
+    public function testAnAttachmentIsSentUnderTheNameThatWasChecked(): void
+    {
+        $dir = $this->root . "/dir\nsub";
+        if (!@mkdir($dir, 0o755)) {
+            self::markTestSkipped('The file system refuses a directory name with a line feed.');
+        }
+
+        $path = $dir . '/report.pdf';
+        file_put_contents($path, 'pdf');
+
+        try {
+            $mailer = new Mailer($this->config);
+            $mailer->to('good@example.test')->subject('s')->text('t')->attach($path, allowedRoot: $this->root);
+            $mailer->getPhpMailer()->preSend();
+            $message = $mailer->getPhpMailer()->getSentMIMEMessage();
+
+            self::assertStringContainsString('name=report.pdf', $message);
+            self::assertStringContainsString('filename=report.pdf', $message);
+            self::assertStringContainsString('Content-Type: application/pdf', $message);
+        } finally {
+            @unlink($path);
+            @rmdir($dir);
+        }
+    }
+
+    public function testAMissingFileIsReportedAsMissingBeforeItsNameIsChecked(): void
+    {
+        foreach (['', '/nope/x.pdf'] as $path) {
+            $mailer = new Mailer($this->config);
+
+            try {
+                $mailer->attach($path);
+                self::fail('A missing file was attached.');
+            } catch (MailerException $e) {
+                self::assertSame(MailerFailure::AttachmentNotFound, $e->failure, $path);
+            }
+        }
+    }
+
+    public function testARefusedFileNameSaysFileNameAndPointsToTheDisplayNameArgument(): void
+    {
+        $path = $this->root . '/report.';
+        file_put_contents($path, 'payload');
+
+        try {
+            $mailer = new Mailer($this->config);
+
+            try {
+                $mailer->attach($path);
+                self::fail('A file name ending with a dot was attached.');
+            } catch (MailerException $e) {
+                self::assertStringStartsWith('Attachment rejected: file name "report." ', $e->getMessage());
+                self::assertStringEndsWith('; pass a display name as the second argument of attach().', $e->getMessage());
+            }
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testARefusedDisplayNameSaysDisplayName(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        try {
+            $mailer->attach($this->inside, 'report.');
+            self::fail('A display name ending with a dot was attached.');
+        } catch (MailerException $e) {
+            self::assertStringStartsWith('Attachment rejected: display name "report." ', $e->getMessage());
+            self::assertStringNotContainsString('second argument', $e->getMessage());
+        }
     }
 }
