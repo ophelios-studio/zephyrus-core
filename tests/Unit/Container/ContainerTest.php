@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Container;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Container\Container;
 use Zephyrus\Container\ContainerException;
@@ -246,7 +247,7 @@ final class ContainerTest extends TestCase
         yield 'trailing backslash' => ['Vendor\\'];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('malformedIdProvider')]
+    #[DataProvider('malformedIdProvider')]
     public function testGetRefusesMalformedIdWithoutAutoloading(string $id): void
     {
         $calls = $this->countAutoloadCalls(function () use ($id): void {
@@ -260,7 +261,7 @@ final class ContainerTest extends TestCase
         self::assertSame(0, $calls);
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('malformedIdProvider')]
+    #[DataProvider('malformedIdProvider')]
     public function testMakeRefusesMalformedIdWithoutAutoloading(string $id): void
     {
         $calls = $this->countAutoloadCalls(function () use ($id): void {
