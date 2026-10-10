@@ -178,6 +178,10 @@ final class MailerAttachmentGuardTest extends TestCase
         yield 'dot dot' => ['..'];
         yield 'blank' => [' '];
         yield 'tab only' => ["\t"];
+        yield 'zero padded with a space' => [' 0'];
+        yield 'zero before a tab' => ["0\t"];
+        yield 'dot dot padded with a space' => [' ..'];
+        yield 'dot dot before a space' => ['.. '];
     }
 
     #[DataProvider('unusableDisplayNameProvider')]
@@ -189,6 +193,14 @@ final class MailerAttachmentGuardTest extends TestCase
         $this->expectExceptionMessage('is not a usable file name');
 
         $mailer->attach($this->inside, $name);
+    }
+
+    public function testADisplayNameWithATrailingDotIsSentUnchangedByAttach(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attach($this->inside, 'report.');
+
+        self::assertSame('report.', $mailer->getPhpMailer()->getAttachments()[0][2]);
     }
 
     public function testADisplayNameOf255BytesIsAcceptedByAttach(): void

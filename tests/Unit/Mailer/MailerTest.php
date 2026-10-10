@@ -586,6 +586,13 @@ final class MailerTest extends TestCase
         yield 'dot dot' => ['..'];
         yield 'blank' => ['   '];
         yield 'tab only' => ["\t"];
+        yield 'zero padded with a space' => [' 0'];
+        yield 'zero before a tab' => ["0\t"];
+        yield 'dot dot padded with a space' => [' ..'];
+        yield 'dot dot before a space' => ['.. '];
+        yield 'three dots' => ['...'];
+        yield 'zero with a trailing dot' => ['0.'];
+        yield 'trailing dot' => ['report.'];
     }
 
     /**

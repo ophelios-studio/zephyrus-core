@@ -192,8 +192,9 @@ final class Mailer
      *                                 directory, which is rarely what a caller means.
      * @param string      $name        Display name (default: original filename). May not
      *                                 contain a NUL byte, a line break or a path separator,
-     *                                 nor be blank, "0", "." or "..": it lands in a MIME header
-     *                                 and is what the recipient's client writes to disk.
+     *                                 exceed 255 bytes, have surrounding spaces, nor be blank,
+     *                                 "0", "." or "..": it lands in a MIME header and is what
+     *                                 the recipient's client writes to disk.
      * @param string|null $allowedRoot Directory the attachment must live under. Null keeps
      *                                 the historical behaviour of trusting the caller.
      */
@@ -212,7 +213,7 @@ final class Mailer
         }
 
         if ($name !== '') {
-            $this->assertDisplayName($name);
+            $this->assertDisplayName($name, false);
         }
 
         if (!is_file($path)) {
@@ -236,9 +237,10 @@ final class Mailer
      * Attach bytes held in memory, such as a generated PDF.
      *
      * @param string      $content  The file contents.
-     * @param string      $name     Display name the recipient's client writes to disk: non-empty,
+     * @param string      $name     Display name the recipient's client writes to disk: at most 255
+     *                              bytes and unchanged by trimming or by dropping a trailing dot;
      *                              not blank, "0", "." or "..", without NUL, CR, LF or a path separator.
-     * @param string|null $mimeType Media type as type/subtype, optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
+     * @param string|null $mimeType Media type as type/subtype (at most 255 bytes), optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
      */
@@ -248,7 +250,7 @@ final class Mailer
             throw MailerException::attachmentRejected('display name', $name, 'must not be empty');
         }
 
-        $this->assertDisplayName($name);
+        $this->assertDisplayName($name, true);
 
         if ($mimeType !== null && strlen($mimeType) > self::MAX_HEADER_VALUE_BYTES) {
             throw MailerException::attachmentRejected('media type', $mimeType, 'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes');
@@ -303,7 +305,7 @@ final class Mailer
     /**
      * Refuse a display name that could split a MIME header, name a path, or be dropped by the mail library.
      */
-    private function assertDisplayName(string $name): void
+    private function assertDisplayName(string $name, bool $isStringAttachment): void
     {
         if (strlen($name) > self::MAX_HEADER_VALUE_BYTES) {
             throw MailerException::attachmentRejected(
@@ -321,11 +323,13 @@ final class Mailer
             );
         }
 
-        if ($name === '0' || trim($name) === '' || $name === '.' || $name === '..') {
+        $sent = trim((string) ($isStringAttachment ? PHPMailer::mb_pathinfo($name, PATHINFO_BASENAME) : $name));
+
+        if ($sent !== $name || in_array($name, ['', '0', '.', '..'], true)) {
             throw MailerException::attachmentRejected(
                 'display name',
                 $name,
-                'is not a usable file name (blank, "0", "." or "..")',
+                'is not a usable file name (blank, "0", "." or "..", or the mailer would trim or shorten it)',
             );
         }
     }
