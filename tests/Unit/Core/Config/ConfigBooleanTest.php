@@ -74,6 +74,28 @@ final class ConfigBooleanTest extends TestCase
         ConfigBoolean::parse('security', 'flag', $value);
     }
 
+    public function testARefusalCutInsideAMultibyteCharacterStillShowsValidUtf8(): void
+    {
+        foreach (['x' . str_repeat('é', 30), str_repeat('é', 200)] as $value) {
+            try {
+                ConfigBoolean::parse('security', 'flag', $value);
+                self::fail('A value that is not a boolean must be refused.');
+            } catch (ConfigurationException $exception) {
+                self::assertTrue(mb_check_encoding($exception->getMessage(), 'UTF-8'));
+            }
+        }
+    }
+
+    public function testALongRefusedValueIsShownWithItsByteCount(): void
+    {
+        try {
+            ConfigBoolean::parse('security', 'flag', str_repeat('y', 100));
+            self::fail('A value that is not a boolean must be refused.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('...(100 bytes)', $exception->getMessage());
+        }
+    }
+
     public function testTheRefusalNamesTheSectionAndTheKey(): void
     {
         try {
