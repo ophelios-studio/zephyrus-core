@@ -6,6 +6,7 @@ namespace Zephyrus\Core;
 
 use ArrayIterator;
 use Closure;
+use PHPMailer\PHPMailer\PHPMailer;
 use ReflectionFunction;
 use SensitiveParameterValue;
 use Tracy\Debugger;
@@ -218,6 +219,9 @@ final class DebugIntegration
         // @phpstan-ignore assign.propertyType (same as above)
         Dumper::$objectExporters[ArrayIterator::class] = self::exposeArrayIterator(...);
 
+        // @phpstan-ignore assign.propertyType (same as above)
+        Dumper::$objectExporters[PHPMailer::class] = self::exposePhpMailer(...);
+
         $hidden = array_values(array_unique([
             ...self::SENSITIVE_KEYS,
             ...self::SENSITIVE_PROPERTIES,
@@ -306,6 +310,18 @@ final class DebugIntegration
 
         $describer->addPropertyTo($value, 'storage', $iterator->getArrayCopy(), Value::PropertyPrivate, null, ArrayIterator::class);
         $value->value .= ' (' . count($iterator) . ')';
+    }
+
+    /**
+     * Render a PHPMailer through an allow-list of transport settings, so recipients, bodies and headers never reach a dump.
+     */
+    private static function exposePhpMailer(PHPMailer $mail, Value $value, Describer $describer): void
+    {
+        $describer->addPropertyTo($value, 'Host', $mail->Host, Value::PropertyPublic, null, PHPMailer::class);
+        $describer->addPropertyTo($value, 'Port', $mail->Port, Value::PropertyPublic, null, PHPMailer::class);
+        $describer->addPropertyTo($value, 'SMTPSecure', $mail->SMTPSecure, Value::PropertyPublic, null, PHPMailer::class);
+        $describer->addPropertyTo($value, 'SMTPAuth', $mail->SMTPAuth, Value::PropertyPublic, null, PHPMailer::class);
+        $describer->addPropertyTo($value, 'CharSet', $mail->CharSet, Value::PropertyPublic, null, PHPMailer::class);
     }
 
     /**

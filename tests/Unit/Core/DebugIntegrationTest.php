@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core;
 
 use Closure;
+use PHPMailer\PHPMailer\PHPMailer;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
@@ -434,6 +435,58 @@ final class DebugIntegrationTest extends TestCase
         self::assertStringNotContainsString($recipient, $html, 'The bluescreen rendered a Mailer recipient.');
         self::assertStringNotContainsString($token, $html, 'The bluescreen rendered the HTML body of a Mailer.');
         self::assertStringNotContainsString($text, $html, 'The bluescreen rendered the text body of a Mailer.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpShowsOnlyTheSafeSettingsOfAPhpMailer(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $recipient = self::marker('recipient') . '@example.com';
+        $token = self::marker('reset-token');
+        $text = self::marker('text-body');
+        $subject = self::marker('subject');
+        $mailer = new Mailer(MailerConfig::fromArray(['smtp' => ['host' => 'smtp.example.test']]));
+        $mailer->to($recipient)->subject($subject)->html($token)->text($text);
+
+        $html = Dumper::toHtml($mailer->getPhpMailer(), [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $plain = Dumper::toText($mailer->getPhpMailer(), [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $plain] as $label => $output) {
+            self::assertStringContainsString('smtp.example.test', $output, "Control: $label must show the SMTP host.");
+            self::assertStringNotContainsString($recipient, $output, "$label rendered a PHPMailer recipient.");
+            self::assertStringNotContainsString($subject, $output, "$label rendered a PHPMailer subject.");
+            self::assertStringNotContainsString($token, $output, "$label rendered the HTML body of a PHPMailer.");
+            self::assertStringNotContainsString($text, $output, "$label rendered the text body of a PHPMailer.");
+            self::assertStringNotContainsString('MIMEHeader', $output, "$label rendered the MIME header of a PHPMailer.");
+            self::assertStringNotContainsString('ErrorInfo', $output, "$label rendered the error info of a PHPMailer.");
+        }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenShowsOnlyTheSafeSettingsOfAPhpMailer(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $recipient = self::marker('recipient') . '@example.com';
+        $token = self::marker('reset-token');
+        $mailer = new Mailer(MailerConfig::fromArray(['smtp' => ['host' => 'smtp.example.test']]));
+        $mailer->to($recipient)->html($token);
+
+        try {
+            self::throwWithPhpMailer($mailer->getPhpMailer());
+        } catch (\RuntimeException $exception) {
+            $html = self::blueScreenHtml($exception);
+        }
+
+        self::assertStringContainsString('smtp.example.test', $html, 'Control: the bluescreen must show the SMTP host.');
+        self::assertStringNotContainsString($recipient, $html, 'The bluescreen rendered a PHPMailer recipient.');
+        self::assertStringNotContainsString($token, $html, 'The bluescreen rendered the body of a PHPMailer.');
+    }
+
+    private static function throwWithPhpMailer(PHPMailer $mail): never
+    {
+        throw new \RuntimeException('delivery refused');
     }
 
     private static function deliver(Mailer $mailer): never
