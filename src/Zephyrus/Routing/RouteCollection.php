@@ -479,7 +479,8 @@ final class RouteCollection
      * Routes without a parameter are tried before parameterised ones, each group in registration
      * order, and the first route matching both path and method wins. A 405 is raised only when a
      * route matches the path but none accepts the method; a GET route also accepts HEAD.
-     * Expects the raw request target, not Request::path(), which has already rewritten control bytes.
+     * A control character is refused only while $path still holds it: Request::path() has already rewritten
+     * it, so RouteDispatcher::match() checks the raw target first.
      *
      * @throws RouteNotFoundException When no route matches, or the path is not valid UTF-8 or contains a control character.
      * @throws MethodNotAllowedException When the path matches but no route accepts the method.
