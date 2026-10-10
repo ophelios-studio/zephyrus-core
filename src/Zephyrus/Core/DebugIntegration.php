@@ -108,6 +108,7 @@ final class DebugIntegration
     /**
      * Class properties masked by Tracy's Class::$property form. Tracy's own "POST (preview)" still shows the request body.
      * Exception and Error traces are masked whole, arguments included; the bluescreen's stack section is unchanged.
+     * Dump the object itself: dump((array) $object) exposes private properties under mangled keys that no exporter can mask.
      */
     public const array SENSITIVE_PROPERTIES = [
         'Zephyrus\Http\RequestBody::$raw',
