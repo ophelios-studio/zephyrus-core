@@ -268,14 +268,14 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertSame('user_id|i:2;', $this->storedPayload($id));
     }
 
-    public function testCreatingASessionReportsSuccess(): void
+    public function testAnEmptyNewSessionReportsSuccessAndStoresNoRow(): void
     {
         $id = bin2hex(random_bytes(16));
         $handler = $this->handler();
 
         self::assertSame('', $handler->read($id));
         self::assertTrue($handler->write($id, ''));
-        self::assertSame('', $this->storedPayload($id));
+        self::assertNull($this->storedPayload($id));
     }
 
     // ── Payload storage ───────────────────────────────────────────────────────
