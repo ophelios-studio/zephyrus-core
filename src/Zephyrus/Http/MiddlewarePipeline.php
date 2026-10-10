@@ -48,6 +48,33 @@ final class MiddlewarePipeline
     }
 
     /**
+     * Returns a copy without the middlewares that are instances of any of the given classes or interfaces.
+     *
+     * @param array<int, class-string> $classes
+     */
+    public function without(array $classes): self
+    {
+        if ($classes === []) {
+            return $this;
+        }
+
+        $kept = array_filter(
+            $this->middlewares,
+            static function (MiddlewareInterface $middleware) use ($classes): bool {
+                foreach ($classes as $class) {
+                    if ($middleware instanceof $class) {
+                        return false;
+                    }
+                }
+
+                return true;
+            },
+        );
+
+        return new self(array_values($kept));
+    }
+
+    /**
      * Runs the chain around $destination and returns the response.
      *
      * @param callable(Request): Response $destination

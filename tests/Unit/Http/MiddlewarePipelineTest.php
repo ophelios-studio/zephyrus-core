@@ -96,4 +96,94 @@ final class MiddlewarePipelineTest extends TestCase
         self::assertSame('1', $response->headers['x-one']);
         self::assertSame('2', $response->headers['x-two']);
     }
+
+    public function testWithoutDropsInstancesOfTheGivenClassesAndKeepsTheOthersInOrder(): void
+    {
+        $pipeline = new MiddlewarePipeline([
+            new PipelineStampMiddleware('first'),
+            new PipelineOtherMiddleware(),
+            new PipelineStampMiddleware('second'),
+            new PipelineTailMiddleware(),
+        ]);
+
+        $response = $pipeline->without([PipelineStampMiddleware::class])->handle(
+            Request::fromArray('GET', '/'),
+            static fn (Request $request): Response => Response::text('ok'),
+        );
+
+        self::assertSame('other,tail', $response->headers['x-trace']);
+    }
+
+    public function testWithoutMatchesAnInterface(): void
+    {
+        $pipeline = new MiddlewarePipeline([new PipelineStampMiddleware('first'), new PipelineTailMiddleware()]);
+
+        $response = $pipeline->without([MiddlewareInterface::class])->handle(
+            Request::fromArray('GET', '/'),
+            static fn (Request $request): Response => Response::text('ok'),
+        );
+
+        self::assertArrayNotHasKey('x-trace', $response->headers);
+    }
+
+    public function testWithoutLeavesTheOriginalPipelineUntouched(): void
+    {
+        $pipeline = new MiddlewarePipeline([new PipelineStampMiddleware('first'), new PipelineTailMiddleware()]);
+        $pipeline->without([PipelineStampMiddleware::class]);
+
+        $response = $pipeline->handle(
+            Request::fromArray('GET', '/'),
+            static fn (Request $request): Response => Response::text('ok'),
+        );
+
+        self::assertSame('first,tail', $response->headers['x-trace']);
+    }
+
+    public function testWithoutNothingReturnsTheSamePipeline(): void
+    {
+        $pipeline = new MiddlewarePipeline([new PipelineTailMiddleware()]);
+
+        self::assertSame($pipeline, $pipeline->without([]));
+    }
+}
+
+abstract class PipelineTracingMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        $response = $next($request);
+        $trace = $response->headers['x-trace'] ?? null;
+
+        return $response->withHeader('x-trace', $trace === null ? $this->label() : $this->label() . ',' . $trace);
+    }
+
+    abstract protected function label(): string;
+}
+
+final class PipelineStampMiddleware extends PipelineTracingMiddleware
+{
+    public function __construct(private readonly string $label)
+    {
+    }
+
+    protected function label(): string
+    {
+        return $this->label;
+    }
+}
+
+final class PipelineOtherMiddleware extends PipelineTracingMiddleware
+{
+    protected function label(): string
+    {
+        return 'other';
+    }
+}
+
+final class PipelineTailMiddleware extends PipelineTracingMiddleware
+{
+    protected function label(): string
+    {
+        return 'tail';
+    }
 }
