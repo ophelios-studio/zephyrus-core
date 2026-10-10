@@ -171,6 +171,23 @@ final class UriTest extends TestCase
     }
 
     #[Test]
+    #[DataProvider('unparseableAuthoritiesWithAnInvalidPort')]
+    public function invalidPortStaysInTheHostOfAnUnparseableAuthority(string $url, string $host): void
+    {
+        $uri = new Uri($url);
+
+        self::assertSame($host, $uri->host());
+        self::assertNull($uri->port());
+    }
+
+    public static function unparseableAuthoritiesWithAnInvalidPort(): iterable
+    {
+        yield 'port zero with an empty host' => ['http://:0//evil.example.com/x', ':0'];
+        yield 'port above the range' => ['http://app.example.com:99999/x', 'app.example.com:99999'];
+        yield 'port with a leading zero' => ['http://app.example.com:065535/x', 'app.example.com:065535'];
+    }
+
+    #[Test]
     public function malformedAuthorityKeepsThePathQueryAndFragment(): void
     {
         $uri = new Uri('https://app.example.com:evil/dashboard?tab=2&sort=name#totals');

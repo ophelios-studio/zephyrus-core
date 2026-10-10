@@ -119,7 +119,8 @@ final readonly class Uri
 
             // Only a port that IS a port becomes one. Anything else stays
             // visible in the host rather than being silently discarded.
-            if (preg_match('#^(\[[^\]]*\]|[^:]*):(\d+)$#', $authority, $portMatch) === 1) {
+            if (preg_match('#^(\[[^\]]*\]|[^:]*):(\d+)$#', $authority, $portMatch) === 1
+                && self::isPortNumber($portMatch[2])) {
                 $host = $portMatch[1];
                 $parts['port'] = (int) $portMatch[2];
             }
@@ -146,6 +147,11 @@ final readonly class Uri
         }
 
         return $parts;
+    }
+
+    private static function isPortNumber(string $port): bool
+    {
+        return preg_match('/^[1-9][0-9]{0,4}$/D', $port) === 1 && (int) $port <= 65535;
     }
 
     public function scheme(): string
