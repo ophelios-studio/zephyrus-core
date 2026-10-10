@@ -59,8 +59,8 @@ final class Formatter
      * @param string      $defaultDatetimePattern  Default pattern for datetime().
      * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and
      *                                             ordinal(). Null keeps the ICU default of the locale, '' disables
-     *                                             grouping. Otherwise at most 4 bytes, no digit, and not the
-     *                                             locale's decimal separator.
+     *                                             grouping. Otherwise at most 4 bytes, no digit or control
+     *                                             character, and not the locale's decimal, monetary or minus sign.
      * @throws FormatterException if the grouping separator is not accepted.
      */
     public function __construct(
@@ -477,16 +477,29 @@ final class Formatter
     }
 
     /**
-     * @throws FormatterException if the separator is longer than 4 bytes, has a digit, or equals the decimal separator.
+     * @throws FormatterException if the separator is longer than 4 bytes, has a digit or a control character,
+     *         is not valid UTF-8, or equals the locale's decimal, monetary or minus sign.
      */
     private function assertValidGroupingSeparator(string $separator): void
     {
         if (strlen($separator) > 4
-            || preg_match('/\p{Nd}/u', $separator) !== 0
-            || $separator === $this->localeSymbol(NumberFormatter::DECIMAL_SEPARATOR_SYMBOL)
+            || preg_match('/[\p{Nd}\p{Cc}]/u', $separator) !== 0
+            || in_array($separator, $this->reservedSeparators(), true)
         ) {
             throw FormatterException::invalidGroupingSeparator();
         }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function reservedSeparators(): array
+    {
+        return [
+            $this->localeSymbol(NumberFormatter::DECIMAL_SEPARATOR_SYMBOL),
+            $this->localeSymbol(NumberFormatter::MONETARY_SEPARATOR_SYMBOL),
+            $this->localeSymbol(NumberFormatter::MINUS_SIGN_SYMBOL),
+        ];
     }
 
     /**

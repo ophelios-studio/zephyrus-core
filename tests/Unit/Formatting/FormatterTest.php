@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Formatting;
 
 use DateTime;
+use NumberFormatter;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Formatting\FormatterException;
@@ -731,6 +733,46 @@ final class FormatterTest extends TestCase
     {
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: 'ABCDE');
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMinusSign(): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: '-');
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMonetarySeparator(): void
+    {
+        $monetary = (new NumberFormatter('fr_CA', NumberFormatter::DECIMAL))
+            ->getSymbol(NumberFormatter::MONETARY_SEPARATOR_SYMBOL);
+
+        $this->expectException(FormatterException::class);
+        new Formatter('fr_CA', groupingSeparator: (string) $monetary);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function controlCharacterSeparators(): iterable
+    {
+        yield 'NUL' => ["\0"];
+        yield 'tab' => ["\t"];
+        yield 'line feed' => ["\n"];
+        yield 'carriage return' => ["\r"];
+        yield 'escape' => ["\x1B"];
+    }
+
+    #[DataProvider('controlCharacterSeparators')]
+    public function testGroupingSeparatorOptionIsRefusedWhenItContainsAControlCharacter(string $separator): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: $separator);
+    }
+
+    public function testGroupingSeparatorOptionIsRefusedWhenItIsInvalidUtf8(): void
+    {
+        $this->expectException(FormatterException::class);
+        new Formatter('en_US', groupingSeparator: "\xC3\x28");
     }
 
     public function testGroupingSeparatorOptionAcceptsTheFourByteBoundary(): void
