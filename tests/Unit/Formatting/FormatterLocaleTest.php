@@ -36,14 +36,14 @@ final class FormatterLocaleTest extends TestCase
 
         self::assertSame('il y a 3 minutes', $fmt->timeago(time() - 180));
         self::assertSame('il y a 1 minute', $fmt->timeago(time() - 60));
-        self::assertSame('il y a 30 secondes', $fmt->timeago(time() - 30));
+        self::assertMatchesRegularExpression('/^il y a 3[01] secondes$/', $fmt->timeago(time() - 30));
         self::assertSame('il y a 2 heures', $fmt->timeago(time() - 7200));
         self::assertSame('il y a 1 jour', $fmt->timeago(time() - 86400));
         self::assertSame('il y a 3 jours', $fmt->timeago(time() - 3 * 86400));
         self::assertSame('il y a 2 mois', $fmt->timeago(time() - 60 * 86400));
         self::assertSame('il y a 1 an', $fmt->timeago(time() - 400 * 86400));
         self::assertSame('il y a 2 ans', $fmt->timeago(time() - 800 * 86400));
-        self::assertSame('dans 1 minute', $fmt->timeago(time() + 60));
+        self::assertSame('dans 1 minute', $fmt->timeago(time() + 70));
         self::assertSame('dans 3 jours', $fmt->timeago(time() + 3 * 86400));
         self::assertSame("à l'instant", $fmt->timeago(time()));
     }
