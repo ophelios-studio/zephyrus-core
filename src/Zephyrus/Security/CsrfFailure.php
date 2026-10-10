@@ -10,14 +10,14 @@ namespace Zephyrus\Security;
  * The failure callback runs on attacker-controlled input: it must answer the refusal only, never replay the
  * request or act on the account from it.
  */
-enum CsrfFailure
+enum CsrfFailure: string
 {
     /** The request carried no token in the body field or the header. */
-    case TokenMissing;
+    case TokenMissing = 'token_missing';
 
     /**
      * The token manager refused the submitted token: it was forged, came from another session, or the
      * session's token was lost or rotated.
      */
-    case TokenInvalid;
+    case TokenInvalid = 'token_invalid';
 }

@@ -90,6 +90,8 @@ final class CsrfConfig
         . 'the browser\'s HTML parsing and could send the token to another site. Add a hidden "%s" field to your '
         . 'form templates, filled with the escaped value of CsrfTokenManagerInterface::getToken()';
 
+    private const string EXAMPLE_PATTERN = '#^/webhooks/#';
+
     /**
      * PCRE patterns for paths that skip CSRF validation, each one validated.
      *
@@ -135,7 +137,7 @@ final class CsrfConfig
     {
         return new self(
             enabled: $security->csrfEnabled,
-            excludedPathPatterns: $security->csrfExceptions,
+            excludedPathPatterns: self::normalizeExcludedPathPatterns($security->csrfExceptions, fromSecurity: true),
         );
     }
 
@@ -177,9 +179,10 @@ final class CsrfConfig
 
     /**
      * @param mixed $patterns
+     * @param bool  $fromSecurity True when the patterns come from the security section, so errors name that key.
      * @return list<string>
      */
-    private static function normalizeExcludedPathPatterns(mixed $patterns): array
+    private static function normalizeExcludedPathPatterns(mixed $patterns, bool $fromSecurity = false): array
     {
         if (!is_array($patterns)) {
             throw new InvalidArgumentException('CSRF excluded path patterns must be an array of regex strings.');
@@ -187,15 +190,19 @@ final class CsrfConfig
 
         $normalized = [];
         foreach ($patterns as $index => $pattern) {
+            $where = $fromSecurity
+                ? sprintf('security.csrf.exceptions[%s]', (string) $index)
+                : sprintf('CSRF excluded path pattern at index %s', (string) $index);
+
             if (!is_string($pattern) || trim($pattern) === '') {
-                throw new InvalidArgumentException(sprintf('CSRF excluded path pattern at index %s must be a non-empty string.', (string) $index));
+                throw new InvalidArgumentException(sprintf('%s must be a non-empty string such as %s.', $where, self::EXAMPLE_PATTERN));
             }
 
             if (@preg_match($pattern, '') === false) {
-                throw new InvalidArgumentException(sprintf('CSRF excluded path pattern at index %s is not a valid regex: %s', (string) $index, $pattern));
+                throw new InvalidArgumentException(sprintf('%s is not a valid regex: %s (expected a shape such as %s).', $where, $pattern, self::EXAMPLE_PATTERN));
             }
 
-            self::assertPatternIsAnchored($pattern, $index);
+            self::assertPatternIsAnchored($pattern, $where);
 
             $normalized[] = $pattern;
         }
@@ -212,17 +219,18 @@ final class CsrfConfig
      * satisfy and verify by reading, rather than an analysis that would be
      * wrong quietly.
      *
-     * @param int|string $index
+     * @param string $where Configuration key or index of the pattern, used in the error message.
      */
-    private static function assertPatternIsAnchored(string $pattern, int|string $index): void
+    private static function assertPatternIsAnchored(string $pattern, string $where): void
     {
         $body = self::patternBody($pattern);
 
         if ($body === null) {
             throw new InvalidArgumentException(sprintf(
-                'CSRF excluded path pattern at index %s is not a delimited regex: %s',
-                (string) $index,
+                '%s is not a delimited regex: %s (expected a shape such as %s).',
+                $where,
                 $pattern,
+                self::EXAMPLE_PATTERN,
             ));
         }
 
@@ -232,10 +240,10 @@ final class CsrfConfig
 
         if (!str_starts_with($anchorable, '^') && !str_starts_with($anchorable, '\A')) {
             throw new InvalidArgumentException(sprintf(
-                'CSRF excluded path pattern at index %s must start with "^" so it cannot match in the '
-                . 'middle of a path: %s',
-                (string) $index,
+                '%s must start with "^" so it cannot match in the middle of a path: %s (expected a shape such as %s).',
+                $where,
                 $pattern,
+                self::EXAMPLE_PATTERN,
             ));
         }
 
@@ -246,10 +254,9 @@ final class CsrfConfig
 
         if (!$endsAtBoundary) {
             throw new InvalidArgumentException(sprintf(
-                'CSRF excluded path pattern at index %s must end with "/" (the route and everything under '
-                . 'it) or "$" (that exact path), otherwise it also exempts every sibling route sharing the '
-                . 'prefix: %s',
-                (string) $index,
+                '%s must end with "/" (the route and everything under it) or "$" (that exact path), otherwise '
+                . 'it also exempts every sibling route sharing the prefix: %s',
+                $where,
                 $pattern,
             ));
         }

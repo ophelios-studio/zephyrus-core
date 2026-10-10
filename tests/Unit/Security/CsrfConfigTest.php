@@ -53,4 +53,21 @@ final class CsrfConfigTest extends TestCase
 
         CsrfConfig::fromSecurityConfig($this->security(true, ['#/webhooks/#']));
     }
+
+    public function testFromSecurityConfigNamesTheConfigurationKeyOfARefusedExclusion(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('security.csrf.exceptions[1]');
+        $this->expectExceptionMessage('#^/webhooks/#');
+
+        CsrfConfig::fromSecurityConfig($this->security(true, ['#^/ok/#', '/webhooks/']));
+    }
+
+    public function testFromSecurityConfigRefusesAnEmptyExclusionByConfigurationKey(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('security.csrf.exceptions[0]');
+
+        CsrfConfig::fromSecurityConfig($this->security(true, ['']));
+    }
 }
