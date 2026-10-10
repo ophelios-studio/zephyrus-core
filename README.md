@@ -220,7 +220,7 @@ $response = $kernel->handle($request);
 $response->send();
 ```
 
-`CsrfMiddleware` rejects any request other than GET, HEAD, OPTIONS or TRACE that lacks a valid token, sent as a `_csrf_token` body field or an `X-CSRF-Token` header. Render the field in your forms. Pass `$csrf` to your views and echo the token escaped:
+`CsrfMiddleware` rejects any request other than GET, HEAD, OPTIONS or TRACE that lacks a valid token, sent as a `_csrf_token` body field or an `X-CSRF-Token` header. The token is never injected into your HTML: each form must render the `_csrf_token` field itself. Pass `$csrf` to your views and echo the token escaped:
 
 ```php
 <input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf->getToken(), ENT_QUOTES, 'UTF-8') ?>">
