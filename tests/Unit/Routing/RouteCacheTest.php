@@ -416,10 +416,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload hash mismatch');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has a routes hash that does not match its routes section');
     }
 
     public function testLoadThrowsOnUnsupportedMetadataVersion(): void
@@ -438,10 +435,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload contains unsupported metadata version');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has an unsupported metadata version');
     }
 
     public function testIsFreshReturnsTrueWhenCacheMatchesRoutes(): void
@@ -513,7 +507,7 @@ final class RouteCacheTest extends TestCase
         $meta = $this->metadataFor([]);
         unset($meta['generated_at']);
 
-        $this->assertFileRefusedByFreshnessAndLoad($meta, 'Route cache payload contains invalid metadata generation timestamp');
+        $this->assertFileRefusedByFreshnessAndLoad($meta, 'has an invalid generation timestamp');
     }
 
     public function testFreshnessAndLoadRefuseMetadataWithStringGeneratedAt(): void
@@ -521,7 +515,7 @@ final class RouteCacheTest extends TestCase
         $meta = $this->metadataFor([]);
         $meta['generated_at'] = '1700000000';
 
-        $this->assertFileRefusedByFreshnessAndLoad($meta, 'Route cache payload contains invalid metadata generation timestamp');
+        $this->assertFileRefusedByFreshnessAndLoad($meta, 'has an invalid generation timestamp');
     }
 
     public function testFreshnessRefusesRoutesHashWithTrailingNewline(): void
@@ -877,10 +871,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload contains invalid metadata hash format');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has a malformed routes hash');
     }
 
     public function testLoadThrowsWhenMetadataRouteCountIsInvalid(): void
@@ -898,10 +889,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload contains invalid metadata route count');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has an invalid route count');
     }
 
     public function testLoadThrowsWhenMetadataRouteCountDoesNotMatchPayload(): void
@@ -929,10 +917,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload metadata route count mismatch');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has a route count that does not match its routes section');
     }
 
     public function testLoadThrowsWhenMetadataGeneratedAtIsInvalid(): void
@@ -951,10 +936,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload contains invalid metadata generation timestamp');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has an invalid generation timestamp');
     }
 
     public function testLoadThrowsWhenConstraintMapContainsNonStringValues(): void
@@ -1046,10 +1028,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload missing metadata section');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has no metadata section');
     }
 
     public function testMetadataAndFreshnessIgnoreFileWithoutMetadataSection(): void
@@ -1063,19 +1042,14 @@ final class RouteCacheTest extends TestCase
     }
 
     #[DataProvider('requiredMetadataFieldProvider')]
-    public function testLoadRefusesMetadataMissingRequiredField(string $field, string $message): void
+    public function testLoadRefusesMetadataMissingRequiredField(string $field, string $problem): void
     {
         $meta = $this->metadataFor([]);
         unset($meta[$field]);
 
         file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
 
-        $cache = new RouteCache($this->cacheFile);
-
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage($message);
-
-        $cache->load();
+        $this->assertLoadRefused(new RouteCache($this->cacheFile), $problem);
     }
 
     /**
@@ -1083,10 +1057,10 @@ final class RouteCacheTest extends TestCase
      */
     public static function requiredMetadataFieldProvider(): iterable
     {
-        yield 'version' => ['version', 'Route cache payload contains unsupported metadata version'];
-        yield 'routes_hash' => ['routes_hash', 'Route cache payload contains invalid metadata'];
-        yield 'route_count' => ['route_count', 'Route cache payload contains invalid metadata route count'];
-        yield 'generated_at' => ['generated_at', 'Route cache payload contains invalid metadata generation timestamp'];
+        yield 'version' => ['version', 'has an unsupported metadata version'];
+        yield 'routes_hash' => ['routes_hash', 'has a routes hash that is not a string'];
+        yield 'route_count' => ['route_count', 'has an invalid route count'];
+        yield 'generated_at' => ['generated_at', 'has an invalid generation timestamp'];
     }
 
     public function testLoadRefusesRoutesHashWithTrailingNewline(): void
@@ -1098,10 +1072,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload contains invalid metadata hash format');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has a malformed routes hash');
     }
 
     public function testLoadRefusesHttpMethodWithTrailingNewline(): void
@@ -1142,7 +1113,7 @@ final class RouteCacheTest extends TestCase
     /**
      * @param array<string, mixed> $meta
      */
-    private function assertFileRefusedByFreshnessAndLoad(array $meta, string $expectedMessage): void
+    private function assertFileRefusedByFreshnessAndLoad(array $meta, string $problem): void
     {
         file_put_contents($this->cacheFile, json_encode(['meta' => $meta, 'routes' => []], JSON_THROW_ON_ERROR));
 
@@ -1150,16 +1121,23 @@ final class RouteCacheTest extends TestCase
 
         self::assertNull($cache->metadata());
         self::assertFalse($cache->isFresh(new RouteCollection()));
+        $this->assertLoadRefused($cache, $problem);
+    }
 
+    private function assertLoadRefused(RouteCache $cache, string $problem): void
+    {
         try {
             $cache->load();
         } catch (RouteCacheException $exception) {
-            self::assertSame($expectedMessage, $exception->getMessage());
+            self::assertSame(
+                sprintf('Route cache file %s %s, rebuild the cache with save() or warm()', $this->cacheFile, $problem),
+                $exception->getMessage(),
+            );
 
             return;
         }
 
-        self::fail('load() accepted a cache file that the freshness check refuses');
+        self::fail('load() accepted a cache file that should be refused');
     }
 
     public function testLoadThrowsWhenMetaRoutesHashIsNotString(): void
@@ -1173,10 +1151,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->expectException(RouteCacheException::class);
-        $this->expectExceptionMessage('Route cache payload contains invalid metadata');
-
-        $cache->load();
+        $this->assertLoadRefused($cache, 'has a routes hash that is not a string');
     }
 
     public function testLoadThrowsWhenRouteEntryIsNotArray(): void

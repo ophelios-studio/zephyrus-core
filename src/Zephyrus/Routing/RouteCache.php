@@ -358,17 +358,17 @@ final class RouteCache
 
         $routesPayload = $decoded['routes'];
         if ($meta['route_count'] !== count($routesPayload)) {
-            throw new RouteCacheException('Route cache payload metadata route count mismatch');
+            throw new RouteCacheException($this->refusal('has a route count that does not match its routes section'));
         }
 
         try {
             $actualHash = $this->computePayloadHash($routesPayload);
         } catch (RouteCacheException $exception) {
-            throw new RouteCacheException('Unable to validate route cache payload hash', previous: $exception);
+            throw new RouteCacheException($this->refusal('has a routes section that cannot be hashed'), previous: $exception);
         }
 
         if (!hash_equals($meta['routes_hash'], $actualHash)) {
-            throw new RouteCacheException('Route cache payload hash mismatch');
+            throw new RouteCacheException($this->refusal('has a routes hash that does not match its routes section'));
         }
 
         $collection = new RouteCollection();
@@ -571,30 +571,39 @@ final class RouteCache
     private function metadataFailure(mixed $meta): ?string
     {
         if ($meta === null) {
-            return 'Route cache payload missing metadata section, rebuild the cache with save() or warm()';
+            return $this->refusal('has no metadata section');
         }
 
-        if (!is_array($meta) || !is_string($meta['routes_hash'] ?? null)) {
-            return 'Route cache payload contains invalid metadata';
+        if (!is_array($meta)) {
+            return $this->refusal('has a metadata section that is not an object');
+        }
+
+        if (!is_string($meta['routes_hash'] ?? null)) {
+            return $this->refusal('has a routes hash that is not a string');
         }
 
         if (($meta['version'] ?? null) !== self::METADATA_VERSION) {
-            return 'Route cache payload contains unsupported metadata version';
+            return $this->refusal('has an unsupported metadata version');
         }
 
         if (preg_match('/^[a-f0-9]{64}$/D', $meta['routes_hash']) !== 1) {
-            return 'Route cache payload contains invalid metadata hash format';
+            return $this->refusal('has a malformed routes hash');
         }
 
         if (!is_int($meta['route_count'] ?? null) || $meta['route_count'] < 0) {
-            return 'Route cache payload contains invalid metadata route count';
+            return $this->refusal('has an invalid route count');
         }
 
         if (!is_int($meta['generated_at'] ?? null)) {
-            return 'Route cache payload contains invalid metadata generation timestamp';
+            return $this->refusal('has an invalid generation timestamp');
         }
 
         return null;
+    }
+
+    private function refusal(string $problem): string
+    {
+        return sprintf('Route cache file %s %s, rebuild the cache with save() or warm()', $this->cacheFile, $problem);
     }
 
     /**
