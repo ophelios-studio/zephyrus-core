@@ -228,8 +228,11 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * Refresh the access window of an unchanged session without rewriting its payload.
      *
      * A bare UPDATE, never an upsert: an upsert would re-create a row deleted while the request was in flight,
-     * such as by a logout. Returns false when no row was refreshed. A created session with an empty payload is not
-     * stored and returns true without a statement. An id this handler never read is refused.
+     * such as by a logout. Returns false when no row was refreshed. A created session with an empty payload has no
+     * row and returns true without a statement. An id this handler never read is refused.
+     *
+     * @throws SessionException when the database could not be resolved.
+     * @throws DatabaseException when the statement fails.
      */
     public function updateTimestamp(string $id, string $data): bool
     {
@@ -310,6 +313,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * read, is not written.
      *
      * Requires the id column to be a PRIMARY KEY or carry a UNIQUE constraint.
+     *
+     * @throws SessionException when the database could not be resolved.
+     * @throws DatabaseException when the statement fails.
      */
     public function write(string $id, string $data): bool
     {
@@ -414,7 +420,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
     /**
      * Delete the session row. Returns true once no row remains, so session_regenerate_id(true) can proceed.
-     * A failing statement throws.
+     *
+     * @throws SessionException when the database could not be resolved.
+     * @throws DatabaseException when the statement fails.
      */
     public function destroy(string $id): bool
     {
@@ -438,6 +446,12 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         return true;
     }
 
+    /**
+     * Delete every row whose last access is older than the maximum lifetime, and return the number removed.
+     *
+     * @throws SessionException when the database could not be resolved.
+     * @throws DatabaseException when the statement fails.
+     */
     public function gc(int $max_lifetime): int|false
     {
         $threshold = time() - $max_lifetime;

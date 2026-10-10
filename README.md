@@ -308,10 +308,13 @@ The callback receives attacker-controlled input: it should only answer the refus
 use Zephyrus\Data\Database;
 use Zephyrus\Session\DatabaseSessionHandler;
 
-$session->setHandler(new DatabaseSessionHandler(fn (): Database => Database::fromConfig($configuration->database), 'core.session'));
+$databaseConfig = $configuration->database
+    ?? throw new \LogicException('Database sessions need a database: section in config.yml');
+
+$session->setHandler(new DatabaseSessionHandler(fn (): Database => Database::fromConfig($databaseConfig), 'core.session'));
 ```
 
-Return the application's shared `Database` from the Closure instead if it has one.
+`$configuration->database` is a `?DatabaseConfig`, so the example resolves it before registering: a missing `database:` section fails at boot, not at the first request. Return the application's shared `Database` from the Closure instead if it has one.
 
 If the Closure throws or returns anything but a `Database`, the callback that needed it throws a `SessionException`, and so does every later callback that needs the database, for the life of the handler instance (one per request in the usual bootstrap): nothing falls back to an empty session and the Closure is not run again. After a thrown failure, the original error is the previous exception. With the default serializer, a new session that stays empty is not stored, so a visitor who never writes to the session leaves no row. Under strict mode, the next request then refuses the id of that never-stored session, so an anonymous visitor gets a new id and a new `Set-Cookie` on each request until something is stored.
 
