@@ -71,7 +71,7 @@ final readonly class Uri
 
             // Only a valid port number is split off; anything else stays in the host, so a host
             // allowlist never approves a host that was not sent.
-            if (preg_match('#^(\[[^\]]*\]|[^:]*):(\d+)$#', $authority, $portMatch) === 1
+            if (preg_match('#^(\[[^\]]*\]|[^:]*):(\d+)$#D', $authority, $portMatch) === 1
                 && self::isPortNumber($portMatch[2])) {
                 $host = $portMatch[1];
                 $parts['port'] = (int) $portMatch[2];

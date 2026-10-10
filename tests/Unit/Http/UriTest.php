@@ -171,6 +171,15 @@ final class UriTest extends TestCase
     }
 
     #[Test]
+    public function portFollowedByANewlineIsNotReadAsAPort(): void
+    {
+        $uri = new Uri("http://:80\n/x");
+
+        self::assertNull($uri->port());
+        self::assertSame(":80\n", $uri->host());
+    }
+
+    #[Test]
     #[DataProvider('unparseableAuthoritiesWithAnInvalidPort')]
     public function invalidPortStaysInTheHostOfAnUnparseableAuthority(string $url, string $host): void
     {

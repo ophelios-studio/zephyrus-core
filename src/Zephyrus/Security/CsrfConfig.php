@@ -35,8 +35,8 @@ use function trim;
  * is validated the same way as fromArray().
  *
  * To exempt a route and everything under it, end with "/" ("#^/webhooks/#"). To exempt the route
- * with and without children, list both "#^/webhooks$#" and "#^/webhooks/#".
- * To exempt exactly one path, end with "$" ("#^/logout$#").
+ * with and without children, list both "#^/webhooks$#D" and "#^/webhooks/#".
+ * To exempt exactly one path, end with "$" and add the D modifier ("#^/logout$#D"), otherwise "$" also matches before a final newline.
  *
  * ## Forms
  *
