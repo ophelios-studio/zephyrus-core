@@ -18,9 +18,15 @@ final class SapiEmitter implements EmitterInterface
 {
     private const int DEFAULT_CHUNK_SIZE = 8192;
 
+    /**
+     * @throws \InvalidArgumentException When $chunkSize is not positive.
+     */
     public function __construct(
         private readonly int $chunkSize = self::DEFAULT_CHUNK_SIZE,
     ) {
+        if ($chunkSize < 1) {
+            throw new \InvalidArgumentException(sprintf('The chunk size must be positive, %d given.', $chunkSize));
+        }
     }
 
     public function emit(Response $response): void

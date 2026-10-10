@@ -145,6 +145,25 @@ final class SapiEmitterTest extends TestCase
         self::assertSame('abc', $output);
     }
 
+    public function testConstructorRefusesZeroChunkSize(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        new SapiEmitter(chunkSize: 0);
+    }
+
+    public function testConstructorRefusesNegativeChunkSize(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        new SapiEmitter(chunkSize: -1);
+    }
+
+    public function testConstructorAcceptsChunkSizeOfOne(): void
+    {
+        self::assertInstanceOf(SapiEmitter::class, new SapiEmitter(chunkSize: 1));
+    }
+
     // -------------------------------------------------------------------------
     // Status code (CLI SAPI supports http_response_code() tracking)
     // -------------------------------------------------------------------------
