@@ -112,7 +112,7 @@ final readonly class RouteUrlGenerator
             throw RouteUrlGenerationException::constraintViolation(
                 $name,
                 $routeName,
-                sprintf('invalid constraint pattern "%s"', $pattern),
+                'invalid constraint pattern ' . MessageValue::quote($pattern),
             );
         }
 

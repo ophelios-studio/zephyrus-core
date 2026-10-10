@@ -34,6 +34,14 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertNull($e->messageWithoutValue());
     }
 
+    public function testMissingRequiredQuotesAFieldThatIsNotAPlainKey(): void
+    {
+        self::assertSame(
+            "Configuration section 'database' requires field \"a\\u001bb\" but none was provided.",
+            ConfigurationException::missingRequired('database', "a\x1bb")->getMessage(),
+        );
+    }
+
     public function testRemovedFieldExposesItsSectionAndFieldOnly(): void
     {
         $e = ConfigurationException::removedField('database', 'emulate_prepares', 'Delete this line.');

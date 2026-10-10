@@ -943,6 +943,8 @@ final class DatabaseConfigTest extends TestCase
             '"db.example.test/app?password=***"',
         ];
         yield 'database with an at sign in the password' => ['database', 'app?password=SE@KRET', '"app?password=***"'];
+        yield 'newline in the userinfo' => ['host', "postgres://app:pa\nss@db.example.test", '"postgres://***@db.example.test"'];
+        yield 'newline in a conninfo password' => ['host', "host=db password=a\nb", '"host=db password=***"'];
         yield 'at sign in both the userinfo and the query password' => [
             'host',
             'postgres://app:p@ss@db.example.test/app?password=SE@KRET',

@@ -251,6 +251,22 @@ final class RouteUrlGeneratorTest extends TestCase
         $generator->generate('users.show', ['id' => '42']);
     }
 
+    public function testAnInvalidConstraintPatternIsQuotedInItsRefusal(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => "\\d+(\x1b"], name: 'users.show'));
+
+        try {
+            (new RouteUrlGenerator($routes))->generate('users.show', ['id' => '42']);
+            self::fail('An invalid constraint pattern must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame(
+                'Route parameter "id" for route "users.show": invalid constraint pattern "\\\\d+(\\u001b"',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testGenerateTemporarySignedBuildsVerifiableExpiringUrl(): void
     {
         $routes = new RouteCollection();

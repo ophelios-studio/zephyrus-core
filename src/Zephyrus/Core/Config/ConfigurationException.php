@@ -35,9 +35,11 @@ final class ConfigurationException extends ZephyrusException
 
     public static function missingRequired(string $section, string $field): self
     {
-        $exception = new self(
-            sprintf("Configuration section '%s' requires field '%s' but none was provided.", $section, $field),
-        );
+        $exception = new self(sprintf(
+            "Configuration section '%s' requires field %s but none was provided.",
+            $section,
+            self::shownField($field),
+        ));
         $exception->section = $section;
         $exception->field = $field;
 
@@ -45,7 +47,8 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * A field the framework no longer reads, followed by the explanation of what to do instead.
+     * A field the framework no longer reads, followed by the explanation of what to do instead. The explanation
+     * is developer text and goes into the message as given, unescaped.
      */
     public static function removedField(string $section, string $field, string $explanation): self
     {

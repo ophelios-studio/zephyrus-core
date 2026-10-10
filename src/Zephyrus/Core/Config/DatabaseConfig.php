@@ -220,8 +220,7 @@ final readonly class DatabaseConfig
         #[\SensitiveParameter] string $value,
         string $field,
         bool $singleHost = false,
-    ): void
-    {
+    ): void {
         if ($singleHost && $value === '') {
             throw ConfigurationException::invalidValue(
                 'database',
