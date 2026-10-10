@@ -20,6 +20,11 @@ final class ConfigKeysTest extends TestCase
 
     private const string ACCEPTED = 'the accepted keys are forceHttps, csrf.enabled, password, host.';
 
+    private const string NOT_A_BOOLEAN = ': is not a boolean; use true/false, 1/0, on/off or yes/no';
+
+    private const string UNSET_ENV_HINT = '; an unset !env without a default reads as null; add a default, such as '
+        . '!env NAME, false.';
+
     public function testEveryAcceptedSpellingPasses(): void
     {
         ConfigKeys::read('example', [
@@ -324,9 +329,21 @@ final class ConfigKeysTest extends TestCase
      */
     public static function refusedBooleans(): iterable
     {
-        yield 'declared null' => [['force_https' => null], 'forceHttps', "field 'force_https' has invalid value null"];
-        yield 'empty string' => [['forceHttps' => ''], 'forceHttps', "field 'forceHttps' has invalid value \"\""];
-        yield 'nested word' => [['csrf' => ['enabled' => 'maybe']], 'csrfEnabled', "field 'csrf.enabled' has invalid value \"maybe\""];
+        yield 'declared null' => [
+            ['force_https' => null],
+            'forceHttps',
+            "field 'force_https' has invalid value null" . self::NOT_A_BOOLEAN . self::UNSET_ENV_HINT,
+        ];
+        yield 'empty string' => [
+            ['forceHttps' => ''],
+            'forceHttps',
+            "field 'forceHttps' has invalid value \"\"" . self::NOT_A_BOOLEAN . '.',
+        ];
+        yield 'nested word' => [
+            ['csrf' => ['enabled' => 'maybe']],
+            'csrfEnabled',
+            "field 'csrf.enabled' has invalid value \"maybe\"" . self::NOT_A_BOOLEAN . '.',
+        ];
     }
 
     /**
@@ -344,7 +361,7 @@ final class ConfigKeysTest extends TestCase
             self::fail('A value that is not a boolean was read as one.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'example' " . $refusal . ': is not a boolean; use true/false, 1/0, on/off or yes/no.',
+                "Configuration section 'example' " . $refusal,
                 $exception->getMessage(),
             );
         }

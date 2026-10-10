@@ -187,7 +187,7 @@ final readonly class Configuration
 
             $folded = ConfigKeys::fold($key);
             $distance = levenshtein($folded, $suggestion);
-            // A typo seldom changes the first letter: version or lesson stay keys of the application's own.
+            // Two edits away with another first letter is a word of its own (version, lesson).
             if ($distance <= 1 || $folded[0] === $suggestion[0]) {
                 throw ConfigurationException::unknownSection(
                     $key,

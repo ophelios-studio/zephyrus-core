@@ -86,6 +86,7 @@ final readonly class SecurityConfig
     private const array MAPPING_EXAMPLES = [
         'csrf' => 'csrf: { enabled: false }',
         'encryption' => self::ENCRYPTION_EXAMPLE,
+        'headers' => 'headers: { xFrameOptions: DENY }',
     ];
 
     /** The security response headers, read from the security.headers section. */
@@ -163,11 +164,10 @@ final readonly class SecurityConfig
 
         $headers = $keys->value('headers');
         if ($headers !== null && !is_array($headers)) {
-            throw ConfigurationException::invalidValue(
+            throw ConfigurationException::invalidType(
                 'security',
-                'headers',
-                $headers,
-                'the security.headers section must be a mapping of header settings, such as xFrameOptions and csp',
+                $keys->key('headers'),
+                'must be a mapping, such as ' . self::MAPPING_EXAMPLES['headers'],
             );
         }
 

@@ -90,8 +90,8 @@ final class ApplicationConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertSame(
                 "Configuration section 'application' field 'debug' has invalid value null: is not a boolean; use "
-                    . 'true/false, 1/0, on/off or yes/no; an unset !env without a default reads as null; write '
-                    . '!env APP_DEBUG, false.',
+                    . 'true/false, 1/0, on/off or yes/no; an unset !env without a default reads as null; add a '
+                    . 'default, such as !env NAME, false.',
                 $exception->getMessage(),
             );
         }

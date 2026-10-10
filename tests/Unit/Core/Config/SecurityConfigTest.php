@@ -793,6 +793,14 @@ final class SecurityConfigTest extends TestCase
             ['encryptionKey' => ['12345-key-material']],
             "field 'encryptionKey' must be a string, such as encryption: { key: !env ENCRYPTION_KEY }.",
         ];
+        yield 'headers set to true' => [
+            ['headers' => true],
+            "field 'headers' must be a mapping, such as headers: { xFrameOptions: DENY }.",
+        ];
+        yield 'headers set to a policy' => [
+            ['headers' => "12345 default-src 'self'"],
+            "field 'headers' must be a mapping, such as headers: { xFrameOptions: DENY }.",
+        ];
     }
 
     /**
@@ -970,17 +978,6 @@ final class SecurityConfigTest extends TestCase
         self::assertTrue($config->isDeclared('headers'));
     }
 
-    public function testAScalarHeadersSectionIsRefusedNamingTheSection(): void
-    {
-        try {
-            SecurityConfig::fromArray(['headers' => true]);
-
-            self::fail('A scalar headers section was accepted.');
-        } catch (ConfigurationException $exception) {
-            self::assertStringContainsString('security.headers section', $exception->getMessage());
-        }
-    }
-
     public function testAHeadersSectionWithAMisspelledKeyIsRefused(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -1080,6 +1077,7 @@ final class SecurityConfigTest extends TestCase
     public static function declaredNullBooleans(): iterable
     {
         yield 'forceHttps' => [['forceHttps' => null], 'forceHttps'];
+        yield 'force_https' => [['force_https' => null], 'force_https'];
         yield 'nested csrf.enabled' => [['csrf' => ['enabled' => null]], 'csrf.enabled'];
         yield 'flat csrf_auto_html' => [['csrf_auto_html' => null], 'csrf_auto_html'];
     }
@@ -1097,7 +1095,8 @@ final class SecurityConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertSame(
                 "Configuration section 'security' field '" . $field . "' has invalid value null: is not a boolean; "
-                . 'use true/false, 1/0, on/off or yes/no.',
+                . 'use true/false, 1/0, on/off or yes/no; an unset !env without a default reads as null; add a '
+                . 'default, such as !env NAME, false.',
                 $exception->getMessage(),
             );
         }
