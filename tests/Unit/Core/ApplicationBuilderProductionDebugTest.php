@@ -143,6 +143,7 @@ final class ApplicationBuilderProductionDebugTest extends TestCase
         // above is what asserts the content.
         $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-debug-guard-');
         self::assertIsString($logFile);
+        $previousLog = ini_get('error_log');
         ini_set('error_log', $logFile);
 
         try {
@@ -150,7 +151,7 @@ final class ApplicationBuilderProductionDebugTest extends TestCase
                 'application' => ['environment' => 'production', 'debug' => true],
             ]))->build();
         } finally {
-            ini_set('error_log', '');
+            ini_set('error_log', $previousLog === false ? '' : $previousLog);
             @unlink($logFile);
         }
 
