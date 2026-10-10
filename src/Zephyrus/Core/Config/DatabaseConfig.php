@@ -7,63 +7,37 @@ namespace Zephyrus\Core\Config;
 /**
  * Immutable configuration section for a single database connection.
  *
- * Required fields: database, username.
- * All other fields carry safe defaults for a typical local PostgreSQL setup.
+ * Required fields: database, username. Defaults: driver 'pgsql', host 'localhost', port 5432,
+ * password '', charset 'utf8', sslMode and sslRootCert null.
  *
- * Validation rules:
- *   - database and username must be non-empty strings (fromArray only).
- *   - port must be in the valid TCP range 1-65535 (fromArray only).
- *   - driver must be 'pgsql' (fromArray only; PostgreSQL is the only driver).
- *   - charset must be alphanumeric or underscore (constructor AND fromArray:
- *     it is interpolated into SET client_encoding).
- *   - sslMode and sslRootCert must be DSN-safe (constructor AND fromArray).
+ * Validation (fromArray, and the constructor for charset, sslMode and sslRootCert):
+ *   - database and username: non-empty strings (fromArray only).
+ *   - port: 1-65535 (fromArray only).
+ *   - driver: 'pgsql' (fromArray only).
+ *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
+ *   - sslMode and sslRootCert: DSN-safe, as they are interpolated into the PDO DSN.
  *
- * Prepared statements:
- *   Zephyrus always uses PostgreSQL's native server-side prepared statements
- *   (the extended query protocol), and there is no setting to change that.
- *   Client-side parameter emulation was available here as `emulate_prepares`
- *   until it was REMOVED: it is a security downgrade, not a tuning knob. See
- *   REMOVED_EMULATE_PREPARES_KEYS for what a file carrying the key gets, and
- *   Zephyrus\Data\Database for the enforcement.
+ * Prepared statements are always PostgreSQL server-side (extended query protocol).
+ * The emulate_prepares keys are refused, see REMOVED_EMULATE_PREPARES_KEYS.
  *
- * Transport security note (sslMode / sslRootCert):
- *   libpq negotiates TLS by itself and defaults to 'prefer', meaning it
- *   encrypts when the server offers TLS and silently falls back to plaintext
- *   when it does not. Pinning a mode is a deployment policy decision, never a
- *   safe default: a server built without TLS refuses every connection under
- *   'require' or stricter, so an application that hard-coded it would go down
- *   the moment it was deployed against such a server.
- *
- *   Both fields are therefore OPT-IN and default to null. Null means the
- *   parameter is left OUT of the DSN entirely, so libpq keeps its own default
- *   and the connection string of every existing application is unchanged.
- *
- *   Only client-side verification is covered here. Client-certificate
- *   authentication (sslcert / sslkey) is deliberately out of scope: it is an
- *   authentication mechanism, and this section carries a username/password
- *   pair instead.
+ * TLS (sslMode, sslRootCert): both default to null, which leaves the parameter out of the
+ * DSN so libpq keeps its own default ('prefer'). A pinned mode is a deployment decision:
+ * 'require' or stricter fails against a server built without TLS. Client-certificate
+ * authentication (sslcert, sslkey) is not supported.
  */
 final readonly class DatabaseConfig
 {
     /**
-     * The complete set of libpq sslmode values, in increasing strictness.
+     * The libpq sslmode values, in increasing strictness.
      *
-     * Kept as an explicit allow-list because this value is interpolated
-     * verbatim into the PDO DSN. Anything outside the set must fail at
-     * construction rather than reach that string, where a stray separator
-     * could truncate the connection parameters or append new ones.
+     * An allow-list because the value is interpolated into the PDO DSN.
      */
     public const array SSL_MODES = ['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'];
 
     /**
-     * Configuration keys that once turned client-side parameter emulation on
-     * and that fromArray() now REFUSES, in either spelling.
+     * Keys that fromArray() refuses, in either spelling, even when set to false.
      *
-     * Rejected rather than ignored, and rejected even when set to false. An
-     * operator who wrote this line down believed something about their
-     * deployment, and every one of those beliefs is now wrong; silently
-     * dropping the key would leave a configuration file documenting behaviour
-     * the framework no longer has.
+     * A silently ignored key would leave the file documenting a knob that no longer exists.
      */
     public const array REMOVED_EMULATE_PREPARES_KEYS = ['emulatePrepares', 'emulate_prepares'];
 
@@ -78,24 +52,11 @@ final readonly class DatabaseConfig
         public ?string $sslMode = null,
         public ?string $sslRootCert = null,
     ) {
-        // Validated in the constructor rather than in fromArray() alone, unlike
-        // most other fields here: these three are the ones that reach a connection
-        // string or a SQL statement as free-form text, so the guarantee worth
-        // having is that no instance can exist at all carrying a value the driver
-        // or the server would not recognise. fromArray() normalises first (trim,
-        // lower-case, empty to null); a direct caller is expected to pass a
-        // canonical value or null.
+        // The constructor re-checks these three, so a directly built config cannot carry a
+        // value fromArray() would refuse. fromArray() normalises first (trim, lower-case,
+        // empty to null).
 
-        // charset is interpolated verbatim into `SET client_encoding TO '<charset>'`
-        // at connect time (Database::fromConfig), so a quote plus a semicolon in the
-        // value would try to open a SECOND command. The extended query protocol now
-        // refuses that outright ("cannot insert multiple commands into a prepared
-        // statement"), which is exactly the defence-in-depth layer client-side
-        // emulation used to remove: under emulation the same value ran as arbitrary
-        // SQL under the application role. The check stays regardless, because that
-        // refusal belongs to the driver rather than to us and the statement could
-        // move. fromArray() already applied this check; the constructor did not, and
-        // a directly built config skipped it.
+        // A quote and a semicolon in charset would open a second statement in SET client_encoding.
         if (preg_match('/^[a-zA-Z0-9_]+$/', $this->charset) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
@@ -114,9 +75,8 @@ final readonly class DatabaseConfig
             );
         }
 
-        // A path is opaque to us, so the only check that means anything is that
-        // it cannot break out of its DSN parameter. Existence is left to libpq,
-        // which reads the file at connect time and reports a precise error.
+        // Only the characters that could break out of the DSN parameter are checked here;
+        // libpq reports a missing file at connect time.
         if ($this->sslRootCert !== null && preg_match('/^[^\\s;\'"]+$/', $this->sslRootCert) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
@@ -131,14 +91,15 @@ final readonly class DatabaseConfig
     /**
      * Build a DatabaseConfig from a plain key-value array.
      *
+     * Accepts sslMode or sslmode, and sslRootCert or sslrootcert. Blank values mean null.
+     *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if required fields are absent or invalid values are supplied.
+     * @throws ConfigurationException if a removed emulate_prepares key is present, a required
+     *                                field is missing, or a value is invalid.
      */
     public static function fromArray(array $values): self
     {
-        // FIRST, before any other validation. An operator upgrading a working
-        // application must be told what changed, not handed an unrelated error
-        // from further down that says nothing about the key they wrote.
+        // Checked first, so an operator upgrading gets the removal message, not an unrelated error.
         foreach (self::REMOVED_EMULATE_PREPARES_KEYS as $removed) {
             if (array_key_exists($removed, $values)) {
                 throw self::removedEmulatePrepares($removed);
@@ -152,18 +113,10 @@ final readonly class DatabaseConfig
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
-        // Opt-in TLS policy for the connection. Accepts the camelCase key and
-        // the canonical libpq spelling, mirroring the mixed-case key handling
-        // used across the other configuration sections. Absent, blank or
-        // whitespace-only all collapse to null, which keeps the parameter out
-        // of the DSN: an operator clearing an environment variable must land
-        // back on the previous behaviour, not on a malformed connection string.
         $sslMode     = self::normalizeOptional($values['sslMode'] ?? $values['sslmode'] ?? null);
         $sslRootCert = self::normalizeOptional($values['sslRootCert'] ?? $values['sslrootcert'] ?? null);
 
-        // Case-folded because libpq matches sslmode exactly and an environment
-        // variable spelled REQUIRE is an operator typo, not a different policy.
-        // The cert path is left alone: file systems are case-sensitive.
+        // libpq matches sslmode exactly, so REQUIRE is folded. The cert path is case-sensitive.
         if ($sslMode !== null) {
             $sslMode = strtolower($sslMode);
         }
@@ -217,14 +170,7 @@ final readonly class DatabaseConfig
     }
 
     /**
-     * The boot failure an operator gets for a configuration file that still
-     * carries the removed emulation key.
-     *
-     * Loud on purpose, and this is the one place tolerance would be the wrong
-     * instinct. A silently ignored key leaves the file asserting a property of
-     * the deployment that stopped being true, and the person who typed it acted
-     * on that belief. So the message names the key, says plainly that it was
-     * removed and why, and gives the one-line remedy.
+     * The boot error for a configuration file that still carries a removed emulation key.
      */
     private static function removedEmulatePrepares(string $key): ConfigurationException
     {
@@ -248,13 +194,7 @@ final readonly class DatabaseConfig
     }
 
     /**
-     * Reduce an optional configuration value to a trimmed string, or to null
-     * when it carries nothing usable.
-     *
-     * A YAML `!env VAR` with no default resolves to null when the variable is
-     * unset, and to an empty string when the variable is set but blank. Both
-     * mean "not configured", and both must produce the same result, otherwise
-     * an empty environment variable would push an empty parameter into the DSN.
+     * Trims an optional value. Null, blank and whitespace-only all become null.
      */
     private static function normalizeOptional(mixed $value): ?string
     {

@@ -7,16 +7,19 @@ namespace Zephyrus\Core\Config;
 /**
  * Immutable localization bootstrap config.
  *
- * - locale: translator default locale token (e.g. 'en', 'fr-CA').
- * - supportedLocales: explicit locale allowlist for request negotiation.
- * - localePath: single directory containing locale subdirectories or files (optional).
- * - timezone: application timezone, applied via date_default_timezone_set() (default 'UTC').
- * - currency: default currency code for Formatter::money() (nullable).
- * - dateFormat: default ICU pattern or preset for Formatter::date() (default 'medium').
- * - timeFormat: default ICU pattern or preset for Formatter::time() (default 'short').
- * - datetimeFormat: default ICU pattern or preset for Formatter::datetime() (default 'medium').
- * - groupingSeparator: thousands separator for money/decimal/percent/ordinal (null keeps the locale default, '' disables grouping).
- *   At most 4 bytes, valid UTF-8, no digit or control character.
+ * YAML keys (snake_case aliases accepted where listed):
+ * - locale (defaultLocale, default_locale): translator default locale, lower-cased, so 'fr-CA' is
+ *   stored as 'fr-ca'. Default 'en'.
+ * - supportedLocales (supported_locales): negotiation allowlist. Trimmed, lower-cased, blanks dropped.
+ *   Default [].
+ * - localePath (locale_path, jsonLocalePaths, json_locale_paths): one directory of locales.
+ *   The legacy array form keeps its last non-empty entry. Default null.
+ * - timezone: applied with date_default_timezone_set() by ApplicationBuilder. Default 'UTC'.
+ * - currency: default currency code for Formatter::money(). Default null.
+ * - dateFormat (date_format), timeFormat (time_format), datetimeFormat (datetime_format): ICU
+ *   pattern or preset for Formatter::date(), time() and datetime(). Defaults 'medium', 'short', 'medium'.
+ * - groupingSeparator (grouping_separator): thousands separator. Null keeps the locale default,
+ *   '' disables grouping. At most 4 bytes, valid UTF-8, no digit or control character.
  */
 final readonly class LocalizationConfig
 {
@@ -38,15 +41,13 @@ final readonly class LocalizationConfig
 
     /**
      * @param array<string, mixed> $values
+     * @throws ConfigurationException if locale or timezone is blank, or grouping_separator is invalid.
      */
     public static function fromArray(array $values): self
     {
-        // Support both new ('locale') and legacy ('defaultLocale', 'default_locale') keys
         $locale = trim((string) ($values['locale'] ?? $values['defaultLocale'] ?? $values['default_locale'] ?? 'en'));
         $supportedLocales = (array) ($values['supportedLocales'] ?? $values['supported_locales'] ?? []);
 
-        // Support both new ('localePath') and legacy ('jsonLocalePaths', 'json_locale_paths') keys.
-        // Legacy accepted an array; we take the last non-empty path from it.
         $localePath = self::resolveLocalePath($values);
 
         $timezone = trim((string) ($values['timezone'] ?? 'UTC'));
@@ -126,13 +127,12 @@ final readonly class LocalizationConfig
      */
     private static function resolveLocalePath(array $values): ?string
     {
-        // New key takes precedence
+        // localePath wins over the legacy keys, even when it is blank.
         if (isset($values['localePath']) || isset($values['locale_path'])) {
             $path = trim((string) ($values['localePath'] ?? $values['locale_path'] ?? ''));
             return $path !== '' ? $path : null;
         }
 
-        // Legacy: jsonLocalePaths / json_locale_paths (array) — take last non-empty
         $legacyPaths = $values['jsonLocalePaths'] ?? $values['json_locale_paths'] ?? null;
         if ($legacyPaths !== null && is_array($legacyPaths)) {
             $filtered = array_values(array_filter(array_map(static function (mixed $p): string {

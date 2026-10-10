@@ -7,53 +7,37 @@ namespace Zephyrus\Core\Config;
 /**
  * Immutable configuration section for PHP session behaviour.
  *
- * Defaults are conservative and security-oriented:
- *   - httpOnly:   true  (no JS cookie access)
- *   - secure:     auto  (on whenever the request itself is HTTPS)
- *   - sameSite:   'Lax' (balanced CSRF protection)
- *   - lifetime:   0     (browser-session cookie)
+ * Defaults (secure by default):
+ *   - name:       'PHPSESSID'
+ *   - lifetime:   0, a browser-session cookie.
+ *   - httpOnly:   true, so scripts cannot read the cookie.
+ *   - secure:     'auto', Secure only on HTTPS requests (see below).
+ *   - sameSite:   'Lax', one of Strict, Lax, None.
  *   - cookiePath: '/'
- *   - idleTimeout: null (session.gc_maxlifetime is left as configured)
+ *   - idleTimeout: null, session.gc_maxlifetime left as configured.
  *
  * No Domain attribute is ever emitted, so the cookie is host-only.
  *
- * ## `secure` is a THREE-state setting
+ * `secure` takes three states:
+ *   absent or 'auto'  secure=false, secureAuto=true   Secure on HTTPS requests only
+ *   true              secure=true,  secureAuto=false  always Secure
+ *   false             secure=false, secureAuto=false  never Secure (local HTTP development)
  *
- * SessionConfig::fromArray([]) used to leave the cookie without a Secure
- * attribute: an HTTPS request produced session_get_cookie_params()['secure']
- * = false, so a deployment that did not set the flag itself shipped a session
- * cookie a downgraded request could carry. The default is now the same one
- * Symfony ships, "auto":
+ * The default 'auto' makes HTTPS requests always carry Secure. Read the result with
+ * resolveSecure(), since `secure` alone does not answer whether the cookie carries Secure.
  *
- *   absent, or 'auto'  -> secure=false, secureAuto=true   Secure on HTTPS only
- *   true               -> secure=true,  secureAuto=false  always Secure
- *   false              -> secure=false, secureAuto=false  never Secure
- *
- * The explicit `false` is what a local HTTP development environment sets, and
- * it is honoured: auto never overrides it.
- *
- * Read the pair through resolveSecure(); `secure` alone answers "is it forced
- * on", not "will the cookie carry Secure".
- *
- * ## Combinations a browser would silently discard are refused
- *
- *   - SameSite=None without Secure. Every current browser drops the cookie.
+ * Refused at construction, because a browser would silently discard the cookie:
+ *   - SameSite=None without Secure.
  *   - A `__Host-` name whose path is not '/', or that can never be Secure.
  *   - A `__Secure-` name that can never be Secure.
+ *   A prefixed name with secure 'auto' is allowed: it is valid on the HTTPS origin.
  *
- * These throw rather than being repaired, because the alternative is a cookie
- * that is never stored and an application that looks logged out for no visible
- * reason. Only the definitively broken shapes are refused: a name with a
- * prefix combined with `secure: auto` is allowed, since it is correct on the
- * HTTPS origin the prefix is for.
- *
- * Validation rules:
- *   - name must be a non-empty string.
- *   - lifetime must be >= 0.
- *   - idleTimeout must be a positive whole number of seconds when set, and
- *     small enough that now plus it fits the INTEGER expire column of the
- *     DatabaseSessionHandler schema (2147483647).
- *   - sameSite must be one of: Strict, Lax, None.
+ * Validation:
+ *   - name: non-empty string.
+ *   - lifetime: 0 or greater.
+ *   - idleTimeout: a positive whole number of seconds when set, and small enough that
+ *     now plus it fits the INTEGER expire column of the DatabaseSessionHandler schema (2147483647).
+ *   - sameSite: one of Strict, Lax, None (case-sensitive).
  */
 final readonly class SessionConfig
 {
@@ -67,14 +51,10 @@ final readonly class SessionConfig
 
     /**
      * @param bool $secure     Force the Secure attribute on regardless of the request.
-     * @param bool $secureAuto Add Secure when the request itself is HTTPS. Ignored when
-     *                         $secure is already true. Defaults to false so a caller
-     *                         building this object positionally keeps the exact
-     *                         behaviour it had; fromArray() turns it on.
-     * @param ?int $idleTimeout Server-side idle timeout in seconds, applied by
-     *                         SessionManager::start() as session.gc_maxlifetime.
+     * @param bool $secureAuto Add Secure when the request is HTTPS. Ignored when $secure is true.
+     *                         Defaults to false for positional callers; fromArray() turns it on.
+     * @param ?int $idleTimeout Seconds, applied by SessionManager::start() as session.gc_maxlifetime.
      *                         DatabaseSessionHandler refuses a session idle longer on read.
-     *                         PHP's files handler only uses it as the garbage-collection age.
      */
     public function __construct(
         public string $name,
@@ -86,9 +66,7 @@ final readonly class SessionConfig
         public bool $secureAuto = false,
         public ?int $idleTimeout = null,
     ) {
-        // Validated here rather than only in fromArray() so that a caller
-        // constructing the object directly, which the framework's own
-        // middlewares do, cannot assemble a cookie the browser will drop.
+        // Also checked here, so a directly built object cannot hold a cookie browsers would drop.
         if (trim($this->name) === '') {
             throw ConfigurationException::invalidValue('session', 'name', $this->name, 'must not be empty');
         }
@@ -129,10 +107,12 @@ final readonly class SessionConfig
     /**
      * Build a SessionConfig from a plain key-value array.
      *
-     * Accepts both camelCase and snake_case key variants for ergonomic config files.
+     * Accepts camelCase and snake_case keys (e.g. http_only, same_site, idle_timeout).
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if supplied values violate constraints.
+     * @throws ConfigurationException on a non-boolean secure or httpOnly, an idleTimeout that is not
+     *         a positive integer within range, or any constructor rule (empty name, negative lifetime,
+     *         unknown sameSite, or a combination browsers would discard).
      */
     public static function fromArray(array $values): self
     {
@@ -161,7 +141,7 @@ final readonly class SessionConfig
             return $value;
         }
 
-        // Leading zeros are dropped so '0600' reads as decimal; all zeros leaves nothing.
+        // Leading zeros are dropped so '0600' reads as decimal.
         $digits = is_string($value) && preg_match('/\A[0-9]+\z/', $value) === 1 ? ltrim($value, '0') : '';
 
         if ($digits !== '') {
@@ -189,10 +169,9 @@ final readonly class SessionConfig
     /**
      * Whether the cookie should carry the Secure attribute for this request.
      *
-     * @param bool $requestIsSecure Whether the REQUEST arrived over HTTPS. The
-     *   caller supplies it because only the caller knows whether a forwarded
-     *   protocol header may be trusted; SessionMiddleware passes the answer
-     *   Request already resolved against the trusted-header allowlist.
+     * @param bool $requestIsSecure Whether the request arrived over HTTPS. The caller decides, since
+     *   only it knows whether a forwarded protocol header is trusted (SessionMiddleware uses the
+     *   answer Request resolved against the trusted-header allowlist).
      */
     public function resolveSecure(bool $requestIsSecure): bool
     {

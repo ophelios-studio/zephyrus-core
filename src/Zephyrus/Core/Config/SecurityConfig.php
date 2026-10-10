@@ -12,9 +12,7 @@ use Zephyrus\Security\CsrfConfig;
 /**
  * Immutable configuration section for HTTP security behaviour.
  *
- * Supports both flat keys (legacy) and nested YAML sections:
- *
- * Nested format (preferred):
+ * Preferred nested YAML:
  *   security:
  *     forceHttps: true
  *     allowedHosts: [example.com]
@@ -27,50 +25,40 @@ use Zephyrus\Security\CsrfConfig;
  *     encryption:
  *       key: !env ENCRYPTION_KEY
  *
- * Flat format (legacy, still accepted):
- *   security:
- *     forceHttps: true
- *     csrfEnabled: true
- *     csrfExceptions: []
- *     allowedHosts: []
- *     maxBodySize: 2097152
- *     trustedProxies: []
- *     trustedHeaders: []
+ * Flat keys (csrfEnabled, csrfExceptions, encryptionKey) are still accepted at the top level,
+ * and every key also accepts snake_case.
  *
- * Defaults are conservative yet development-friendly:
- *   - forceHttps:     false (must be explicitly enabled in production)
- *   - csrfEnabled:    true  (on by default)
- *   - csrfExceptions: []    (no excluded paths by default)
- *   - allowedHosts:   []    (empty = any host; populate for production lockdown)
- *   - maxBodySize:    2097152 (2 MB; 0 = unlimited)
- *   - trustedProxies: []    (empty = trust no proxies; forwarded headers ignored)
- *   - trustedHeaders: the X-Forwarded-* family (see Request::TRUSTED_HEADERS_DEFAULT);
- *                     'forwarded', 'x-real-ip', 'cf-connecting-ip' and 'x-client-ip'
- *                     are opt-in, and [] reads no forwarded header at all
- *   - encryptionKey:  null  (must be set explicitly for Cryptography usage)
+ * Defaults:
+ *   - forceHttps:     false. Enable it explicitly in production.
+ *   - csrfEnabled:    true. CSRF protection is opt-out.
+ *   - csrfExceptions: [] (no excluded paths).
+ *   - allowedHosts:   [] (any host). Populate it in production.
+ *   - maxBodySize:    2097152 (2 MB). 0 = unlimited.
+ *   - trustedProxies: [] (no proxy trusted, so forwarded headers are ignored).
+ *   - trustedHeaders: the X-Forwarded-* family (Request::TRUSTED_HEADERS_DEFAULT). 'forwarded',
+ *                     'x-real-ip', 'cf-connecting-ip' and 'x-client-ip' are opt-in. [] reads none.
+ *   - encryptionKey:  null. Required for Cryptography usage.
  *
- * Validation rules:
- *   - maxBodySize must be 0 or greater.
- *   - Each allowedHost entry must be a non-empty string. allowedHosts and
- *     trustedProxies also accept one comma-separated string, such as from !env.
- *     A string naming nothing is an empty trustedProxies (no proxy is trusted) but
- *     is REJECTED for allowedHosts, where an empty list would allow every host.
+ * Validation:
+ *   - maxBodySize: 0 or greater.
+ *   - allowedHosts: each entry a non-empty host name without a scheme, such as example.com.
+ *     allowedHosts and trustedProxies also accept one comma-separated string (typically from !env).
+ *     A string naming nothing is an empty
+ *     trustedProxies, but is REJECTED for allowedHosts, where an empty list allows every host.
  *     A declared null allowedHosts (an unset !env without default) is REJECTED for the same reason.
- *   - Each csrfExceptions entry must be a non-empty string.
- *   - csrf.autoHtml and its aliases are not settings: omit them. A value that
- *     casts to true is REJECTED at boot.
- *   - Each trustedProxies entry must be '*', a valid IP address or a valid CIDR range.
- *     IPv6 ranges below /96 that embed an IPv4 address (::ffff:a.b.c.d/N, ::a.b.c.d/N,
- *     64:ff9b::a.b.c.d/N) are REJECTED.
- *   - Each trustedHeaders entry must name a header Request can actually read;
- *     an unknown name is REJECTED rather than ignored, because silently dropping
- *     a typo would leave an operator believing they trust a header they do not.
+ *   - csrfExceptions: each entry a non-empty string.
+ *   - csrf.autoHtml and its aliases: not settings, omit them. A true value is REJECTED at boot.
+ *   - trustedProxies: each entry '*', a valid IP address or a valid CIDR range. IPv6 ranges
+ *     below /96 that embed an IPv4 address (::ffff:a.b.c.d/N, ::a.b.c.d/N, 64:ff9b::a.b.c.d/N)
+ *     are REJECTED.
+ *   - trustedHeaders: each entry a header Request can read. An unknown name is REJECTED, not
+ *     ignored, so a typo cannot leave the operator trusting a header they do not.
  */
 final readonly class SecurityConfig
 {
     /**
-     * The spellings fromArray() reads each setting from, in the order it prefers
-     * them: [section, key], where section 'values' is the top level.
+     * The spellings fromArray() reads each setting from, in order of preference:
+     * [section, key], where section 'values' is the top level.
      */
     private const array SPELLINGS = [
         'forceHttps'     => [['values', 'forceHttps'], ['values', 'force_https']],
@@ -101,14 +89,10 @@ final readonly class SecurityConfig
      *                                  are trusted. Empty = trust no proxies (safe default).
      *                                  Use ['*'] to trust all proxies (development only).
      * @param ?string  $encryptionKey   Application encryption key (nullable, from !env).
-     * @param string[] $trustedHeaders  Which forwarding headers may be read once the peer is a
-     *                                  trusted proxy. Trusting a proxy is NOT the same as trusting
-     *                                  every header a caller can name: a proxy manages one family
-     *                                  and passes the rest through untouched. Defaults to the
-     *                                  X-Forwarded-* family; [] reads none.
-     * @param string[] $declaredKeys    Canonical names of the settings the SOURCE ARRAY actually
-     *                                  contained. See isDeclared(); empty when the object was
-     *                                  built directly rather than through fromArray().
+     * @param string[] $trustedHeaders  Forwarding headers read once the peer is a trusted proxy.
+     *                                  Trusting a proxy does not trust every header it passes through.
+     * @param string[] $declaredKeys    Canonical names the SOURCE ARRAY contained. See isDeclared();
+     *                                  empty when built directly rather than through fromArray().
      */
     public function __construct(
         public bool $forceHttps,
@@ -126,18 +110,14 @@ final readonly class SecurityConfig
     }
 
     /**
-     * Whether the configuration source actually named this setting.
+     * Whether the configuration source named this setting.
      *
-     * The typed object cannot answer that on its own: csrfEnabled DEFAULTS to
-     * true, so "the operator asked for CSRF" and "the operator said nothing"
-     * produce the identical value. ApplicationBuilder needs the difference to
-     * refuse a boot where a protection was REQUESTED and nothing consumes it,
-     * without failing every application that simply never mentioned the
-     * section.
+     * The typed object cannot tell "CSRF requested" from "said nothing", since csrfEnabled
+     * defaults to true. ApplicationBuilder uses this to refuse a boot that requests a protection
+     * nothing consumes, without failing applications that never mention the section.
      *
-     * Accepts the canonical camelCase name: forceHttps, csrfEnabled,
-     * csrfAutoHtml, csrfExceptions, allowedHosts, maxBodySize, trustedProxies,
-     * trustedHeaders, encryptionKey.
+     * Accepts the canonical camelCase name: forceHttps, csrfEnabled, csrfAutoHtml, csrfExceptions,
+     * allowedHosts, maxBodySize, trustedProxies, trustedHeaders, encryptionKey.
      */
     public function isDeclared(string $key): bool
     {
@@ -147,11 +127,12 @@ final readonly class SecurityConfig
     /**
      * Build a SecurityConfig from a plain key-value array.
      *
-     * Accepts both nested (csrf: / encryption:) and flat (csrfEnabled, etc.)
-     * key variants. Nested keys take precedence when both are present.
+     * Nested keys (csrf:, encryption:) take precedence over the flat ones.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if supplied values violate constraints.
+     * @throws ConfigurationException if a value is not a boolean, csrf.autoHtml is true, allowedHosts
+     *         is null or names nothing, maxBodySize is negative, or a list entry is invalid
+     *         (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders).
      */
     public static function fromArray(array $values): self
     {
@@ -178,8 +159,7 @@ final readonly class SecurityConfig
 
         $maxBodySize = (int) (self::read('maxBodySize', $sections) ?? 2_097_152);
         $trustedProxies = self::listValue(self::read('trustedProxies', $sections));
-        // An ABSENT key takes the default set; an explicitly empty list is a
-        // valid, maximally strict setting and must not be confused with it.
+        // An absent key takes the default set. An explicit [] is a valid, strictest setting.
         $trustedHeaders = (array) (self::read('trustedHeaders', $sections) ?? Request::TRUSTED_HEADERS_DEFAULT);
 
         $encryptionKey = self::read('encryptionKey', $sections);
@@ -288,8 +268,8 @@ final readonly class SecurityConfig
     }
 
     /**
-     * A list setting: an array as given, or a comma-separated string (typically from !env)
-     * split into trimmed, non-empty entries. A string that names nothing is an empty list.
+     * A list setting: an array as given, or a comma-separated string split into trimmed,
+     * non-empty entries. A string naming nothing is an empty list.
      *
      * @return array<mixed>
      */
@@ -311,8 +291,7 @@ final readonly class SecurityConfig
     }
 
     /**
-     * The canonical names the source array actually mentioned, under any of the
-     * aliases fromArray() accepts. See isDeclared().
+     * The canonical names the source array mentioned, under any accepted spelling. See isDeclared().
      *
      * @param array<string, array<string, mixed>> $sections Source array and nested sections, by name.
      * @return list<string>
@@ -355,8 +334,8 @@ final readonly class SecurityConfig
     }
 
     /**
-     * The spelling that supplied the value fromArray() used, as a path such as
-     * "csrf.auto_html", with its raw value. A null spelling is skipped, as fromArray() does.
+     * The first spelling that wrote a non-null value, as a path such as "csrf.auto_html",
+     * with that raw value. Null values are skipped.
      *
      * @param array<string, array<string, mixed>> $sections
      * @return array{string, mixed}|null
@@ -384,7 +363,7 @@ final readonly class SecurityConfig
         };
     }
 
-    /** A list entry as it may appear in a message: strings bounded and escaped, other non-scalars by type. */
+    /** A list entry for a message: strings bounded and escaped, other non-scalars by type. */
     private static function shownValue(mixed $value): mixed
     {
         return match (true) {
