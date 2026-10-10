@@ -67,7 +67,7 @@ final readonly class SecurityConfig
     /**
      * @param bool     $forceHttps      Redirect plain-HTTP requests to HTTPS.
      * @param bool     $csrfEnabled     Enable CSRF token verification on mutating requests.
-     * @param bool     $csrfAutoHtml    Always false; a true value is refused at boot.
+     * @param bool     $csrfAutoHtml    Pass false: fromArray() refuses true, and the constructor ignores it.
      * @param string[] $csrfExceptions  Regex path patterns excluded from CSRF validation.
      * @param string[] $allowedHosts    Restrict accepted Host headers; empty allows all.
      * @param int      $maxBodySize     Maximum request body in bytes (0 = unlimited).
@@ -87,7 +87,7 @@ final readonly class SecurityConfig
     public function __construct(
         public bool $forceHttps,
         public bool $csrfEnabled,
-        /** @deprecated since 0.14, will be removed in 0.15. Leave it unset: true is refused at boot. */
+        /** @deprecated since 0.14, will be removed in 0.15. Pass false: fromArray() refuses true. */
         public bool $csrfAutoHtml,
         public array $csrfExceptions,
         public array $allowedHosts,
