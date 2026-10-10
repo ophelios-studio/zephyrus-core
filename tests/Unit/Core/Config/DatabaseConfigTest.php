@@ -485,4 +485,68 @@ final class DatabaseConfigTest extends TestCase
             'columnCacheVersion' => $version,
         ]);
     }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function unquotedScalarColumnCacheVersions(): iterable
+    {
+        yield 'float' => [1.10];
+        yield 'true' => [true];
+        yield 'false' => [false];
+    }
+
+    #[DataProvider('unquotedScalarColumnCacheVersions')]
+    public function testThrowsForFloatOrBooleanColumnCacheVersionAndAsksForQuotes(mixed $version): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/columnCacheVersion' has invalid value '(float|bool)': .*quote/");
+
+        DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => $version,
+        ]);
+    }
+
+    public function testQuotedAndIntegerColumnCacheVersionsStayDistinct(): void
+    {
+        $quoted = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => '1.10',
+        ]);
+        $integer = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => 110,
+        ]);
+
+        self::assertSame('1.10', $quoted->columnCacheVersion);
+        self::assertSame('110', $integer->columnCacheVersion);
+    }
+
+    public function testThrowsForSslModeThatIsAnArray(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/sslMode' has invalid value 'array'/");
+
+        DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'sslMode'  => ['require'],
+        ]);
+    }
+
+    public function testThrowsForSslRootCertThatIsAnArray(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/sslRootCert' has invalid value 'array'/");
+
+        DatabaseConfig::fromArray([
+            'database'    => 'db',
+            'username'    => 'u',
+            'sslRootCert' => ['/etc/ssl/root.crt'],
+        ]);
+    }
 }

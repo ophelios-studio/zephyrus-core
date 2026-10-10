@@ -14,7 +14,7 @@ namespace Zephyrus\Core\Config;
  *   - database and username: non-empty strings (fromArray only).
  *   - port: 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
- *   - columnCacheVersion: a scalar, trimmed (fromArray only).
+ *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
  *   - sslMode and sslRootCert: DSN-safe, as they are interpolated into the PDO DSN.
  *
@@ -118,11 +118,12 @@ final readonly class DatabaseConfig
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
-        $sslMode     = self::normalizeOptional($values['sslMode'] ?? $values['sslmode'] ?? null);
-        $sslRootCert = self::normalizeOptional($values['sslRootCert'] ?? $values['sslrootcert'] ?? null);
-        $columnCacheVersion = self::normalizeColumnCacheVersion(
+        $sslMode     = self::normalizeOptional($values['sslMode'] ?? $values['sslmode'] ?? null, 'sslMode');
+        $sslRootCert = self::normalizeOptional($values['sslRootCert'] ?? $values['sslrootcert'] ?? null, 'sslRootCert');
+        $columnCacheVersion = self::normalizeOptional(
             $values['columnCacheVersion'] ?? $values['column_cache_version'] ?? null,
-        );
+            'columnCacheVersion',
+        ) ?? '';
 
         // libpq matches sslmode exactly, so REQUIRE is folded. The cert path is case-sensitive.
         if ($sslMode !== null) {
@@ -203,39 +204,27 @@ final readonly class DatabaseConfig
     }
 
     /**
-     * Trims an optional value. Null, blank and whitespace-only all become null.
+     * Trims an optional string. Null, blank and whitespace-only all become null.
+     *
+     * @throws ConfigurationException if the value is neither a string nor an integer.
      */
-    private static function normalizeOptional(mixed $value): ?string
+    private static function normalizeOptional(mixed $value, string $field): ?string
     {
         if ($value === null) {
             return null;
         }
 
-        $normalized = trim((string) $value);
-
-        return $normalized === '' ? null : $normalized;
-    }
-
-    /**
-     * Trims the cache version to a string. Null means no version; a non-scalar is refused.
-     *
-     * @throws ConfigurationException if the value is an array or an object.
-     */
-    private static function normalizeColumnCacheVersion(mixed $value): string
-    {
-        if ($value === null) {
-            return '';
-        }
-
-        if (!is_scalar($value)) {
+        if (!is_string($value) && !is_int($value)) {
             throw ConfigurationException::invalidValue(
                 'database',
-                'columnCacheVersion',
+                $field,
                 get_debug_type($value),
-                'must be a scalar, such as a release id or a migration version',
+                "must be a string or an integer: quote a number such as '1.10' to keep its digits",
             );
         }
 
-        return trim((string) $value);
+        $normalized = trim((string) $value);
+
+        return $normalized === '' ? null : $normalized;
     }
 }
