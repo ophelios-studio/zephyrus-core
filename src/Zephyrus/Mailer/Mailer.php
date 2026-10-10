@@ -55,6 +55,11 @@ final class Mailer
 
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
+    /**
+     * C0 controls, DEL and the bidi controls U+200F, U+202A to U+202E, U+2066 to U+2069, matched on bytes so an invalid UTF-8 name cannot bypass it.
+     */
+    private const string CONTROL_OR_BIDI_PATTERN = '~[\x00-\x1F\x7F]|\xE2\x80[\x8E\x8F\xAA-\xAE]|\xE2\x81[\xA6-\xA9]~';
+
     /** Longest display name: PHPMailer folds header lines over 998 bytes unindented. */
     private const int MAX_HEADER_VALUE_BYTES = 255;
 
@@ -194,7 +199,7 @@ final class Mailer
      *                                 relative path still resolves against the working
      *                                 directory, which is rarely what a caller means.
      * @param string      $name        Display name (default: original filename, checked the same way). May not
-     *                                 contain a NUL byte, a line break, a path separator or "=?",
+     *                                 contain a control or bidirectional formatting character, a path separator or "=?",
      *                                 exceed 255 bytes, have surrounding spaces, nor be blank,
      *                                 "0", "." or "..", nor end with a dot: it lands in a MIME
      *                                 header and is what the recipient's client writes to disk.
@@ -243,7 +248,7 @@ final class Mailer
      * @param string      $content  The file contents.
      * @param string      $name     Display name the recipient's client writes to disk: at most 255
      *                              bytes and unchanged by trimming or by dropping a trailing dot;
-     *                              not blank, "0", "." or "..", without NUL, CR, LF, a path separator or "=?".
+     *                              not blank, "0", "." or "..", without control or bidirectional formatting characters, a path separator or "=?".
      * @param string|null $mimeType Media type as type/subtype (at most 127 bytes), optionally followed by parameters such as "; method=REQUEST" but not name, filename or boundary. Null lets PHPMailer infer it from $name.
      *
      * @throws MailerException if the name or the media type is malformed.
@@ -339,6 +344,10 @@ final class Mailer
                 $fromFileName,
                 'is not a usable file name (blank, "0", "." or "..", ends with a dot, or the mailer would trim or shorten it)',
             );
+        }
+
+        if (preg_match(self::CONTROL_OR_BIDI_PATTERN, $name) === 1) {
+            $this->refuseName($name, $fromFileName, 'contains a control or bidirectional formatting character');
         }
     }
 

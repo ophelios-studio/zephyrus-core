@@ -667,6 +667,40 @@ final class MailerTest extends TestCase
         $mailer->attachContent('content', str_repeat('a', 256) . '.pdf');
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function controlOrBidiCharacterNameProvider(): iterable
+    {
+        yield 'tab' => ["inv\toice.pdf"];
+        yield 'unit separator' => ["inv\x1Foice.pdf"];
+        yield 'delete' => ["inv\x7Foice.pdf"];
+        yield 'right-to-left mark' => ["inv\u{200F}oice.pdf"];
+        yield 'right-to-left override' => ["inv\u{202E}fdp.exe"];
+        yield 'left-to-right isolate' => ["inv\u{2066}oice.pdf"];
+        yield 'right-to-left isolate' => ["inv\u{2067}oice.pdf"];
+        yield 'pop directional isolate' => ["inv\u{2069}oice.pdf"];
+    }
+
+    #[DataProvider('controlOrBidiCharacterNameProvider')]
+    public function testAControlOrBidiCharacterInTheDisplayNameIsRefusedByAttachContent(string $name): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('contains a control or bidirectional formatting character');
+
+        $mailer->attachContent('content', $name);
+    }
+
+    public function testAPlainDisplayNameWithSpacesAndAccentsIsAcceptedByAttachContent(): void
+    {
+        $mailer = new Mailer($this->config);
+        $mailer->attachContent('content', 'Rapport annuel été.pdf');
+
+        self::assertSame('Rapport annuel été.pdf', $mailer->getPhpMailer()->getAttachments()[0][2]);
+    }
+
     public function testAnEncodedWordInTheDisplayNameIsRefusedByAttachContent(): void
     {
         $mailer = new Mailer($this->config);
