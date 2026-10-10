@@ -10,14 +10,9 @@ use PDOStatement;
 use Zephyrus\Core\Config\DatabaseConfig;
 
 /**
- * Thin PDO wrapper that provides:
- *   - A clean construction path from DatabaseConfig or a pre-built PDO.
- *   - Uniform exception wrapping (DatabaseException instead of raw PDOException).
- *   - A transaction() helper that commits on success and rolls back on failure.
- *   - A query() helper that prepares + binds parameters and returns the statement.
+ * Thin PDO wrapper that turns driver failures into DatabaseException.
  *
- * Testability: inject a pre-built PDO (e.g. sqlite::memory:) via the
- * constructor; use fromConfig() for production usage.
+ * Inject a pre-built PDO (for example sqlite::memory:) in tests; use fromConfig() in production.
  */
 final class Database
 {
@@ -25,65 +20,24 @@ final class Database
     private array $typeConversions = [];
 
     /**
-     * Memoized column-type resolutions for THIS instance, keyed by SQL string
-     * plus the statement's column count.
-     *
-     * getColumnMeta() triggers backend metadata lookups on PostgreSQL
-     * (a pg_class query per column, plus a pg_type query for non-builtin
-     * OIDs), so resolving the same statement shape on every select() would
-     * fire hundreds of identical round-trips over a request. The column
-     * layout (name + native type) of a given SQL string is stable for the
-     * connection lifetime, so the resolution is computed once per distinct
-     * query and reused thereafter.
-     *
-     * This layer holds the DERIVED callable map, built from this instance's
-     * own conversion registry, which is why registerTypeConversion() drops it.
+     * Resolved column types for this instance, keyed by SQL text and column count.
+     * Dropped by registerTypeConversion(), since it holds callables built from the registry.
      *
      * @var array<string, array<string, callable(string): mixed>>
      */
     private array $columnTypeCache = [];
 
     /**
-     * Process-wide cache of resolved column SHAPES, keyed by
-     * sha1(dsn . '|' . sql) . '|' . columnCount.
+     * Process-wide column shapes, keyed by sha1(dsn . '|' . sql) . '|' . columnCount.
      *
-     * The per-instance memo above dies with the Database instance, while the
-     * PDO handle underneath it may well be persistent, so every new instance
-     * re-pays the full metadata cost on a connection that already knows the
-     * answer. This layer survives for the lifetime of the PHP process instead.
+     * Holds plain data (column name => native type), never converters: each instance
+     * rebuilds its callables from its own registry, so an override such as a string
+     * passthrough for NUMERIC is never bypassed. The column count changes with any
+     * SELECT * shape change, which self-invalidates the key. Only fromConfig()
+     * connections take part. Backed by APCu across requests, see fetchColumnShapeFromApcu().
      *
-     * Three deliberate choices make it safe:
-     *
-     *   1. It stores PLAIN DATA (a column count and a column name => native
-     *      type name map), never the converters themselves. The converters are
-     *      closures, so caching them would be unserializable, and, worse, would
-     *      let one instance's registry leak into another.
-     *   2. The callable map is rebuilt from THIS instance's typeConversions on
-     *      every hit, so an instance can only ever apply its own converters.
-     *      That matters: the built-in NUMERIC conversion is floatval, and an
-     *      application that overrides it with a string passthrough to protect
-     *      money precision must never be served the framework default.
-     *   3. The key carries the column count, which PDOStatement::columnCount()
-     *      reports client side (PQnfields) for zero round-trips. Any column
-     *      added to or dropped from a SELECT * therefore changes the key and
-     *      self-invalidates, with no deploy hook to forget.
-     *
-     * Only connections opened through fromConfig() take part: a directly
-     * injected PDO has no knowable identity, so those instances keep the
-     * per-instance memo alone and behave exactly as before.
-     *
-     * This array is backed by APCu when the extension is available, which is
-     * what carries a shape from one REQUEST to the next: PHP resets every
-     * static at request shutdown, so under mod_php or FPM this array alone is
-     * empty again on the next request even though the persistent PDO handle
-     * under it survived. See fetchColumnShapeFromApcu().
-     *
-     * KNOWN LIMIT: a column that changes TYPE while keeping BOTH its name and
-     * the statement's column count (int4 to numeric, say) is invisible to this
-     * key, and a process would keep applying the previous converter. A column
-     * added or dropped changes the count, so that case self-invalidates. See
-     * APCU_TTL for how long the undetectable case can survive, and
-     * flushSharedColumnMetadata() for the manual release.
+     * Known limit: a column that changes type while keeping its name and the column count
+     * stays undetected until its APCu entry expires (APCU_TTL) or flushSharedColumnMetadata() runs.
      *
      * @var array<string, array{count: int, types: array<string, string>}>
      */
@@ -105,64 +59,33 @@ final class Database
     private ?string $connectionDsn = null;
 
     /**
-     * Number of transaction() calls currently running in a savepoint, which
-     * gives each nesting level its own savepoint name.
+     * Savepoint nesting depth: each nested transaction() level gets its own savepoint name.
      */
     private int $savepointDepth = 0;
 
     /**
-     * Transaction levels (0 for the outermost, then each savepoint depth) in
-     * which a query() failed. PostgreSQL aborts the transaction on such a failure
-     * and answers a later COMMIT with a silent ROLLBACK, so a level whose failure
-     * was caught is checked against the server before it is committed or released.
+     * Transaction levels in which a caught query() failure happened. PostgreSQL turns a later COMMIT
+     * into a silent ROLLBACK, so such a level is checked before it is committed or released.
      *
      * @var array<int, true>
      */
     private array $failedLevels = [];
 
-    /**
-     * Hard ceiling on the process-wide store, so a long-running process that
-     * generates unbounded distinct SQL (dynamic IN lists, generated filters)
-     * cannot grow it forever. Reaching it resets the store wholesale rather
-     * than carrying LRU bookkeeping on the hot path; a process that trips this
-     * is producing far more query shapes than any cache can help with.
-     */
+    /** Upper bound on the process-wide store; reaching it clears the store wholesale. */
     private const MAX_SHARED_COLUMN_SHAPES = 2048;
 
-    /**
-     * Namespace for the APCu keys, so this cache cannot collide with whatever
-     * else the host application keeps in the same shared memory. The trailing
-     * version segment lets a future change to the stored structure ignore
-     * older entries instead of having to reason about them.
-     */
+    /** Namespace for APCu keys, so they cannot collide with the host application. The version segment ignores older layouts. */
     private const APCU_KEY_PREFIX = 'zephyrus:column-shape:v1:';
 
     /**
-     * Lifetime of an APCu entry, in seconds.
-     *
-     * Deliberately finite rather than unlimited. A deploy replaces the machine
-     * and starts APCu empty, so an ordinary release self-clears, and a column
-     * being added or dropped changes the column count and self-invalidates via
-     * the key. What is left is the one drift the key cannot see: a column that
-     * changes TYPE while keeping its name and the statement width. Because the
-     * house rule is that a migration reaches production BEFORE the code that
-     * needs it, there is a real window where the schema has moved and no
-     * process has restarted, and an unlimited entry would apply the previous
-     * converter until someone noticed.
-     *
-     * An hour bounds that window without operator action. The cost is one
-     * re-resolution per query shape per hour per machine, which is noise
-     * against the round-trips saved on every request in between.
+     * APCu entry lifetime in seconds. Bounds how long a column that changed type under the same name
+     * and width keeps its old converter, since a migration can land before the process restarts.
      */
     private const APCU_TTL = 3600;
 
     private const RETURNING_PATTERN = '/\bRETURNING\b/i';
 
-    /**
-     * Built-in PostgreSQL native type conversions matching v1 DatabaseStatement behavior.
-     * Integer types → intval, float/decimal types → floatval, boolean → boolval,
-     * JSONB/JSON → json_decode, PostgreSQL arrays → PHP arrays.
-     */
+    /** Built-in PostgreSQL type conversions, keyed by the pg_field_type() name. */
     private const BUILTIN_TYPE_CONVERSIONS = [
         // Integer types
         'INT2' => 'intval',
@@ -185,25 +108,9 @@ final class Database
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
 
-        // OVERRIDDEN, NOT REFUSED, and that is a deliberate choice.
-        //
-        // fromConfig() already pins the driver option at connect time, but that
-        // only covers the connection IT opens. Two doors stay open: a $pdoFactory
-        // is free to ignore the $options it is handed and build its own PDO, and
-        // this constructor accepts any pre-built PDO at all. Both end up here, so
-        // this is the single point where the guarantee can actually be made.
-        //
-        // Refusing (throwing on a connection that arrives with emulation on) was
-        // the alternative and was rejected: PDO::getAttribute(ATTR_EMULATE_PREPARES)
-        // THROWS on a driver that does not implement the attribute (SQLite does
-        // not), so the detection needed for a refusal is itself unreliable, and it
-        // would turn a fixable misconfiguration into a hard crash for no gain.
-        // Overriding reaches the same end state and cannot fail open.
-        //
-        // The return value is ignored on purpose: a driver with no emulation layer
-        // to disable answers false without raising (verified on pdo_sqlite under
-        // PHP 8.4 and 8.5), and there is nothing to report about a connection that
-        // was never emulating in the first place.
+        // Overridden, not refused: fromConfig() pins it too, but a $pdoFactory or an injected PDO can arrive
+        // with emulation on. Refusing would crash on drivers without the attribute (SQLite). The return value
+        // is ignored: such a driver answers false without raising.
         $this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
 
         $this->registerBuiltinTypeConversions();
@@ -220,29 +127,14 @@ final class Database
     {
         $this->typeConversions[strtoupper($typeName)] = $converter;
 
-        // A newly registered converter can change how already-seen column
-        // shapes resolve, so drop the memoized resolutions to stay correct.
-        // Registration happens at setup, not in hot paths, so this is cheap.
-        //
-        // The process-wide shape cache is deliberately NOT cleared: registering
-        // a converter changes how a type is converted, never what type a column
-        // is. The next resolve rebuilds the callable map from the cached shape
-        // against the updated registry, so the new converter takes effect
-        // immediately without re-asking the backend.
+        // Drops resolved column types. The process-wide shape cache stays: it holds shapes, not converters.
         $this->columnTypeCache = [];
     }
 
     /**
-     * Turn the process-wide column shape cache on or off (on by default).
+     * Turns the process-wide column shape cache on or off (on by default). Turning it off flushes both layers.
      *
-     * Escape hatch for a deployment where a long-lived process must never hold
-     * a schema snapshot, and for tests that need a clean slate. Covers BOTH
-     * backing layers, the process static and APCu. Turning it off also flushes
-     * them, since entries that can no longer be read are only holding memory;
-     * turning it back on simply re-warms on the next query.
-     *
-     * Correctness never depends on this: the per-instance memo and the live
-     * conversion registry produce the same rows either way.
+     * Correctness does not depend on it: the per-instance memo yields the same rows.
      */
     public static function setSharedColumnMetadataEnabled(bool $enabled): void
     {
@@ -254,20 +146,9 @@ final class Database
     }
 
     /**
-     * Drop every cached column shape, from the process static AND from APCu.
+     * Drops every cached column shape, from the process static and from APCu.
      *
-     * Needed only in the one case the cache key cannot detect: a column that
-     * changed TYPE while keeping both its name and the statement's column
-     * count. APCu expires those entries on its own within APCU_TTL, so this is
-     * the way to reclaim the window rather than wait it out.
-     *
-     * OPERATIONAL NOTE: APCu memory belongs to a SAPI instance, not to a
-     * machine. Calling this from an HTTP request clears it for every worker
-     * process of that web server, which makes a small authenticated admin
-     * route the practical fleet-wide flush (one call per machine). Running it
-     * from a CLI process does NOT reach the web server's segment, so an
-     * `ssh console` one-liner is not a fleet flush. Restarting or redeploying
-     * the app is, since fresh machines start with an empty APCu.
+     * APCu memory belongs to one web SAPI: call this from a web request to reach its workers, not from a CLI process.
      */
     public static function flushSharedColumnMetadata(): void
     {
@@ -283,12 +164,10 @@ final class Database
     }
 
     /**
-     * Build a Database instance by opening a PostgreSQL connection described
-     * by the given DatabaseConfig.
+     * Opens a PostgreSQL connection described by $config.
      *
      * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
-     *        Optional PDO factory for tests/advanced callers. Receives
-     *        ($dsn, $username, $password, $options) and must return a PDO.
+     *        Optional factory for tests and advanced callers, receiving ($dsn, $username, $password, $options).
      *
      * @throws DatabaseException on PDO connection failure.
      */
@@ -301,37 +180,14 @@ final class Database
             $config->database,
         );
 
-        // Opt-in only: libpq negotiates TLS on its own and defaults to
-        // 'prefer', so it already encrypts whenever the server offers TLS.
-        // Pinning a mode is a policy decision about what to do when it does
-        // NOT: 'require' and stricter refuse the connection outright, which is
-        // the point, and also why this can never be a default. Absent, the key
-        // is not added at all, so the DSN is byte-for-byte what it has always
-        // been and libpq keeps its own default. This is a DSN parameter rather
-        // than a PDO driver option, so it belongs in the connection string.
-        // DatabaseConfig validates the value against the libpq set at
-        // construction, so only a canonical mode can reach this string.
-        //
-        // CACHE NOTE: this DSN is part of the process-wide column shape cache
-        // key (see $connectionDsn and $sharedColumnMetadata). Turning the mode
-        // on, off, or from one value to another therefore changes every key
-        // and orphans the previous APCu entries. That is harmless and
-        // self-correcting: the next query of each shape re-resolves it and
-        // re-populates, and the orphans expire on APCU_TTL. It is not a bug.
+        // Opt-in: libpq already negotiates TLS ('prefer' by default). A pinned mode makes it refuse what it
+        // would otherwise accept unencrypted. The DSN is part of the shape cache key: changing it orphans APCu entries.
         if ($config->sslMode !== null) {
             $dsn .= ';sslmode=' . $config->sslMode;
         }
 
-        // Appended whenever it is set, independently of the mode: silently
-        // dropping a trust anchor an operator configured would be worse than
-        // handing libpq a parameter it ignores under a non-verifying mode.
-        //
-        // The converse (a verify mode with no root cert) is deliberately NOT
-        // rejected here. libpq has its own answer for it: it falls back to
-        // ~/.postgresql/root.crt, accepts the literal 'system' for the OS
-        // trust store on PostgreSQL 16+, and fails the connection with a
-        // precise message when no anchor is found. Refusing it here would
-        // reject a configuration libpq accepts.
+        // Appended whenever set, whatever the mode: libpq ignores it under a non-verifying mode, and under a
+        // verifying mode without one it falls back to its own default store.
         if ($config->sslRootCert !== null) {
             $dsn .= ';sslrootcert=' . $config->sslRootCert;
         }
@@ -339,17 +195,11 @@ final class Database
         $options = [
             PDO::ATTR_PERSISTENT => false,
 
-            // NOT configurable, and not merely defaulted off: client-side
-            // parameter emulation is a security downgrade and the framework
-            // refuses to offer it. See the constructor for why setting it here
-            // is not by itself enough, and DatabaseConfig for the four measured
-            // costs and the boot-time rejection of the old config key.
+            // Not configurable: client-side emulation is a security downgrade. See the constructor.
             PDO::ATTR_EMULATE_PREPARES => false,
         ];
 
-        // #[\SensitiveParameter] so the database password is not captured in a backtrace. Tracy's
-        // Debugger::enable() sets zend.exception_ignore_args=0 to render call arguments, so a connect
-        // failure in debug mode would otherwise print the credential on the bluescreen.
+        // #[\SensitiveParameter] keeps the password out of the backtrace Tracy renders (zend.exception_ignore_args=0).
         $factory = $pdoFactory ?? static fn (string $dsn, string $username, #[\SensitiveParameter] string $password, array $options): PDO
             => new PDO($dsn, $username, $password, $options);
 
@@ -361,24 +211,11 @@ final class Database
 
         $db = new self($pdo);
 
-        // Record the connection identity so resolved column shapes can be
-        // shared across instances opened against the SAME database, and only
-        // those. The DSN carries no credentials (PDO takes those separately);
-        // the TLS parameters above are transport policy and a public file
-        // path, so that stays true.
+        // Identity of the connection for shared shapes. The DSN holds no credentials: PDO receives them separately.
         $db->connectionDsn = $dsn;
 
-        // Set client encoding for the connection. The value is interpolated, which
-        // is only safe because DatabaseConfig validates charset against
-        // ^[a-zA-Z0-9_]+$ in BOTH its constructor and fromArray(); nothing here
-        // re-checks it.
-        //
-        // The failure is swallowed, and that is a deliberate trade-off rather than
-        // a claim that it cannot fail: the realistic causes are a charset name the
-        // server does not know, and a connection that died between connect and this
-        // statement. Raising here would turn a connection that works on the server
-        // default encoding into a hard boot failure for every application that
-        // vendors this framework, so the connection is returned either way.
+        // $config->charset is interpolated: DatabaseConfig validates it against ^[a-zA-Z0-9_]+$ on construction.
+        // A failure is ignored, so a server that lacks the charset still yields a working connection.
         try {
             $db->query(sprintf("SET client_encoding TO '%s'", $config->charset));
         } catch (DatabaseException) {
@@ -901,20 +738,15 @@ final class Database
     }
 
     /**
-     * Run $work inside a database transaction and return its result.
+     * Runs $work in a transaction and returns its result: commits when $work returns, rolls back and rethrows when it throws.
      *
-     * Commits if $work returns, rolls back and rethrows if it throws. A call
-     * made while a transaction is already open runs in a savepoint instead, so
-     * its failure undoes only its own writes and the enclosing transaction can
-     * carry on. A rollback that fails in turn never replaces the error that
-     * caused it. When $work catches a failed query() and the server has aborted
-     * the transaction (PostgreSQL), the commit or release is refused rather than
-     * reported as done: let the exception propagate, or catch it around a nested
-     * transaction(). A statement run through pdo() is not tracked here: see pdo().
+     * Inside an open transaction, $work runs in a savepoint, so its failure undoes only its own writes.
+     * A failed query() that $work caught leaves the server aborted (PostgreSQL): the commit or release is refused
+     * with SQLSTATE 25P02 rather than reported as done. A statement run through pdo() is not tracked.
      *
      * @throws DatabaseException when the database fails to begin, commit, or set or release a savepoint,
-     *         or with SQLSTATE 25P02 when $work caught a failure that aborted the transaction. Its
-     *         message carries the stage and the SQLSTATE only; the driver text is on driverMessage().
+     *         or with SQLSTATE 25P02 as described above. Its message carries the stage and the SQLSTATE only;
+     *         the driver text is on driverMessage().
      * @template T
      * @param callable(Database): T $work
      * @return T
@@ -960,9 +792,8 @@ final class Database
     }
 
     /**
-     * Return the last generated id of the session. Refused on PostgreSQL, where it can name another table's
-     * sequence: use insertGetId() with INSERT ... RETURNING id. On SQLite the value is stale after an insert that
-     * wrote no row (e.g. ON CONFLICT DO NOTHING), so prefer insertGetId() there too.
+     * Returns the last generated id of the session. Refused on PostgreSQL, where it can name another table's
+     * sequence: use insertGetId() with INSERT ... RETURNING id. Stale on SQLite after an insert that wrote no row.
      *
      * @throws DatabaseException on PostgreSQL, or when the driver cannot report the id.
      */
@@ -999,10 +830,8 @@ final class Database
     }
 
     /**
-     * Report whether the underlying connection currently has an active transaction.
-     *
-     * A transaction() callable may commit or roll back on its own, so an earlier
-     * answer is never reusable.
+     * Reports whether the connection has an active transaction. Never cache the answer:
+     * a transaction() callable may commit or roll back on its own.
      *
      * @phpstan-impure
      */
@@ -1012,11 +841,10 @@ final class Database
     }
 
     /**
-     * Expose the underlying PDO for advanced callers (e.g. schema migrations).
-     * Prefer the typed helpers for normal query work.
+     * Exposes the underlying PDO for advanced callers (for example schema migrations). Prefer the typed helpers.
      *
-     * A statement run through this PDO inside transaction() is not tracked: if it fails on PostgreSQL
-     * and the exception is caught, the COMMIT silently becomes a ROLLBACK. Let the exception escape.
+     * A statement run through it inside transaction() is not tracked: if it fails and the exception is caught,
+     * PostgreSQL turns the COMMIT into a silent ROLLBACK. Let the exception escape.
      */
     public function pdo(): PDO
     {
@@ -1024,10 +852,8 @@ final class Database
     }
 
     /**
-     * Resolve each parameter to its placeholder, value and PDO type, refusing
-     * what has no SQL form before anything reaches the driver.
-     * PDOStatement::execute() binds everything as a string instead, which
-     * PostgreSQL rejects for false on a boolean and misreads for bytes on a bytea.
+     * Resolves each parameter to its placeholder, PDO value and type, refusing values with no SQL form before the driver sees them.
+     * Binding everything as a string would make PostgreSQL reject false on a boolean and misread bytes on a bytea.
      *
      * @param array<int|string, mixed> $params list keys for ? placeholders, names (with or without the colon) for named ones
      * @return list<array{int|string, mixed, int}>
@@ -1138,8 +964,7 @@ final class Database
     }
 
     /**
-     * The shortest text that reads back as the same double, whatever the
-     * precision and locale settings, spelled the way PostgreSQL reads it.
+     * The shortest text that reads back as the same double, independent of precision and locale, spelled as PostgreSQL reads it.
      */
     private static function floatLiteral(float $value): string
     {
@@ -1251,9 +1076,8 @@ final class Database
     }
 
     /**
-     * Return why the transaction can no longer run statements, or null when the
-     * probe succeeds. The caller may have repaired a failure with its own savepoint,
-     * and SQLite never aborts, so a recorded failure alone does not decide it.
+     * Returns why the transaction can no longer run statements, or null when the probe succeeds. A recorded
+     * failure alone does not decide it: the caller may have repaired it with its own savepoint, and SQLite never aborts.
      */
     private function probeFailure(string $stage): ?DatabaseException
     {
@@ -1278,29 +1102,17 @@ final class Database
     }
 
     /**
-     * Build a column-name → converter map for columns whose types have
-     * registered converters.
+     * Builds the column-name => converter map for columns whose native type has a converter.
      *
-     * Two caches back this, in order:
+     * Per-instance memo first, then the process-wide shape cache, which skips getColumnMeta() on a hit while
+     * still rebuilding the callables from this instance's converters.
      *
-     *   1. The per-instance memo of the finished callable map, which costs a
-     *      single array lookup on a hit.
-     *   2. The process-wide shape cache, which on a hit skips every
-     *      getColumnMeta() call (and the PostgreSQL backend round-trips they
-     *      trigger) while still rebuilding the callable map from THIS
-     *      instance's converters.
-     *
-     * Both are transparent: a fixed SQL statement yields the same column layout
-     * for the connection lifetime, so a cached resolution is identical to a
-     * fresh one.
-     *
-     * @return array<string, callable(string): mixed> column name → converter
+     * @return array<string, callable(string): mixed> column name => converter
      */
     private function resolveColumnTypes(string $sql, PDOStatement $stmt): array
     {
-        // columnCount() reads PQnfields off the already-fetched result: client
-        // side, zero round-trips. It is part of both keys so that adding or
-        // dropping a column on a SELECT * self-invalidates.
+        // columnCount() is client side, zero round-trips. It is part of both keys, so adding or dropping
+        // a SELECT * column self-invalidates.
         $columnCount = $stmt->columnCount();
         $localKey = $sql . '|' . $columnCount;
 
@@ -1315,9 +1127,7 @@ final class Database
         if ($shared) {
             $shape = self::$sharedColumnMetadata[$sharedKey] ?? null;
 
-            // The width is in the key already; re-checking it here costs one
-            // integer compare and denies a hash collision any chance of serving
-            // a shape of the wrong width.
+            // The width is already in the key; this compare stops a hash collision from serving a shape of the wrong width.
             if ($shape !== null && $shape['count'] !== $columnCount) {
                 $shape = null;
             }
@@ -1325,8 +1135,7 @@ final class Database
             if ($shape === null) {
                 $shape = self::fetchColumnShapeFromApcu($sharedKey, $columnCount);
 
-                // An APCu hit warms the static, so nothing else in this process
-                // pays even the shared-memory lookup again.
+                // An APCu hit warms the static, so the shared-memory lookup happens once per process.
                 if ($shape !== null) {
                     self::rememberColumnShape($sharedKey, $shape);
                 }
@@ -1357,19 +1166,11 @@ final class Database
     }
 
     /**
-     * Read the column layout off an executed statement: the statement width
-     * plus a column name → native type name map.
+     * Reads the column layout off an executed statement: the width plus a column name => native type map.
      *
-     * This is the only place getColumnMeta() is called, and it deliberately
-     * records EVERY column rather than only the ones the calling instance has
-     * a converter for. A shape narrowed by one registry would be wrong for any
-     * other instance reading it back: a converter registered only by the second
-     * instance would silently never fire, because the column it targets was
-     * dropped from the shape before it was cached.
-     *
-     * Recording every column also settles duplicate result column names the way
-     * the fetched row does. PDO::FETCH_OBJ keeps the LAST such column's value,
-     * so the last one's type is the one that applies here too.
+     * Records every column, not only those this instance has a converter for: a shape narrowed by one
+     * registry would hide a converter registered by another instance. Duplicate names keep the last
+     * column's type, as the fetched row keeps the last value (PDO::FETCH_OBJ).
      *
      * @return array{count: int, types: array<string, string>}
      */
@@ -1390,8 +1191,7 @@ final class Database
     }
 
     /**
-     * Record a shape in the process static, resetting the store wholesale if
-     * it has reached its ceiling.
+     * Records a shape in the process static, clearing the store first if it has reached its ceiling.
      *
      * @param array{count: int, types: array<string, string>} $shape
      */
@@ -1405,19 +1205,11 @@ final class Database
     }
 
     /**
-     * Read a shape back from APCu, or null when there is nothing trustworthy
-     * to read.
+     * Reads a shape back from APCu, or returns null when nothing trustworthy is stored.
      *
-     * This is the layer that makes the cache worth having on a request-per-
-     * process SAPI. PHP destroys every static at request shutdown while the
-     * persistent PDO handle survives, so without shared memory the very first
-     * query of every request re-asks PostgreSQL for metadata it already
-     * answered on that same connection.
-     *
-     * Every failure path returns null, which means "resolve it properly", not
-     * "there are no conversions". Handing back a half-understood entry would
-     * silently skip a JSONB decode or a NUMERIC passthrough, and a wrong value
-     * is far worse than a slow query.
+     * This layer carries a shape across requests: PHP clears every static at request shutdown while the
+     * persistent PDO handle survives. Every failure returns null, meaning "resolve it again", never
+     * "no conversions": a silently skipped JSONB decode is worse than a slow query.
      *
      * @return array{count: int, types: array<string, string>}|null
      */
@@ -1431,9 +1223,7 @@ final class Database
         /** @var mixed $cached */
         $cached = apcu_fetch(self::APCU_KEY_PREFIX . $key, $success);
 
-        // The out-param decides, not a comparison against false: false is a
-        // perfectly legitimate cached value, and conflating the two is how a
-        // cache starts reporting hits as misses.
+        // The out-param decides: false is a legitimate cached value.
         if (!$success) {
             return null;
         }
@@ -1457,12 +1247,7 @@ final class Database
     }
 
     /**
-     * Publish a shape to APCu, best effort.
-     *
-     * A full, disabled or racing APCu simply means the next process resolves
-     * the shape itself, so the return value is deliberately ignored and APCu
-     * needs no size ceiling of its own: its own expunge handles pressure, and
-     * the entries are a few hundred bytes each.
+     * Publishes a shape to APCu, best effort: a full or disabled APCu just means the next process resolves it.
      *
      * @param array{count: int, types: array<string, string>} $shape
      */
@@ -1476,13 +1261,8 @@ final class Database
     }
 
     /**
-     * Whether APCu can be used right now.
-     *
-     * Checked on the cold path only (a per-instance memo miss), so the cost
-     * never lands on a repeated query. Note that apc.enable_cli defaults to
-     * off, so CLI and worker processes usually get nothing here: that is fine,
-     * because a long-running process is served by the static, which for it
-     * lives as long as the process does.
+     * Whether APCu can be used right now. Checked on the cold path only. apc.enable_cli is off by default,
+     * so CLI and worker processes rely on the static instead.
      */
     private static function apcuUsable(): bool
     {
@@ -1504,8 +1284,7 @@ final class Database
     }
 
     /**
-     * Register built-in PostgreSQL type conversions (int, float, bool, JSON,
-     * arrays) matching v1 DatabaseStatement auto-coercion behavior.
+     * Registers the built-in PostgreSQL type conversions (int, float, bool, JSON).
      */
     private function registerBuiltinTypeConversions(): void
     {
@@ -1518,8 +1297,6 @@ final class Database
         $this->typeConversions['JSONB'] = $jsonDecoder;
         $this->typeConversions['JSON'] = $jsonDecoder;
 
-        // PostgreSQL array types (e.g. _int4, _text) → PHP arrays.
-        // These are handled dynamically in resolveColumnTypes() via
-        // the underscore prefix check, not registered statically.
+        // Array types (_int4, _text) are resolved in resolveColumnTypes(), not registered here.
     }
 }
