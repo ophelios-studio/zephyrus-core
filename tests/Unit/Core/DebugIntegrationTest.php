@@ -281,6 +281,58 @@ final class DebugIntegrationTest extends TestCase
         self::assertFalse(str_contains($html, $email), 'The bluescreen rendered the mailer transport message.');
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function traceArgumentExceptionProvider(): iterable
+    {
+        yield 'application exception with a property' => ['application'];
+        yield 'database exception' => ['database'];
+        yield 'error subclass with a property' => ['error'];
+    }
+
+    #[DataProvider('traceArgumentExceptionProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBlueScreenMasksASecretPassedAsATraceArgument(string $case): void
+    {
+        ini_set('zend.exception_ignore_args', '0');
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+
+        try {
+            self::failAuthentication($secret, $case);
+        } catch (\Throwable $exception) {
+            $html = self::blueScreenHtml($exception);
+        }
+
+        self::assertSame('0', ini_get('zend.exception_ignore_args'), 'Control: the trace must carry argument values.');
+        self::assertTrue(str_contains($html, 'failAuthentication'), 'Control: the bluescreen must render the failing frame.');
+        self::assertStringNotContainsString($secret, $html, 'The bluescreen rendered a secret passed as a trace argument.');
+    }
+
+    private static function failAuthentication(string $password, string $case): never
+    {
+        throw match ($case) {
+            'application' => new AuthenticationFailure('login refused', 'jane'),
+            'database' => DatabaseException::queryExecutionFailed('select 1', new \PDOException('driver refused')),
+            default => new AuthenticationError('login refused', 'jane'),
+        };
+    }
+
+    private static function blueScreenHtml(\Throwable $exception): string
+    {
+        $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . bin2hex(random_bytes(8)) . '.html';
+
+        try {
+            Debugger::getBlueScreen()->renderToFile($exception, $file);
+
+            return (string) file_get_contents($file);
+        } finally {
+            @unlink($file);
+        }
+    }
+
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function testBlueScreenKeepsScalarValuesOfPatternKeysVisible(): void
@@ -690,5 +742,21 @@ final class DebugIntegrationTest extends TestCase
     private function throwWithConfig(array $config): never
     {
         throw new \RuntimeException('boom');
+    }
+}
+
+final class AuthenticationFailure extends \RuntimeException
+{
+    public function __construct(string $message, public readonly string $login)
+    {
+        parent::__construct($message);
+    }
+}
+
+final class AuthenticationError extends \Error
+{
+    public function __construct(string $message, public readonly string $login)
+    {
+        parent::__construct($message);
     }
 }
