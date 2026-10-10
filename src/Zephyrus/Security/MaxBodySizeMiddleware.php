@@ -15,40 +15,19 @@ use function strlen;
 use function trim;
 
 /**
- * Refuses a request whose body exceeds a byte budget, with 413.
+ * Refuses, with a 413 JSON response, a request whose body exceeds a byte budget.
  *
- * ## Why this class exists
- *
- * `security.maxBodySize` has been a parsed, type-validated, range-checked and
- * unit-tested configuration key with NO CONSUMER ANYWHERE. An application could
- * declare a 2 MB limit and post 5 MB, because there was not even a middleware
- * to wire by hand. Deleting a documented key is a breaking change for five
- * production applications, so the key keeps its meaning and this is the thing
- * that gives it one.
- *
- * ## It is OPT-IN, and deliberately so
- *
- * Nothing registers it for you. A framework that started registering
- * middlewares off a config file would hand an application that already
- * registers its own a SECOND copy of it, which is a worse outage than the
- * silence it replaces. ApplicationBuilder::build() therefore refuses to boot
- * when the key is declared and this middleware is absent, and says so; it never
- * registers anything itself.
+ * Opt-in by design: a registration driven by config would duplicate the copy an application
+ * already adds. ApplicationBuilder::build() refuses to boot when security.maxBodySize is positive,
+ * this middleware is not registered as a global middleware, and the key is not acknowledged with
+ * withAcknowledgedSecurityKeys(['maxBodySize']).
  *
  *   $builder->withMiddleware(new MaxBodySizeMiddleware($config->security->maxBodySize));
  *
- * ## What it measures
- *
- * Content-Length when the request declares one, because that is the only figure
- * available for a multipart upload: PHP has already drained the body into
- * $_FILES by the time any middleware runs, so php://input is empty and the raw
- * body measures zero. When no Content-Length is present the raw body is
- * measured directly.
- *
- * This is a BUDGET, not a defence against a caller who lies about the length
- * and streams more. The web server's own limit (client_max_body_size,
- * LimitRequestBody) is the one that stops the bytes arriving; PHP's
- * post_max_size is the one that stops them being parsed. Set those too.
+ * The measure is a valid declared Content-Length, otherwise the raw body. Multipart uploads are
+ * already parsed into $_FILES, so their raw body is empty and only Content-Length counts.
+ * This is a budget, not a defence: a client that lies about its length is stopped by the web
+ * server limit (client_max_body_size, LimitRequestBody) and by post_max_size, which must be set too.
  */
 final class MaxBodySizeMiddleware implements MiddlewareInterface
 {
@@ -83,10 +62,7 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
         return $next($request);
     }
 
-    /**
-     * The size to judge, or null when the request declares none and carries no
-     * raw body to measure.
-     */
+    /** Null when there is neither a valid declared length nor a raw body. */
     private function bodySize(Request $request): ?int
     {
         $declared = $request->headers()->get('content-length');

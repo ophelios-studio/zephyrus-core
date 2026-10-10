@@ -9,23 +9,15 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
 /**
- * Middleware that injects HTTP security response headers on every response.
+ * Sets the configured security headers on every response that does not already carry them with a
+ * non-blank value; a blank value set by a route does not opt out.
  *
- * Behaviour:
- *   - Calls $next to obtain the inner response first.
- *   - Sets each configured security header the inner response does not already
- *     carry with a non-blank value. The configured value is a default: a route's
- *     own value wins, even a stricter or a looser one (a stricter Referrer-Policy
- *     on a page carrying a one-time token, for example).
- *   - A route's Content-Security-Policy replaces the configured policy whole, it
- *     is not merged with it.
- *   - Headers with an empty string value in the config are skipped (not emitted).
- *   - Strict-Transport-Security is only emitted on HTTPS requests (see isSecure()).
+ * A header set by the inner response wins, including a looser one. A route's Content-Security-Policy
+ * replaces the configured policy whole, it is not merged. Empty config values are not emitted.
+ * Strict-Transport-Security is only sent on HTTPS requests.
  *
- * Usage:
- *
- *   $config = SecureHeadersConfig::defaults();          // sensible defaults
- *   // — or —
+ *   $config = SecureHeadersConfig::defaults();
+ *   // or, with explicit values:
  *   $config = SecureHeadersConfig::fromArray([
  *       'hsts_max_age'             => 31_536_000,
  *       'hsts_include_subdomains'  => true,
@@ -97,33 +89,8 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Whether the request arrived over HTTPS, asked in a way a parse failure
-     * cannot answer wrongly.
-     *
-     * ## The root cause is now fixed
-     *
-     * uri()->isSecure() alone used not to be enough. Uri::__construct fell back
-     * to "http" and "localhost" when parse_url() returned false, and it did so
-     * silently, so any malformed authority collapsed the whole URI and made an
-     * HTTPS request look like a plain one. HSTS was dropped from a response that
-     * had every reason to carry it, with nothing logged and nothing thrown.
-     * Request::fromGlobals composes the URL as scheme . "://" . host . target
-     * with host taken from the Host header, so an attacker-chosen Host such as
-     * "example.com:port" was enough to defeat the parse on a real HTTPS request.
-     *
-     * Uri::decompose() now preserves the scheme it was actually given instead of
-     * inventing one, so uri()->isSecure() answers this correctly on its own.
-     *
-     * ## Why the raw-string check STAYS anyway
-     *
-     * It is redundant by construction today, and it is kept deliberately. It
-     * costs one string comparison; it can only ever ADD the header, never remove
-     * it, and an over-emitted HSTS is inert because browsers honour it only over
-     * TLS; and the thing it protects, an omitted security header, fails
-     * SILENTLY, which is the failure mode worth paying a byte to avoid. Deleting
-     * it would leave this middleware's most important guarantee resting entirely
-     * on a parsing detail in another class, with no local evidence that it
-     * holds.
+     * Whether the request is HTTPS. The raw "https://" prefix is checked too, so a malformed Host
+     * cannot drop HSTS silently; an extra HSTS header is harmless, browsers only honour it over TLS.
      */
     private static function isSecure(Request $request): bool
     {

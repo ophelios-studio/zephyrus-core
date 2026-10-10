@@ -11,20 +11,14 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
 /**
- * Middleware that appends a Content Security Policy header on responses.
+ * Appends a Content-Security-Policy header to responses that do not already carry one with a non-blank value.
  *
- * - Accepts either a prebuilt ContentSecurityPolicy object or a raw header string.
- * - Skips header emission when the policy resolves to an empty string.
- * - Supports report-only mode via Content-Security-Policy-Report-Only.
- * - Optionally mints a per-request nonce, see below. Off by default.
+ * Accepts a ContentSecurityPolicy object or a raw string, and sends nothing when the policy is
+ * blank. Report-only mode uses Content-Security-Policy-Report-Only.
  *
- * ## Per-request nonce (opt in)
- *
- * A single inline <script> is enough to force a project to drop script-src
- * entirely, which throws away the one directive that actually mitigates XSS.
- * A nonce keeps that inline block working while script-src stays strict.
- *
- * Pass the directives that should receive the nonce:
+ * Nonces are opt-in per directive. A nonce is 16 CSPRNG bytes, base64 encoded, regenerated for
+ * every request and never reused across requests. The policy is rebuilt per request from the
+ * immutable template, so the header always carries that request's nonce.
  *
  *   $policy = ContentSecurityPolicy::create()
  *       ->withDirective('default-src', "'self'")
@@ -34,45 +28,15 @@ use Zephyrus\Http\Response;
  *       ->withMiddleware(new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']))
  *       ->build();
  *
- * In a template, emit it on the inline block:
+ * Template: <script nonce="{nonce()}">...</script>
  *
- *   <script nonce="{nonce()}">...</script>
+ * A nonce or hash makes browsers ignore 'unsafe-inline' in the same directive, which would silently
+ * stop inline scripts. Debug mode warns about that combination for a ContentSecurityPolicy object only,
+ * and the policy is never rewritten.
  *
- * The nonce is minted before the request reaches the handler, so the value the
- * template reads through nonce() is the value that ends up in the header. It is
- * 16 CSPRNG bytes, base64 encoded, regenerated for every request and never
- * reused across responses.
- *
- * ## The 'unsafe-inline' trap
- *
- * Under CSP Level 2 and later, a nonce in a directive makes browsers IGNORE
- * 'unsafe-inline' in that same directive. So adding a nonce to a script-src of
- * "'self' 'unsafe-inline'" does not loosen anything, it silently stops every
- * inline script in the project from running. That is why this is opt in per
- * directive and never automatic: enabling it is a decision about the
- * application's own markup, not something a framework can infer.
- *
- * When debug is on, 'unsafe-inline' next to a nonce, or next to a hash in the
- * same directive, raises an E_USER_WARNING naming the directive. Matching is
- * case-insensitive, as browsers match keywords and hash algorithms. Only a
- * ContentSecurityPolicy object is inspected: a raw string policy is sent as
- * written. The policy is never rewritten: silently editing a security policy
- * would be worse than the warning.
- *
- * ## Ordering against SecureHeadersMiddleware
- *
- * SecureHeadersMiddleware also emits Content-Security-Policy when its config
- * carries a csp value. Both middlewares leave a header the response already
- * carries alone, and the response unwinds from the innermost middleware (the
- * one registered LAST) outwards, so the innermost writer wins.
- *
- * Register this middleware AFTER SecureHeadersMiddleware, or leave
- * SecureHeadersConfig::csp empty. Registered BEFORE it, this middleware is the
- * outer one, so SecureHeadersMiddleware's csp, written first from the inside,
- * reaches the client: the policy built here, nonce included, silently
- * disappears and the inline scripts relying on that nonce stop running. Only
- * one of the two should own the CSP header. KernelBuilder::build() refuses
- * this order among global middlewares when the csp is set.
+ * Register this middleware AFTER SecureHeadersMiddleware, or leave its csp empty: the innermost
+ * middleware writes the header first and wins, and KernelBuilder::build() refuses the reverse order
+ * among global middlewares when the csp is set.
  */
 final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterface
 {
@@ -128,8 +92,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         }
 
         if ($this->nonceDirectives === [] || $this->nonceTemplate === null) {
-            // Unchanged path: no nonce is minted and the header is byte for
-            // byte what it was before nonce support existed.
+            // No nonce: the static policy is sent as configured.
             /** @var Response $response */
             $response = $next($request);
 
@@ -140,8 +103,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
             return $response->withHeader($this->headerName(), $this->policy);
         }
 
-        // Mint BEFORE the handler runs, so the template reads the same value
-        // that this response's header will carry.
+        // Minted before the handler, so nonce() in the template matches the header.
         App::resetNonce();
         $nonce = App::nonce();
 
@@ -167,12 +129,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         return $response->withHeader($this->headerName(), $headerValue);
     }
 
-    /**
-     * Debug only. The header was already on the response when this middleware
-     * ran. Causes: SecureHeadersMiddleware registered after this middleware, whose
-     * csp it then sees, a route setting the header itself, or a stack built
-     * without KernelBuilder, which cannot refuse that order.
-     */
+    /** Debug only: a header already on the response wins, so the nonce policy is not sent. */
     private function warnNoncePolicyNotApplied(): void
     {
         if (!self::isDebug()) {
@@ -198,13 +155,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         return $configuration !== null && $configuration->application->debug;
     }
 
-    /**
-     * Warn, in debug only, about 'unsafe-inline' in a directive that a nonce or
-     * a hash also covers. Browsers ignore 'unsafe-inline' once either is
-     * present, so the keyword looks harmless today and silently activates the
-     * day the nonce or hash is removed. A nonce being added makes it worse: the
-     * inline scripts stop running right away.
-     */
+    /** Debug only: warns about 'unsafe-inline' beside a nonce or hash in the same directive. */
     private function warnOnUnsafeInline(ContentSecurityPolicy $policy): void
     {
         if (!self::isDebug()) {

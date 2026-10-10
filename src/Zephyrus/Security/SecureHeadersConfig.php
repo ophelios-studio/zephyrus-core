@@ -8,26 +8,19 @@ use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigurationException;
 
 /**
- * Immutable configuration for HTTP security response headers.
+ * Immutable configuration for the HTTP security response headers.
  *
- * Each property maps directly to one HTTP response header. An empty string
- * value means that header will NOT be emitted, allowing callers to disable
- * individual headers without subclassing or hacking around the middleware.
+ * Each property is one response header. An empty string means the header is not emitted.
+ * HSTS is enabled by hstsMaxAge > 0, and only sent on HTTPS requests.
  *
- * HSTS is handled separately: hstsMaxAge > 0 enables it; hstsIncludeSubdomains
- * controls the includeSubDomains directive. The middleware only emits HSTS on
- * HTTPS requests (it makes no sense on plain HTTP).
- *
- * Default values follow current OWASP guidance for new applications:
- *   - X-Frame-Options: SAMEORIGIN (clickjacking protection)
- *   - X-Content-Type-Options: nosniff (MIME-sniffing protection)
- *   - Referrer-Policy: strict-origin-when-cross-origin (privacy-safe default)
- *   - X-XSS-Protection: 0 (disables the legacy XSS Auditor — modern browsers
- *     use CSP instead; the auditor can itself be exploited)
- *   - HSTS: disabled (requires explicit opt-in with a real max-age)
- *   - Content-Security-Policy: empty — callers must provide a CSP appropriate
- *     for their application; there is no safe universal default
- *   - Permissions-Policy: empty — callers opt in per-feature
+ * Defaults:
+ *   - X-Frame-Options: SAMEORIGIN
+ *   - X-Content-Type-Options: nosniff
+ *   - Referrer-Policy: strict-origin-when-cross-origin
+ *   - X-XSS-Protection: 0 (the legacy auditor is off; it can be exploited)
+ *   - HSTS: disabled (max-age must be set explicitly)
+ *   - Content-Security-Policy: empty (no universal safe policy exists)
+ *   - Permissions-Policy: empty (opt in per feature)
  */
 final readonly class SecureHeadersConfig
 {
@@ -63,9 +56,9 @@ final readonly class SecureHeadersConfig
     }
 
     /**
-     * Build a SecureHeadersConfig from a plain key-value array.
+     * Builds the config from a key-value array, falling back to defaults() for missing keys.
      *
-     * Accepts camelCase and snake_case key variants; camelCase takes precedence.
+     * Each key takes its camelCase or snake_case spelling; camelCase wins when both are set.
      *
      * @param array<string, mixed> $values
      * @throws ConfigurationException when hstsIncludeSubdomains is not a recognisable boolean.
@@ -103,10 +96,7 @@ final readonly class SecureHeadersConfig
         );
     }
 
-    /**
-     * Return the fully-formed Strict-Transport-Security header value, or an
-     * empty string when HSTS is disabled (hstsMaxAge == 0).
-     */
+    /** The Strict-Transport-Security value, or an empty string when hstsMaxAge is 0 or less. */
     public function hstsHeaderValue(): string
     {
         if ($this->hstsMaxAge <= 0) {
