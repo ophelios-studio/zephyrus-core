@@ -9,10 +9,8 @@ use Zephyrus\Exceptions\ZephyrusException;
 /**
  * Thrown when PHP refuses a session operation or the session storage is misconfigured.
  *
- * The message names the possible causes and never the warning PHP raised, since
- * that warning carries absolute server paths. The warning is chained as the
- * previous exception, an ErrorException, so a logger recording the chain keeps
- * the cause.
+ * The message never includes PHP's warning, which carries absolute server paths; it is chained as the
+ * previous ErrorException, available through phpReason() for logging.
  */
 final class SessionException extends ZephyrusException
 {
