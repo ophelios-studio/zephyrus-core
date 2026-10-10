@@ -198,6 +198,10 @@ final class Container implements ContainerInterface
         $args = [];
 
         foreach ($constructor->getParameters() as $param) {
+            if ($param->isVariadic()) {
+                continue;
+            }
+
             $type = $param->getType();
 
             if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {

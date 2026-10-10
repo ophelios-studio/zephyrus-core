@@ -63,6 +63,39 @@ final class ProtectedConstructorService
     protected function __construct(public readonly SimpleService $dep) {}
 }
 
+final class ServiceWithScalarVariadic
+{
+    /** @var list<string> */
+    public readonly array $tags;
+
+    public function __construct(string ...$tags)
+    {
+        $this->tags = $tags;
+    }
+}
+
+final class ServiceWithClassVariadic
+{
+    /** @var list<SimpleService> */
+    public readonly array $services;
+
+    public function __construct(SimpleService ...$services)
+    {
+        $this->services = $services;
+    }
+}
+
+final class ServiceWithUntypedVariadic
+{
+    /** @var list<mixed> */
+    public readonly array $items;
+
+    public function __construct(...$items)
+    {
+        $this->items = $items;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -253,6 +286,9 @@ final class ContainerTest extends TestCase
         yield 'trailing backslash' => ['Vendor\\'];
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
     public static function idPhpRejectsBeforeAutoloaderProvider(): iterable
     {
         yield 'parent segment' => ['../x'];
@@ -311,6 +347,27 @@ final class ContainerTest extends TestCase
             self::assertStringContainsString('give $dsn a default value', $e->getMessage());
             self::assertStringNotContainsString('no type hint', $e->getMessage());
         }
+    }
+
+    public function testAutoWireResolvesScalarVariadicToNoArguments(): void
+    {
+        $svc = $this->container->get(ServiceWithScalarVariadic::class);
+        self::assertInstanceOf(ServiceWithScalarVariadic::class, $svc);
+        self::assertSame([], $svc->tags);
+    }
+
+    public function testAutoWireResolvesClassVariadicToNoArguments(): void
+    {
+        $svc = $this->container->get(ServiceWithClassVariadic::class);
+        self::assertInstanceOf(ServiceWithClassVariadic::class, $svc);
+        self::assertSame([], $svc->services);
+    }
+
+    public function testAutoWireResolvesUntypedVariadicToNoArguments(): void
+    {
+        $svc = $this->container->get(ServiceWithUntypedVariadic::class);
+        self::assertInstanceOf(ServiceWithUntypedVariadic::class, $svc);
+        self::assertSame([], $svc->items);
     }
 
     /**
