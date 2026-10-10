@@ -57,7 +57,7 @@ final class DatabaseTest extends TestCase
             },
         );
 
-        self::assertSame('pgsql:host=db.internal;port=5433;dbname=zephyrus', $captured['dsn']);
+        self::assertSame('pgsql:host=\'db.internal\';port=5433;dbname=\'zephyrus\'', $captured['dsn']);
         self::assertSame('app', $captured['username']);
         self::assertSame('secret', $captured['password']);
         self::assertArrayHasKey(PDO::ATTR_PERSISTENT, $captured['options']);
@@ -190,7 +190,7 @@ final class DatabaseTest extends TestCase
         self::assertNull($config->sslMode);
         self::assertNull($config->sslRootCert);
         self::assertSame(
-            'pgsql:host=db.internal;port=5433;dbname=zephyrus',
+            'pgsql:host=\'db.internal\';port=5433;dbname=\'zephyrus\'',
             $this->captureDsn($config),
         );
     }
@@ -206,7 +206,7 @@ final class DatabaseTest extends TestCase
         ]);
 
         self::assertSame(
-            'pgsql:host=localhost;port=5432;dbname=zephyrus',
+            'pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\'',
             $this->captureDsn($config),
         );
     }
@@ -221,7 +221,7 @@ final class DatabaseTest extends TestCase
             ]);
 
             self::assertSame(
-                'pgsql:host=localhost;port=5432;dbname=zephyrus;sslmode=' . $mode,
+                'pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\';sslmode=' . $mode,
                 $this->captureDsn($config),
                 sprintf('sslmode=%s must reach the DSN verbatim', $mode),
             );
@@ -237,7 +237,7 @@ final class DatabaseTest extends TestCase
         ]);
 
         self::assertSame(
-            'pgsql:host=localhost;port=5432;dbname=zephyrus;sslmode=verify-full',
+            'pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\';sslmode=verify-full',
             $this->captureDsn($without),
         );
 
@@ -249,8 +249,8 @@ final class DatabaseTest extends TestCase
         ]);
 
         self::assertSame(
-            'pgsql:host=localhost;port=5432;dbname=zephyrus'
-                . ';sslmode=verify-full;sslrootcert=/etc/ssl/certs/pg-root.crt',
+            'pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\''
+                . ';sslmode=verify-full;sslrootcert=\'/etc/ssl/certs/pg-root.crt\'',
             $this->captureDsn($with),
         );
     }
@@ -265,7 +265,24 @@ final class DatabaseTest extends TestCase
         ]);
 
         self::assertSame(
-            'pgsql:host=localhost;port=5432;dbname=zephyrus;sslrootcert=system',
+            'pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\';sslrootcert=\'system\'',
+            $this->captureDsn($config),
+        );
+    }
+
+
+    public function testFromConfigQuotesHostDatabaseAndCertificatePath(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'host' => '::1',
+            'database' => 'café',
+            'username' => 'app',
+            'sslmode' => 'verify-full',
+            'sslrootcert' => '/etc/ssl/my-root.crt',
+        ]);
+
+        self::assertSame(
+            "pgsql:host='::1';port=5432;dbname='café';sslmode=verify-full;sslrootcert='/etc/ssl/my-root.crt'",
             $this->captureDsn($config),
         );
     }
@@ -312,7 +329,7 @@ final class DatabaseTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Database connection failed for DSN [pgsql:host=localhost;port=5432;dbname=zephyrus]: factory boom');
+        $this->expectExceptionMessage('Database connection failed for DSN [pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\']: factory boom');
 
         Database::fromConfig(
             $config,
@@ -330,7 +347,7 @@ final class DatabaseTest extends TestCase
         ]);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Database connection failed for DSN [pgsql:host=localhost;port=5432;dbname=zephyrus]: pdo boom');
+        $this->expectExceptionMessage('Database connection failed for DSN [pgsql:host=\'localhost\';port=5432;dbname=\'zephyrus\']: pdo boom');
 
         Database::fromConfig(
             $config,

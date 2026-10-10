@@ -180,8 +180,9 @@ final class Database
      */
     public static function fromConfig(DatabaseConfig $config, ?callable $pdoFactory = null): self
     {
+        // DatabaseConfig refuses quotes and backslashes in these values, so quoting needs no escaping.
         $dsn = sprintf(
-            'pgsql:host=%s;port=%d;dbname=%s',
+            "pgsql:host='%s';port=%d;dbname='%s'",
             $config->host,
             $config->port,
             $config->database,
@@ -189,7 +190,6 @@ final class Database
 
         // Opt-in: libpq already negotiates TLS ('prefer' by default). A pinned mode makes it refuse what it
         // would otherwise accept unencrypted. The DSN is part of the shape cache key: changing it orphans APCu entries.
-        // DatabaseConfig validates sslMode and sslRootCert before they reach the DSN.
         if ($config->sslMode !== null) {
             $dsn .= ';sslmode=' . $config->sslMode;
         }
@@ -197,7 +197,7 @@ final class Database
         // Appended whenever set, whatever the mode: libpq ignores it under a non-verifying mode, and under a
         // verifying mode without one it falls back to its own default store.
         if ($config->sslRootCert !== null) {
-            $dsn .= ';sslrootcert=' . $config->sslRootCert;
+            $dsn .= ";sslrootcert='" . $config->sslRootCert . "'";
         }
 
         $options = [
