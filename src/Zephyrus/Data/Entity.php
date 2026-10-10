@@ -13,55 +13,25 @@ use stdClass;
 use ValueError;
 
 /**
- * Abstract base for domain entities hydrated from database rows.
+ * Base class for domain entities hydrated from database rows.
  *
- * Provides reflection-based hydration from stdClass rows with automatic
- * type coercion, nested entity support, and enum handling.
- *
- * Example:
- *
- *   class User extends Entity {
- *       public int $id;
- *       public string $name;
- *       public string $email;
- *       public UserRole $role;        // Backed enum
- *       public ?UserProfile $profile; // Nested entity
- *       #[JsonIgnore]
- *       public string $password_hash;
- *   }
- *
- *   $user = User::build($row);           // Single row
- *   $users = User::buildArray($rows);    // Array of rows
- *   $json = json_encode($user);          // Excludes password_hash
- *
- * Two behaviours worth knowing:
- *   - A row column named `rawData` is RESERVED and never hydrated; see
- *     self::RESERVED_PROPERTY.
- *   - jsonSerialize() omits any property the row did not assign, so a partial
- *     SELECT yields a partial payload instead of an error.
+ * A row column named `rawData` is never hydrated (see self::RESERVED_PROPERTY).
+ * jsonSerialize() omits the properties the row did not assign.
  */
 abstract class Entity implements JsonSerializable
 {
     /**
-     * Column name this base class cannot hydrate, because it is the name of its own
-     * private slot below. A subclass that declares a public $rawData shadows that
-     * slot, so an assignment made from THIS scope lands on the private
-     * `?stdClass` and raises a TypeError. The column is skipped instead.
+     * Column name reserved for the private $rawData slot below. A subclass declaring a
+     * public $rawData would shadow that slot, so the column is skipped.
      */
     private const RESERVED_PROPERTY = 'rawData';
 
     private ?stdClass $rawData = null;
 
     /**
-     * Hydrate an entity instance from a database row (stdClass).
+     * Hydrate an entity from a database row, coercing values to the declared property types.
      *
-     * Performs reflection-based type coercion:
-     *   - Built-in types (int, string, float, bool): settype()
-     *   - Backed enums: Enum::from($value)
-     *   - Nested entities (subclasses of Entity): recursive build()
-     *   - stdClass properties: assigned directly
-     *   - Union and intersection types: skipped (not resolvable)
-     *   - Null values: assigned as-is
+     * Private and static properties, and union or intersection types, are not hydrated.
      *
      * @return static|null Returns null when $row is null.
      */
@@ -80,16 +50,8 @@ abstract class Entity implements JsonSerializable
                 continue;
             }
 
-            // hasProperty(), not property_exists(). property_exists() answers from
-            // the CALLING scope, which is this class, so it reported true for two
-            // kinds of property this method cannot actually write:
-            //   - the private $rawData slot declared here, which getProperty() on
-            //     the subclass reflection then could not address (ReflectionException);
-            //   - a private property declared ON the subclass, whose assignment
-            //     raised "Cannot access private property".
-            // hasProperty() answers from the subclass reflection, and the isPrivate()
-            // guard drops the second case. Protected properties stay hydrated: they
-            // ARE writable from this scope, and were before.
+            // Subclass reflection, not property_exists(): the latter also reports this
+            // class's private slots, which cannot be written from here.
             if (!$reflection->hasProperty($name)) {
                 continue;
             }
@@ -101,26 +63,16 @@ abstract class Entity implements JsonSerializable
 
             $reflectionType = $property->getType();
 
-            // Skip composite types: a union does not say which member to use,
-            // and an intersection cannot be satisfied by a database value at
-            // all. The test is a POSITIVE one against ReflectionNamedType
-            // rather than a list of the composite classes, because enumerating
-            // the exclusions is what let ReflectionIntersectionType through
-            // here in the first place: it reached isBuiltin() below, which it
-            // does not declare, and hydration died with "Call to undefined
-            // method". A fourth ReflectionType added by a future PHP release
-            // is skipped by this shape instead of reopening the same hole.
+            // Positive check on ReflectionNamedType: any future composite type is skipped too.
             if ($reflectionType !== null && !$reflectionType instanceof ReflectionNamedType) {
                 continue;
             }
 
-            // Null values are assigned directly.
             if ($value === null) {
                 $instance->$name = null;
                 continue;
             }
 
-            // No type hint — assign directly.
             if ($reflectionType === null) {
                 $instance->$name = $value;
                 continue;
@@ -139,10 +91,7 @@ abstract class Entity implements JsonSerializable
                     try {
                         $instance->$name = $className::from($value);
                     } catch (ValueError) {
-                        // The offending value is a DATABASE VALUE and is deliberately
-                        // NOT interpolated here: this message reaches logs and debug
-                        // error pages, and the column that failed plus the enum that
-                        // rejected it are enough to diagnose the mismatch.
+                        // The database value is not interpolated: the message reaches logs and error pages.
                         throw new InvalidArgumentException(
                             "Invalid value for enum {$className} on property \${$name}"
                         );
@@ -159,7 +108,7 @@ abstract class Entity implements JsonSerializable
     }
 
     /**
-     * Hydrate an array of database rows into entity instances.
+     * Hydrate an array of database rows into entities.
      *
      * @param stdClass[] $rows
      * @return static[]
@@ -170,7 +119,7 @@ abstract class Entity implements JsonSerializable
     }
 
     /**
-     * Return the original stdClass row used to build this entity.
+     * Return the stdClass row this entity was built from.
      */
     public function getRawData(): ?stdClass
     {
@@ -178,8 +127,7 @@ abstract class Entity implements JsonSerializable
     }
 
     /**
-     * Serialize public properties to an associative array, excluding
-     * any properties marked with #[JsonIgnore].
+     * Return the public properties as an array, excluding those marked #[JsonIgnore].
      *
      * @return array<string, mixed>
      */
@@ -194,10 +142,7 @@ abstract class Entity implements JsonSerializable
                 continue;
             }
 
-            // build() only assigns the properties present in the row, so a partial
-            // SELECT leaves the rest uninitialized and getValue() would raise
-            // "Typed property must not be accessed before initialization". An absent
-            // column is omitted from the payload rather than fatalling.
+            // Uninitialized properties (absent from a partial SELECT) are omitted, not read.
             if (!$property->isInitialized($this)) {
                 continue;
             }
