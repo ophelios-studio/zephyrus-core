@@ -1296,6 +1296,34 @@ final class RequestTest extends TestCase
         self::assertSame('https://first.example/x', $request->uri()->full());
     }
 
+    #[DataProvider('forwardedHeadersWithEmptyElements')]
+    public function testFromGlobalsSkipsEmptyForwardedElementsWhenWalkingFromTheRight(string $header): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => $header,
+            ],
+            trustedProxies: ['10.0.0.0/24'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('https://good.example.com/x', $request->uri()->full());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function forwardedHeadersWithEmptyElements(): iterable
+    {
+        yield 'trailing comma' => ['for=203.0.113.9;host=good.example.com;proto=https,'];
+        yield 'empty element between hops' => ['for=203.0.113.9;host=good.example.com;proto=https, , for=10.0.0.2'];
+        yield 'whitespace only element' => ['for=203.0.113.9;host=good.example.com;proto=https,   , for=10.0.0.2'];
+    }
+
     public function testFromGlobalsDefaultsMethodToGetWhenAbsent(): void
     {
         $request = Request::fromGlobals(server: []);

@@ -1160,6 +1160,10 @@ final readonly class Request
         $elements   = explode(',', $header);
         $parameters = [];
         for ($i = count($elements) - 1; $i >= 0; $i--) {
+            if (trim($elements[$i]) === '') {
+                continue;
+            }
+
             $parameters = self::parseForwardedElement($elements[$i]);
             $for        = self::normalizeIp($parameters['for'] ?? null);
             if ($for === null || !self::isProxyTrusted($for, $trustedProxies)) {
