@@ -391,6 +391,31 @@ final class KernelBuilderTest extends TestCase
         self::assertFalse(KernelBuilder::create()->hasGlobalMiddleware($middleware::class));
     }
 
+    public function testRouteNamesOfListsOnlyTheNamesHoldingTheClass(): void
+    {
+        $builder = KernelBuilder::create()
+            ->registerMiddleware('auth', $this->makeMiddleware('X-Auth', 'yes'))
+            ->registerMiddleware('admin', new KernelBuilderOtherMiddleware());
+
+        self::assertSame(['auth'], $builder->routeNamesOf($this->makeMiddleware('X-Any', 'yes')::class));
+    }
+
+    public function testRouteNamesOfReturnsNumericNamesAsStrings(): void
+    {
+        $builder = KernelBuilder::create()->registerMiddleware('404', $this->makeMiddleware('X-Auth', 'yes'));
+
+        $names = $builder->routeNamesOf($this->makeMiddleware('X-Any', 'yes')::class);
+
+        self::assertSame(['404'], $names);
+    }
+
+    public function testRouteNamesOfIgnoresGlobalMiddlewares(): void
+    {
+        $builder = KernelBuilder::create()->withMiddleware($this->makeMiddleware('X-Global', 'yes'));
+
+        self::assertSame([], $builder->routeNamesOf($this->makeMiddleware('X-Any', 'yes')::class));
+    }
+
     // -------------------------------------------------------------------------
 
     private function makeMiddleware(string $header, string $value): MiddlewareInterface
@@ -407,6 +432,18 @@ final class KernelBuilderTest extends TestCase
                 return $next($request)->withHeader($this->header, $this->value);
             }
         };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Fixture middleware of a class distinct from the anonymous one built by makeMiddleware()
+// ---------------------------------------------------------------------------
+
+final class KernelBuilderOtherMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        return $next($request);
     }
 }
 

@@ -185,17 +185,27 @@ final class KernelBuilder
      */
     public function hasMiddleware(string $class): bool
     {
-        if ($this->hasGlobalMiddleware($class)) {
-            return true;
-        }
+        return $this->hasGlobalMiddleware($class) || $this->routeNamesOf($class) !== [];
+    }
 
-        foreach ($this->namedRouteMiddlewares as $middleware) {
+    /**
+     * The route names under which a middleware of the given class is registered.
+     *
+     * @param class-string $class
+     *
+     * @return list<string>
+     */
+    public function routeNamesOf(string $class): array
+    {
+        $names = [];
+
+        foreach ($this->namedRouteMiddlewares as $name => $middleware) {
             if ($middleware instanceof $class) {
-                return true;
+                $names[] = (string) $name;
             }
         }
 
-        return false;
+        return $names;
     }
 
     /**
