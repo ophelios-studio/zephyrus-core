@@ -41,6 +41,7 @@ use Zephyrus\Data\DatabaseException;
  * Pass a Closure instead of the Database to register the handler before the database can be built. It runs
  * at most once, at the first callback that needs the database. When it throws or returns anything else, that
  * callback and every later one throw a SessionException: there is no fallback and no retry.
+ * A new session that stays empty is not stored.
  *
  * A wrapper must forward open() and close() as well as the data callbacks: close() releases the
  * advisory lock taken by read().
@@ -222,11 +223,12 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * Refresh the access window of an unchanged session without rewriting its payload.
      *
      * A bare UPDATE, never an upsert: an upsert would re-create a row deleted while the request was in flight,
-     * such as by a logout. Returns false when no row was refreshed. An id this handler never read is refused.
+     * such as by a logout. Returns false when no row was refreshed. A session this request created has no row
+     * to refresh and returns true without a statement. An id this handler never read is refused.
      */
     public function updateTimestamp(string $id, string $data): bool
     {
-        return $this->writeRow($id, function () use ($id): int {
+        return $this->writeRow($id, true, function () use ($id): int {
             $access = time();
 
             return $this->database()->execute(
@@ -298,13 +300,13 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *
      * The statement depends on what read() saw. A resumed session gets a bare UPDATE, so a row deleted in the
      * meantime stays deleted. A created session gets one INSERT ... ON CONFLICT DO UPDATE, so two concurrent
-     * creators cannot collide. A session whose read() failed, or an id never read, is not written.
+     * creators cannot collide, unless its payload is empty: then nothing is stored. A session whose read() failed, or an id never read, is not written.
      *
      * Requires the id column to be a PRIMARY KEY or carry a UNIQUE constraint.
      */
     public function write(string $id, string $data): bool
     {
-        return $this->writeRow($id, function (bool $resumed) use ($id, $data): int {
+        return $this->writeRow($id, $data === '', function (bool $resumed) use ($id, $data): int {
             $stored = self::encodePayload($data);
             $access = time();
             $expire = $access + $this->maxLifetime();
@@ -363,9 +365,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * The checks shared by write() and updateTimestamp(), then the lock release that ends both.
      *
+     * @param bool $nothingToStore A created session is not stored and the call succeeds without a statement.
      * @param callable(bool): int $statement Told whether read() resumed a stored session; returns the rows it touched.
      */
-    private function writeRow(string $id, callable $statement): bool
+    private function writeRow(string $id, bool $nothingToStore, callable $statement): bool
     {
         if (!$this->isValidId($id)) {
             return false;
@@ -379,7 +382,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
                 // Writing would rebuild the row destroy() removed.
                 self::STATE_DESTROYED => true,
                 self::STATE_READ_FAILED => false,
-                self::STATE_RESUMED, self::STATE_CREATED => $statement($state === self::STATE_RESUMED) > 0,
+                self::STATE_CREATED => $nothingToStore || $statement(false) > 0,
+                self::STATE_RESUMED => $statement(true) > 0,
             };
         } finally {
             $this->releaseLock();

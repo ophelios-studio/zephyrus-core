@@ -302,7 +302,7 @@ final class DatabaseSessionHandlerTest extends TestCase
     public function testUpdateTimestampNeverRecreatesARowThatIsNoLongerThere(): void
     {
         self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
-        self::assertFalse($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'live payload'));
+        self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', ''));
 
         self::assertSame(
             0,
@@ -391,13 +391,13 @@ final class DatabaseSessionHandlerTest extends TestCase
     }
 
     /**
-     * A brand-new session, written with an empty payload, must still be created.
+     * A brand-new session still gets its row once it holds data.
      */
     public function testWriteStillCreatesTheRowForASessionThisRequestOpened(): void
     {
         self::assertSame('', $this->handler->read('43e880c2447ca10d3092d51d258c050c'));
 
-        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', ''));
+        self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'foo=bar'));
         self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session', []));
     }
 
@@ -1101,6 +1101,44 @@ final class DatabaseSessionHandlerTest extends TestCase
         } catch (SessionException $exception) {
             self::assertSame('Session database for table "session" could not be resolved.', $exception->getMessage());
         }
+    }
+
+    public function testCreatedSessionWithoutDataStoresNoRow(): void
+    {
+        $id = '43e880c2447ca10d3092d51d258c050c';
+        $this->handler->read($id);
+
+        self::assertTrue($this->handler->write($id, ''));
+        self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session'));
+    }
+
+    public function testUpdateTimestampOfCreatedSessionStoresNoRow(): void
+    {
+        $id = '43e880c2447ca10d3092d51d258c050c';
+        $this->handler->read($id);
+
+        self::assertTrue($this->handler->updateTimestamp($id, ''));
+        self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session'));
+    }
+
+    public function testCreatedSessionWithDataStoresOneRow(): void
+    {
+        $id = '43e880c2447ca10d3092d51d258c050c';
+        $this->handler->read($id);
+
+        self::assertTrue($this->handler->write($id, '0'));
+        self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session'));
+    }
+
+    public function testResumedSessionClearedToEmptyIsUpdated(): void
+    {
+        $id = '43e880c2447ca10d3092d51d258c050c';
+        $this->handler->read($id);
+        $this->handler->write($id, 'foo=bar');
+        $this->handler->read($id);
+
+        self::assertTrue($this->handler->write($id, ''));
+        self::assertSame(1, $this->database->count("SELECT COUNT(*) FROM session WHERE data = ''"));
     }
 }
 
