@@ -88,12 +88,13 @@ final readonly class ConfigKeys
     /**
      * The property read as a boolean, or the default when it is not written.
      *
+     * @param string $nullHint Appended to the refusal of a written null.
      * @throws ConfigurationException when the written value, null included, is not a recognisable boolean.
      */
-    public function boolean(string $property, bool $default): bool
+    public function boolean(string $property, bool $default, string $nullHint = ''): bool
     {
         return $this->has($property)
-            ? ConfigBoolean::parse($this->section, $this->key($property), $this->value($property))
+            ? ConfigBoolean::parse($this->section, $this->key($property), $this->value($property), $nullHint)
             : $default;
     }
 

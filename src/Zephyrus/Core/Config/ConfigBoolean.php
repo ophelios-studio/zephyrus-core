@@ -19,9 +19,10 @@ final class ConfigBoolean
     private const array FALSE_WORDS = ['false', '0', 'off', 'no'];
 
     /**
+     * @param string $nullHint Appended to the refusal of a null value.
      * @throws ConfigurationException when the value is not a recognisable boolean.
      */
-    public static function parse(string $section, string $key, mixed $value): bool
+    public static function parse(string $section, string $key, mixed $value, string $nullHint = ''): bool
     {
         if (is_bool($value)) {
             return $value;
@@ -47,7 +48,8 @@ final class ConfigBoolean
             $section,
             $key,
             $value,
-            'is not a boolean; use true/false, 1/0, on/off or yes/no',
+            'is not a boolean; use true/false, 1/0, on/off or yes/no'
+                . ($value === null && $nullHint !== '' ? '; ' . $nullHint : ''),
         );
     }
 

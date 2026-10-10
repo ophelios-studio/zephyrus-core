@@ -81,11 +81,34 @@ final class ApplicationConfigTest extends TestCase
         }
     }
 
-    public function testADeclaredNullDebugIsRefusedRatherThanReadAsTheEnvironmentDefault(): void
+    public function testADeclaredNullDebugIsRefusedWithTheUnsetEnvHint(): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("Configuration section 'application' field 'debug' has invalid value null: is not a boolean");
+        try {
+            ApplicationConfig::fromArray(['environment' => 'development', 'debug' => null]);
 
-        ApplicationConfig::fromArray(['environment' => 'development', 'debug' => null]);
+            self::fail('A declared null debug was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'application' field 'debug' has invalid value null: is not a boolean; use "
+                    . 'true/false, 1/0, on/off or yes/no; an unset !env without a default reads as null; write '
+                    . '!env APP_DEBUG, false.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnUnreadableDebugWordIsRefusedWithoutTheUnsetEnvHint(): void
+    {
+        try {
+            ApplicationConfig::fromArray(['debug' => 'enabled']);
+
+            self::fail('An unreadable debug was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'application' field 'debug' has invalid value \"enabled\": is not a boolean; "
+                    . 'use true/false, 1/0, on/off or yes/no.',
+                $exception->getMessage(),
+            );
+        }
     }
 }

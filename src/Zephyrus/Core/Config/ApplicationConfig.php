@@ -15,6 +15,8 @@ final readonly class ApplicationConfig
         'debug' => ['debug'],
     ];
 
+    private const string UNSET_ENV_HINT = 'an unset !env without a default reads as null; write !env APP_DEBUG, false';
+
     public function __construct(
         public Environment $environment,
         public bool $debug,
@@ -36,7 +38,7 @@ final readonly class ApplicationConfig
 
         return new self(
             environment: $environment,
-            debug: $keys->boolean('debug', !$environment->isProductionLike()),
+            debug: $keys->boolean('debug', !$environment->isProductionLike(), self::UNSET_ENV_HINT),
         );
     }
 }
