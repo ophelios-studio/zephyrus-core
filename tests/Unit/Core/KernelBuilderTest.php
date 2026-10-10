@@ -262,6 +262,38 @@ final class KernelBuilderTest extends TestCase
         self::assertTrue($builder->hasMiddleware($middleware::class));
     }
 
+    public function testNamedMiddlewaresListsEveryRegisteredName(): void
+    {
+        $auth = $this->makeMiddleware('X-Auth', 'yes');
+        $admin = $this->makeMiddleware('X-Admin', 'yes');
+
+        $builder = KernelBuilder::create()
+            ->registerMiddleware('auth', $auth)
+            ->registerMiddleware('admin', $admin);
+
+        $named = $builder->namedMiddlewares();
+
+        self::assertSame(['auth', 'admin'], array_keys($named));
+        self::assertSame($auth, $named['auth']);
+        self::assertSame($admin, $named['admin']);
+    }
+
+    public function testNamedMiddlewaresExcludesGlobalMiddlewares(): void
+    {
+        $builder = KernelBuilder::create()->withMiddleware($this->makeMiddleware('X-Global', 'yes'));
+
+        self::assertSame([], $builder->namedMiddlewares());
+    }
+
+    public function testNamedMiddlewaresReturnsACopyThatCannotChangeTheBuilder(): void
+    {
+        $builder = KernelBuilder::create()->registerMiddleware('auth', $this->makeMiddleware('X-Auth', 'yes'));
+
+        $named = $builder->namedMiddlewares();
+        unset($named['auth']);
+
+        self::assertArrayHasKey('auth', $builder->namedMiddlewares());
+    }
     public function testHasGlobalMiddlewareIsFalseOnAnEmptyBuilder(): void
     {
         $middleware = $this->makeMiddleware('X-Absent', 'yes');

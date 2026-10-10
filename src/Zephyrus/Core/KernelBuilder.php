@@ -231,6 +231,16 @@ final class KernelBuilder
     }
 
     /**
+     * Returns the middlewares registered under a route name, keyed by that name.
+     *
+     * @return array<string, MiddlewareInterface>
+     */
+    public function namedMiddlewares(): array
+    {
+        return $this->namedRouteMiddlewares;
+    }
+
+    /**
      * Whether a middleware of the given class is registered as a GLOBAL middleware.
      *
      * Unlike hasMiddleware(), a middleware registered only under a route name
