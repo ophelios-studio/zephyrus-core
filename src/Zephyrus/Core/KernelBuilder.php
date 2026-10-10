@@ -211,7 +211,7 @@ final class KernelBuilder
     /**
      * Returns the middlewares registered under a route name, keyed by that name.
      *
-     * @return array<string, MiddlewareInterface>
+     * @return array<int|string, MiddlewareInterface>
      */
     public function namedMiddlewares(): array
     {
