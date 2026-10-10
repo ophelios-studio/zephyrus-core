@@ -305,7 +305,7 @@ final class SessionManager
             return;
         }
 
-        $this->assertSessionActive(sprintf('write "%s" to the session', $key));
+        $this->assertWritable($key);
 
         $_SESSION[$key] = $value;
     }
@@ -323,15 +323,16 @@ final class SessionManager
     }
 
     /**
-     * Remove a key from the session. No-op when the key does not exist.
+     * Remove a key from the session. No-op when the session was read and the key does not exist.
      *
-     * @throws SessionException when the key exists and no session is active.
+     * @throws SessionException when no session is active, unless the session was read and lacks the key.
      */
     public function remove(string $key): void
     {
         $this->assertValidKey($key);
 
-        if (!$this->has($key)) {
+        $loaded = $this->loadedData();
+        if ($loaded !== null && !array_key_exists($key, $loaded)) {
             return;
         }
 
@@ -340,7 +341,7 @@ final class SessionManager
             return;
         }
 
-        $this->assertSessionActive(sprintf('write "%s" to the session', $key));
+        $this->assertWritable($key);
 
         unset($_SESSION[$key]);
     }
@@ -363,7 +364,10 @@ final class SessionManager
     public function flash(string $key, mixed $default = null): mixed
     {
         $value = $this->get($key, $default);
-        $this->remove($key);
+
+        if ($this->has($key)) {
+            $this->remove($key);
+        }
 
         return $value;
     }
@@ -372,6 +376,27 @@ final class SessionManager
     {
         if ($key === '') {
             throw SessionException::invalidKey($key);
+        }
+    }
+
+    /**
+     * The session data, or null when it has not been read: no override and no started session.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function loadedData(): ?array
+    {
+        if ($this->overrideStorage !== null) {
+            return $this->overrideStorage;
+        }
+
+        return isset($_SESSION) ? $_SESSION : null;
+    }
+
+    private function assertWritable(string $key): void
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            throw SessionException::noActiveSessionForWrite($key);
         }
     }
 

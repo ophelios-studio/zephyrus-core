@@ -39,6 +39,13 @@ final class SessionExceptionTest extends TestCase
         self::assertStringNotContainsString('/srv/app', $exception->getMessage());
     }
 
+    public function testInvalidKeyEscapesControlBytesInTheMessage(): void
+    {
+        $exception = SessionException::invalidKey("a\r\nb");
+
+        self::assertSame('Session key must be a non-empty string. Got "a\\r\\nb".', $exception->getMessage());
+    }
+
     /**
      * @param callable(?\ErrorException=): SessionException $refusal
      */

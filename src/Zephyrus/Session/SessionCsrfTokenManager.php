@@ -81,7 +81,7 @@ final class SessionCsrfTokenManager implements CsrfTokenManagerInterface
     /**
      * Discard the current token so the next getToken() call generates a fresh one.
      *
-     * @throws SessionException when a token is stored and no session is active.
+     * @throws SessionException when no session is active, unless the session was read and holds no token.
      */
     public function regenerate(): void
     {

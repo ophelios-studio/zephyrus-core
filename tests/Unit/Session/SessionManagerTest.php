@@ -16,6 +16,11 @@ final class SessionManagerTest extends TestCase
 {
     // ── factory helper ────────────────────────────────────────────────────────
 
+    protected function tearDown(): void
+    {
+        unset($_SESSION);
+    }
+
     private function makeSession(array $initial = []): SessionManager
     {
         return new SessionManager($initial);
@@ -290,9 +295,36 @@ final class SessionManagerTest extends TestCase
         $session->set('user', 'alice');
     }
 
-    public function testRemoveOfAbsentKeyPassesWithoutActiveSession(): void
+    public function testRemoveOfAbsentKeyThrowsWhenTheSessionWasNeverRead(): void
     {
         $session = new SessionManager();
+
+        try {
+            $session->remove('user');
+            self::fail('Removing a key before the session is read must throw without an active session.');
+        } catch (SessionException $exception) {
+            self::assertSame(
+                'Cannot write "user" to the session: no session is active. Run SessionMiddleware on this route, '
+                . 'or call start(); in a test, pass an array to new SessionManager([]).',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testRemoveOfAbsentKeyPassesWhenTheSessionWasRead(): void
+    {
+        $_SESSION = [];
+
+        $session = new SessionManager();
+        $session->remove('user');
+
+        self::assertFalse($session->has('user'));
+    }
+
+    public function testRemoveOfAbsentKeyPassesAfterDestroy(): void
+    {
+        $session = new SessionManager(['user' => 'alice']);
+        $session->destroy();
 
         $session->remove('user');
 
@@ -321,6 +353,41 @@ final class SessionManagerTest extends TestCase
         }
     }
 
+    public function testRemoveOfPresentNullKeyThrowsWithoutActiveSession(): void
+    {
+        $_SESSION = ['k' => null];
+
+        $session = new SessionManager();
+
+        try {
+            $session->remove('k');
+            self::fail('A present key holding null is still present and must throw without an active session.');
+        } catch (SessionException $exception) {
+            self::assertSame(
+                'Cannot write "k" to the session: no session is active. Run SessionMiddleware on this route, '
+                . 'or call start(); in a test, pass an array to new SessionManager([]).',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testRefusalEscapesControlBytesInTheKey(): void
+    {
+        $_SESSION = ["k\r\nX" => 'value'];
+
+        $session = new SessionManager();
+
+        try {
+            $session->remove("k\r\nX");
+            self::fail('Removing a present key without an active session must throw.');
+        } catch (SessionException $exception) {
+            self::assertSame(
+                'Cannot write "k\\r\\nX" to the session: no session is active. Run SessionMiddleware on this route, '
+                . 'or call start(); in a test, pass an array to new SessionManager([]).',
+                $exception->getMessage(),
+            );
+        }
+    }
     public function testFlashReadPassesWithoutActiveSession(): void
     {
         $session = new SessionManager();

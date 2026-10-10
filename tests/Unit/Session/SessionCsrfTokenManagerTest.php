@@ -43,6 +43,37 @@ final class SessionCsrfTokenManagerTest extends TestCase
         $manager->getToken();
     }
 
+    protected function tearDown(): void
+    {
+        unset($_SESSION);
+    }
+
+    public function testRegenerateThrowsBeforeTheSessionIsReadSoTheOldTokenIsNotKept(): void
+    {
+        $manager = new SessionCsrfTokenManager(new SessionManager());
+
+        try {
+            $manager->regenerate();
+            self::fail('Rotating the token before the session is started must throw.');
+        } catch (SessionException $exception) {
+            self::assertSame(
+                'Cannot write "_csrf_token" to the session: no session is active. Run SessionMiddleware on this route, '
+                . 'or call start(); in a test, pass an array to new SessionManager([]).',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testRegeneratePassesWhenTheSessionWasReadAndHoldsNoToken(): void
+    {
+        $_SESSION = [];
+
+        $manager = new SessionCsrfTokenManager(new SessionManager());
+        $manager->regenerate();
+
+        self::assertSame([], $_SESSION);
+    }
+
     // ── implements interface ──────────────────────────────────────────────────
 
     public function testImplementsCsrfTokenManagerInterface(): void

@@ -16,7 +16,7 @@ final class SessionException extends ZephyrusException
 {
     public static function invalidKey(string $key): self
     {
-        return new self(sprintf('Session key must be a non-empty string. Got "%s".', $key));
+        return new self(sprintf('Session key must be a non-empty string. Got %s.', self::quoteKey($key)));
     }
 
     public static function saveHandlerRefused(?\ErrorException $phpWarning = null): self
@@ -83,6 +83,11 @@ final class SessionException extends ZephyrusException
         ));
     }
 
+    public static function noActiveSessionForWrite(string $key): self
+    {
+        return self::noActiveSession(sprintf('write %s to the session', self::quoteKey($key)));
+    }
+
     public static function notActiveForDestruction(): self
     {
         return new self(
@@ -100,6 +105,12 @@ final class SessionException extends ZephyrusException
         $warning = $this->getPrevious();
 
         return $warning instanceof \ErrorException ? $warning->getMessage() : null;
+    }
+
+    /** A key quoted as a JSON string, so control bytes in it cannot forge a log line. */
+    private static function quoteKey(string $key): string
+    {
+        return (string) json_encode($key, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     private static function withReason(string $message, ?\ErrorException $phpWarning): self

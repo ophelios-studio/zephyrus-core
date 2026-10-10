@@ -106,10 +106,11 @@ final class Flash
             return;
         }
 
-        $session->remove(self::KEY_SUCCESS);
-        $session->remove(self::KEY_ERROR);
-        $session->remove(self::KEY_WARNING);
-        $session->remove(self::KEY_INFO);
+        foreach ([self::KEY_SUCCESS, self::KEY_ERROR, self::KEY_WARNING, self::KEY_INFO] as $key) {
+            if ($session->has($key)) {
+                $session->remove($key);
+            }
+        }
     }
 
     /**
