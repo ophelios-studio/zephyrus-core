@@ -50,6 +50,8 @@ final class Formatter
 
     private const NBSP = "\u{a0}";
 
+    private const MAX_PRECISION = 20;
+
     /** @var array<string, array{string, string}> Singular and plural French labels per timeago() unit. */
     private const FRENCH_TIME_UNITS = [
         'second' => ['seconde', 'secondes'],
@@ -178,6 +180,7 @@ final class Formatter
      */
     public function decimal(float $value, int $precision = 2): string
     {
+        $this->assertPrecision('decimal', $precision);
         $fmt = $this->groupedNumberFormatter(NumberFormatter::DECIMAL);
         $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, $precision);
         $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, $precision);
@@ -197,6 +200,7 @@ final class Formatter
      */
     public function percent(float $value, int $precision = 0): string
     {
+        $this->assertPrecision('percent', $precision);
         $fmt = $this->groupedNumberFormatter(NumberFormatter::PERCENT);
         $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, $precision);
         $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, $precision);
@@ -358,6 +362,7 @@ final class Formatter
      */
     public function filesize(int $bytes, int $precision = 1): string
     {
+        $this->assertPrecision('filesize', $precision);
         $isFrench = $this->isFrench();
         $units = $isFrench ? self::FRENCH_FILESIZE_UNITS : self::ENGLISH_FILESIZE_UNITS;
         $absBytes = abs($bytes);
@@ -521,6 +526,16 @@ final class Formatter
 
         if (in_array($separator, $this->reservedSeparators(), true)) {
             throw FormatterException::reservedGroupingSeparator($this->locale);
+        }
+    }
+
+    /**
+     * @throws FormatterException When the precision is outside 0 to MAX_PRECISION.
+     */
+    private function assertPrecision(string $method, int $precision): void
+    {
+        if ($precision < 0 || $precision > self::MAX_PRECISION) {
+            throw FormatterException::invalidPrecision($method, $precision, self::MAX_PRECISION);
         }
     }
 

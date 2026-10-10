@@ -439,6 +439,57 @@ final class FormatterTest extends TestCase
         self::assertSame('0 B', $this->formatter->filesize(0));
     }
 
+    // ─── Precision bounds ─────────────────────────────────────────────
+
+    /**
+     * @return list<array{int}>
+     */
+    public static function precisionsOutsideZeroToTwenty(): array
+    {
+        return [[-1], [21], [4_294_967_296]];
+    }
+
+    #[DataProvider('precisionsOutsideZeroToTwenty')]
+    public function testDecimalRefusesAPrecisionOutsideZeroToTwenty(int $precision): void
+    {
+        $this->assertPrecisionIsRefused('decimal', $precision, fn (): string => $this->formatter->decimal(1.5, $precision));
+    }
+
+    #[DataProvider('precisionsOutsideZeroToTwenty')]
+    public function testPercentRefusesAPrecisionOutsideZeroToTwenty(int $precision): void
+    {
+        $this->assertPrecisionIsRefused('percent', $precision, fn (): string => $this->formatter->percent(0.5, $precision));
+    }
+
+    #[DataProvider('precisionsOutsideZeroToTwenty')]
+    public function testFilesizeRefusesAPrecisionOutsideZeroToTwenty(int $precision): void
+    {
+        $this->assertPrecisionIsRefused('filesize', $precision, fn (): string => $this->formatter->filesize(1536, $precision));
+    }
+
+    public function testPrecisionOfZeroAndTwentyAreAccepted(): void
+    {
+        $zeros = str_repeat('0', 20);
+
+        self::assertSame('2', $this->formatter->decimal(2.0, 0));
+        self::assertSame("1.{$zeros}", $this->formatter->decimal(1.0, 20));
+        self::assertSame("1.{$zeros}%", $this->formatter->percent(0.01, 20));
+        self::assertSame("1.{$zeros} KB", $this->formatter->filesize(1024, 20));
+    }
+
+    private function assertPrecisionIsRefused(string $method, int $precision, callable $call): void
+    {
+        try {
+            $call();
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
+            self::assertSame(
+                sprintf('%s() precision must be between 0 and 20, got %d.', $method, $precision),
+                $exception->getMessage(),
+            );
+        }
+    }
+
     // ─── List ─────────────────────────────────────────────────────────
 
     public function testListConjunctionThreeItems(): void

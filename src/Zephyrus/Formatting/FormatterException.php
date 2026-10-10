@@ -37,6 +37,16 @@ final class FormatterException extends ZephyrusRuntimeException
         return new self(sprintf('Invalid currency code: it %s.', FormatterInput::CURRENCY_CODE_RULE));
     }
 
+    public static function invalidPrecision(string $method, int $precision, int $maximum): self
+    {
+        return new self(sprintf(
+            '%s() precision must be between 0 and %d, got %d.',
+            $method,
+            $maximum,
+            $precision,
+        ));
+    }
+
     public static function currencyRequired(string $locale): self
     {
         return new self(sprintf(
