@@ -72,7 +72,7 @@ final class KernelBuilder
 
     private ?EventDispatcher $eventDispatcher = null;
 
-    /** @var array<class-string<\Throwable>, callable(\Throwable, ?\Zephyrus\Http\Request): \Zephyrus\Http\Response> */
+    /** @var array<class-string<\Throwable>, callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response> */
     private array $exceptionHandlers = [];
 
     public static function create(): self
@@ -186,7 +186,7 @@ final class KernelBuilder
      * matching class wins via instanceof.
      *
      * @param class-string<\Throwable> $exceptionClass
-     * @param callable(\Throwable, ?\Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
+     * @param callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
      */
     public function withExceptionHandler(string $exceptionClass, callable $handler): self
     {
