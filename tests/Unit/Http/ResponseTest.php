@@ -516,6 +516,28 @@ final class ResponseTest extends TestCase
         self::assertSame($expected, $response->headers['location']);
     }
 
+    #[DataProvider('isLocalPathSamples')]
+    public function testIsLocalPathSeparatesLocalPathsFromOtherTargets(string $path, bool $expected): void
+    {
+        self::assertSame($expected, Response::isLocalPath($path));
+    }
+
+    /**
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function isLocalPathSamples(): iterable
+    {
+        yield 'root' => ['/', true];
+        yield 'query and fragment' => ['/a?b#c', true];
+        yield 'dot segments are allowed' => ['/../x', true];
+        yield 'protocol-relative' => ['//evil', false];
+        yield 'slash then backslash' => ['/\\evil', false];
+        yield 'absolute URL' => ['http://x', false];
+        yield 'relative' => ['a', false];
+        yield 'empty' => ['', false];
+        yield 'final newline' => ["/a\n", false];
+    }
+
     /**
      * A request parameter can arrive as an array (?next[]=x), so a non-string
      * target must fall back rather than raise a TypeError on every such request.

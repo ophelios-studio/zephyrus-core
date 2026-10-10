@@ -124,6 +124,25 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::integer()->test('abc'));
     }
 
+    public function testIntegerRefusesBooleans(): void
+    {
+        self::assertFalse(Rules::integer()->test(true));
+        self::assertFalse(Rules::integer()->test(false));
+    }
+
+    public function testIntegerAcceptsPaddedIntegerString(): void
+    {
+        self::assertTrue(Rules::integer()->test(' 5 '));
+        self::assertTrue(Rules::integer()->test("\t5\n"));
+        self::assertTrue(Rules::integer()->test("\x0B5\r"));
+    }
+
+    public function testIntegerRefusesFormFeedPaddingAndNul(): void
+    {
+        self::assertFalse(Rules::integer()->test("\f5"));
+        self::assertFalse(Rules::integer()->test("5\0"));
+    }
+
     // ---- numeric ----
 
     public function testNumericPasses(): void
@@ -711,6 +730,20 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::cronExpression()->test(null));
     }
 
+    public function testCronExpressionRefusesControlCharacters(): void
+    {
+        self::assertFalse(Rules::cronExpression()->test("\0* * * * *"));
+        self::assertFalse(Rules::cronExpression()->test("*\n* * * *"));
+        self::assertFalse(Rules::cronExpression()->test("* * * * *\r\n"));
+        self::assertFalse(Rules::cronExpression()->test("* * * * *\n"));
+        self::assertFalse(Rules::cronExpression()->test("* * * *\x0B*"));
+    }
+
+    public function testCronExpressionAcceptsSpacesAndTabsBetweenFields(): void
+    {
+        self::assertTrue(Rules::cronExpression()->test(" *\t*  * * *\t"));
+    }
+
     public function testCronExpressionDefaultMessage(): void
     {
         self::assertSame('Must be a valid cron expression.', Rules::cronExpression()->errorMessage());
@@ -865,6 +898,19 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::hostname()->test('exa_mple.com'));
         self::assertFalse(Rules::hostname()->test('exa mple.com'));
         self::assertFalse(Rules::hostname()->test(null));
+    }
+
+    public function testHostnameTrimsSpacesAndTabsOnly(): void
+    {
+        self::assertTrue(Rules::hostname()->test(' example.com '));
+        self::assertTrue(Rules::hostname()->test("\texample.com\t"));
+    }
+
+    public function testHostnameRefusesControlCharacterPadding(): void
+    {
+        self::assertFalse(Rules::hostname()->test("app.example.test\n"));
+        self::assertFalse(Rules::hostname()->test("example.com\0"));
+        self::assertFalse(Rules::hostname()->test("\r\nexample.com"));
     }
 
     public function testHostnameDefaultMessage(): void
@@ -1307,6 +1353,29 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::httpPath()->test(null));
     }
 
+    public function testHttpPathRefusesProtocolRelativeAndBackslashTargets(): void
+    {
+        self::assertFalse(Rules::httpPath()->test('//evil.example.com'));
+        self::assertFalse(Rules::httpPath()->test('/\evil.example.com'));
+        self::assertFalse(Rules::httpPath()->test('/a\b'));
+        self::assertFalse(Rules::httpPath()->test('///'));
+    }
+
+    public function testHttpPathRefusesControlCharacters(): void
+    {
+        self::assertFalse(Rules::httpPath()->test("/a\nSet-Cookie:x=1"));
+        self::assertFalse(Rules::httpPath()->test("/a\n"));
+        self::assertFalse(Rules::httpPath()->test("/a\0b"));
+        self::assertFalse(Rules::httpPath()->test("/a\x7F"));
+        self::assertFalse(Rules::httpPath()->test("/a\tb"));
+    }
+
+    public function testHttpPathAcceptsUnicodeAndInnerDoubleSlash(): void
+    {
+        self::assertTrue(Rules::httpPath()->test('/caf%C3%A9/a//b'));
+        self::assertTrue(Rules::httpPath()->test('/café'));
+    }
+
     public function testHttpPathDefaultMessage(): void
     {
         self::assertSame('Must be a valid HTTP path.', Rules::httpPath()->errorMessage());
@@ -1371,6 +1440,10 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::queryString()->test('a=1#frag'));
         self::assertFalse(Rules::queryString()->test('a = 1'));
         self::assertFalse(Rules::queryString()->test(null));
+        self::assertFalse(Rules::queryString()->test("a=1\n"));
+        self::assertFalse(Rules::queryString()->test("a=1\nX: y"));
+        self::assertFalse(Rules::queryString()->test("a=1\0"));
+        self::assertFalse(Rules::queryString()->test("a=\t1"));
     }
 
     public function testQueryStringDefaultMessage(): void
@@ -1550,6 +1623,20 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::acceptLanguage()->test('en;q=1.5'));
         self::assertFalse(Rules::acceptLanguage()->test('en;q=.5'));
         self::assertFalse(Rules::acceptLanguage()->test(null));
+    }
+
+    public function testAcceptLanguageRefusesLineBreaksAndNul(): void
+    {
+        self::assertFalse(Rules::acceptLanguage()->test("en\n"));
+        self::assertFalse(Rules::acceptLanguage()->test("en\r\n"));
+        self::assertFalse(Rules::acceptLanguage()->test("en,\nfr"));
+        self::assertFalse(Rules::acceptLanguage()->test("en\0"));
+    }
+
+    public function testAcceptLanguageStillAcceptsSpacesAndTabsAroundTheList(): void
+    {
+        self::assertTrue(Rules::acceptLanguage()->test(" en , fr ;q=0.5 "));
+        self::assertTrue(Rules::acceptLanguage()->test("\ten\t"));
     }
 
     public function testAcceptLanguageDefaultMessage(): void
@@ -2136,6 +2223,14 @@ final class RulesTest extends TestCase
         self::assertSame('Must be a valid If-None-Match header.', Rules::ifNoneMatch()->errorMessage());
     }
 
+    public function testIfNoneMatchRefusesControlCharactersAroundAValue(): void
+    {
+        self::assertFalse(Rules::ifNoneMatch()->test("\"abc\"\n"));
+        self::assertFalse(Rules::ifNoneMatch()->test("\"abc\"\0"));
+        self::assertFalse(Rules::ifNoneMatch()->test("\"a\", \"b\"\r\n"));
+        self::assertTrue(Rules::ifNoneMatch()->test("\"a\" ,\t\"b\""));
+    }
+
     // ---- ifMatch ----
 
     public function testIfMatchPassesWildcardAndEtagLists(): void
@@ -2160,6 +2255,14 @@ final class RulesTest extends TestCase
     public function testIfMatchDefaultMessage(): void
     {
         self::assertSame('Must be a valid If-Match header.', Rules::ifMatch()->errorMessage());
+    }
+
+    public function testIfMatchRefusesControlCharactersAroundAValue(): void
+    {
+        self::assertFalse(Rules::ifMatch()->test("\"abc\"\n"));
+        self::assertFalse(Rules::ifMatch()->test("\0\"abc\""));
+        self::assertFalse(Rules::ifMatch()->test("\"a\", \"b\"\r\n"));
+        self::assertTrue(Rules::ifMatch()->test("\"a\" ,\t\"b\""));
     }
 
     // ---- httpDate ----
@@ -2280,6 +2383,14 @@ final class RulesTest extends TestCase
     public function testByteRangeDefaultMessage(): void
     {
         self::assertSame('Must be a valid byte range header.', Rules::byteRange()->errorMessage());
+    }
+
+    public function testByteRangeRefusesControlCharactersAroundARange(): void
+    {
+        self::assertFalse(Rules::byteRange()->test("bytes=0-10\r\n"));
+        self::assertFalse(Rules::byteRange()->test("bytes=0-10\0"));
+        self::assertFalse(Rules::byteRange()->test("bytes=0-10,\n20-30"));
+        self::assertTrue(Rules::byteRange()->test("bytes=0-10, \t20-30"));
     }
 
     // ---- contentRange ----

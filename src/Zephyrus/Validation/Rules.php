@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Validation;
 
 use Zephyrus\Http\IpRange;
+use Zephyrus\Http\Response;
 
 final class Rules
 {
@@ -56,7 +57,7 @@ final class Rules
     }
 
     /**
-     * Accepts ints, integer strings ('5', '+5', padded ' 5 ') and whole floats
+     * Accepts ints, integer strings ('5', '+5', padded with spaces, tabs, CR, LF or VT) and whole floats
      * below 1e14 (5.0) with the default precision ini of 14.
      * Booleans, fractional floats, '05' and '5.0' fail.
      */
@@ -174,6 +175,7 @@ final class Rules
 
     /**
      * Accepts strings matching $pattern, a complete PCRE pattern with delimiters; non-strings fail.
+     * End the pattern with \z or add the D modifier, otherwise $ also matches before a final newline.
      */
     public static function regex(string $pattern, string $message): Rule
     {
@@ -456,17 +458,18 @@ final class Rules
     }
 
     /**
-     * Accepts five whitespace-separated, non-empty fields; field values are not range-checked.
+     * Accepts five non-empty fields separated by spaces or tabs; field values are not range-checked.
+     * Any other control character fails.
      */
     public static function cronExpression(string $message = 'Must be a valid cron expression.'): Rule
     {
         return Rule::of(
             static function (mixed $v): bool {
-                if (!is_string($v)) {
+                if (!is_string($v) || preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $v) === 1) {
                     return false;
                 }
 
-                $parts = preg_split('/\s+/', trim($v));
+                $parts = preg_split('/[ \t]+/', trim($v, " \t"));
 
                 return is_array($parts)
                     && count($parts) === 5
@@ -544,7 +547,7 @@ final class Rules
 
     /**
      * Accepts a DNS name of at most 253 characters made of labels of 1 to 63 characters (letters, digits and inner hyphens).
-     * Surrounding whitespace is trimmed and the name lowercased before the check; a trailing dot is refused.
+     * Surrounding spaces and tabs are trimmed and the name lowercased before the check; a trailing dot is refused.
      */
     public static function hostname(string $message = 'Must be a valid hostname.'): Rule
     {
@@ -554,7 +557,7 @@ final class Rules
                     return false;
                 }
 
-                $host = strtolower(trim($v));
+                $host = strtolower(trim($v, " \t"));
                 if ($host === '' || strlen($host) > 253 || str_starts_with($host, '.') || str_ends_with($host, '.')) {
                     return false;
                 }
@@ -907,16 +910,17 @@ final class Rules
     }
 
     /**
-     * Accepts a string starting with '/' and containing no spaces.
-     * Dot segments and '//' are not rejected: do not use the result as a safe filesystem path.
+     * Accepts a string with a single leading '/' (not '//'), no backslash, no space and no ASCII control character:
+     * safe as a local redirect target. Dot segments are not rejected: do not use the result as a filesystem path.
+     *
+     * @see Response::isLocalPath()
      */
     public static function httpPath(string $message = 'Must be a valid HTTP path.'): Rule
     {
         return Rule::of(
             static fn (mixed $v): bool => is_string($v)
-                && $v !== ''
-                && str_starts_with($v, '/')
-                && !str_contains($v, ' '),
+                && !str_contains($v, ' ')
+                && Response::isLocalPath($v),
             $message,
         );
     }
@@ -964,7 +968,7 @@ final class Rules
 
     /**
      * Accepts a query string without the leading '?'; the empty string passes.
-     * '#' and spaces fail, and the string must parse to at least one key.
+     * '#', spaces and control characters fail, and the string must parse to at least one key.
      */
     public static function queryString(string $message = 'Must be a valid query string.'): Rule
     {
@@ -978,7 +982,7 @@ final class Rules
                     return true;
                 }
 
-                if (str_starts_with($v, '?') || str_contains($v, '#') || str_contains($v, ' ')) {
+                if (str_starts_with($v, '?') || preg_match('/[#\x00-\x20\x7F]/', $v) === 1) {
                     return false;
                 }
 
@@ -1098,14 +1102,14 @@ final class Rules
     {
         return Rule::of(
             static function (mixed $v): bool {
-                if (!is_string($v) || trim($v) === '') {
+                if (!is_string($v) || trim($v, " \t") === '') {
                     return false;
                 }
 
                 $part = '[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*|\*';
                 $q = '(?:0(?:\.\d{1,3})?|1(?:\.0{1,3})?)';
 
-                return preg_match('/^\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?(?:\s*,\s*(?:' . $part . ')(?:\s*;\s*q=' . $q . ')?)*\s*$/D', $v) === 1;
+                return preg_match('/^[ \t]*(?:' . $part . ')(?:[ \t]*;[ \t]*q=' . $q . ')?(?:[ \t]*,[ \t]*(?:' . $part . ')(?:[ \t]*;[ \t]*q=' . $q . ')?)*[ \t]*$/D', $v) === 1;
             },
             $message,
         );
@@ -1301,7 +1305,7 @@ final class Rules
     }
 
     /**
-     * Accepts 12 to 19 digits once spaces and hyphens are removed; no Luhn check (see cardNumberLuhn).
+     * Accepts 12 to 19 digits once whitespace and hyphens are removed; no Luhn check (see cardNumberLuhn).
      */
     public static function cardNumber(string $message = 'Must be a valid card number format.'): Rule
     {
@@ -1323,7 +1327,7 @@ final class Rules
     }
 
     /**
-     * Accepts a card number shape (12 to 19 digits, spaces and hyphens removed) that passes the Luhn checksum.
+     * Accepts a card number shape (12 to 19 digits, whitespace and hyphens removed) that passes the Luhn checksum.
      */
     public static function cardNumberLuhn(string $message = 'Must be a valid card number.'): Rule
     {
@@ -1527,29 +1531,7 @@ final class Rules
     public static function ifNoneMatch(string $message = 'Must be a valid If-None-Match header.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
-                if (!is_string($v) || $v === '') {
-                    return false;
-                }
-
-                if ($v === '*') {
-                    return true;
-                }
-
-                $parts = array_map('trim', explode(',', $v));
-                if (in_array('', $parts, true)) {
-                    return false;
-                }
-
-                $etag = self::etag();
-                foreach ($parts as $part) {
-                    if (!$etag->test($part)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            },
+            static fn (mixed $v): bool => self::isEtagListOrWildcard($v),
             $message,
         );
     }
@@ -1560,31 +1542,29 @@ final class Rules
     public static function ifMatch(string $message = 'Must be a valid If-Match header.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
-                if (!is_string($v) || $v === '') {
-                    return false;
-                }
-
-                if ($v === '*') {
-                    return true;
-                }
-
-                $parts = array_map('trim', explode(',', $v));
-                if (in_array('', $parts, true)) {
-                    return false;
-                }
-
-                $etag = self::etag();
-                foreach ($parts as $part) {
-                    if (!$etag->test($part)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            },
+            static fn (mixed $v): bool => self::isEtagListOrWildcard($v),
             $message,
         );
+    }
+
+    private static function isEtagListOrWildcard(mixed $v): bool
+    {
+        if (!is_string($v) || $v === '') {
+            return false;
+        }
+
+        if ($v === '*') {
+            return true;
+        }
+
+        $etag = self::etag();
+        foreach (explode(',', $v) as $item) {
+            if (!$etag->test(trim($item, " \t"))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -1649,13 +1629,8 @@ final class Rules
                     return false;
                 }
 
-                $ranges = explode(',', substr($v, 6));
-                if (in_array('', array_map('trim', $ranges), true)) {
-                    return false;
-                }
-
-                foreach ($ranges as $range) {
-                    $range = trim($range);
+                foreach (explode(',', substr($v, 6)) as $range) {
+                    $range = trim($range, " \t");
 
                     if (preg_match('/^(\d+)-(\d+)$/D', $range, $m) === 1) {
                         if ((int) $m[1] > (int) $m[2]) {

@@ -132,24 +132,33 @@ final readonly class Response
     /**
      * Redirects to $target when it is a local path, otherwise to $fallback. Use it for targets read from a request.
      *
-     * A local path starts with a single "/", has no backslash and no ASCII control character. A non-string $target
-     * falls back too. A percent-encoded CRLF stays local: it is inert in a Location header.
+     * See isLocalPath() for what counts as local. A non-string $target falls back too. A percent-encoded CRLF stays
+     * local: it is inert in a Location header.
      *
      * @throws InvalidArgumentException When $fallback is not a local path.
      */
     public static function localRedirect(mixed $target, string $fallback = '/', int $status = 302): self
     {
-        if (preg_match(self::LOCAL_PATH_PATTERN, $fallback) !== 1) {
+        if (!self::isLocalPath($fallback)) {
             throw new InvalidArgumentException(sprintf(
                 'The redirect fallback "%s" must be a local path starting with a single "/".',
                 $fallback,
             ));
         }
 
-        $isLocal = is_string($target) && preg_match(self::LOCAL_PATH_PATTERN, $target) === 1;
+        $isLocal = is_string($target) && self::isLocalPath($target);
         $location = $isLocal ? $target : $fallback;
 
         return self::redirect($location, $status);
+    }
+
+    /**
+     * Whether $path is a local path: a single leading "/", no backslash and no ASCII control character.
+     * A redirect target, not a filesystem path: dot segments are allowed.
+     */
+    public static function isLocalPath(string $path): bool
+    {
+        return preg_match(self::LOCAL_PATH_PATTERN, $path) === 1;
     }
 
     /**

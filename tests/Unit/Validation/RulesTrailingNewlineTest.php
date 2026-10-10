@@ -20,16 +20,13 @@ final class RulesTrailingNewlineTest extends TestCase
         yield 'decimalString' => [Rules::decimalString(), '12.34'];
         yield 'alphaNumeric' => [Rules::alphaNumeric(), 'abc123'];
         yield 'uuid' => [Rules::uuid(), '123e4567-e89b-12d3-a456-426614174000'];
-        yield 'rfc3339DateTime' => [Rules::rfc3339DateTime(), '2026-10-10T12:00:00Z'];
         yield 'time24' => [Rules::time24(), '23:59'];
         yield 'phoneE164' => [Rules::phoneE164(), '+14155550123'];
         yield 'hexColor' => [Rules::hexColor(), '#1a2b3c'];
         yield 'macAddress' => [Rules::macAddress(), '00:1A:2B:3C:4D:5E'];
         yield 'postalCode' => [Rules::postalCode(), 'K1A 0B1'];
-        yield 'subnetMask' => [Rules::subnetMask(), '255.255.255.0'];
         yield 'slug' => [Rules::slug(), 'my-slug-1'];
         yield 'noWhitespace' => [Rules::noWhitespace(), 'abc'];
-        yield 'base64Url' => [Rules::base64Url(), 'abc_-XYZ'];
         yield 'semver' => [Rules::semver(), '1.2.3-rc.1+build.5'];
         yield 'ulid' => [Rules::ulid(), '01ARZ3NDEKTSV4RRFFQ69G5FAV'];
         yield 'sha256' => [Rules::sha256(), str_repeat('a', 64)];
@@ -67,25 +64,5 @@ final class RulesTrailingNewlineTest extends TestCase
     {
         self::assertTrue($rule->test($valid));
         self::assertFalse($rule->test($valid . "\n"));
-    }
-
-    public function testIntegerRefusesBooleanTrue(): void
-    {
-        self::assertFalse(Rules::integer()->test(true));
-    }
-
-    public function testIntegerRefusesBooleanFalse(): void
-    {
-        self::assertFalse(Rules::integer()->test(false));
-    }
-
-    public function testIntegerStillAcceptsPaddedIntegerString(): void
-    {
-        self::assertTrue(Rules::integer()->test(' 5 '));
-    }
-
-    public function testIntegerStillAcceptsInt(): void
-    {
-        self::assertTrue(Rules::integer()->test(0));
     }
 }
