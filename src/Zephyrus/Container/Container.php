@@ -19,7 +19,7 @@ use ReflectionUnionType;
  *   $c->instance(Config::class, Config::fromArray($_ENV));
  *
  *   // Mailer's typed constructor parameters are resolved from the container.
- *   // Scalar variadics (string, int, float, bool, array) receive no argument; other variadics are refused.
+ *   // Variadics typed string, int, float, bool or array receive no argument; other variadics are refused.
  *   $mailer = $c->get(Mailer::class);
  */
 final class Container implements ContainerInterface
@@ -110,7 +110,7 @@ final class Container implements ContainerInterface
     }
 
     /** Built-in types a variadic parameter may have to receive no argument during auto-wiring. */
-    private const array SCALAR_VARIADIC_TYPES = ['string', 'int', 'float', 'bool', 'array'];
+    private const array EMPTY_VARIADIC_TYPES = ['string', 'int', 'float', 'bool', 'array'];
 
     /**
      * Shape a string must have before it reaches the autoloader: a fully-qualified class name.
@@ -175,11 +175,11 @@ final class Container implements ContainerInterface
     /**
      * Return true when $type is string, int, float, bool or array, or a union or nullable made only of them.
      */
-    private function isScalarVariadicType(ReflectionType $type): bool
+    private function receivesNoArgument(ReflectionType $type): bool
     {
         if ($type instanceof ReflectionUnionType) {
             foreach ($type->getTypes() as $member) {
-                if (!$this->isScalarVariadicType($member) && !$this->isNullType($member)) {
+                if (!$this->receivesNoArgument($member) && !$this->isNullType($member)) {
                     return false;
                 }
             }
@@ -189,7 +189,7 @@ final class Container implements ContainerInterface
 
         return $type instanceof ReflectionNamedType
             && $type->isBuiltin()
-            && in_array($type->getName(), self::SCALAR_VARIADIC_TYPES, true);
+            && in_array($type->getName(), self::EMPTY_VARIADIC_TYPES, true);
     }
 
     /** Return true when $type is the null member of a union. */
@@ -200,7 +200,7 @@ final class Container implements ContainerInterface
 
     /**
      * Construct $className, resolving each typed constructor parameter from this container.
-     * A variadic of a scalar type receives no argument; every other variadic is refused.
+     * A variadic typed string, int, float, bool or array receives no argument; every other variadic is refused.
      *
      * @throws NotFoundException  When $className is not a loadable class.
      * @throws ContainerException When a constructor parameter cannot be resolved.
@@ -234,7 +234,7 @@ final class Container implements ContainerInterface
             $type = $param->getType();
 
             if ($param->isVariadic()) {
-                if ($type === null || !$this->isScalarVariadicType($type)) {
+                if ($type === null || !$this->receivesNoArgument($type)) {
                     $kind = $type === null ? 'untyped' : "typed [{$type}]";
 
                     throw new ContainerException(
