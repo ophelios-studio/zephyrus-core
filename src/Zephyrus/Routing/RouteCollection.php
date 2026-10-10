@@ -403,7 +403,7 @@ final class RouteCollection
     }
 
     /**
-     * @return array<int, string>
+     * @return list<int|string>
      */
     public function duplicateRouteNames(): array
     {
