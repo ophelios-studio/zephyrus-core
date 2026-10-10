@@ -57,8 +57,7 @@ final class CsrfConfigTest extends TestCase
     public function testFromSecurityConfigNamesTheConfigurationKeyOfARefusedExclusion(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('security.csrf.exceptions[1]');
-        $this->expectExceptionMessage('#^/webhooks/#');
+        $this->expectExceptionMessageMatches('/security\.csrf\.exceptions\[1\] must start with .+ \/webhooks\/ \(expected a shape such as #\^\/webhooks\/#\)\./');
 
         CsrfConfig::fromSecurityConfig($this->security(true, ['#^/ok/#', '/webhooks/']));
     }
