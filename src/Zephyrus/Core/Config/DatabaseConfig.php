@@ -15,6 +15,7 @@ namespace Zephyrus\Core\Config;
  *   - port: 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
  *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
+ *   - sslMode, sslRootCert, columnCacheVersion: one spelling per setting (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
  *   - sslMode and sslRootCert: DSN-safe, as they are interpolated into the PDO DSN.
  *
@@ -83,12 +84,12 @@ final readonly class DatabaseConfig
      * Build a DatabaseConfig from a plain key-value array.
      *
      * Accepts sslMode, sslmode or ssl_mode, sslRootCert, sslrootcert or ssl_root_cert, and columnCacheVersion
-     * or column_cache_version, the first spelling listed winning. Blank values mean null, except a blank
-     * columnCacheVersion, which becomes ''.
+     * or column_cache_version. Two spellings of one setting in the same array are refused. Blank values
+     * mean null, except a blank columnCacheVersion, which becomes ''.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if a removed emulate_prepares key is present, a required
-     *                                field is missing, or a value is invalid.
+     * @throws ConfigurationException if a removed emulate_prepares key is present, two spellings of one
+     *                                setting are present, a required field is missing, or a value is invalid.
      */
     public static function fromArray(array $values): self
     {
@@ -219,38 +220,54 @@ final readonly class DatabaseConfig
         }
     }
 
+    private static function conflictingSpellings(string $first, string $second): ConfigurationException
+    {
+        return new ConfigurationException(sprintf(
+            "Configuration section 'database' sets both '%s' and '%s': keep one.",
+            $first,
+            $second,
+        ));
+    }
+
     /**
-     * Reads an optional string from the first spelling set to a non-null value.
+     * Reads an optional string from the one spelling the array contains.
      *
      * @param array<string, mixed> $values
-     * @param list<string>         $spellings Accepted keys, the first one winning.
+     * @param list<string>         $spellings Accepted keys.
      * @param string               $hint      Appended to the refusal message.
      * @return array{string, ?string} The key read (the first spelling when none is set) and its
      *                                trimmed value, null when absent or blank.
-     * @throws ConfigurationException if the value is neither a string nor an integer.
+     * @throws ConfigurationException if two spellings are present, or the value is neither a
+     *                                string nor an integer.
      */
     private static function optionalSetting(array $values, array $spellings, string $hint = ''): array
     {
-        foreach ($spellings as $key) {
-            $value = $values[$key] ?? null;
-            if ($value === null) {
-                continue;
-            }
-
-            if (!is_string($value) && !is_int($value)) {
-                throw ConfigurationException::invalidValue(
-                    'database',
-                    $key,
-                    get_debug_type($value),
-                    'must be a string or an integer' . $hint,
-                );
-            }
-
-            $normalized = trim((string) $value);
-
-            return [$key, $normalized === '' ? null : $normalized];
+        $present = array_values(array_filter($spellings, static fn (string $key): bool => array_key_exists($key, $values)));
+        if (count($present) > 1) {
+            throw self::conflictingSpellings($present[0], $present[1]);
         }
 
-        return [$spellings[0], null];
+        if ($present === []) {
+            return [$spellings[0], null];
+        }
+
+        $key = $present[0];
+        $value = $values[$key];
+        if ($value === null) {
+            return [$key, null];
+        }
+
+        if (!is_string($value) && !is_int($value)) {
+            throw ConfigurationException::invalidValue(
+                'database',
+                $key,
+                get_debug_type($value),
+                'must be a string or an integer' . $hint,
+            );
+        }
+
+        $normalized = trim((string) $value);
+
+        return [$key, $normalized === '' ? null : $normalized];
     }
 }

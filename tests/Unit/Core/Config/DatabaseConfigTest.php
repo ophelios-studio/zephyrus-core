@@ -597,15 +597,47 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('/etc/ssl/root.crt', $config->sslRootCert);
     }
 
-    public function testCamelCaseSslSettingsWinOverSnakeCase(): void
+    /**
+     * @return iterable<string, array{array<string, mixed>, string, string}>
+     */
+    public static function twoSpellingsOfOneSetting(): iterable
+    {
+        yield 'blank then value' => [['sslMode' => '', 'ssl_mode' => 'require'], 'sslMode', 'ssl_mode'];
+        yield 'value then array' => [['sslmode' => 'require', 'ssl_mode' => [1]], 'sslmode', 'ssl_mode'];
+        yield 'two values' => [['sslMode' => 'require', 'sslmode' => 'disable'], 'sslMode', 'sslmode'];
+        yield 'null and value' => [['sslrootcert' => null, 'ssl_root_cert' => '/a.crt'], 'sslrootcert', 'ssl_root_cert'];
+        yield 'root cert pair' => [['sslRootCert' => '/a.crt', 'ssl_root_cert' => '/b.crt'], 'sslRootCert', 'ssl_root_cert'];
+        yield 'column cache version' => [
+            ['columnCacheVersion' => '1', 'column_cache_version' => '2'],
+            'columnCacheVersion',
+            'column_cache_version',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $settings
+     */
+    #[DataProvider('twoSpellingsOfOneSetting')]
+    public function testRefusesTwoSpellingsOfOneSetting(array $settings, string $first, string $second): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u'] + $settings);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' sets both '" . $first . "' and '" . $second . "': keep one.",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testDifferentSettingsInDifferentSpellingsAreAccepted(): void
     {
         $config = DatabaseConfig::fromArray([
             'database'      => 'db',
             'username'      => 'u',
             'sslMode'       => 'require',
-            'ssl_mode'      => 'disable',
-            'sslRootCert'   => '/a.crt',
-            'ssl_root_cert' => '/b.crt',
+            'ssl_root_cert' => '/a.crt',
         ]);
 
         self::assertSame('require', $config->sslMode);
