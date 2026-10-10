@@ -162,7 +162,7 @@ final readonly class SecurityConfig
         $forceHttps = self::readBool('forceHttps', $sections, false);
         $csrfEnabled = self::readBool('csrfEnabled', $sections, true);
         $autoHtml = self::findWritten('csrfAutoHtml', $sections);
-        $csrfAutoHtml = (bool) ($autoHtml[1] ?? false);
+        $csrfAutoHtml = $autoHtml === null ? false : ConfigBoolean::parse('security', $autoHtml[0], $autoHtml[1]);
         $csrfExceptions = (array) (self::read('csrfExceptions', $sections) ?? []);
 
         $declaredKeys = self::declaredKeys($sections);

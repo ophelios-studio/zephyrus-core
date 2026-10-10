@@ -474,24 +474,24 @@ final class SecurityConfigTest extends TestCase
     public static function autoHtmlRefusalSources(): iterable
     {
         yield 'nested auto_html written as a string' => [
-            ['csrf' => ['auto_html' => 'false']],
-            "field 'csrf.auto_html' has invalid value '\"false\"'",
+            ['csrf' => ['auto_html' => 'yes']],
+            "field 'csrf.auto_html' has invalid value '\"yes\"'",
         ];
         yield 'nested autoHtml written as a bool' => [
             ['csrf' => ['autoHtml' => true]],
             "field 'csrf.autoHtml' has invalid value 'true'",
         ];
         yield 'flat csrf_auto_html written as a string' => [
-            ['csrf_auto_html' => 'false'],
-            "field 'csrf_auto_html' has invalid value '\"false\"'",
+            ['csrf_auto_html' => 'yes'],
+            "field 'csrf_auto_html' has invalid value '\"yes\"'",
         ];
         yield 'flat csrfAutoHtml written as a bool' => [
             ['csrfAutoHtml' => true],
             "field 'csrfAutoHtml' has invalid value 'true'",
         ];
         yield 'null spelling is skipped in favour of the one that was written' => [
-            ['csrf' => ['autoHtml' => null, 'auto_html' => 'false']],
-            "field 'csrf.auto_html' has invalid value '\"false\"'",
+            ['csrf' => ['autoHtml' => null, 'auto_html' => 'yes']],
+            "field 'csrf.auto_html' has invalid value '\"yes\"'",
         ];
     }
 
@@ -605,6 +605,39 @@ final class SecurityConfigTest extends TestCase
         $config = SecurityConfig::fromArray(['csrf' => ['autoHtml' => false]]);
 
         self::assertFalse($config->csrfAutoHtml);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function falseAutoHtmlSpellings(): iterable
+    {
+        yield 'off' => ['off'];
+        yield 'false' => ['false'];
+    }
+
+    #[DataProvider('falseAutoHtmlSpellings')]
+    public function testCsrfAutoHtmlFalseSpellingIsAccepted(string $value): void
+    {
+        $config = SecurityConfig::fromArray(['csrf' => ['autoHtml' => $value]]);
+
+        self::assertFalse($config->csrfAutoHtml);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unreadableAutoHtmlSpellings(): iterable
+    {
+        yield 'empty string' => [''];
+    }
+
+    #[DataProvider('unreadableAutoHtmlSpellings')]
+    public function testCsrfAutoHtmlUnreadableSpellingIsRefused(string $value): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SecurityConfig::fromArray(['csrf' => ['autoHtml' => $value]]);
     }
 
     public function testNestedCsrfSectionDefaults(): void
