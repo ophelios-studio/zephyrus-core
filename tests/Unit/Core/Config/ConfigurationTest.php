@@ -13,6 +13,7 @@ use Zephyrus\Core\Config\Environment;
 use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Core\Config\SessionConfig;
+use Zephyrus\Mailer\MailerConfig;
 
 final class ConfigurationTest extends TestCase
 {
@@ -458,5 +459,21 @@ final class ConfigurationTest extends TestCase
 
         self::assertFalse($config->hasSection('database'));
         self::assertFalse($config->hasSection('application'));
+    }
+
+    public function testFromArrayRefusesFactoryRegisteredUnderBuiltInNameEvenWithoutConfiguredValues(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('database');
+
+        Configuration::fromArray([], ['database' => MailerConfig::class]);
+    }
+
+    public function testFromArrayRefusesFactoryRegisteredUnderSnakeCaseSpellingOfBuiltInName(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('database');
+
+        Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']], ['_database' => MailerConfig::class]);
     }
 }

@@ -63,17 +63,21 @@ final readonly class Configuration
      *        Map of section name => ConfigSection subclass FQCN. These classes
      *        must have a static fromArray(array): static method.
      * @throws ConfigurationException if any section value violates its constraints.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromArray(array $config, array $sectionFactories = []): self
     {
         $customSections = [];
         foreach ($sectionFactories as $name => $className) {
-            if (in_array($name, self::BUILT_IN_SECTIONS, true)) {
-                continue;
+            $normalizedName = self::normalizeKey($name);
+            if (in_array($normalizedName, self::BUILT_IN_SECTIONS, true)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Section factory "%s" targets a built-in typed property and cannot be registered.',
+                    $name,
+                ));
             }
 
             if (isset($config[$name]) && is_array($config[$name])) {
-                $normalizedName = self::normalizeKey($name);
                 $customSections[$normalizedName] = $className::fromArray($config[$name]);
             }
         }

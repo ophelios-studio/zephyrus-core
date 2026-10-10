@@ -126,15 +126,14 @@ final class ConfigurationYamlTest extends TestCase
 
     public function testBuiltInSectionNamesCannotBeOverriddenByCustomFactories(): void
     {
-        // 'application' is a built-in section and should not be overridden
-        $config = Configuration::fromArray([
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('application');
+
+        Configuration::fromArray([
             'application' => ['environment' => 'testing', 'debug' => true],
         ], sectionFactories: [
-            'application' => CustomAppConfig::class, // Should be ignored
+            'application' => CustomAppConfig::class,
         ]);
-
-        self::assertFalse($config->hasSection('application'));
-        self::assertSame(Environment::Testing, $config->application->environment);
     }
 }
 
