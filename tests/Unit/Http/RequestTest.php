@@ -1710,6 +1710,21 @@ final class RequestTest extends TestCase
         self::assertEquals(new FileUpload('me.png', 'image/png', '/tmp/phpA', 123), $request->file('avatar'));
     }
 
+    public function testConstructorNormalizesNativeFilesShape(): void
+    {
+        $request = new Request('POST', '/upload', files: [
+            'avatar' => [
+                'name' => 'me.png',
+                'type' => 'image/png',
+                'tmp_name' => '/tmp/phpA',
+                'error' => UPLOAD_ERR_OK,
+                'size' => 123,
+            ],
+        ]);
+
+        self::assertEquals(new FileUpload('me.png', 'image/png', '/tmp/phpA', 123), $request->file('avatar'));
+    }
+
     public function testFromArrayKeepsFileUploadListAsGiven(): void
     {
         $first = new FileUpload('a.png', 'image/png', '/tmp/phpA', 1);

@@ -127,6 +127,8 @@ final readonly class Request
 
     /** @var array<string, mixed> */
     public array $query;
+    /** @var array<string, FileUpload|array<int, FileUpload>> */
+    public array $files;
     private Uri $uri;
     private RequestBody $body;
     private HeaderBag $headerBag;
@@ -138,7 +140,7 @@ final readonly class Request
      * @param HeaderBag|array<string, mixed> $headers
      * @param CookieJar|array<string, string> $cookies
      * @param array<string, mixed> $attributes
-     * @param array<string, FileUpload|array<int, FileUpload>> $files
+     * @param array<string, mixed> $files Native $_FILES entries or FileUpload values.
      * @param array<string, string> $routeParameters Names this request took from
      *   its URL. See the property docblock; the values are also present in
      *   $attributes, this records WHERE THEY CAME FROM.
@@ -152,13 +154,14 @@ final readonly class Request
         HeaderBag|array $headers = [],
         CookieJar|array $cookies = [],
         public array $attributes = [],
-        public array $files = [],
+        array $files = [],
         public ?string $clientIp = null,
         string $rawBody = '',
         public array $routeParameters = [],
         private ?Route $matchedRoute = null,
     ) {
         $this->uri = self::canonicalizeUri($uri);
+        $this->files = self::normalizeFileUploads($files);
         $this->query = $query ?? self::parseQueryString($this->uri->queryString());
         $this->body = $body instanceof RequestBody
             ? $body
@@ -228,7 +231,7 @@ final readonly class Request
             headers:    new HeaderBag($headers),
             cookies:    new CookieJar($cookie),
             attributes: [],
-            files:      self::normalizeFileUploads($files),
+            files:      $files,
             clientIp:   $clientIp,
         );
     }
@@ -265,7 +268,7 @@ final readonly class Request
             headers:    new HeaderBag(self::normalizeHeaders($headers)),
             cookies:    new CookieJar($cookies),
             attributes: $attributes,
-            files:      self::normalizeFileUploads($files),
+            files:      $files,
             clientIp:   $clientIp,
         );
     }
