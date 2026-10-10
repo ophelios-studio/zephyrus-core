@@ -36,23 +36,37 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
         ));
     }
 
-    public static function excludedNotAMiddleware(string $route, string $class): self
+    public static function excludedNotAMiddleware(string $subject, string $class): self
     {
         return new self(sprintf(
-            'Route "%s" cannot skip "%s": it does not exist or does not implement %s. '
+            '%s cannot skip "%s": it does not exist or does not implement %s. '
             . 'Pass the class of a global middleware, for example SessionMiddleware::class',
-            $route,
+            $subject,
             $class,
             MiddlewareInterface::class,
         ));
     }
 
-    public static function excludedSecurityMiddleware(string $route, string $class, string $security): self
+    /**
+     * @param list<string> $classes The classes the group expands to.
+     */
+    public static function excludedMiddlewareGroup(string $subject, string $name, array $classes = []): self
+    {
+        return new self(sprintf(
+            '%s cannot skip "%s": "%s" is a middleware group: list its classes instead%s',
+            $subject,
+            $name,
+            $name,
+            $classes === [] ? '' : sprintf(' (%s)', implode(', ', $classes)),
+        ));
+    }
+
+    public static function excludedSecurityMiddleware(string $subject, string $class, string $security): self
     {
         $reason = $class === $security
             ? 'it is a framework security middleware'
             : sprintf('it would skip the framework security middleware %s', $security);
-        $message = sprintf('Route "%s" cannot skip "%s": %s', $route, $class, $reason);
+        $message = sprintf('%s cannot skip "%s": %s', $subject, $class, $reason);
 
         if ($security === CsrfMiddleware::class) {
             $message .= '. Exempt the path under security.csrf.exceptions instead';

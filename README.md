@@ -183,7 +183,17 @@ $router = $router
     ->withoutMiddleware(SessionMiddleware::class);
 ```
 
-`withoutMiddleware()` affects only the last route registered, even after `controller()`, `group()`, `resource()` or `discoverControllers()`: to cover a whole controller, put the attribute on the class.
+`withoutMiddleware()` affects only the last route registered, even after `controller()`, `group()`, `resource()` or `discoverControllers()`. To skip a middleware for a whole batch, pass `excludedMiddlewares` to `group()` or `resource()`:
+
+```php
+$router = $router->group('/public', fn (Router $r) => $r
+    ->get('/pricing', 'PricingController@show')
+    ->get('/faq', 'FaqController@show'),
+    excludedMiddlewares: [SessionMiddleware::class],
+);
+```
+
+To cover a whole controller, put the attribute on the class.
 
 Only a matched route skips: a 404 or 405 still runs every global middleware. Route middlewares named with `#[Middleware]` are not affected. The framework security middlewares (`ForceHttpsMiddleware`, `AllowedHostsMiddleware`, `CsrfMiddleware`, `MaxBodySizeMiddleware`, `SecureHeadersMiddleware`, `ContentSecurityPolicyMiddleware`) cannot be skipped, nor can a parent of one: the route registration throws a `RouteMiddlewareException`. To exempt a path from the CSRF check, use `security.csrf.exceptions`.
 

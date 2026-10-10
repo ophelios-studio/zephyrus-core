@@ -80,28 +80,36 @@ final readonly class Route
         array $excludedMiddlewares = [],
     ) {
         self::assertValidParameterNames($path);
-        $this->excludedMiddlewares = self::skippableMiddlewares($excludedMiddlewares, $method . ' ' . $path);
+        $this->excludedMiddlewares = self::skippableMiddlewares(
+            $excludedMiddlewares,
+            sprintf('Route "%s %s"', $method, $path),
+        );
     }
 
     /**
+     * Resolves excluded middleware names to their class names, refusing any that may not be skipped.
+     *
      * @param array<int, string> $middlewares
+     * @param string $subject Route or group label used in the refusal message, such as Route "GET /x".
      * @return list<class-string<MiddlewareInterface>>
      * @throws RouteMiddlewareException
+     *
+     * @internal Read by Route and Router only.
      */
-    private static function skippableMiddlewares(array $middlewares, string $route): array
+    public static function skippableMiddlewares(array $middlewares, string $subject): array
     {
         $skippable = [];
 
         foreach ($middlewares as $middleware) {
             if (!is_a($middleware, MiddlewareInterface::class, true)) {
-                throw RouteMiddlewareException::excludedNotAMiddleware($route, $middleware);
+                throw RouteMiddlewareException::excludedNotAMiddleware($subject, $middleware);
             }
 
             $middleware = (new \ReflectionClass($middleware))->getName();
 
             foreach (self::UNSKIPPABLE_MIDDLEWARES as $security) {
                 if (is_a($security, $middleware, true)) {
-                    throw RouteMiddlewareException::excludedSecurityMiddleware($route, $middleware, $security);
+                    throw RouteMiddlewareException::excludedSecurityMiddleware($subject, $middleware, $security);
                 }
             }
 

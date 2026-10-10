@@ -223,6 +223,193 @@ final class RouterTest extends TestCase
         (new Router())->get('/', 'HomeController@index')->withoutMiddleware('session');
     }
 
+    public function testGroupExcludedMiddlewaresApplyToEveryRoute(): void
+    {
+        $routes = (new Router())
+            ->group('/public', fn (Router $router): Router => $router
+                ->get('/home', 'PublicController@home')
+                ->post('/contact', 'PublicController@contact'),
+                excludedMiddlewares: [SessionMiddleware::class],
+            )
+            ->routes()
+            ->all();
+
+        self::assertSame([SessionMiddleware::class], $routes[0]->excludedMiddlewares);
+        self::assertSame([SessionMiddleware::class], $routes[1]->excludedMiddlewares);
+    }
+
+    public function testGroupExcludedMiddlewaresAreAddedToTheExclusionsOfEachRoute(): void
+    {
+        $routes = (new Router())
+            ->group('/docs', fn (Router $router): Router => $router
+                ->get('/intro', 'DocsController@intro')
+                ->withoutMiddleware(AuthGuardMiddleware::class),
+                excludedMiddlewares: [SessionMiddleware::class, AuthGuardMiddleware::class],
+            )
+            ->routes()
+            ->all();
+
+        self::assertSame([AuthGuardMiddleware::class, SessionMiddleware::class], $routes[0]->excludedMiddlewares);
+    }
+
+    public function testResourceExcludedMiddlewaresApplyToEveryRoute(): void
+    {
+        $routes = (new Router())
+            ->resource('/users', 'UserController', excludedMiddlewares: [SessionMiddleware::class])
+            ->routes()
+            ->all();
+
+        self::assertSame(
+            array_fill(0, 6, [SessionMiddleware::class]),
+            array_map(static fn ($route): array => $route->excludedMiddlewares, $routes),
+        );
+    }
+
+    public function testGroupRefusesTheSameClassesAsWithoutMiddleware(): void
+    {
+        $securityExpected = $this->refusalMessage(
+            fn (): Router => (new Router())->post('/public/webhook', 'HookController@receive')
+                ->withoutMiddleware(CsrfMiddleware::class),
+        );
+        $securityActual = $this->refusalMessage(
+            fn (): Router => (new Router())->group('/public', fn (Router $router): Router => $router
+                ->post('/webhook', 'HookController@receive'), excludedMiddlewares: [CsrfMiddleware::class]),
+        );
+
+        self::assertSame(
+            str_replace('Route "POST /public/webhook"', 'Group "/public"', $securityExpected),
+            $securityActual,
+        );
+        self::assertStringContainsString('security.csrf.exceptions', $securityActual);
+
+        $notMiddlewareExpected = $this->refusalMessage(
+            fn (): Router => (new Router())->get('/public/home', 'PublicController@home')
+                ->withoutMiddleware('session'),
+        );
+        $notMiddlewareActual = $this->refusalMessage(
+            fn (): Router => (new Router())->group('/public', fn (Router $router): Router => $router
+                ->get('/home', 'PublicController@home'), excludedMiddlewares: ['session']),
+        );
+
+        self::assertSame(
+            str_replace('Route "GET /public/home"', 'Group "/public"', $notMiddlewareExpected),
+            $notMiddlewareActual,
+        );
+    }
+
+    public function testGroupWithoutRoutesStillRefusesAnExcludedClassThatIsNotAMiddleware(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessageMatches('/cannot skip "session"/');
+
+        (new Router())->group('/public', fn (Router $router): Router => $router, excludedMiddlewares: ['session']);
+    }
+
+    public function testGroupWithoutRoutesStillRefusesAFrameworkSecurityMiddleware(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessageMatches('/cannot skip ".*CsrfMiddleware"/');
+
+        (new Router())->group('/public', fn (Router $router): Router => $router, excludedMiddlewares: [CsrfMiddleware::class]);
+    }
+
+    public function testGroupWithEmptyPrefixIsNamedAsTheRootGroup(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessage('Group "/" cannot skip "session"');
+
+        (new Router())->group('', fn (Router $router): Router => $router, excludedMiddlewares: ['session']);
+    }
+
+    public function testResourceNamesItselfWhenAnExcludedClassIsNotAMiddleware(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "session": it does not exist or does not implement '
+            . 'Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->resource('/u', 'UserController', excludedMiddlewares: ['session'])),
+        );
+    }
+
+    public function testResourceNamesItselfWhenAnExcludedClassIsASecurityMiddleware(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "Zephyrus\Security\CsrfMiddleware": it is a framework security middleware. '
+            . 'Exempt the path under security.csrf.exceptions instead',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->resource('/u', 'UserController', excludedMiddlewares: [CsrfMiddleware::class])),
+        );
+    }
+
+    public function testResourceNamesItselfWhenAnExcludedNameIsAMiddlewareGroup(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "web": "web" is a middleware group: list its classes instead '
+            . '(Zephyrus\Session\SessionMiddleware)',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [SessionMiddleware::class])
+                ->resource('/u', 'UserController', excludedMiddlewares: ['web'])),
+        );
+    }
+
+    public function testGroupListsTheClassesOfAMiddlewareGroupItRefuses(): void
+    {
+        self::assertSame(
+            'Group "/public" cannot skip "web": "web" is a middleware group: list its classes instead '
+            . '(Zephyrus\Session\SessionMiddleware, Zephyrus\Security\AuthGuardMiddleware)',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [SessionMiddleware::class, AuthGuardMiddleware::class])
+                ->group('/public', fn (Router $router): Router => $router, excludedMiddlewares: ['web'])),
+        );
+    }
+
+    public function testResourceInsideAGroupNamesTheResourceNotTheGroup(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "session": it does not exist or does not implement '
+            . 'Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            $this->refusalMessage(fn (): Router => (new Router())->group(
+                '/api',
+                fn (Router $router): Router => $router->resource('/u', 'UserController', excludedMiddlewares: ['session']),
+            )),
+        );
+    }
+
+    public function testGroupRefusesAMiddlewareGroupNameAndSaysSo(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessage('"web" is a middleware group: list its classes');
+
+        (new Router())->middlewareGroup('web', [SessionMiddleware::class])->group(
+            '/public',
+            fn (Router $router): Router => $router->get('/a', 'PublicController@a'),
+            excludedMiddlewares: ['web'],
+        );
+    }
+
+    public function testWithoutMiddlewareRefusesAMiddlewareGroupNameAndSaysSo(): void
+    {
+        self::assertSame(
+            'Route "GET /a" cannot skip "web": "web" is a middleware group: list its classes instead '
+            . '(Zephyrus\Session\SessionMiddleware)',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup('web', [SessionMiddleware::class])
+                ->get('/a', 'PublicController@a')
+                ->withoutMiddleware('web')),
+        );
+    }
+
+    public function testGroupAcceptsExcludedMiddlewaresWithStringKeys(): void
+    {
+        $router = (new Router())->group(
+            '/public',
+            fn (Router $router): Router => $router->get('/a', 'PublicController@a'),
+            excludedMiddlewares: ['named' => SessionMiddleware::class, SessionMiddleware::class],
+        );
+
+        self::assertSame([SessionMiddleware::class], $router->routes()->all()[0]->excludedMiddlewares);
+    }
+
     public function testNameAfterWithoutMiddlewareKeepsTheExclusion(): void
     {
         $route = (new Router())
@@ -863,5 +1050,19 @@ final class RouterTest extends TestCase
         $handlers = $router->routeHandlers();
         $gammaHandlers = array_filter($handlers, fn (string $h) => str_contains($h, 'GammaController'));
         self::assertNotEmpty($gammaHandlers);
+    }
+
+    /**
+     * @param callable(): Router $build
+     */
+    private function refusalMessage(callable $build): string
+    {
+        try {
+            $build();
+        } catch (RouteMiddlewareException $exception) {
+            return $exception->getMessage();
+        }
+
+        self::fail('Expected a RouteMiddlewareException.');
     }
 }

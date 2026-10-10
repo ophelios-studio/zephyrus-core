@@ -108,17 +108,28 @@ final class Router
      * Skips the given global middlewares on the most recently added route.
      *
      * Only that last route is affected, even right after controller(), group(), resource() or
-     * discoverControllers(): use the attribute at class level to cover a whole controller.
-     * Each class may be a parent class or an interface. Route middlewares are not affected, and a 404 or
-     * 405 still runs every global middleware (see the WithoutMiddleware attribute).
+     * discoverControllers(): pass excludedMiddlewares to group() or resource() for a batch, and use the
+     * attribute at class level for a whole controller. Each class may be a parent class or an interface.
+     * Route middlewares are not affected, and a 404 or 405 still runs every global middleware (see the
+     * WithoutMiddleware attribute).
      *
      * @param class-string ...$middlewares Global middleware classes or interfaces.
      * @throws \LogicException When no route has been added yet.
-     * @throws RouteMiddlewareException When a class is not a middleware or would skip a framework security
-     *                                  middleware.
+     * @throws RouteMiddlewareException When a name is a middleware group, is not a middleware, or would skip a
+     *                                  framework security middleware.
      */
     public function withoutMiddleware(string ...$middlewares): self
     {
+        $routes = $this->routes->all();
+
+        if ($routes !== []) {
+            $last = $routes[array_key_last($routes)];
+            $this->assertNoMiddlewareGroup(
+                array_values($middlewares),
+                sprintf('Route "%s %s"', $last->method, $last->path),
+            );
+        }
+
         return new self(
             $this->routes->withLastRouteExcludedMiddlewares(array_values($middlewares)),
             $this->attributeReader,
@@ -139,22 +150,30 @@ final class Router
      *
      * @param callable(self): self $registrar
      * @param array<int, string> $middlewares
+     * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces every route skips.
      *
      * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
-     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle, or an excluded
+     *                                  name is a middleware group, is not a middleware, or would skip a framework
+     *                                  security middleware.
      */
     public function group(
         string $prefix,
         callable $registrar,
         array $middlewares = [],
         ?string $namePrefix = null,
+        array $excludedMiddlewares = [],
     ): self {
         $scoped = new self(null, $this->attributeReader, $this->middlewareGroups);
         $scopedResult = $registrar($scoped);
 
         $router = $this;
 
-        foreach ($scopedResult->routes()->all() as $route) {
+        $scopedRoutes = $scopedResult->routes()->all();
+        $excludedMiddlewares = array_values($excludedMiddlewares);
+        $this->assertSkippable($excludedMiddlewares, sprintf('Group "%s"', $this->joinPath($prefix, '')));
+
+        foreach ($scopedRoutes as $route) {
             $routeName = $route->name;
 
             if ($namePrefix !== null && $routeName !== null) {
@@ -170,12 +189,43 @@ final class Router
                 name: $routeName,
             );
 
-            if ($route->excludedMiddlewares !== []) {
-                $router = $router->withoutMiddleware(...$route->excludedMiddlewares);
+            $excluded = [...$route->excludedMiddlewares, ...$excludedMiddlewares];
+
+            if ($excluded !== []) {
+                $router = $router->withoutMiddleware(...$excluded);
             }
         }
 
         return $router;
+    }
+
+    /**
+     * @param array<int, string> $names
+     *
+     * @throws RouteMiddlewareException
+     */
+    private function assertSkippable(array $names, string $subject): void
+    {
+        $this->assertNoMiddlewareGroup($names, $subject);
+        Route::skippableMiddlewares($names, $subject);
+    }
+
+    /**
+     * @param array<int, string> $names
+     *
+     * @throws RouteMiddlewareException
+     */
+    private function assertNoMiddlewareGroup(array $names, string $subject): void
+    {
+        foreach ($names as $name) {
+            if (isset($this->middlewareGroups[$name])) {
+                throw RouteMiddlewareException::excludedMiddlewareGroup(
+                    $subject,
+                    $name,
+                    $this->expandMiddlewares([$name]),
+                );
+            }
+        }
     }
 
     /**
@@ -274,21 +324,31 @@ final class Router
      * - DELETE /resource/{id}      -> Controller@delete
      *
      * @param array<int, string> $middlewares
+     * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces every route skips.
      *
      * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
-     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle, or an excluded
+     *                                  name is a middleware group, is not a middleware, or would skip a framework
+     *                                  security middleware.
      */
-    public function resource(string $resourcePath, string $controller, array $middlewares = []): self
-    {
+    public function resource(
+        string $resourcePath,
+        string $controller,
+        array $middlewares = [],
+        array $excludedMiddlewares = [],
+    ): self {
         $basePath = '/' . trim($resourcePath, '/');
+        $this->assertSkippable($excludedMiddlewares, sprintf('Resource "%s"', $this->joinPath($resourcePath, '')));
 
-        return $this
+        return $this->group('', fn (self $resource): self => $resource
             ->get($basePath, sprintf('%s@index', $controller), middlewares: $middlewares)
             ->get($basePath . '/{id}', sprintf('%s@show', $controller), ['id' => '\\d+'], $middlewares)
             ->post($basePath, sprintf('%s@store', $controller), middlewares: $middlewares)
             ->put($basePath . '/{id}', sprintf('%s@update', $controller), ['id' => '\\d+'], $middlewares)
             ->patch($basePath . '/{id}', sprintf('%s@patch', $controller), ['id' => '\\d+'], $middlewares)
-            ->delete($basePath . '/{id}', sprintf('%s@delete', $controller), ['id' => '\\d+'], $middlewares);
+            ->delete($basePath . '/{id}', sprintf('%s@delete', $controller), ['id' => '\\d+'], $middlewares),
+            excludedMiddlewares: $excludedMiddlewares,
+        );
     }
 
     /**
