@@ -12,8 +12,14 @@ SCOPE_RE='^[a-z0-9,._/-]+$'
 GITHUB_COMMITTER='noreply@github.com'
 CI_SKIP_RE='\[(skip ci|ci skip|no ci|skip actions|actions skip)\]'
 # Random per run, so untrusted text cannot contain the token that resumes command processing.
-stop_token="untrusted-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
-[ "${#stop_token}" -eq 42 ] || exit 1
+stop_token="untrusted-$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" || {
+  echo "could not generate the stop token" >&2
+  exit 1
+}
+if [ "${#stop_token}" -ne 42 ]; then
+  echo "stop token has unexpected length" >&2
+  exit 1
+fi
 
 if [ "${1:-}" = --title ]; then
   title_mode=1
@@ -44,10 +50,23 @@ escape() {
   printf '%s' "$s"
 }
 
+# Writes C0 controls other than CR and LF (escape() encodes those), and DEL, as \xNN so the log cannot render them.
+show_controls() {
+  local s=$1 code hex char shown
+  for code in {1..9} 11 12 {14..31} 127; do
+    printf -v hex '%02X' "$code"
+    printf -v char "\\x$hex"
+    shown="\\x$hex"
+    s=${s//"$char"/"$shown"}
+  done
+  printf '%s' "$s"
+}
+
 # Prints untrusted text with runner workflow commands stopped, so it cannot run one.
 print_untrusted() {
   local prefix=$1 text=$2
-  printf '::stop-commands::%s\n%s%s\n::%s::\n' "$stop_token" "$prefix" "$(escape "$text")" "$stop_token"
+  printf '::stop-commands::%s\n%s%s\n::%s::\n' "$stop_token" "$prefix" "$(show_controls "$(escape "$text")")" \
+    "$stop_token"
 }
 
 is_allowed_type() {
@@ -117,7 +136,7 @@ check_text() {
   if [[ "$text" == *[[:cntrl:]]* ]]; then
     reasons+=("contains a control character")
   fi
-  if printf '%s\n' "$text" | grep -Eqi "$CI_SKIP_RE"; then
+  if grep -Eqi "$CI_SKIP_RE" <<< "$text"; then
     reasons+=("contains a CI skip marker")
   fi
 }
@@ -184,7 +203,7 @@ while IFS= read -r commit; do
     check_subject_line "$subject"
   fi
 
-  if printf '%s\n' "$msg" | grep -Eqi '^co-authored-by:'; then
+  if grep -Eqi '^co-authored-by:' <<< "$msg"; then
     reasons+=("has a Co-Authored-By trailer")
   fi
 
