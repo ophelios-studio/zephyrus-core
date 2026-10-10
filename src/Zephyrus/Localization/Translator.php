@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 use Zephyrus\Core\App;
+use Zephyrus\Formatting\FormatterException;
 
 final class Translator
 {
@@ -325,7 +326,15 @@ final class Translator
             return $value;
         }
 
-        return $formatter->format($pipeName, $isCustom ? $value : $this->castPipeValue($value));
+        if ($isCustom) {
+            return $formatter->format($pipeName, $value);
+        }
+
+        try {
+            return $formatter->format($pipeName, $this->castPipeValue($value));
+        } catch (\TypeError|FormatterException $e) {
+            throw LocalizationException::formatterPipeFailed($pipeName, $key, $e);
+        }
     }
 
     /**

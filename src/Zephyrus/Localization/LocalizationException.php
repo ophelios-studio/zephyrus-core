@@ -76,6 +76,15 @@ final class LocalizationException extends ZephyrusRuntimeException
         return new self(sprintf('Unknown pipe "%s" in translation key "%s".', $pipe, $key));
     }
 
+    /**
+     * A built-in formatter pipe rejected the value. Names the pipe and the key,
+     * never the value; the cause stays in the previous exception.
+     */
+    public static function formatterPipeFailed(string $pipe, string $key, \Throwable $previous): self
+    {
+        return new self(sprintf('Unable to apply pipe "%s" in translation key "%s".', $pipe, $key), previous: $previous);
+    }
+
     public static function invalidFormat(string $path): self
     {
         return self::withPath(

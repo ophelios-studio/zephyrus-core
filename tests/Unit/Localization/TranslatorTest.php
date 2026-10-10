@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
 use Zephyrus\Formatting\Formatter;
+use Zephyrus\Formatting\FormatterException;
 use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\LocalizationException;
 use Zephyrus\Localization\Translator;
@@ -432,9 +433,67 @@ final class TranslatorTest extends TestCase
 
         $translator = $this->buildTranslator();
 
-        $this->expectException(\TypeError::class);
         try {
             $translator->trans('{v|ordinal}', ['v' => 'not-a-number']);
+            self::fail('A built-in formatter failure must not render silently.');
+        } catch (LocalizationException $e) {
+            self::assertInstanceOf(\TypeError::class, $e->getPrevious());
+            self::assertStringContainsString('"ordinal"', $e->getMessage());
+            self::assertStringContainsString('{v|ordinal}', $e->getMessage());
+            self::assertStringNotContainsString('not-a-number', $e->getMessage());
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testBuiltInFormatterTypeErrorNamesPipeAndKeyWithoutValue(): void
+    {
+        App::setFormatter(new Formatter('en_US', 'USD'));
+
+        $translator = $this->buildTranslator();
+
+        try {
+            $translator->trans('Price: {p|money}', ['p' => 'abc']);
+            self::fail('A non-numeric value must not reach money() as text.');
+        } catch (LocalizationException $e) {
+            self::assertSame('Unable to apply pipe "money" in translation key "Price: {p|money}".', $e->getMessage());
+            self::assertInstanceOf(\TypeError::class, $e->getPrevious());
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testBuiltInFormatterExceptionIsWrappedWithPipeAndKey(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $translator = $this->buildTranslator();
+
+        try {
+            $translator->trans('Sent {d|date}', ['d' => 'not-a-date']);
+            self::fail('An unparseable date must not render silently.');
+        } catch (LocalizationException $e) {
+            self::assertStringContainsString('"date"', $e->getMessage());
+            self::assertInstanceOf(FormatterException::class, $e->getPrevious());
+            self::assertStringNotContainsString('not-a-date', $e->getMessage());
+        } finally {
+            App::reset();
+        }
+    }
+
+    public function testCustomFormatterTypeErrorPropagatesUnwrapped(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('tagged', static function (string $value): string {
+            throw new \TypeError('custom failure');
+        });
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        $this->expectException(\TypeError::class);
+        try {
+            $translator->trans('{v|tagged}', ['v' => 'x']);
         } finally {
             App::reset();
         }
