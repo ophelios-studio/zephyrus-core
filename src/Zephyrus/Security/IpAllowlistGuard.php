@@ -17,13 +17,12 @@ final class IpAllowlistGuard implements AuthGuardInterface
     public function __construct(private readonly array $allowedIps)
     {
         foreach ($allowedIps as $entry) {
-            if (!IpRange::isValid($entry)) {
+            $reason = IpRange::invalidEntryReason($entry);
+            if ($reason !== null) {
                 throw new InvalidArgumentException(sprintf(
                     'Allowed IP "%s": %s.',
                     IpRange::shownEntry($entry),
-                    IpRange::isIpv4MappedBelow96($entry)
-                        ? IpRange::IPV4_MAPPED_REFUSAL
-                        : 'not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32',
+                    $reason,
                 ));
             }
         }

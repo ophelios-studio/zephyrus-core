@@ -13,7 +13,7 @@ final class IpRange
 {
     private const int SHOWN_LENGTH = 64;
 
-    public const string IPV4_MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
+    private const string MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
 
     /**
      * Whether the value is an IP address or a CIDR range this class can match against.
@@ -60,6 +60,8 @@ final class IpRange
     /**
      * An entry as it may appear in an error message: at most 64 bytes, then the
      * byte count when cut, with control characters escaped.
+     *
+     * @internal
      */
     public static function shownEntry(string $entry): string
     {
@@ -74,14 +76,16 @@ final class IpRange
     }
 
     /**
-     * Whether the range is an IPv4-mapped IPv6 range (::ffff:a.b.c.d/N) with N below 96.
-     * Such a range covers ::/8-style spans of IPv6 space, not the IPv4 range it names.
+     * Why an IP address or CIDR range cannot be matched, or null when it can.
      */
-    public static function isIpv4MappedBelow96(string $range): bool
+    public static function invalidEntryReason(string $entry): ?string
     {
-        $parsed = self::split($range);
+        $parsed = self::split($entry);
+        if ($parsed === null) {
+            return 'not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32';
+        }
 
-        return $parsed !== null && self::isShortIpv4Mapped($parsed[0], $parsed[1]);
+        return self::isShortIpv4Mapped($parsed[0], $parsed[1]) ? self::MAPPED_REFUSAL : null;
     }
 
     /**

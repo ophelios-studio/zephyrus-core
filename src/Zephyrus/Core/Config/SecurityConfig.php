@@ -231,14 +231,15 @@ final readonly class SecurityConfig
         }
 
         foreach ($trustedProxies as $i => $proxy) {
-            if (!is_string($proxy) || ($proxy !== '*' && !IpRange::isValid($proxy))) {
-                $reason = 'each entry must be "*", an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32';
-                if (is_string($proxy) && IpRange::isIpv4MappedBelow96($proxy)) {
-                    $reason = IpRange::IPV4_MAPPED_REFUSAL;
-                } elseif (is_string($proxy) && str_contains($proxy, ',')) {
-                    $reason .= '; one entry per list item, a comma-separated value is not accepted';
-                }
-
+            $reason = match (true) {
+                !is_string($proxy) => 'each entry must be a string',
+                $proxy === '*' => null,
+                default => IpRange::invalidEntryReason($proxy),
+            };
+            if ($reason !== null && is_string($proxy) && str_contains($proxy, ',')) {
+                $reason .= '; one entry per list item, a comma-separated value is not accepted';
+            }
+            if ($reason !== null) {
                 throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", self::shownValue($proxy), $reason);
             }
         }

@@ -83,9 +83,9 @@ final class IpRangeTest extends TestCase
     }
 
     #[DataProvider('ipv4MappedRanges')]
-    public function testIsIpv4MappedBelow96FlagsOnlyShortMappedRanges(string $range, bool $expected): void
+    public function testInvalidEntryReasonRefusesOnlyShortMappedRangesWithTheMappedReason(string $range, bool $expected): void
     {
-        self::assertSame($expected, IpRange::isIpv4MappedBelow96($range));
+        self::assertSame($expected, str_contains(IpRange::invalidEntryReason($range) ?? '', 'shorter than /96'));
     }
 
     #[DataProvider('validRanges')]
