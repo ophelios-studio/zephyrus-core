@@ -104,9 +104,9 @@ final readonly class SecureHeadersConfig
      * not emitted.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when a key is unknown, a value is null or not a string or number, a header
-     *         value contains a control character other than a horizontal tab after trimming, hstsMaxAge is not an
-     *         integer or a string of digits, or hstsIncludeSubdomains is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown, a header value is null, not a string or number, or holds
+     *         a control character other than a horizontal tab after trimming, hstsMaxAge is not an integer or a
+     *         string of digits, or hstsIncludeSubdomains is not a recognisable boolean.
      */
     public static function fromArray(array $values): self
     {

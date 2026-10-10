@@ -196,7 +196,7 @@ final readonly class SecurityConfig
             $encryptionKey = null;
         }
 
-        if ($autoHtml !== null && $csrfAutoHtml) {
+        if ($csrfAutoHtml) {
             [$written, $rawValue] = $autoHtml;
 
             throw ConfigurationException::invalidValue(
@@ -372,7 +372,7 @@ final readonly class SecurityConfig
     }
 
     /**
-     * The value fromArray() uses for a setting, or null when no spelling wrote it.
+     * The setting's value as `??` would pick it across its spellings, or null when no spelling wrote it.
      *
      * @param array<string, array<string, mixed>> $sections
      */
