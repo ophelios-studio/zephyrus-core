@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Event;
 
+use InvalidArgumentException;
+use Zephyrus\Exceptions\MessageValue;
+
 /**
  * Synchronous event dispatcher.
  *
@@ -57,16 +60,44 @@ final class EventDispatcher
 
     /**
      * Register every listener declared by the subscriber's getSubscribedEvents().
+     *
+     * Every entry is checked before any listener is registered.
+     *
+     * @throws InvalidArgumentException When an entry is malformed or names a method the subscriber does not expose.
      */
     public function addSubscriber(EventSubscriberInterface $subscriber): void
     {
+        $registrations = [];
+
         foreach ($subscriber::getSubscribedEvents() as $eventClass => $spec) {
-            if (is_string($spec)) {
-                $this->addListener($eventClass, [$subscriber, $spec]);
-            } else {
-                [$method, $priority] = $spec;
-                $this->addListener($eventClass, [$subscriber, $method], $priority);
+            $parsed = self::parseSubscribedSpec($spec);
+
+            if ($parsed === null) {
+                throw new InvalidArgumentException(sprintf(
+                    'Subscriber %s declares an invalid listener for %s: expected "method", ["method"] or ["method", priority], got %s.',
+                    $subscriber::class,
+                    $eventClass,
+                    self::describeSpec($spec),
+                ));
             }
+
+            [$method, $priority] = $parsed;
+            $listener = [$subscriber, $method];
+
+            if (!is_callable($listener)) {
+                throw new InvalidArgumentException(sprintf(
+                    'Subscriber %1$s declares the listener %2$s for %3$s, but %1$s has no public method %2$s.',
+                    $subscriber::class,
+                    MessageValue::quote($method),
+                    $eventClass,
+                ));
+            }
+
+            $registrations[] = [$eventClass, $listener, $priority];
+        }
+
+        foreach ($registrations as [$eventClass, $listener, $priority]) {
+            $this->addListener($eventClass, $listener, $priority);
         }
     }
 
@@ -76,9 +107,40 @@ final class EventDispatcher
     public function removeSubscriber(EventSubscriberInterface $subscriber): void
     {
         foreach ($subscriber::getSubscribedEvents() as $eventClass => $spec) {
-            $method = is_string($spec) ? $spec : $spec[0];
-            $this->removeListener($eventClass, [$subscriber, $method]);
+            $parsed = self::parseSubscribedSpec($spec);
+            $listener = $parsed === null ? null : [$subscriber, $parsed[0]];
+
+            if ($listener !== null && is_callable($listener)) {
+                $this->removeListener($eventClass, $listener);
+            }
         }
+    }
+
+    private static function describeSpec(mixed $spec): string
+    {
+        if (!is_array($spec) || !array_is_list($spec)) {
+            return MessageValue::describe($spec);
+        }
+
+        return '[' . MessageValue::quoteList(array_slice($spec, 0, 3)) . (count($spec) > 3 ? ', ...' : '') . ']';
+    }
+
+    /**
+     * @return array{string, int}|null The method and priority, or null when the entry is malformed.
+     */
+    private static function parseSubscribedSpec(mixed $spec): ?array
+    {
+        if (is_string($spec)) {
+            return [$spec, 0];
+        }
+
+        if (!is_array($spec) || !array_is_list($spec) || count($spec) < 1 || count($spec) > 2) {
+            return null;
+        }
+
+        $priority = count($spec) === 2 ? $spec[1] : 0;
+
+        return is_string($spec[0]) && is_int($priority) ? [$spec[0], $priority] : null;
     }
 
     /**
@@ -194,13 +256,13 @@ final class EventDispatcher
             return $keys;
         }
 
-        foreach (array_values((array) class_parents($eventClass)) as $parent) {
+        foreach (array_values(class_parents($eventClass) ?: []) as $parent) {
             if (isset($this->listeners[$parent])) {
                 $keys[] = $parent;
             }
         }
 
-        foreach (array_values((array) class_implements($eventClass)) as $interface) {
+        foreach (array_values(class_implements($eventClass) ?: []) as $interface) {
             if (isset($this->listeners[$interface])) {
                 $keys[] = $interface;
             }
