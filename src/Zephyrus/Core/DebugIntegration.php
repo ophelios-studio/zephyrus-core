@@ -342,8 +342,7 @@ final class DebugIntegration
     /**
      * Strip the class or wildcard prefix PHP puts on the keys of a wrapped object's non-public properties.
      *
-     * A property listed as Class::$name in the describer's keysToHide is wrapped as sensitive before its
-     * prefix is lost, so the declaring class still decides what is masked.
+     * A property listed as Class::$name in keysToHide is marked sensitive before its prefix is lost.
      *
      * @param array<array-key, mixed> $entries
      * @return array<array-key, mixed>
