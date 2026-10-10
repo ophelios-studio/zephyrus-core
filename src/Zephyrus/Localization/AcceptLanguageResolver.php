@@ -5,27 +5,22 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 /**
- * Resolves the best locale from an Accept-Language header value, an optional
- * explicit requested locale (URL segment, cookie, etc.), and a whitelist of
- * supported locales.
+ * Picks the locale for a request from an explicit locale, an Accept-Language header, then a default.
  *
- * Resolution order:
- *   1. $requestedLocale (normalized; progressive subtag fallback).
- *   2. Candidates parsed from $acceptLanguageHeader, ordered by q-value.
- *   3. $defaultLocale as the final fallback.
- *
- * When $supportedLocales is empty every normalized locale is considered valid.
+ * Order: $requestedLocale (normalized, then progressively shortened: zh-Hant-TW, zh-Hant, zh), the header
+ * candidates by q-value (a '*' range selects $defaultLocale), then $defaultLocale, replaced by the first
+ * supported locale when unsupported. An empty $supportedLocales accepts every normalized locale.
  */
 final class AcceptLanguageResolver
 {
-    /** Longest language tag accepted (RFC 5646 practical maximum). Longer tags are ignored. */
+    /** Tags longer than this are ignored (RFC 5646 practical maximum). */
     private const MAX_TAG_LENGTH = 35;
 
     /**
-     * @param string   $acceptLanguageHeader  Raw Accept-Language header value.
-     * @param string[] $supportedLocales       Allowlist. Empty means "accept any".
-     * @param string   $defaultLocale          Returned when nothing else matches.
-     * @param string   $requestedLocale        Explicit override (URL segment, cookie…).
+     * @param string   $acceptLanguageHeader Raw header value, may be empty.
+     * @param string[] $supportedLocales     Allowlist. Empty means "accept any".
+     * @param string   $defaultLocale        Used when nothing matches. An empty value becomes 'en'.
+     * @param string   $requestedLocale      Explicit override, may be empty. A '*' is ignored.
      */
     public function resolve(
         string $acceptLanguageHeader,
@@ -43,13 +38,11 @@ final class AcceptLanguageResolver
             $defaultLocale = 'en';
         }
 
-        // Keep the final fallback within the supported-locale allowlist.
         if ($supportedLocales !== []) {
             $defaultLocale = $this->resolveAcceptedLocale($defaultLocale, $supportedLocales)
                 ?? $supportedLocales[0];
         }
 
-        // 1. Explicit requested locale wins if it is accepted.
         if ($requestedLocale !== '') {
             $normalized = $this->normalize($requestedLocale);
 
@@ -61,7 +54,6 @@ final class AcceptLanguageResolver
             }
         }
 
-        // 2. Walk Accept-Language candidates in descending quality order.
         foreach ($this->parseHeader($acceptLanguageHeader) as $candidate) {
             if ($candidate === '*') {
                 return $defaultLocale;
@@ -73,13 +65,11 @@ final class AcceptLanguageResolver
             }
         }
 
-        // 3. Default fallback.
         return $defaultLocale;
     }
 
     /**
-     * Parse an Accept-Language header into an ordered list of normalized locale
-     * codes, sorted by q-value descending (highest quality first).
+     * Parses the header into normalized locales, highest q-value first, dropping q=0 and duplicates.
      *
      * @return string[]
      */
@@ -110,16 +100,14 @@ final class AcceptLanguageResolver
                 }
             }
 
-            // RFC7231: q=0 means "not acceptable".
+            // q=0 means "not acceptable" (RFC 7231).
             if ($locale !== '' && $quality > 0.0) {
-                // Preserve source order so equal q-values stay stable.
                 $entries[] = [$locale, $quality, $position];
             }
 
             $position++;
         }
 
-        // Descending by quality, then ascending original position for stability.
         usort($entries, static function (array $a, array $b): int {
             $qualityCompare = $b[1] <=> $a[1];
             if ($qualityCompare !== 0) {
@@ -141,11 +129,13 @@ final class AcceptLanguageResolver
         return $ordered;
     }
 
+    /**
+     * An invalid q-value counts as 1.0; valid values are clamped to [0, 1].
+     */
     private function parseQuality(string $value): float
     {
         $quality = trim($value);
 
-        // Keep default behavior for invalid q-values.
         if ($quality === '' || !is_numeric($quality)) {
             return 1.0;
         }
@@ -164,8 +154,8 @@ final class AcceptLanguageResolver
     }
 
     /**
-     * Normalize a locale tag: underscores become hyphens, language code is
-     * lowercased, optional region code is uppercased (e.g. FR-ca → fr-CA).
+     * Underscores become hyphens, language lowercased, script title-cased, region uppercased (FR-ca gives fr-CA).
+     * Returns '' for an empty or over-long tag. A '*' passes through unchanged.
      */
     private function normalize(string $locale): string
     {
@@ -190,19 +180,16 @@ final class AcceptLanguageResolver
         for ($index = 1; $index < $subtagCount; $index++) {
             $subtag = $parts[$index];
 
-            // Script subtag (e.g. Hant -> Hant).
             if (strlen($subtag) === 4 && ctype_alpha($subtag)) {
                 $normalized[] = ucfirst(strtolower($subtag));
                 continue;
             }
 
-            // Region subtag (e.g. us -> US, 419 -> 419).
             if ((strlen($subtag) === 2 && ctype_alpha($subtag)) || (strlen($subtag) === 3 && ctype_digit($subtag))) {
                 $normalized[] = strtoupper($subtag);
                 continue;
             }
 
-            // Variants/extensions are kept lowercased.
             $normalized[] = strtolower($subtag);
         }
 
@@ -230,7 +217,6 @@ final class AcceptLanguageResolver
             return $locale;
         }
 
-        // Progressive fallback for compound tags: zh-Hant-TW -> zh-Hant -> zh.
         $parts = explode('-', $locale);
         while (count($parts) > 1) {
             array_pop($parts);

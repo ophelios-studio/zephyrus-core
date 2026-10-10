@@ -10,52 +10,21 @@ use RecursiveIteratorIterator;
 use UnexpectedValueException;
 
 /**
- * Loads locale catalogs from JSON files.
+ * Loads locale catalogs from JSON files as a nested (not flattened) array.
  *
- * Supports two modes:
+ * For locale "en", every *.json file under {basePath}/en/ is read recursively and merged in alphabetical order,
+ * later files winning on conflicting keys. Without that directory, the single file {basePath}/en.json is read.
+ * A missing catalog yields an empty array.
  *
- * 1. **Directory mode** (preferred): Given a base path and locale "en", if a
- *    directory `{basePath}/en/` exists, all `*.json` files inside it (including
- *    subdirectories) are recursively discovered and merged into a single nested
- *    array using `array_replace_recursive`. This allows splitting translations
- *    across multiple files for organization:
- *
- *      locale/en/
- *        strings.json      {"welcome": {"title": "Hello"}}
- *        errors.json       {"errors": {"required": "Required"}}
- *        admin/users.json  {"admin": {"users": {"title": "Users"}}}
- *
- * 2. **Single-file mode** (backward compat): If no directory exists, falls back
- *    to looking for `{basePath}/{locale}.json` as a single file.
- *
- * The returned catalog is a **nested associative array** (not flattened).
- * The Translator resolves dot-notation keys at lookup time by traversing
- * the nesting levels.
- *
- * ## Path safety
- * The locale is concatenated into a filesystem path, so it is treated as
- * untrusted input regardless of where it came from. Two independent guards
- * are enforced here, in the loader itself, because `load()` is public API a
- * consumer may call directly without ever going through a locale resolver:
- *
- * 1. The locale must match {@see self::LOCALE_PATTERN}, a BCP-47-shaped tag.
- *    That shape admits no separator, no dot and no null byte, so no traversal
- *    sequence can survive it.
- * 2. The resolved directory or file must still sit under `$basePath` once
- *    `realpath()` has collapsed every symbolic link.
- *
- * A locale failing either guard yields an empty catalog, which is exactly the
- * behaviour of a locale that has no catalog on disk.
+ * Path safety: the locale becomes part of a filesystem path, so load() checks it even when called directly.
+ * The locale must match LOCALE_PATTERN (no separator, dot or NUL byte), and the resolved path must stay under
+ * $basePath after symbolic links are collapsed. A locale failing either check yields an empty catalog.
  */
 final class JsonLocaleLoader implements LocaleLoaderInterface
 {
     /**
-     * BCP-47-shaped locale tag: a 2-3 letter language, then any number of
-     * alphanumeric subtags separated by "-" or "_".
-     *
-     * Both separators are accepted because {@see self::localeCandidates()}
-     * documents and supports underscore-named catalog directories, so an
-     * application may legitimately configure "fr_CA".
+     * BCP-47-shaped tag: a 2-3 letter language, then alphanumeric subtags separated by "-" or "_".
+     * The underscore stays because catalog directories may be named like fr_CA (see localeCandidates()).
      */
     private const string LOCALE_PATTERN = '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$/';
 
@@ -65,7 +34,12 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
+     * Returns the catalog for $locale, or an empty array when none exists or the locale is refused.
+     *
      * @return array<string, mixed>
+     *
+     * @throws LocalizationException When a catalog file or directory is unreadable, not valid JSON, or does not
+     *                               decode to a JSON object or array.
      */
     public function load(string $locale): array
     {
@@ -76,7 +50,6 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
         $base = rtrim($this->basePath, DIRECTORY_SEPARATOR);
         $candidates = $this->localeCandidates($locale);
 
-        // 1. Try directory mode: {basePath}/{locale}/
         foreach ($candidates as $candidate) {
             $dir = $base . DIRECTORY_SEPARATOR . $candidate;
             if (is_dir($dir) && $this->isContainedIn($dir, $base)) {
@@ -84,7 +57,6 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
             }
         }
 
-        // 2. Fall back to single-file mode: {basePath}/{locale}.json
         foreach ($candidates as $candidate) {
             $file = $base . DIRECTORY_SEPARATOR . $candidate . '.json';
             if (is_file($file) && $this->isContainedIn($file, $base)) {
@@ -96,8 +68,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Whether a locale tag is shaped like a language tag and therefore safe to
-     * concatenate into a filesystem path.
+     * Whether $locale is a BCP-47-shaped tag, safe to concatenate into a file path.
      */
     public static function isWellFormedLocale(string $locale): bool
     {
@@ -105,8 +76,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Whether `$path` still resolves inside `$base` after symbolic links are
-     * collapsed. A path that cannot be resolved at all is never contained.
+     * Whether $path still resolves inside $base after symbolic links are collapsed. An unresolvable path is never contained.
      */
     private function isContainedIn(string $path, string $base): bool
     {
@@ -123,11 +93,6 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Recursively scan a directory for *.json files and merge them.
-     *
-     * Files are sorted alphabetically for deterministic merge order.
-     * Later files (alphabetically) override earlier files when keys conflict.
-     *
      * @return array<string, mixed>
      */
     private function loadDirectory(string $directory): array
@@ -145,8 +110,6 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Load and decode a single JSON file.
-     *
      * @return array<string, mixed>
      */
     private function loadFile(string $path): array
@@ -171,8 +134,6 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Recursively find all *.json files in a directory.
-     *
      * @return string[]
      */
     private function findJsonFiles(string $directory): array
@@ -192,9 +153,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
                 }
             }
         } catch (UnexpectedValueException $exception) {
-            // The SPL iterators embed the absolute server path in their message.
-            // Wrap so the catalog directory name is reported and the full path
-            // stays in the previous exception rather than in the message.
+            // The SPL message embeds the absolute path; only the directory name is reported.
             throw LocalizationException::unreadableDirectory(basename($directory), $exception);
         }
 
@@ -202,12 +161,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Build locale directory/file name candidates.
-     *
-     * For "fr-CA" this returns variants such as:
-     *   ["fr-CA", "fr_CA", "fr-ca", "fr_ca"]
-     * so projects can use either canonical or lowercase region casing.
-     * For "en" this returns ["en"].
+     * Directory and file name variants of a tag, e.g. "fr-CA" gives ["fr-CA", "fr_CA", "fr-ca", "fr_ca"].
      *
      * @return string[]
      */

@@ -8,6 +8,16 @@ use Zephyrus\Core\App;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Formatting\FormatterException;
 
+/**
+ * Translates dot-notation keys from the catalogs of a LocaleLoaderInterface.
+ *
+ * Lookup order: the requested locale, its base language (fr-CA, then fr), the default locale, then the default's
+ * base language. A missing key returns the key itself, interpolated like a value. Catalogs are cached per instance.
+ *
+ * Placeholders are {name} or {name|pipe|pipe:argument}. A placeholder without a parameter stays verbatim.
+ * Pipes, applied left to right: lower, upper, title, trim, ltrim, rtrim, number, truncate, plural, default, then
+ * any Formatter name (built-in or registered), which needs a Formatter set in App.
+ */
 final class Translator
 {
     private const TEXT_PIPES = [
@@ -17,7 +27,7 @@ final class Translator
     /** @var array<string, array<string, mixed>> */
     private array $catalogCache = [];
 
-    /** @var array<string, ?\MessageFormatter> null when the exact-one rule applies */
+    /** @var array<string, ?\MessageFormatter> Null when the locale falls back to "exactly 1 is singular". */
     private array $pluralSelectors = [];
 
     public function __construct(
@@ -27,9 +37,13 @@ final class Translator
     }
 
     /**
+     * Returns the translation of $key, for $locale or the default locale.
+     *
      * @param array<string, scalar|null> $parameters
      *
-     * @throws LocalizationException
+     * @throws LocalizationException When the loader fails, a pipe is unknown, or a formatter pipe needs
+     *                               App::setFormatter() or is rejected by a built-in formatter. A custom
+     *                               formatter's own exception propagates unchanged.
      */
     public function trans(string $key, array $parameters = [], ?string $locale = null): string
     {
@@ -103,22 +117,18 @@ final class Translator
     }
 
     /**
-     * Resolve a dot-notation key by traversing the nested catalog array.
-     *
-     * Returns the string value if found, or null if the key does not exist
-     * or resolves to a non-scalar value (e.g. an intermediate array node).
+     * Returns the scalar at $key, or null when missing or not scalar (e.g. an intermediate array node).
      *
      * @param array<string, mixed> $catalog
      */
     private function resolveKey(string $key, array $catalog): ?string
     {
-        // Fast path: direct key match (for flat catalogs or top-level keys)
+        // A literal key containing dots wins over dot-notation traversal.
         if (array_key_exists($key, $catalog)) {
             $value = $catalog[$key];
             return (is_scalar($value) || $value === null) ? (string) $value : null;
         }
 
-        // Dot-notation traversal for nested catalogs
         $segments = explode('.', $key);
         $current = $catalog;
 
@@ -202,12 +212,10 @@ final class Translator
     }
 
     /**
-     * Format a numeric value.
+     * Formats a numeric value; a non-numeric value is returned unchanged.
      *
-     * Argument format: precision[:thousands_sep[:decimal_sep]]
-     *   number:2        → 12.35   (no thousands separator, dot decimal)
-     *   number:2:,:.    → 1,234.56
-     *   number:0:_      → 1_234
+     * Argument: precision[:thousands_sep[:decimal_sep]], e.g. "2:,:." gives 1,234.56. Defaults: precision 0, no
+     * thousands separator, "." decimal separator.
      */
     private function formatNumber(string $value, ?string $argument): string
     {
@@ -224,11 +232,9 @@ final class Translator
     }
 
     /**
-     * Truncate a string to at most $length multibyte characters.
+     * Truncates to at most $length characters, then appends the suffix, so the result can exceed $length.
      *
-     * Argument format: length[:suffix]
-     *   truncate:10       → appends "…" when truncated
-     *   truncate:10:...   → appends "..." when truncated
+     * Argument: length[:suffix], the suffix defaulting to an ellipsis. A length of 0 or less never truncates.
      */
     private function applyTruncate(string $value, ?string $argument): string
     {
@@ -248,13 +254,9 @@ final class Translator
     }
 
     /**
-     * Return the singular or plural form, using the plural rules of the locale.
+     * Returns the singular or plural form, using the plural rules of the locale.
      *
-     * Argument format: singular:plural
-     *   plural:item:items   → "item" for one (1 in English, 0 and 1 in French), else "items"
-     *   plural:child:children
-     *
-     * When no plural form is given, an "s" is appended to the singular.
+     * Argument: singular[:plural], e.g. "item:items". Without a plural, an "s" is appended to the singular.
      * A non-numeric value always takes the singular.
      */
     private function applyPlural(string $value, ?string $argument, string $locale): string
@@ -275,7 +277,7 @@ final class Translator
     }
 
     /**
-     * Whether the number takes the singular form: only 1 in most locales, below 2 in French.
+     * Whether $number takes the singular, by the ICU plural rules of $locale; exactly 1 when ICU has none usable.
      */
     private function takesSingular(float $number, string $locale): bool
     {
@@ -292,7 +294,7 @@ final class Translator
     }
 
     /**
-     * Return a selector only for a locale ICU accepts and that classifies 1 as "one".
+     * Null unless ICU accepts the locale and classifies 1 as "one".
      */
     private function createPluralSelector(string $locale): ?\MessageFormatter
     {
@@ -320,15 +322,10 @@ final class Translator
     }
 
     /**
-     * Delegate an unknown pipe to the Formatter registered in App.
+     * Delegates an unknown pipe to the Formatter set in App, built-in or custom.
      *
-     * Supports both built-in Formatter methods (money, date, decimal, …) and
-     * custom formatters registered via Formatter::register().
-     *
-     * A name no formatter answers to throws LocalizationException, and so does a
-     * built-in formatter name while no Formatter is set in App. A custom formatter's
-     * own exception propagates unchanged. An empty value skips a known formatter pipe,
-     * so a following default applies.
+     * Throws LocalizationException when no formatter answers to the name, or a built-in name is used while no
+     * Formatter is set. An empty value is returned as is, so a following default pipe applies.
      *
      * @throws LocalizationException
      */
@@ -368,8 +365,7 @@ final class Translator
     }
 
     /**
-     * Give the formatter an int or float for numeric strings, so built-ins typed
-     * with int (ordinal, duration, filesize) accept them under strict types.
+     * Passes numeric strings as int or float, since built-in formatters are typed under strict types.
      */
     private function castPipeValue(string $value): int|float|string
     {

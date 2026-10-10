@@ -5,18 +5,10 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 /**
- * High-level locale resolver: accepts nullable parameters and treats an
- * explicit requested locale (URL segment, cookie, form field, …) as the
- * highest-priority signal, falling back to Accept-Language header candidates
- * (with q-value ordering and regional fallback), and finally to the
- * application default.
+ * Resolves the locale from an explicit request, then the Accept-Language header, then the default.
  *
- * Resolution order:
- *   1. $requestedLocale (normalized; regional fallback to base language).
- *   2. Candidates parsed from $acceptLanguageHeader, ordered by q-value.
- *   3. $defaultLocale as the final fallback.
- *
- * When $supportedLocales is empty every normalized locale is considered valid.
+ * Order: $requestedLocale (normalized, regional falls back to base language), Accept-Language
+ * candidates by q-value, then $defaultLocale. An empty $supportedLocales accepts any locale.
  */
 final class LocaleResolver
 {
@@ -28,7 +20,7 @@ final class LocaleResolver
     }
 
     /**
-     * Resolve the best locale from the available signals.
+     * Resolves the best locale from the available signals.
      *
      * @param string[] $supportedLocales Allowlist. Empty means "accept any".
      */

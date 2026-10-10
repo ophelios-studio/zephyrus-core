@@ -5,28 +5,15 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 /**
- * Chains multiple LocaleLoaderInterface implementations and merges their
- * catalogs using a last-wins override policy.
+ * Merges the catalogs of several loaders, later loaders winning on conflicting keys.
  *
- * Resolution semantics:
- *   - Each loader is called in the order supplied.
- *   - Keys from later loaders override keys from earlier loaders.
- *   - Loaders that return empty catalogs (e.g. missing locale file) are silently
- *     skipped; they never displace keys contributed by earlier loaders.
+ * Nested catalogs are merged key by key. A loader returning an empty catalog never displaces earlier keys.
  *
- * Typical usage — vendor base + application override:
+ * Usage (vendor base, application override):
  *
  *   $loader = new FallbackLocaleLoader([
- *       new JsonLocaleLoader('/vendor/package/locales'),   // base layer
- *       new JsonLocaleLoader('/app/resources/locales'),    // app overrides
- *   ]);
- *
- * Typical usage — per-module translation files merged at startup:
- *
- *   $loader = new FallbackLocaleLoader([
- *       new JsonLocaleLoader('/modules/blog/locales'),
- *       new JsonLocaleLoader('/modules/shop/locales'),
- *       new JsonLocaleLoader('/app/locales'),              // wins on conflict
+ *       new JsonLocaleLoader('/vendor/package/locales'),
+ *       new JsonLocaleLoader('/app/resources/locales'),
  *   ]);
  */
 final class FallbackLocaleLoader implements LocaleLoaderInterface

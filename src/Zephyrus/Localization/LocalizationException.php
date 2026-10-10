@@ -7,41 +7,14 @@ namespace Zephyrus\Localization;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
- * Thrown when locale file loading or parsing fails, or a translation pipe cannot be applied.
+ * Thrown when locale loading or parsing fails, or a translation pipe cannot be applied.
  *
- * ## The absolute server path is CONTEXT, never part of the sentence
- *
- * Every factory here used to interpolate the full path it was handed. The
- * message is the part that TRAVELS: a log line, an alert email, a Tracy panel,
- * an APM event, sometimes a 500 page. Worse than most, locale loading runs at
- * BOOT, before the kernel's error handling exists, so these messages are among
- * the likeliest in the whole framework to land raw in front of somebody. They
- * disclosed the deployment's filesystem layout to every one of those readers
- * for nothing, because the only actor who can fix a broken locale file is a
- * developer who already has the repository.
- *
- * The file NAME stays, because that is the diagnostic. The path moved to
- * path(), so a caller that genuinely needs it asks instead of receiving it by
- * default. Same shape as RenderException::templateNotFound().
- *
- * ## Why the LAST TWO segments and not just the basename
- *
- * A catalog is nested as locale/<tag>/<file>.json, so a basename alone made
- * fr/legal.json and en/legal.json produce the IDENTICAL sentence, and the
- * locale tag is the single most useful disambiguator when a translation file
- * fails to parse. Naming the parent segment is not an invented convention, it
- * is the catalog's own structure, and a directory NAME is not a server path:
- * nothing above the catalog is disclosed. The accessor still carries the full
- * path for a caller that needs it.
+ * Messages name the file by its last two segments ("fr/legal.json") and never the absolute path, since they
+ * can reach logs or error pages. The full path is available through path().
  */
 final class LocalizationException extends ZephyrusRuntimeException
 {
-    /**
-     * The absolute path this exception is about, when it was given one.
-     *
-     * Deliberately NOT in getMessage(). Null rather than '' when there is no
-     * path, so "none recorded" stays distinguishable from "it was empty".
-     */
+    /** Absolute path, deliberately kept out of getMessage(). Null when none was recorded. */
     private ?string $path = null;
 
     public static function unreadableFile(string $path): self
@@ -53,9 +26,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * The JsonException message IS kept. It reads "Syntax error" or "Control
-     * character error", never a path, and it is the entire reason a developer
-     * reads this line.
+     * Keeps the JsonException message, which names the syntax error and never a path.
      */
     public static function invalidJson(string $path, ?\Throwable $previous = null): self
     {
@@ -68,8 +39,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * A pipe that is neither a text pipe nor a formatter name. Names the pipe,
-     * the key and the valid pipes, never the value being rendered.
+     * Names the pipe, the key and the valid pipes, never the value being rendered.
      *
      * @param list<string> $validPipes
      */
@@ -96,8 +66,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * A built-in formatter pipe rejected the value. Names the pipe and the key,
-     * never the value; the cause stays in the previous exception.
+     * Names the pipe and the key, never the value; the cause stays in the previous exception.
      */
     public static function formatterPipeFailed(string $pipe, string $key, \Throwable $previous): self
     {
@@ -113,12 +82,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * A catalog directory exists but could not be opened or traversed.
-     *
-     * The absolute server path is deliberately kept out of the message and left
-     * in the previous exception, so a leaked message cannot disclose the
-     * deployment layout. This factory receives a NAME, not a path, so path()
-     * stays null for it.
+     * Takes a directory name rather than a path, so path() stays null and the message never discloses the layout.
      */
     public static function unreadableDirectory(string $name, ?\Throwable $previous = null): self
     {
@@ -137,12 +101,7 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * Name a locale file by its last two path segments ("fr/legal.json").
-     *
-     * Falls back to the file alone when there is no parent segment to show, so
-     * a bare "en.json" or a root-level "/en.json" never grows a stray
-     * separator. dirname() answers "." for the first and "/" (whose basename is
-     * "") for the second.
+     * Shows the parent segment so "fr/legal.json" and "en/legal.json" differ; a root-level file gets no separator.
      */
     private static function catalogRelativeName(string $path): string
     {

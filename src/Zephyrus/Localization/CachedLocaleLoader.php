@@ -5,11 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 /**
- * Decorator that caches locale catalogs in APCu when the extension is
- * available and the application is not running in debug mode.
- *
- * When APCu is not loaded or debug mode is enabled, every call is transparently
- * forwarded to the inner loader with no caching overhead.
+ * Caches locale catalogs in APCu when it is loaded and debug is off, otherwise delegates to the inner loader.
  *
  * Usage:
  *
@@ -25,10 +21,9 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
     private readonly bool $cacheEnabled;
 
     /**
-     * @param LocaleLoaderInterface $inner   The actual loader to delegate to.
-     * @param bool                  $debug   When true, caching is bypassed entirely.
-     * @param string                $prefix  APCu key prefix (avoids collisions between apps).
-     * @param int                   $ttl     Cache time-to-live in seconds (0 = unlimited).
+     * @param bool   $debug  Bypasses the cache entirely when true.
+     * @param string $prefix APCu key prefix, avoids collisions between applications.
+     * @param int    $ttl    Time-to-live in seconds, 0 for no expiry.
      */
     public function __construct(
         private readonly LocaleLoaderInterface $inner,
@@ -40,6 +35,8 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
+     * Returns the cached catalog for $locale, loading and storing it on a miss.
+     *
      * @return array<string, mixed>
      */
     public function load(string $locale): array
@@ -65,10 +62,7 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
     }
 
     /**
-     * Flush all cached catalogs matching this loader's prefix.
-     *
-     * Useful after deploying new translation files. When APCu is not
-     * available this is a no-op.
+     * Deletes the cached catalogs of this prefix. Call after deploying new translation files; no-op without APCu.
      */
     public function flush(): void
     {
