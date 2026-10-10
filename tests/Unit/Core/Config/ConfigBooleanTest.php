@@ -106,4 +106,40 @@ final class ConfigBooleanTest extends TestCase
             self::assertStringContainsString("field 'csrf.enabled'", $exception->getMessage());
         }
     }
+
+    public function testTheFirstSpellingThatIsSetDecidesTheValue(): void
+    {
+        self::assertFalse(ConfigBoolean::firstSet('csrf', ['enabled' => false, 'csrf_enabled' => true], ['enabled', 'csrf_enabled'], true));
+        self::assertFalse(ConfigBoolean::firstSet('csrf', ['enabled' => null, 'csrf_enabled' => false], ['enabled', 'csrf_enabled'], true));
+        self::assertTrue(ConfigBoolean::firstSet('csrf', ['csrf_enabled' => true], ['enabled', 'csrf_enabled'], false));
+    }
+
+    public function testAStringZeroIsASetValueNotAnAbsentOne(): void
+    {
+        self::assertFalse(ConfigBoolean::firstSet('session', ['httpOnly' => '0'], ['httpOnly', 'http_only'], true));
+    }
+
+    public function testTheDefaultAppliesOnlyWhenNoSpellingIsSet(): void
+    {
+        self::assertTrue(ConfigBoolean::firstSet('session', [], ['httpOnly', 'http_only'], true));
+        self::assertFalse(ConfigBoolean::firstSet('session', ['http_only' => null], ['httpOnly', 'http_only'], false));
+    }
+
+    public function testAnEmptySetValueIsRefusedInsteadOfUsingTheDefault(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        ConfigBoolean::firstSet('session', ['httpOnly' => ''], ['httpOnly', 'http_only'], true);
+    }
+
+    public function testTheRefusalNamesTheSpellingThatWasSet(): void
+    {
+        try {
+            ConfigBoolean::firstSet('session', ['http_only' => 'maybe'], ['httpOnly', 'http_only'], true);
+            self::fail('A value that is not a boolean must be refused.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("section 'session'", $exception->getMessage());
+            self::assertStringContainsString("field 'http_only'", $exception->getMessage());
+        }
+    }
 }

@@ -53,6 +53,24 @@ final class ConfigBoolean
         );
     }
 
+    /**
+     * Parse the first of the given keys that is set (not null), or return the default when none is.
+     *
+     * @param array<string, mixed> $values
+     * @param list<string>         $keys   Spellings in order of preference.
+     * @throws ConfigurationException when the value written under the key is not a recognisable boolean.
+     */
+    public static function firstSet(string $section, array $values, array $keys, bool $default): bool
+    {
+        foreach ($keys as $key) {
+            if (($values[$key] ?? null) !== null) {
+                return self::parse($section, $key, $values[$key]);
+            }
+        }
+
+        return $default;
+    }
+
     private static function shown(mixed $value): string
     {
         if (is_string($value)) {

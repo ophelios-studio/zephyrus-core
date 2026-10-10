@@ -6,7 +6,6 @@ namespace Zephyrus\Security;
 
 use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigBoolean;
-use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
 
 use function is_array;
@@ -154,10 +153,11 @@ final class CsrfConfig
     public static function fromArray(array $config): self
     {
         return new self(
-            enabled: self::boolOption($config, ['enabled', 'csrf_enabled', 'csrfEnabled'], true),
+            enabled: ConfigBoolean::firstSet('csrf', $config, ['enabled', 'csrf_enabled', 'csrfEnabled'], true),
             bodyField: (string) ($config['bodyField'] ?? $config['body_field'] ?? '_csrf_token'),
             headerName: (string) ($config['headerName'] ?? $config['header_name'] ?? 'X-CSRF-Token'),
-            injectToken: self::boolOption(
+            injectToken: ConfigBoolean::firstSet(
+                'csrf',
                 $config,
                 ['injectToken', 'inject_token', 'csrf_auto_html', 'csrfAutoHtml'],
                 false,
@@ -170,24 +170,6 @@ final class CsrfConfig
                 ?? []
             ),
         );
-    }
-
-    /**
-     * The first spelling that is set, read as a strict boolean.
-     *
-     * @param array<string, mixed> $config
-     * @param list<string>         $keys
-     * @throws ConfigurationException when the written value is not a boolean.
-     */
-    private static function boolOption(array $config, array $keys, bool $default): bool
-    {
-        foreach ($keys as $key) {
-            if (($config[$key] ?? null) !== null) {
-                return ConfigBoolean::parse('csrf', $key, $config[$key]);
-            }
-        }
-
-        return $default;
     }
 
     /**
