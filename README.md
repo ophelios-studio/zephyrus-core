@@ -255,6 +255,10 @@ $middleware = new CsrfMiddleware(
 
 The callback receives attacker-controlled input: it should only answer the refusal, never replay the request or act on the account from it.
 
+### Process model
+
+`App` holds its services (configuration, translator, formatter, session, asset, URL generator, CSP nonce) for the whole process, and `SessionMiddleware` sets the session per request. This assumes one request per process (php-fpm, mod_php), as does the PHP session. Persistent workers (RoadRunner, Swoole, FrankenPHP worker mode) are not supported: `App::reset()` is a testing tool, not a between-requests hook.
+
 ---
 
 ## Requirements

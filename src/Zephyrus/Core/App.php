@@ -28,6 +28,10 @@ use Zephyrus\Session\SessionManager;
  * The set*() methods can be called at any time (e.g. during ApplicationBuilder
  * wiring) and are idempotent. The get*() methods return null when the service
  * has not been set, so helpers can degrade gracefully.
+ *
+ * The state assumes one request per process (php-fpm, mod_php), as does the
+ * PHP session. Persistent workers (RoadRunner, Swoole, FrankenPHP worker mode)
+ * are not supported; reset() is a testing tool, not a between-requests hook.
  */
 final class App
 {
