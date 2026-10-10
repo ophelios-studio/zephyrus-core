@@ -87,6 +87,25 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
+     * A value of the wrong type, refused without showing it, followed by the requirement it fails, such as
+     * 'must be a mapping'.
+     */
+    public static function invalidType(string $section, string $field, string $requirement): self
+    {
+        $exception = new self(sprintf(
+            "Configuration section '%s' field %s %s.",
+            $section,
+            self::shownField($field),
+            $requirement,
+        ));
+        $exception->section = $section;
+        $exception->field = $field;
+        $exception->reason = $requirement;
+
+        return $exception;
+    }
+
+    /**
      * Two spellings of one setting written in the same section; field() is the first.
      */
     public static function conflictingKeys(string $section, string $first, string $second): self
@@ -134,9 +153,9 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The section named by invalidValue(), missingRequired(), removedField(), unknownKey() or conflictingKeys(), or
-     * null for any other refusal: its configuration key (such as 'database' or 'security.headers'), or the class
-     * name of the ConfigSection whose getter refused a value.
+     * The section named by invalidValue(), invalidType(), missingRequired(), removedField(), unknownKey() or
+     * conflictingKeys(), or null for any other refusal: its configuration key (such as 'database' or
+     * 'security.headers'), or the class name of the ConfigSection whose getter refused a value.
      */
     public function section(): ?string
     {
@@ -144,8 +163,8 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The field named by invalidValue(), missingRequired(), removedField(), unknownKey() or conflictingKeys(), as
-     * passed, or null.
+     * The field named by invalidValue(), invalidType(), missingRequired(), removedField(), unknownKey() or
+     * conflictingKeys(), as passed, or null.
      */
     public function field(): ?string
     {
@@ -153,7 +172,7 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The reason given to invalidValue(), or null.
+     * The reason given to invalidValue(), or the requirement given to invalidType(), or null.
      */
     public function reason(): ?string
     {

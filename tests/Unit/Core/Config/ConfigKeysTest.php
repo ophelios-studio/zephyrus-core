@@ -146,22 +146,50 @@ final class ConfigKeysTest extends TestCase
         );
     }
 
+    public function testAMappingNameHoldingNullReadsAsAnEmptyMapping(): void
+    {
+        $keys = ConfigKeys::read('example', ['csrf' => null], self::SPELLINGS);
+
+        self::assertFalse($keys->has('csrfEnabled'));
+    }
+
     /**
      * @return iterable<string, array{mixed}>
      */
     public static function nonMappingValues(): iterable
     {
-        yield 'null' => [null];
         yield 'false' => [false];
-        yield 'string' => ['enabled'];
+        yield 'zero' => [0];
+        yield 'string' => ['s3cret-value'];
     }
 
     #[DataProvider('nonMappingValues')]
-    public function testAMappingNameHoldingNoMappingIsLeftToTheCaller(mixed $value): void
+    public function testAMappingNameHoldingAPlainValueIsRefusedWithoutShowingIt(mixed $value): void
     {
-        ConfigKeys::read('example', ['csrf' => $value], self::SPELLINGS);
+        try {
+            ConfigKeys::read(
+                'example',
+                ['csrf' => $value],
+                self::SPELLINGS,
+                mappingExamples: ['csrf' => 'csrf: { enabled: false }'],
+            );
 
-        $this->addToAssertionCount(1);
+            self::fail('A plain value was accepted where a mapping is expected.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'example' field 'csrf' must be a mapping, such as csrf: { enabled: false }.",
+                $exception->getMessage(),
+            );
+            self::assertSame('csrf', $exception->field());
+        }
+    }
+
+    public function testAMappingWithoutAnExampleIsRefusedWithTheRequirementAlone(): void
+    {
+        self::assertSame(
+            "Configuration section 'example' field 'csrf' must be a mapping.",
+            self::refusalOf(['csrf' => true]),
+        );
     }
 
     public function testTheValueOfAnUnknownKeyStaysOutOfTheMessage(): void
@@ -274,7 +302,7 @@ final class ConfigKeysTest extends TestCase
 
     public function testAnAbsentPropertyReadsAsNullUnderItsPreferredSpelling(): void
     {
-        $keys = ConfigKeys::read('example', ['csrf' => 'not a mapping'], self::SPELLINGS);
+        $keys = ConfigKeys::read('example', ['csrf' => null], self::SPELLINGS);
 
         self::assertFalse($keys->has('csrfEnabled'));
         self::assertNull($keys->value('csrfEnabled'));

@@ -299,4 +299,15 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertNull($e->reason());
         self::assertNull($e->messageWithoutValue());
     }
+
+    public function testInvalidTypeNamesTheSectionFieldAndRequirementButNoValue(): void
+    {
+        $e = ConfigurationException::invalidType('security', "csrf\n", 'must be a mapping');
+
+        self::assertSame("Configuration section 'security' field \"csrf\\n\" must be a mapping.", $e->getMessage());
+        self::assertSame('security', $e->section());
+        self::assertSame("csrf\n", $e->field());
+        self::assertSame('must be a mapping', $e->reason());
+        self::assertNull($e->messageWithoutValue());
+    }
 }

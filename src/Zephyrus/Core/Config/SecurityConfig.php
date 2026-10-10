@@ -50,6 +50,8 @@ use Zephyrus\Security\SecureHeadersConfig;
  *     A string naming nothing is an empty
  *     trustedProxies, but is REJECTED for allowedHosts, where an empty list allows every host.
  *     A declared null allowedHosts (an unset !env without default) is REJECTED for the same reason.
+ *   - csrf, encryption: a mapping or null; any other value is REJECTED without being shown.
+ *   - encryptionKey: a string or null; any other value is REJECTED without being shown.
  *   - csrfExceptions: each entry a non-empty string.
  *   - forceHttps, csrfEnabled, csrfAutoHtml: a boolean; a declared null is REJECTED.
  *   - csrf.autoHtml and its aliases: not settings, omit them. A true value is REJECTED at boot.
@@ -76,6 +78,14 @@ final readonly class SecurityConfig
         'trustedHeaders' => ['trustedHeaders', 'trusted_headers'],
         'encryptionKey'  => ['encryption.key', 'encryptionKey', 'encryption_key'],
         'headers'        => ['headers'],
+    ];
+
+    private const string ENCRYPTION_EXAMPLE = 'encryption: { key: !env ENCRYPTION_KEY }';
+
+    /** Shown when a mapping holds a plain value. */
+    private const array MAPPING_EXAMPLES = [
+        'csrf' => 'csrf: { enabled: false }',
+        'encryption' => self::ENCRYPTION_EXAMPLE,
     ];
 
     /** The security response headers, read from the security.headers section. */
@@ -134,15 +144,22 @@ final readonly class SecurityConfig
      * Build a SecurityConfig from a plain key-value array.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if a key is unknown, a setting is written under two spellings, a value is not
-     *         a boolean, csrf.autoHtml is true, allowedHosts is null or names nothing, maxBodySize is negative or not
-     *         a number of bytes, or a list entry is invalid (csrfExceptions, allowedHosts, trustedProxies,
-     *         trustedHeaders), or headers is neither null nor a mapping, or a header setting is invalid (see
+     * @throws ConfigurationException if a key is unknown, a setting is written under two spellings, csrf or
+     *         encryption holds a plain value, the encryption key is not a string, a value is not a boolean,
+     *         csrf.autoHtml is true, allowedHosts is null or names nothing, maxBodySize is negative or not a number
+     *         of bytes, or a list entry is invalid (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders),
+     *         or headers is neither null nor a mapping, or a header setting is invalid (see
      *         SecureHeadersConfig::fromArray()).
      */
     public static function fromArray(array $values): self
     {
-        $keys = ConfigKeys::read('security', $values, self::SPELLINGS, unlisted: ['csrfAutoHtml']);
+        $keys = ConfigKeys::read(
+            'security',
+            $values,
+            self::SPELLINGS,
+            unlisted: ['csrfAutoHtml'],
+            mappingExamples: self::MAPPING_EXAMPLES,
+        );
 
         $headers = $keys->value('headers');
         if ($headers !== null && !is_array($headers)) {
@@ -177,14 +194,15 @@ final readonly class SecurityConfig
         $trustedHeaders = (array) ($keys->value('trustedHeaders') ?? Request::TRUSTED_HEADERS_DEFAULT);
 
         $encryptionKey = $keys->value('encryptionKey');
-        if (is_string($encryptionKey)) {
-            $encryptionKey = trim($encryptionKey);
-            if ($encryptionKey === '') {
-                $encryptionKey = null;
-            }
-        } else {
-            $encryptionKey = null;
+        if ($encryptionKey !== null && !is_string($encryptionKey)) {
+            throw ConfigurationException::invalidType(
+                'security',
+                $keys->key('encryptionKey'),
+                'must be a string, such as ' . self::ENCRYPTION_EXAMPLE,
+            );
         }
+
+        $encryptionKey = $encryptionKey === null || trim($encryptionKey) === '' ? null : trim($encryptionKey);
 
         if ($csrfAutoHtml) {
             throw ConfigurationException::invalidValue(

@@ -774,12 +774,48 @@ final class SecurityConfigTest extends TestCase
         self::assertNull($config->encryptionKey);
     }
 
-    public function testEncryptionKeyNonStringNormalizesToNull(): void
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function plainValuesWhereAMappingIsExpected(): iterable
     {
-        $config = SecurityConfig::fromArray([
-            'encryption' => ['key' => 123],
-        ]);
+        yield 'csrf set to false' => [['csrf' => false], "field 'csrf' must be a mapping, such as csrf: { enabled: false }."];
+        yield 'csrf set to a word' => [['csrf' => 'off'], "field 'csrf' must be a mapping, such as csrf: { enabled: false }."];
+        yield 'encryption set to the key' => [
+            ['encryption' => '12345-key-material'],
+            "field 'encryption' must be a mapping, such as encryption: { key: !env ENCRYPTION_KEY }.",
+        ];
+        yield 'encryption key as a number' => [
+            ['encryption' => ['key' => 12345]],
+            "field 'encryption.key' must be a string, such as encryption: { key: !env ENCRYPTION_KEY }.",
+        ];
+        yield 'flat encryption key as a list' => [
+            ['encryptionKey' => ['12345-key-material']],
+            "field 'encryptionKey' must be a string, such as encryption: { key: !env ENCRYPTION_KEY }.",
+        ];
+    }
 
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('plainValuesWhereAMappingIsExpected')]
+    public function testAValueOfTheWrongShapeIsRefusedWithoutShowingIt(array $values, string $refusal): void
+    {
+        try {
+            SecurityConfig::fromArray($values);
+
+            self::fail('A value of the wrong shape was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame("Configuration section 'security' " . $refusal, $exception->getMessage());
+            self::assertStringNotContainsString('12345', $exception->getMessage());
+        }
+    }
+
+    public function testANullCsrfOrEncryptionMappingReadsAsTheDefaults(): void
+    {
+        $config = SecurityConfig::fromArray(['csrf' => null, 'encryption' => null]);
+
+        self::assertTrue($config->csrfEnabled);
         self::assertNull($config->encryptionKey);
     }
 

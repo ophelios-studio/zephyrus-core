@@ -32,24 +32,28 @@ final readonly class ConfigKeys
     /**
      * Reads a section, refusing a key that no property accepts and a property written under two keys.
      *
-     * A mapping name holding anything but an array is left to the caller.
+     * A mapping name holding null reads as an empty mapping.
      *
      * @param array<array-key, mixed>     $values
-     * @param array<string, list<string>> $spellings Property => accepted keys, preferred first.
-     * @param list<string>                $unlisted  Properties accepted but left out of the keys a refusal lists.
-     * @throws ConfigurationException when a key is not accepted, or two keys of one property are written.
+     * @param array<string, list<string>> $spellings       Property => accepted keys, preferred first.
+     * @param list<string>                $unlisted        Properties accepted but left out of the keys a refusal
+     *                                                     lists.
+     * @param array<string, string>       $mappingExamples Mapping name => example shown when it holds a plain value.
+     * @throws ConfigurationException when a key is not accepted, a mapping name holds a value that is neither null
+     *                                nor an array, or two keys of one property are written.
      */
     public static function read(
         string $section,
         #[\SensitiveParameter] array $values,
         array $spellings,
         array $unlisted = [],
+        array $mappingExamples = [],
     ): self {
         $listed = array_values(array_map(
             static fn (array $paths): string => $paths[0],
             array_diff_key($spellings, array_flip($unlisted)),
         ));
-        self::assertKnown($section, $values, $spellings, $listed);
+        self::assertKnown($section, $values, $spellings, $listed, $mappingExamples);
 
         $written = [];
         foreach ($spellings as $property => $paths) {
@@ -120,14 +124,16 @@ final readonly class ConfigKeys
     /**
      * @param array<array-key, mixed>     $values
      * @param array<string, list<string>> $spellings
-     * @param list<string>                $listed    The keys a refusal lists.
-     * @throws ConfigurationException when a key is not accepted.
+     * @param list<string>                $listed          The keys a refusal lists.
+     * @param array<string, string>       $mappingExamples
+     * @throws ConfigurationException when a key is not accepted, or a mapping name holds a plain value.
      */
     private static function assertKnown(
         string $section,
         #[\SensitiveParameter] array $values,
         array $spellings,
         array $listed,
+        array $mappingExamples,
     ): void {
         $levels = self::levels($spellings);
         $mappings = array_keys(array_diff_key($levels, ['' => true]));
@@ -135,7 +141,16 @@ final readonly class ConfigKeys
         foreach ($values as $key => $value) {
             $key = (string) $key;
             if ($key !== '' && isset($levels[$key])) {
-                foreach (is_array($value) ? array_keys($value) : [] as $nestedKey) {
+                if ($value !== null && !is_array($value)) {
+                    $example = $mappingExamples[$key] ?? null;
+                    throw ConfigurationException::invalidType(
+                        $section,
+                        $key,
+                        'must be a mapping' . ($example === null ? '' : ', such as ' . $example),
+                    );
+                }
+
+                foreach (array_keys($value ?? []) as $nestedKey) {
                     $path = $key . '.' . $nestedKey;
                     if (!isset($levels[$key][$path])) {
                         $suggestion = self::closest($path, array_keys($levels[$key]));
