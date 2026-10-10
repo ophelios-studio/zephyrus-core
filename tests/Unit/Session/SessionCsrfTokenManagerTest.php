@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Session;
 
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Security\CsrfTokenManagerInterface;
 use Zephyrus\Session\SessionCsrfTokenManager;
 use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
+use Zephyrus\Tests\Support\IsolatedSessionSavePath;
 
 final class SessionCsrfTokenManagerTest extends TestCase
 {
+    use IsolatedSessionSavePath;
+
     protected function tearDown(): void
     {
         unset($_SESSION);
@@ -72,6 +76,27 @@ final class SessionCsrfTokenManagerTest extends TestCase
         $manager->regenerate();
 
         self::assertSame([], $_SESSION);
+    }
+
+    #[RunInSeparateProcess]
+    public function testRegenerateIsSilentAfterTheRealSessionIsDestroyed(): void
+    {
+        $this->useIsolatedSessionSavePath();
+
+        try {
+            session_start();
+            $session = new SessionManager();
+            $manager = new SessionCsrfTokenManager($session);
+            $manager->getToken();
+
+            $session->destroy();
+            $manager->regenerate();
+
+            self::assertFalse($session->has('_csrf_token'));
+            self::assertSame(PHP_SESSION_NONE, session_status());
+        } finally {
+            $this->removeIsolatedSessionSavePath();
+        }
     }
 
     // ── implements interface ──────────────────────────────────────────────────

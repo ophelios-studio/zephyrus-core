@@ -403,6 +403,20 @@ final class SessionManagerRealSessionTest extends TestCase
         self::assertSame(PHP_SESSION_NONE, session_status());
     }
 
+    #[RunInSeparateProcess]
+    public function testRemovingAnAbsentKeyAfterDestroyIsASilentNoOp(): void
+    {
+        session_start();
+        $_SESSION = ['user' => 'alice'];
+
+        $session = new SessionManager();
+        $session->destroy();
+        $session->remove('user');
+
+        self::assertSame([], $session->all());
+        self::assertSame(PHP_SESSION_NONE, session_status());
+    }
+
     /** destroy() must fail when the stored session survives, since its id stays live. */
     #[RunInSeparateProcess]
     public function testDestroyThrowsWhenTheSessionIsClosedButStillHasAnId(): void
