@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Session;
 
+use Closure;
 use PDO;
 use Throwable;
 use Zephyrus\Data\Database;
@@ -36,6 +37,10 @@ use Zephyrus\Data\DatabaseException;
  *   $session = new SessionManager();
  *   $session->setHandler(new DatabaseSessionHandler($db));
  *   $session->start($config->session);
+ *
+ * Pass a Closure instead of the Database to register the handler before the database can be built. It runs
+ * at most once, at the first callback that needs the database. When it throws or returns anything else, that
+ * callback and every later one throw a SessionException: there is no fallback and no retry.
  *
  * A wrapper must forward open() and close() as well as the data callbacks: close() releases the
  * advisory lock taken by read().
@@ -107,7 +112,14 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /** Memoized PDO driver name; '' once the lookup has failed. */
     private ?string $driver = null;
 
+    /** Set once the Closure has run successfully. */
+    private ?Database $resolved = null;
+
+    /** Set once the Closure has failed; every later callback refuses the same way. */
+    private ?SessionException $unavailable = null;
+
     /**
+     * @param Database|Closure(): Database $database
      * @param string $idPattern Accepted session id shape. Override only for ids generated in another format.
      * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). With false,
      *   concurrent requests of one session can overwrite each other's changes. Pass false only behind transaction
@@ -115,7 +127,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *   lock table until PostgreSQL runs out of shared memory.
      */
     public function __construct(
-        private readonly Database $database,
+        private readonly Database|Closure $database,
         private readonly string $table = 'public.session',
         private readonly string $idColumn = 'session_id',
         private readonly string $idPattern = self::DEFAULT_ID_PATTERN,
@@ -145,6 +157,37 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         ini_set('session.use_strict_mode', '1');
     }
 
+    /**
+     * @throws SessionException when the Closure given to the constructor failed or did not return a Database.
+     */
+    private function database(): Database
+    {
+        if ($this->resolved !== null) {
+            return $this->resolved;
+        }
+
+        if ($this->unavailable !== null) {
+            throw SessionException::databaseUnavailable($this->table, $this->unavailable->getPrevious());
+        }
+
+        if ($this->database instanceof Database) {
+            return $this->resolved = $this->database;
+        }
+
+        try {
+            /** @var mixed $database */
+            $database = ($this->database)();
+        } catch (Throwable $failure) {
+            throw $this->unavailable = SessionException::databaseUnavailable($this->table, $failure);
+        }
+
+        if (!$database instanceof Database) {
+            throw $this->unavailable = SessionException::databaseUnavailable($this->table);
+        }
+
+        return $this->resolved = $database;
+    }
+
     public function open(string $path, string $name): bool
     {
         return true;
@@ -169,7 +212,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             return false;
         }
 
-        return $this->database->selectOne(
+        return $this->database()->selectOne(
             "SELECT {$this->idColumn} FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
             [$id, ...$this->liveParameters()],
         ) !== null;
@@ -186,7 +229,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         return $this->writeRow($id, function () use ($id): int {
             $access = time();
 
-            return $this->database->execute(
+            return $this->database()->execute(
                 "UPDATE {$this->table}
                     SET access = ?, expire = ?
                   WHERE {$this->idColumn} = ?",
@@ -211,14 +254,14 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $this->acquireLock($id);
 
-        $select = fn (): ?\stdClass => $this->database->selectOne(
+        $select = fn (): ?\stdClass => $this->database()->selectOne(
             "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
             [$id, ...$this->liveParameters()],
         );
 
         try {
             // Under a savepoint in the caller's transaction, so a failure leaves it able to run the unlock.
-            $row = $this->database->inTransaction() ? $this->database->transaction($select) : $select();
+            $row = $this->database()->inTransaction() ? $this->database()->transaction($select) : $select();
             $payload = $row === null ? null : $this->decodePayload($row->data);
         } catch (Throwable $failure) {
             // PHP does not call close() when read() throws out of session_start().
@@ -267,7 +310,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             $expire = $access + $this->maxLifetime();
 
             if ($resumed) {
-                return $this->database->execute(
+                return $this->database()->execute(
                     "UPDATE {$this->table}
                         SET access = ?, expire = ?, data = ?
                       WHERE {$this->idColumn} = ?",
@@ -275,7 +318,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
                 );
             }
 
-            return $this->database->execute(
+            return $this->database()->execute(
                 "INSERT INTO {$this->table} ({$this->idColumn}, access, expire, data)
                  VALUES (?, ?, ?, ?)
                  ON CONFLICT ({$this->idColumn}) DO UPDATE
@@ -366,7 +409,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         try {
-            $this->database->execute(
+            $this->database()->execute(
                 "DELETE FROM {$this->table} WHERE {$this->idColumn} = ?",
                 [$id],
             );
@@ -384,7 +427,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     {
         $threshold = time() - $max_lifetime;
 
-        return $this->database->execute(
+        return $this->database()->execute(
             "DELETE FROM {$this->table} WHERE access < ?",
             [$threshold],
         );
@@ -427,7 +470,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($id)];
 
         $granted = $this->bestEffort(
-            fn (): bool => $this->database->selectBool('SELECT pg_try_advisory_lock(?, ?)', $key),
+            fn (): bool => $this->database()->selectBool('SELECT pg_try_advisory_lock(?, ?)', $key),
         );
 
         if ($granted === true || ($granted === false && $this->waitForLock($key))) {
@@ -446,21 +489,21 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      */
     private function waitForLock(array $key): bool
     {
-        $nested = $this->database->inTransaction();
+        $nested = $this->database()->inTransaction();
 
         try {
             if ($nested) {
-                $this->database->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $this->database()->query('SAVEPOINT ' . self::LOCK_SAVEPOINT);
             } else {
-                $this->database->pdo()->beginTransaction();
+                $this->database()->pdo()->beginTransaction();
             }
         } catch (Throwable) {
             return false;
         }
 
         try {
-            $this->database->query("SELECT set_config('lock_timeout', ?, true)", [self::LOCK_WAIT_SECONDS . 's']);
-            $this->database->query('SELECT pg_advisory_lock(?, ?)', $key);
+            $this->database()->query("SELECT set_config('lock_timeout', ?, true)", [self::LOCK_WAIT_SECONDS . 's']);
+            $this->database()->query('SELECT pg_advisory_lock(?, ?)', $key);
             $granted = true;
         } catch (Throwable) {
             $granted = false;
@@ -468,10 +511,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         try {
             if ($nested) {
-                $this->database->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
-                $this->database->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $this->database()->query('ROLLBACK TO SAVEPOINT ' . self::LOCK_SAVEPOINT);
+                $this->database()->query('RELEASE SAVEPOINT ' . self::LOCK_SAVEPOINT);
             } else {
-                $this->database->pdo()->rollBack();
+                $this->database()->pdo()->rollBack();
             }
         } catch (Throwable) {
             // Only a lost connection gets here.
@@ -488,7 +531,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
         $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($this->lockedId)];
         $released = $this->bestEffort(
-            fn (): bool => $this->database->selectBool('SELECT pg_advisory_unlock(?, ?)', $key),
+            fn (): bool => $this->database()->selectBool('SELECT pg_advisory_unlock(?, ?)', $key),
         );
 
         // Kept on failure so close() can retry.
@@ -528,7 +571,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     private function bestEffort(callable $statement): mixed
     {
         try {
-            return $this->database->inTransaction() ? $this->database->transaction($statement) : $statement();
+            return $this->database()->inTransaction() ? $this->database()->transaction($statement) : $statement();
         } catch (Throwable) {
             return null;
         }
@@ -549,8 +592,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     private function supportsAdvisoryLocks(): bool
     {
         if ($this->driver === null) {
+            $database = $this->database();
+
             try {
-                $this->driver = (string) $this->database->pdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
+                $this->driver = (string) $database->pdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
             } catch (Throwable) {
                 $this->driver = '';
             }

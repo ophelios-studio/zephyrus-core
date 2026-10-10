@@ -74,6 +74,18 @@ final class SessionException extends ZephyrusException
         ));
     }
 
+    public static function databaseUnavailable(string $table, ?\Throwable $previous = null): self
+    {
+        return new self(
+            sprintf(
+                'Session database for table %s could not be resolved.',
+                (string) json_encode($table, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
+            ),
+            0,
+            $previous,
+        );
+    }
+
     public static function noActiveSession(string $operation): self
     {
         return new self(sprintf(

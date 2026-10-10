@@ -1031,6 +1031,77 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         return $stored;
     }
+
+    private function lazyHandler(int &$calls): DatabaseSessionHandler
+    {
+        return new DatabaseSessionHandler(function () use (&$calls): Database {
+            $calls++;
+
+            return $this->database;
+        }, 'session');
+    }
+
+    public function testClosureIsNotCalledByConstructionOpenOrClose(): void
+    {
+        $calls = 0;
+        $handler = $this->lazyHandler($calls);
+
+        $handler->open('/tmp', 'PHPSESSID');
+        $handler->close();
+
+        self::assertSame(0, $calls);
+    }
+
+    public function testClosureIsCalledOnceAcrossSeveralCallbacks(): void
+    {
+        $calls = 0;
+        $handler = $this->lazyHandler($calls);
+        $id = '43e880c2447ca10d3092d51d258c050c';
+
+        self::assertFalse($handler->validateId($id));
+        $handler->read($id);
+        self::assertTrue($handler->write($id, 'foo=bar'));
+        $handler->close();
+
+        self::assertSame(1, $calls);
+        self::assertSame('foo=bar', $handler->read($id));
+    }
+
+    public function testThrowingClosureIsRefusedAndRefusedAgainOnTheNextCallback(): void
+    {
+        $failure = new \RuntimeException('connection refused');
+        $calls = 0;
+        $handler = new DatabaseSessionHandler(function () use ($failure, &$calls): Database {
+            $calls++;
+
+            throw $failure;
+        }, 'core.session');
+        $id = '43e880c2447ca10d3092d51d258c050c';
+
+        foreach ([fn () => $handler->read($id), fn () => $handler->validateId($id)] as $callback) {
+            try {
+                $callback();
+                self::fail('Expected a SessionException.');
+            } catch (SessionException $exception) {
+                self::assertSame('Session database for table "core.session" could not be resolved.', $exception->getMessage());
+                self::assertSame($failure, $exception->getPrevious());
+            }
+        }
+
+        self::assertSame(1, $calls);
+    }
+
+    public function testClosureReturningAnotherTypeIsRefused(): void
+    {
+        $handler = new DatabaseSessionHandler(fn () => 'not a database', 'session'); // @phpstan-ignore argument.type
+
+        try {
+            $handler->gc(1440);
+            self::fail('Expected a SessionException.');
+        } catch (SessionException $exception) {
+            self::assertSame('Session database for table "session" could not be resolved.', $exception->getMessage());
+        }
+    }
 }
 
 /** Serialized with NUL bytes around its private and protected property names. */
