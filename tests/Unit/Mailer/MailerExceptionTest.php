@@ -185,6 +185,22 @@ final class MailerExceptionTest extends TestCase
         );
     }
 
+    public function testAttachmentRejectedCutsAMultibyteValueOnACharacterBoundary(): void
+    {
+        $message = MailerException::attachmentRejected('display name', 'a' . str_repeat('é', 200), 'is longer than 255 bytes')->getMessage();
+
+        self::assertTrue(mb_check_encoding($message, 'UTF-8'));
+        self::assertNotFalse(json_encode($message));
+    }
+
+    public function testAttachmentRejectedNeverSplitsAnEscapeSequence(): void
+    {
+        self::assertSame(
+            'Attachment rejected: path "ab' . str_repeat('\\001', 62) . '..." (72 bytes) contains a NUL byte.',
+            MailerException::attachmentRejected('path', 'ab' . str_repeat("\x01", 70), 'contains a NUL byte')->getMessage(),
+        );
+    }
+
     public function testConfigurationMissingCarriesConfigurationMissingFailure(): void
     {
         self::assertSame(

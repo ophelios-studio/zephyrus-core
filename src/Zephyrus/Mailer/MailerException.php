@@ -96,16 +96,20 @@ final class MailerException extends ZephyrusRuntimeException
      * a caller logging them should be able to tell them apart.
      *
      * @param string $subject What was refused: path, display name, media type or directory.
-     * @param string $value   The refused value. Control characters and backslashes are escaped, and values over 64 characters are cut in the message.
+     * @param string $value   The refused value. Control characters and backslashes are escaped; values over 64 bytes are cut to 64 bytes on a character boundary.
      * @param string $reason  The rule it broke, stated as the end of a sentence.
      */
     public static function attachmentRejected(string $subject, string $value, string $reason): self
     {
-        $shown = addcslashes($value, "\\\0..\37\177");
+        $cut = strlen($value) > self::SHOWN_VALUE_MAX_LENGTH;
+        $shown = addcslashes(
+            $cut ? mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8') : $value,
+            "\\\0..\37\177",
+        );
         $length = '';
 
-        if (strlen($shown) > self::SHOWN_VALUE_MAX_LENGTH) {
-            $shown = substr($shown, 0, self::SHOWN_VALUE_MAX_LENGTH) . '...';
+        if ($cut) {
+            $shown .= '...';
             $length = sprintf(' (%d bytes)', strlen($value));
         }
 
