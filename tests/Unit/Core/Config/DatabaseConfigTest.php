@@ -827,8 +827,8 @@ final class DatabaseConfigTest extends TestCase
      */
     public static function unusableDsnValues(): iterable
     {
+        yield 'sslrootcert equals sign' => ['sslrootcert', '/tmp/user=x'];
         foreach (['host', 'database', 'sslrootcert'] as $field) {
-            yield $field . ' equals sign' => [$field, '/tmp/user=x'];
             yield $field . ' non-breaking space byte' => [$field, "\xA0"];
             yield $field . ' vertical tab' => [$field, "a\x0Bb"];
             yield $field . ' form feed' => [$field, "a\x0Cb"];
@@ -870,7 +870,28 @@ final class DatabaseConfigTest extends TestCase
             DatabaseConfig::fromArray(['host' => 'a.example.com,b.example.com', 'database' => 'db', 'username' => 'u']);
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
-            self::assertStringContainsString('single host', $e->getMessage());
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value \"a.example.com,b.example.com\": "
+                . 'must be non-empty, valid UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, '
+                . 'quotes, backslashes or control characters, any of which would truncate or extend the DSN; it must '
+                . 'be a single host name or address, not a comma-separated list.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testHostRefusalWithoutACommaDoesNotMentionAList(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['host' => 'a;b', 'database' => 'db', 'username' => 'u']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value \"a;b\": must be non-empty, valid "
+                . 'UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, quotes, backslashes or '
+                . 'control characters, any of which would truncate or extend the DSN.',
+                $e->getMessage(),
+            );
         }
     }
 
@@ -880,15 +901,26 @@ final class DatabaseConfigTest extends TestCase
             DatabaseConfig::fromArray(['host' => '', 'database' => 'db', 'username' => 'u']);
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
-            self::assertStringContainsString("field 'host' has invalid value", $e->getMessage());
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value \"\": host is empty: set DB_HOST or "
+                . 'remove the key to use localhost.',
+                $e->getMessage(),
+            );
         }
     }
 
     public function testFromArrayRefusesAHostThatIsOnlyWhitespace(): void
     {
-        $this->expectException(ConfigurationException::class);
-
-        DatabaseConfig::fromArray(['host' => '   ', 'database' => 'db', 'username' => 'u']);
+        try {
+            DatabaseConfig::fromArray(['host' => '   ', 'database' => 'db', 'username' => 'u']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value \"\": host is empty: set DB_HOST or "
+                . 'remove the key to use localhost.',
+                $e->getMessage(),
+            );
+        }
     }
 
     public function testFromArrayRefusesADatabaseMadeOfANonBreakingSpaceByte(): void

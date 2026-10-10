@@ -270,7 +270,6 @@ final class DatabaseTest extends TestCase
         );
     }
 
-
     public function testFromConfigQuotesHostDatabaseAndCertificatePath(): void
     {
         $config = DatabaseConfig::fromArray([
@@ -356,7 +355,6 @@ final class DatabaseTest extends TestCase
             },
         );
     }
-
 
     public function testPdoAccessorReturnsPdo(): void
     {

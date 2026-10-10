@@ -11,13 +11,14 @@ namespace Zephyrus\Core\Config;
  * password '', charset 'utf8', sslMode and sslRootCert null, columnCacheVersion ''.
  *
  * Validation (fromArray, and the constructor for host, database, charset, sslMode and sslRootCert):
- *   - database and username: non-empty strings (fromArray only).
+ *   - database: non-empty; fromArray reports a blank one as missing.
+ *   - username: a non-empty string (fromArray only).
  *   - port: 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
  *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
  *   - sslMode, sslRootCert, columnCacheVersion: one spelling per setting (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
- *   - host, database and sslRootCert: non-empty, valid UTF-8, with no whitespace, semicolons, equals
+ *   - host, database and sslRootCert: non-empty, valid UTF-8, with no ASCII whitespace, semicolons, equals
  *     signs, quotes, backslashes or control characters, as they are interpolated into the PDO DSN.
  *     host also refuses commas: it is a single host name or address, not a libpq host list.
  *   - sslMode: one of SSL_MODES.
@@ -217,6 +218,15 @@ final readonly class DatabaseConfig
      */
     private static function assertDsnSafeValue(string $value, string $field, bool $singleHost = false): void
     {
+        if ($singleHost && $value === '') {
+            throw ConfigurationException::invalidValue(
+                'database',
+                $field,
+                $value,
+                'host is empty: set DB_HOST or remove the key to use localhost',
+            );
+        }
+
         $forbidden = $singleHost ? ',' : '';
         // Space and \x00-\x1F cover every ASCII whitespace character; \s would vary with the locale.
         $pattern = '/^[^ ;=\'"\\\\\x00-\x1F\x7F' . $forbidden . ']+$/Du';
@@ -226,9 +236,11 @@ final readonly class DatabaseConfig
                 'database',
                 $field,
                 $value,
-                'must be non-empty, valid UTF-8 and must not contain whitespace, semicolons, equals signs, quotes, '
-                    . 'backslashes or control characters, any of which would truncate or extend the DSN'
-                    . ($singleHost ? '; it must be a single host name or address, not a comma-separated list' : ''),
+                'must be non-empty, valid UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, '
+                    . 'quotes, backslashes or control characters, any of which would truncate or extend the DSN'
+                    . ($singleHost && str_contains($value, ',')
+                        ? '; it must be a single host name or address, not a comma-separated list'
+                        : ''),
             );
         }
     }
