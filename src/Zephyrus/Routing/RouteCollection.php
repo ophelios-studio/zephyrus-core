@@ -11,6 +11,8 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final class RouteCollection
 {
+    private const CONTROL_CHARACTER_PATTERN = '/[\x00-\x1F\x7F]/';
+
     /**
      * @var array<int, Route>
      */
@@ -588,15 +590,15 @@ final class RouteCollection
     }
 
     /**
-     * Rejects a value that is not valid UTF-8 or contains a NUL byte.
+     * Rejects a value that is not valid UTF-8 or contains a control character (C0 or DEL).
      *
-     * No route constraint can admit such a value: invalid UTF-8 bound through PDO emulated
+     * No route constraint can admit such a value: invalid UTF-8 or NUL bound through PDO emulated
      * prepares can segfault the worker on pdo_pgsql. Uses /u rather than mb_check_encoding(),
      * so ext-mbstring is not required.
      */
     private static function isWellFormedValue(string $value): bool
     {
-        if (str_contains($value, "\0")) {
+        if (preg_match(self::CONTROL_CHARACTER_PATTERN, $value) === 1) {
             return false;
         }
 
@@ -613,7 +615,7 @@ final class RouteCollection
     {
         $path = substr($path, 0, strcspn($path, '?#'));
 
-        return preg_match('/[\x00-\x1F\x7F]/', $path) === 1 || !self::isWellFormedValue($path);
+        return preg_match(self::CONTROL_CHARACTER_PATTERN, $path) === 1 || !self::isWellFormedValue($path);
     }
 
     /**

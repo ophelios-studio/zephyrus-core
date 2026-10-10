@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Routing;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
@@ -396,6 +397,39 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
 
         self::assertSame([], $collection->routesForPath("/users/\xC3\x28"));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function controlCharacterEncodings(): array
+    {
+        return [
+            'SOH' => ['%01'],
+            'line feed' => ['%0A'],
+            'unit separator' => ['%1F'],
+            'DEL' => ['%7F'],
+            'NUL' => ['%00'],
+        ];
+    }
+
+    #[DataProvider('controlCharacterEncodings')]
+    public function testDecodedParameterValueHoldingAControlCharacterDoesNotMatch(string $encoded): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{name}', 'UserController@show'));
+        $path = '/users/ab' . $encoded . 'cd';
+
+        self::assertSame([], $collection->routesForPath($path));
+
+        try {
+            $collection->match('GET', $path);
+            self::fail('Expected a RouteNotFoundException');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched GET ' . $path, $e->getMessage());
+        }
+
+        self::assertSame(['name' => 'abcd'], $collection->match('GET', '/users/abcd')->parameters);
     }
 
     public function testHandlersReturnsRegisteredHandlersInOrder(): void
