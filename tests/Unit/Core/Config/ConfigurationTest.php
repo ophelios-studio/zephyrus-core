@@ -679,8 +679,10 @@ final class ConfigurationTest extends TestCase
 
     public function testFromYamlFilesRefusesACaseVariantOfACustomSectionAfterTheMerge(): void
     {
-        $first = tempnam(sys_get_temp_dir(), 'zcfg') . '.yml';
-        $second = tempnam(sys_get_temp_dir(), 'zcfg') . '.yml';
+        $firstBase = tempnam(sys_get_temp_dir(), 'zcfg');
+        $secondBase = tempnam(sys_get_temp_dir(), 'zcfg');
+        $first = $firstBase . '.yml';
+        $second = $secondBase . '.yml';
         file_put_contents($first, "payment:\n  name: a\n");
         file_put_contents($second, "Payment:\n  name: b\n");
 
@@ -690,7 +692,9 @@ final class ConfigurationTest extends TestCase
 
             Configuration::fromYamlFiles([$first, $second], ['payment' => FactoryNameSectionConfig::class]);
         } finally {
+            @unlink($firstBase);
             @unlink($first);
+            @unlink($secondBase);
             @unlink($second);
         }
     }
