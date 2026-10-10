@@ -357,6 +357,14 @@ final class JsonLocaleLoaderTest extends TestCase
         self::assertFalse(JsonLocaleLoader::isWellFormedLocale(''));
     }
 
+    public function testWellFormedLocaleRefusesNulAndFinalNewline(): void
+    {
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale("fr\0"));
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale("\0fr"));
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale("fr\n"));
+        self::assertFalse(JsonLocaleLoader::isWellFormedLocale("fr_CA\n"));
+    }
+
     public function testLoadRefusesACatalogDirectoryThatSymlinksOutOfTheBasePath(): void
     {
         $root = sys_get_temp_dir() . '/zephyrus-locale-symlink-' . bin2hex(random_bytes(8));

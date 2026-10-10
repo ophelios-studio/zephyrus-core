@@ -26,7 +26,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
      * BCP-47-shaped tag: a 2-3 letter language, then alphanumeric subtags separated by "-" or "_".
      * The underscore stays because catalog directories may be named like fr_CA (see localeCandidates()).
      */
-    private const string LOCALE_PATTERN = '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$/';
+    private const string LOCALE_PATTERN = '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$/D';
 
     public function __construct(
         private readonly string $basePath,
@@ -72,7 +72,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
      */
     public static function isWellFormedLocale(string $locale): bool
     {
-        return preg_match(self::LOCALE_PATTERN, trim($locale)) === 1;
+        return preg_match(self::LOCALE_PATTERN, trim($locale, " \t")) === 1;
     }
 
     /**
