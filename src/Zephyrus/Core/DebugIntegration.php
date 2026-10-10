@@ -75,7 +75,8 @@ final class DebugIntegration
 
     /**
      * Class properties masked by Tracy's Class::$property form. Tracy's "POST (preview)" still shows the request body.
-     * Exception and Error traces are masked whole, arguments included; the Bluescreen stack section is unchanged.
+     * Exception and Error traces are masked whole in property dumps, arguments included; the Bluescreen stack section
+     * still shows arguments, masked by parameter name.
      * Dump the object itself: dump((array) $object) exposes private properties under mangled keys no exporter can mask.
      */
     public const array SENSITIVE_PROPERTIES = [
