@@ -373,7 +373,7 @@ final class RouteCollection
     {
         $normalizedPath = $this->normalizePath($path);
 
-        if (self::isRefusedRawPath($path) || !self::isWellFormedValue($normalizedPath)) {
+        if (self::pathRefusalReason($path, $normalizedPath) !== null) {
             return [];
         }
 
@@ -480,12 +480,10 @@ final class RouteCollection
     public function match(string $method, string $path): RouteMatch
     {
         $normalizedPath = $this->normalizePath($path);
+        $refusal = self::pathRefusalReason($path, $normalizedPath);
 
-        if (self::isRefusedRawPath($path) || !self::isWellFormedValue($normalizedPath)) {
-            throw new RouteNotFoundException(sprintf(
-                'No route matched %s: the request path is not valid UTF-8 or contains a control character',
-                strtoupper($method),
-            ));
+        if ($refusal !== null) {
+            throw RouteNotFoundException::refusedPath($method, $refusal);
         }
 
         $allowedMethods = [];
@@ -606,16 +604,24 @@ final class RouteCollection
     }
 
     /**
-     * Whether the raw request path holds a control byte or DEL, or is not valid UTF-8.
+     * The RouteNotFoundException reason for a refused path, or null when it may be matched.
      *
-     * Only the part before "?" or "#" is checked, and before normalizePath(), because parse_url() rewrites
+     * The raw path is checked before "?" or "#", and before normalizePath(), because parse_url() rewrites
      * control bytes to "_" rather than failing.
      */
-    private static function isRefusedRawPath(string $path): bool
+    private static function pathRefusalReason(string $rawPath, string $normalizedPath): ?string
     {
-        $path = substr($path, 0, strcspn($path, '?#'));
+        $rawPath = substr($rawPath, 0, strcspn($rawPath, '?#'));
 
-        return preg_match(self::CONTROL_CHARACTER_PATTERN, $path) === 1 || !self::isWellFormedValue($path);
+        if (preg_match(self::CONTROL_CHARACTER_PATTERN, $rawPath) === 1) {
+            return RouteNotFoundException::REASON_CONTROL_CHARACTER;
+        }
+
+        if (!self::isWellFormedValue($rawPath) || !self::isWellFormedValue($normalizedPath)) {
+            return RouteNotFoundException::REASON_INVALID_UTF8;
+        }
+
+        return null;
     }
 
     /**

@@ -65,10 +65,7 @@ final readonly class RouteDispatcher
     public function match(Request $request): RouteMatch
     {
         if ($request->uri()->pathHasControlCharacter()) {
-            throw new RouteNotFoundException(sprintf(
-                'No route matched %s: the request path is not valid UTF-8 or contains a control character',
-                $request->method,
-            ));
+            throw RouteNotFoundException::refusedPath($request->method, RouteNotFoundException::REASON_CONTROL_CHARACTER);
         }
 
         return $this->routes->match($request->method, $request->path());

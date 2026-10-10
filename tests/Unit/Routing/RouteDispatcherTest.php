@@ -152,6 +152,40 @@ final class RouteDispatcherTest extends TestCase
         $dispatcher->match(Request::fromArray('GET', '/missing'));
     }
 
+    public function testMatchNamesTheControlCharacterAsTheReasonForARefusedPath(): void
+    {
+        $dispatcher = new RouteDispatcher(
+            routes: new RouteCollection(),
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+        );
+
+        try {
+            $dispatcher->match(Request::fromArray('GET', "/a\x01b"));
+            self::fail('Expected a RouteNotFoundException');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched GET: the request path contains a control character', $e->getMessage());
+        }
+    }
+
+    public function testMatchNamesInvalidUtf8AsTheReasonForARefusedPath(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+        );
+
+        try {
+            $dispatcher->match(Request::fromArray('GET', "/users/\xC3\x28"));
+            self::fail('Expected a RouteNotFoundException');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched GET: the request path is not valid UTF-8', $e->getMessage());
+        }
+    }
+
     public function testMatchThrowsMethodNotAllowedWhenOnlyTheMethodDiffers(): void
     {
         $routes = new RouteCollection();

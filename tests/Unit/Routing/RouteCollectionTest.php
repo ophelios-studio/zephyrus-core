@@ -432,6 +432,35 @@ final class RouteCollectionTest extends TestCase
         self::assertSame(['name' => 'abcd'], $collection->match('GET', '/users/abcd')->parameters);
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function refusedPaths(): array
+    {
+        return [
+            'SOH' => ["/a\x01b", 'contains a control character'],
+            'NUL' => ["/a\0b", 'contains a control character'],
+            'DEL' => ["/a\x7Fb", 'contains a control character'],
+            'control before the query' => ["/a\nb?x=1", 'contains a control character'],
+            'invalid UTF-8' => ["/a\xC3\x28", 'is not valid UTF-8'],
+            'invalid UTF-8 and control' => ["/a\xC3\x28\x01", 'contains a control character'],
+        ];
+    }
+
+    #[DataProvider('refusedPaths')]
+    public function testMatchGivesTheRealReasonForARefusedPath(string $path, string $reason): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a', 'AController@show'));
+
+        try {
+            $collection->match('post', $path);
+            self::fail('Expected a RouteNotFoundException');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched POST: the request path ' . $reason, $e->getMessage());
+        }
+    }
+
     public function testHandlersReturnsRegisteredHandlersInOrder(): void
     {
         $collection = new RouteCollection();
