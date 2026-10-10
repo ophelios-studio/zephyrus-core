@@ -838,6 +838,35 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame(500, $response->status);
         self::assertSame('yes', $response->headers['x-global']);
     }
+
+    public function testExceptionHandlerSeesGlobalMiddlewareAttributesButNotRouteMiddlewareAttributes(): void
+    {
+        $seen = [];
+        $router = (new Router())
+            ->get('/boom', ErrorPipelineBoomController::class . '@boom', middlewares: ['route.tag']);
+
+        $kernel = KernelBuilder::create()
+            ->withRouter($router)
+            ->withMiddleware(new ErrorPipelineAttributeMiddleware('global.tag'))
+            ->registerMiddleware('route.tag', new ErrorPipelineAttributeMiddleware('route.tag'))
+            ->withExceptionHandler(
+                RuntimeException::class,
+                function (\Throwable $e, Request $request) use (&$seen): Response {
+                    $seen = [
+                        'global' => $request->attribute('global.tag'),
+                        'route' => $request->attribute('route.tag'),
+                    ];
+
+                    return Response::text('handled', 500);
+                },
+            )
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/boom'));
+
+        self::assertSame('handled', $response->body);
+        self::assertSame(['global' => 'set', 'route' => null], $seen);
+    }
 }
 
 // ===========================================================================
@@ -1007,6 +1036,18 @@ final class ErrorPipelineTokenManager implements CsrfTokenManagerInterface
     public function isTokenValid(string $token): bool
     {
         return $token === 'valid-token';
+    }
+}
+
+final class ErrorPipelineAttributeMiddleware implements MiddlewareInterface
+{
+    public function __construct(private readonly string $key)
+    {
+    }
+
+    public function process(Request $request, callable $next): Response
+    {
+        return $next($request->withAttribute($this->key, 'set'));
     }
 }
 

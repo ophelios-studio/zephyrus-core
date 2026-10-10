@@ -233,6 +233,10 @@ final readonly class HttpKernel
      * them at all, so running them on a 500 would make error decoration depend
      * on how the error happened. Global middlewares carry the security headers,
      * and they always run.
+     *
+     * The exception handler receives the request as it entered the route
+     * pipeline: attributes set by a global middleware are on it, attributes set
+     * by a route middleware are not.
      */
     private function dispatchMatchedRoute(RouteMatch $match, Request $request): Response
     {

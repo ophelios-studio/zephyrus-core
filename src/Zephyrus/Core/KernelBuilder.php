@@ -206,7 +206,8 @@ final class KernelBuilder
      *
      * When the kernel catches an exception, registered handlers are checked
      * before the built-in mappings (404, 405, 422, 500). The most-specific
-     * matching class wins via instanceof.
+     * matching class wins via instanceof. The handler receives the request
+     * without the attributes set by route middlewares, see HttpKernel.
      *
      * @param class-string<\Throwable> $exceptionClass
      * @param callable(\Throwable, \Zephyrus\Http\Request): \Zephyrus\Http\Response $handler
