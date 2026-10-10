@@ -207,7 +207,7 @@ final readonly class ConfigKeys
     }
 
     /**
-     * The candidate nearest to the key once case, underscores and hyphens are ignored, or null when none is near.
+     * The candidate nearest to the key once both are folded, or null when none is near.
      * Ties go to the candidate written most like the key, then to the first one.
      *
      * @param list<string> $candidates
@@ -240,8 +240,11 @@ final readonly class ConfigKeys
         return $closest;
     }
 
-    private static function fold(string $key): string
+    /**
+     * The key in lower case without underscores, hyphens and spaces, the form two spellings are compared in.
+     */
+    public static function fold(string $key): string
     {
-        return str_replace(['_', '-'], '', strtolower($key));
+        return str_replace(['_', '-', ' '], '', strtolower($key));
     }
 }

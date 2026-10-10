@@ -158,7 +158,7 @@ final readonly class Configuration
     }
 
     /**
-     * Refuse a top-level key that misspells a canonical name, ignoring case and underscores, unless accepted.
+     * Refuse a top-level key that folds onto a canonical name without being spelled as it, unless accepted.
      *
      * @param array<int|string, mixed> $config
      * @param array<string, string> $canonicalNames Folded spelling => canonical name.
@@ -172,14 +172,10 @@ final readonly class Configuration
     ): void {
         foreach (array_keys($config) as $key) {
             $key = (string) $key;
-            $suggestion = $canonicalNames[self::foldName($key)] ?? null;
+            $suggestion = $canonicalNames[ConfigKeys::fold($key)] ?? null;
 
             if ($suggestion !== null && $key !== $suggestion && !in_array($key, $acceptedKeys, true)) {
-                throw new ConfigurationException(sprintf(
-                    "Configuration section '%s' is not recognised: did you mean '%s'?",
-                    $key,
-                    $suggestion,
-                ));
+                throw ConfigurationException::unknownSection($key, $suggestion);
             }
         }
     }
@@ -195,7 +191,7 @@ final readonly class Configuration
     {
         $canonical = [];
         foreach ($names as $name) {
-            $folded = self::foldName($name);
+            $folded = ConfigKeys::fold($name);
             if (isset($canonical[$folded])) {
                 throw new \InvalidArgumentException(sprintf(
                     'Section factories "%s" and "%s" name the same section: keep one.',
@@ -241,19 +237,15 @@ final readonly class Configuration
     }
 
     /**
-     * The built-in section a name refers to, ignoring case and underscores, or null.
+     * The built-in section a name folds onto (see ConfigKeys::fold()), or null.
      */
     private static function builtInSectionFor(string $name): ?string
     {
-        $folded = self::foldName($name);
+        $folded = ConfigKeys::fold($name);
 
         return in_array($folded, self::BUILT_IN_SECTIONS, true) ? $folded : null;
     }
 
-    private static function foldName(string $name): string
-    {
-        return strtolower(self::normalizeKey($name));
-    }
 
     /**
      * Build a Configuration tree from a YAML file.
@@ -378,8 +370,8 @@ final readonly class Configuration
      *
      * Accepts both snake_case and camelCase keys.
      *
-     * @throws \InvalidArgumentException for any spelling of a built-in section (case or underscores), which is read
-     *        from its typed property.
+     * @throws \InvalidArgumentException for any spelling of a built-in section (case, underscores, hyphens or
+     *        spaces), which is read from its typed property.
      */
     public function section(string $name): ?ConfigSection
     {

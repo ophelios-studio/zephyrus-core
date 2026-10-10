@@ -310,4 +310,17 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertSame('must be a mapping', $e->reason());
         self::assertNull($e->messageWithoutValue());
     }
+
+    public function testUnknownSectionNamesTheWrittenKeyAndItsSuggestion(): void
+    {
+        $e = ConfigurationException::unknownSection("securty\u{202E}", 'security');
+
+        self::assertSame(
+            'Configuration section "securty\u202e" is an unknown section: did you mean "security"?',
+            $e->getMessage(),
+        );
+        self::assertSame("securty\u{202E}", $e->section());
+        self::assertNull($e->field());
+        self::assertNull($e->reason());
+    }
 }

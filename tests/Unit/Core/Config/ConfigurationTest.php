@@ -543,17 +543,23 @@ final class ConfigurationTest extends TestCase
         yield 'capitalised' => ['Database', 'database'];
         yield 'upper case' => ['SECURITY', 'security'];
         yield 'underscore inside' => ['Data_base', 'database'];
+        yield 'hyphen inside' => ['local-ization', 'localization'];
     }
 
     #[DataProvider('misspelledBuiltInKeys')]
     public function testFromArrayRefusesATopLevelKeyThatMisspellsABuiltInSection(string $key, string $suggestion): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage(
-            sprintf("Configuration section '%s' is not recognised: did you mean '%s'?", $key, $suggestion),
-        );
+        try {
+            Configuration::fromArray([$key => []]);
 
-        Configuration::fromArray([$key => []]);
+            self::fail('A misspelled built-in section was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                sprintf("Configuration section '%s' is an unknown section: did you mean \"%s\"?", $key, $suggestion),
+                $exception->getMessage(),
+            );
+            self::assertSame($key, $exception->section());
+        }
     }
 
     /**
@@ -664,17 +670,22 @@ final class ConfigurationTest extends TestCase
         yield 'file capitalised' => ['Payment', 'payment'];
         yield 'file snake_case, factory PascalCase' => ['payment_gateway', 'PaymentGateway'];
         yield 'file upper case' => ['PAYMENT', 'payment'];
+        yield 'file kebab-case' => ['payment-gateway', 'paymentGateway'];
     }
 
     #[DataProvider('caseVariantsOfACustomSection')]
     public function testFromArrayRefusesACaseVariantOfACustomSectionName(string $key, string $factoryName): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage(
-            sprintf("Configuration section '%s' is not recognised: did you mean '%s'?", $key, $factoryName),
-        );
+        try {
+            Configuration::fromArray([$key => ['name' => 'x']], [$factoryName => FactoryNameSectionConfig::class]);
 
-        Configuration::fromArray([$key => ['name' => 'x']], [$factoryName => FactoryNameSectionConfig::class]);
+            self::fail('A variant of a custom section name was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                sprintf("Configuration section '%s' is an unknown section: did you mean \"%s\"?", $key, $factoryName),
+                $exception->getMessage(),
+            );
+        }
     }
 
     /**
@@ -714,10 +725,14 @@ final class ConfigurationTest extends TestCase
         file_put_contents($second, "Payment:\n  name: b\n");
 
         try {
-            $this->expectException(ConfigurationException::class);
-            $this->expectExceptionMessage("did you mean 'payment'?");
-
             Configuration::fromYamlFiles([$first, $second], ['payment' => FactoryNameSectionConfig::class]);
+
+            self::fail('A variant of a custom section name was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'Payment' is an unknown section: did you mean \"payment\"?",
+                $exception->getMessage(),
+            );
         } finally {
             @unlink($firstBase);
             @unlink($first);

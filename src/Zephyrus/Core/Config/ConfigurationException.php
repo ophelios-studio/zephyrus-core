@@ -87,6 +87,21 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
+     * A top-level key that misspells a section, with the section's name.
+     */
+    public static function unknownSection(string $section, string $suggestion): self
+    {
+        $exception = new self(sprintf(
+            'Configuration section %s is an unknown section: did you mean %s?',
+            self::shownField($section),
+            MessageValue::quote($suggestion),
+        ));
+        $exception->section = $section;
+
+        return $exception;
+    }
+
+    /**
      * A value of the wrong type, refused without showing it, followed by the requirement it fails, such as
      * 'must be a mapping'.
      */
@@ -153,9 +168,9 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The section named by invalidValue(), invalidType(), missingRequired(), removedField(), unknownKey() or
-     * conflictingKeys(), or null for any other refusal: its configuration key (such as 'database' or
-     * 'security.headers'), or the class name of the ConfigSection whose getter refused a value.
+     * The section named by invalidValue(), invalidType(), missingRequired(), removedField(), unknownKey(),
+     * unknownSection() or conflictingKeys(), or null for any other refusal: its configuration key (such as
+     * 'database' or 'security.headers'), or the class name of the ConfigSection whose getter refused a value.
      */
     public function section(): ?string
     {
