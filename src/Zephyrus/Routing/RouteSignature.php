@@ -23,6 +23,9 @@ final readonly class RouteSignature
         }
     }
 
+    /**
+     * @throws RouteSignatureException When the URL cannot be parsed.
+     */
     public function sign(string $url): string
     {
         [$payload] = $this->split($url);
@@ -34,7 +37,7 @@ final readonly class RouteSignature
     /**
      * Signs a URL that expires $ttlSeconds after $now (default: current time).
      *
-     * @throws RouteSignatureException When the TTL is not positive.
+     * @throws RouteSignatureException When the TTL is not positive or the URL cannot be parsed.
      */
     public function signTemporary(string $url, int $ttlSeconds, ?int $now = null): string
     {
@@ -50,7 +53,7 @@ final readonly class RouteSignature
     /**
      * Signs a URL that expires at the Unix instant $expiresAt.
      *
-     * @throws RouteSignatureException When $expiresAt is not after $now.
+     * @throws RouteSignatureException When $expiresAt is not after $now or the URL cannot be parsed.
      */
     public function signTemporaryUntil(string $url, int $expiresAt, ?int $now = null): string
     {
@@ -103,7 +106,11 @@ final readonly class RouteSignature
 
     private function validationFailure(string $url, ?int $now = null, int $clockSkewSeconds = 0): ?RouteSignatureException
     {
-        [$payload, $signature, $expiry] = $this->split($url);
+        try {
+            [$payload, $signature, $expiry] = $this->split($url);
+        } catch (RouteSignatureException) {
+            return RouteSignatureException::invalidSignature();
+        }
 
         if ($signature === '') {
             return RouteSignatureException::invalidSignature();
@@ -130,10 +137,15 @@ final readonly class RouteSignature
 
     /**
      * @return array{0: string, 1: string, 2: string|null}
+     * @throws RouteSignatureException When the URL cannot be parsed.
      */
     private function split(string $url): array
     {
         $parts = parse_url($url);
+        if ($parts === false) {
+            throw RouteSignatureException::malformedUrl();
+        }
+
         $query = $parts['query'] ?? '';
 
         parse_str($query, $params);

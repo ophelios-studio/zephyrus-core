@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Routing;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\RouteSignature;
@@ -18,6 +19,55 @@ final class RouteSignatureTest extends TestCase
 
         self::assertStringContainsString('_sig=', $signed);
         self::assertTrue($signer->verify($signed));
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function unparseableUrls(): array
+    {
+        return [
+            'empty host with port' => ['http://:80'],
+            'empty host with path' => ['http:///x'],
+            'bare slashes' => ['//'],
+            'scheme only' => ['http://'],
+            'port out of range' => ['http://example.com:99999/x'],
+            'lone colon' => [':'],
+        ];
+    }
+
+    #[DataProvider('unparseableUrls')]
+    public function testSigningAnUnparseableUrlIsRefused(string $url): void
+    {
+        try {
+            (new RouteSignature('top-secret'))->sign($url);
+            self::fail('Expected a RouteSignatureException.');
+        } catch (RouteSignatureException $e) {
+            self::assertSame('Route URL cannot be parsed', $e->getMessage());
+        }
+    }
+
+    #[DataProvider('unparseableUrls')]
+    public function testSigningATemporaryUnparseableUrlIsRefused(string $url): void
+    {
+        $this->expectException(RouteSignatureException::class);
+
+        (new RouteSignature('top-secret'))->signTemporary($url, 60);
+    }
+
+    #[DataProvider('unparseableUrls')]
+    public function testAnUnparseableUrlNeverVerifies(string $url): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        self::assertFalse($signer->verify($url));
+
+        try {
+            $signer->assertValid($url);
+            self::fail('Expected a RouteSignatureException.');
+        } catch (RouteSignatureException $e) {
+            self::assertSame('Invalid route signature', $e->getMessage());
+        }
     }
 
     public function testVerifyFailsWhenPayloadIsTampered(): void

@@ -13,6 +13,11 @@ final class RouteSignatureException extends ZephyrusRuntimeException
         return new self('Route signing secret cannot be empty');
     }
 
+    public static function malformedUrl(): self
+    {
+        return new self('Route URL cannot be parsed');
+    }
+
     public static function invalidSignature(): self
     {
         return new self('Invalid route signature');
