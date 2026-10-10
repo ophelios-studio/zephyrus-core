@@ -26,8 +26,12 @@ namespace Zephyrus\Core\Config;
  * 'require' or stricter fails against a server built without TLS. Client-certificate
  * authentication (sslcert, sslkey) is not supported.
  *
- * columnCacheVersion: set it to a value that changes with every schema migration (a release id or the
- * migration version, typically !env RELEASE_VERSION). It keys the shared column shape cache, see Database.
+ * columnCacheVersion: a string or an integer, quoted in config.yml when it is a number such as '1.10'.
+ * It is part of the shared column shape cache key, see Database. Write a literal that changes with every
+ * migration (for example the latest migration id), and change it after the migration has run and before
+ * the release serves traffic. It helps when the PHP master survives a release and re-reads config.yml
+ * (symlink deploys, graceful reloads). A process restart already clears the cache. Processes still running
+ * old code keep their cache until APCU_TTL expires or flushSharedColumnMetadata() runs from a web request.
  */
 final readonly class DatabaseConfig
 {
@@ -96,7 +100,8 @@ final readonly class DatabaseConfig
     /**
      * Build a DatabaseConfig from a plain key-value array.
      *
-     * Accepts sslMode or sslmode, and sslRootCert or sslrootcert. Blank values mean null.
+     * Accepts sslMode or sslmode, sslRootCert or sslrootcert, and columnCacheVersion or column_cache_version.
+     * Blank values mean null.
      *
      * @param array<string, mixed> $values
      * @throws ConfigurationException if a removed emulate_prepares key is present, a required
