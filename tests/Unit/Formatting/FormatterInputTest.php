@@ -105,7 +105,6 @@ final class FormatterInputTest extends TestCase
         self::assertNull(FormatterInput::groupingSeparatorRefusal($separator));
     }
 
-
     #[DataProvider('refusedGroupingSeparators')]
     public function testRefusesAnythingOutsideTheList(string $separator): void
     {

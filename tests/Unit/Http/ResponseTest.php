@@ -768,6 +768,7 @@ final class ResponseTest extends TestCase
             self::assertStringNotContainsString('Set-Cookie', $exception->getMessage());
         }
     }
+
     public function testHeaderNameRefusalQuotesTheNameWithItsControlCharactersEscaped(): void
     {
         try {

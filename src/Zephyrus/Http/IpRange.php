@@ -55,7 +55,6 @@ final class IpRange
         return (ord($ipBinary[$fullBytes]) & $mask) === (ord($networkBinary[$fullBytes]) & $mask);
     }
 
-
     /** Why an address or range cannot be matched, or null when it can. */
     public static function invalidEntryReason(string $entry): ?string
     {

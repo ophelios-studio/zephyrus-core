@@ -917,6 +917,7 @@ final class DatabaseConfigTest extends TestCase
             );
         }
     }
+
     public function testHostRefusalWithoutACommaDoesNotMentionAList(): void
     {
         try {

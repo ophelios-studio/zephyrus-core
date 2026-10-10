@@ -149,27 +149,38 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string}>
+     * @return iterable<string, array{string, string}>
      */
     public static function policiesEndingWithAControlTheConfigKeeps(): iterable
     {
-        yield 'vertical tab' => ["default-src 'self'\v"];
-        yield 'NUL' => ["default-src 'self'\0"];
+        yield 'vertical tab' => ["default-src 'self'\v", "default-src 'self'\\u000b"];
+        yield 'NUL' => ["default-src 'self'\0", "default-src 'self'\\u0000"];
     }
 
     #[DataProvider('policiesEndingWithAControlTheConfigKeeps')]
-    public function testARawPolicyIsRefusedLikeTheSameCspInTheConfig(string $policy): void
+    public function testARawPolicyIsRefusedLikeTheSameCspInTheConfig(string $policy, string $escaped): void
     {
         try {
             SecureHeadersConfig::fromArray(['csp' => $policy]);
             self::fail('The config must refuse the policy.');
         } catch (ConfigurationException $exception) {
-            self::assertStringContainsString('must not contain a control character', $exception->getMessage());
+            self::assertSame(
+                "Configuration section 'security.headers' field 'csp' has invalid value \"" . $escaped
+                . '": must not contain a control character.',
+                $exception->getMessage(),
+            );
         }
 
-        $this->expectException(InvalidArgumentException::class);
-
-        new ContentSecurityPolicyMiddleware($policy);
+        try {
+            new ContentSecurityPolicyMiddleware($policy);
+            self::fail('The middleware must refuse the policy.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'The Content-Security-Policy value contains a control character; write it on one line or build it '
+                . 'with ContentSecurityPolicy.',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testARawPolicyIsTrimmedLikeTheSameCspInTheConfig(): void

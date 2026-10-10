@@ -842,7 +842,6 @@ final class FormatterTest extends TestCase
         new Formatter('en_US', groupingSeparator: 'ABCDE');
     }
 
-
     public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMonetarySeparatorOnly(): void
     {
         $symbols = new NumberFormatter('en_BE', NumberFormatter::DECIMAL);
@@ -865,6 +864,7 @@ final class FormatterTest extends TestCase
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: "\xC3\x28");
     }
+
     public function testConstructorRefusesALocaleWithANulByte(): void
     {
         try {

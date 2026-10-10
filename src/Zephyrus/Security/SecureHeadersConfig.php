@@ -261,7 +261,6 @@ final readonly class SecureHeadersConfig
         return null;
     }
 
-
     /** The Strict-Transport-Security value, or an empty string when hstsMaxAge is 0 or less. */
     public function hstsHeaderValue(): string
     {

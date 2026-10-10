@@ -108,7 +108,6 @@ final class MailerException extends ZephyrusRuntimeException
         );
     }
 
-
     /**
      * The mailer was used without the configuration it needs.
      */
