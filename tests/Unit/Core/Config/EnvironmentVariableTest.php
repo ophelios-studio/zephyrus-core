@@ -252,6 +252,28 @@ final class EnvironmentVariableTest extends TestCase
     /**
      * @return iterable<string, array{string}>
      */
+    public static function namesWithAnEqualsSign(): iterable
+    {
+        foreach (['QUERY_STRING=', 'QUERY_STRING=x', 'ZEPHYRUS_TEST_X=1'] as $name) {
+            yield $name => [$name];
+        }
+    }
+
+    #[DataProvider('namesWithAnEqualsSign')]
+    public function testANameContainingAnEqualsSignIsRefused(string $name): void
+    {
+        // libc getenv() on BSD and macOS cuts the name at the first '=', so 'QUERY_STRING=' reads QUERY_STRING.
+        putenv('QUERY_STRING=client');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must not contain a NUL byte or "="');
+
+        EnvironmentVariable::read($name);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
     public static function namesWithANulByte(): iterable
     {
         foreach (self::NUL_NAMES as $name) {

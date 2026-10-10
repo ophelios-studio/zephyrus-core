@@ -44,7 +44,7 @@ final class EnvironmentVariable
     /**
      * Reads a configuration value from $_ENV, then from the process environment.
      *
-     * Names containing a NUL byte are refused. So are names starting with HTTP_, REDIRECT_,
+     * Names containing a NUL byte or "=" are refused. So are names starting with HTTP_, REDIRECT_,
      * ORIG_, SSL_ or H2_, and exact request names such as QUERY_STRING, REMOTE_ADDR,
      * PHP_AUTH_PW, SERVER_SIGNATURE or HTTP2. Matching ignores case. A server may pass
      * other request-derived names.
@@ -53,8 +53,11 @@ final class EnvironmentVariable
      */
     public static function read(string $name): ?string
     {
-        if (str_contains($name, "\0")) {
-            throw new \InvalidArgumentException('Environment variable names must not contain a NUL byte.');
+        if (strpbrk($name, "\0=") !== false) {
+            throw new \InvalidArgumentException(sprintf(
+                '%s: names must not contain a NUL byte or "=".',
+                json_encode($name, JSON_INVALID_UTF8_SUBSTITUTE),
+            ));
         }
 
         $upper = strtoupper($name);
