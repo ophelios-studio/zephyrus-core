@@ -611,6 +611,8 @@ final class MailerTest extends TestCase
         yield 'backslash inside quotes' => ['text/plain; charset="a\\"b"'];
         yield 'vertical tab inside quotes' => ["text/plain; charset=\"a\x0Bb\""];
         yield 'non-ASCII inside quotes' => ['text/plain; charset="caf' . "\u{e9}" . '"'];
+        yield 'semicolon inside quotes' => ['application/pdf; x="a; name=evil.exe"'];
+        yield 'equals sign inside quotes' => ['text/plain; charset="a=b"'];
         yield 'unterminated quote' => ['text/plain; name="x'];
         yield 'name parameter' => ['application/pdf; name=evil.exe'];
         yield 'filename parameter' => ['application/pdf; filename="../../evil.exe"'];

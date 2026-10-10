@@ -51,7 +51,7 @@ final class Mailer
     private ?string $htmlBody = null;
     private ?string $textBody = null;
 
-    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*(?:[ \t]*;[ \t]*(?!(?:name|filename|boundary)=)[a-z0-9][a-z0-9!#$&^_.+-]*=(?:[a-z0-9!#$&^_.+-]+|"[\x20\x21\x23-\x5B\x5D-\x7E]*"))*\z~i';
+    private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*(?:[ \t]*;[ \t]*(?!(?:name|filename|boundary)=)[a-z0-9][a-z0-9!#$&^_.+-]*=(?:[a-z0-9!#$&^_.+-]+|"[\x20\x21\x23-\x3A\x3C\x3E-\x5B\x5D-\x7E]*"))*\z~i';
 
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
