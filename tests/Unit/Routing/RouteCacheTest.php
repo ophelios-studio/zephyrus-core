@@ -571,7 +571,7 @@ final class RouteCacheTest extends TestCase
 
         yield 'valid cache' => [['meta' => $meta, 'routes' => []], false];
         yield 'routes section missing' => [['meta' => $meta], true];
-        yield 'routes section is an object' => [['meta' => $meta, 'routes' => ['GET' => []]], true];
+        yield 'routes section is an object' => [['meta' => ['route_count' => 1, 'routes_hash' => hash('sha256', '{"GET":[]}')] + $meta, 'routes' => ['GET' => []]], true];
         yield 'routes hash mismatch' => [['meta' => ['routes_hash' => str_repeat('a', 64)] + $meta, 'routes' => []], true];
         yield 'route count mismatch' => [['meta' => ['route_count' => 1] + $meta, 'routes' => []], true];
         yield 'metadata missing' => [['routes' => []], true];

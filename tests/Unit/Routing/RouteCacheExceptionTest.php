@@ -12,7 +12,7 @@ final class RouteCacheExceptionTest extends TestCase
 {
     public function testExtendsZephyrusRuntimeException(): void
     {
-        $e = RouteCacheException::staleCache('expired');
+        $e = RouteCacheException::refused('/cache/routes.json', 'expired');
         self::assertInstanceOf(ZephyrusRuntimeException::class, $e);
     }
 
@@ -24,11 +24,5 @@ final class RouteCacheExceptionTest extends TestCase
             'Route cache file /cache/routes.json has no metadata section; rebuild the cache with save() or warm()',
             $e->getMessage(),
         );
-    }
-
-    public function testStaleCache(): void
-    {
-        $e = RouteCacheException::staleCache('Route cache is expired');
-        self::assertSame('Route cache is expired', $e->getMessage());
     }
 }

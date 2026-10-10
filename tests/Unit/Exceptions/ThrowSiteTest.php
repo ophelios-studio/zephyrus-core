@@ -33,7 +33,7 @@ final class ThrowSiteTest extends TestCase
         yield 'database query' => [static fn (): \Throwable => DatabaseException::queryFailed('SELECT 1', 'boom'), __LINE__];
         yield 'database nested factory' => [static fn (): \Throwable => DatabaseException::queryExecutionFailed('SELECT 1', new PDOException('boom')), __LINE__];
         yield 'upload' => [static fn (): \Throwable => UploadException::invalidArrayShape(), __LINE__];
-        yield 'route cache' => [static fn (): \Throwable => RouteCacheException::staleCache('older than sources'), __LINE__];
+        yield 'route cache' => [static fn (): \Throwable => RouteCacheException::refused('/cache/routes.json', 'no metadata section'), __LINE__];
         yield 'configuration' => [static fn (): \Throwable => ConfigurationException::missingRequired('database', 'host'), __LINE__];
         yield 'configuration nested factory' => [static fn (): \Throwable => ConfigurationException::fileNotFound('/etc/app.php'), __LINE__];
         yield 'mailer' => [static fn (): \Throwable => MailerException::invalidFromAddress(), __LINE__];

@@ -10,12 +10,13 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * Thrown when route cache operations fail.
  *
  * Covers file I/O, serialization, payload validation, integrity checks,
- * and cache staleness conditions.
+ * and refused cache files.
  */
 final class RouteCacheException extends ZephyrusRuntimeException
 {
     /**
      * A cache file is refused: the message names the file, the problem and the fix.
+     * $problem completes the phrase "Route cache file <file> has ...".
      */
     public static function refused(string $file, string $problem, ?\Throwable $previous = null): self
     {
@@ -23,13 +24,5 @@ final class RouteCacheException extends ZephyrusRuntimeException
             sprintf('Route cache file %s has %s; rebuild the cache with save() or warm()', $file, $problem),
             previous: $previous,
         );
-    }
-
-    /**
-     * The cache is stale, expired, or does not match current routes.
-     */
-    public static function staleCache(string $reason): self
-    {
-        return new self($reason);
     }
 }
