@@ -49,12 +49,19 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      *        Section name => ConfigSection subclass.
      * @throws ConfigurationException if any section value violates its constraints.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromArray(array $config, array $sectionFactories = []): self
     {
         $customSections = [];
         foreach ($sectionFactories as $name => $className) {
+            if (!is_string($name)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Section factory at index %d must be keyed by its section name.',
+                    $name,
+                ));
+            }
+
             $normalizedName = self::normalizeKey($name);
             if (in_array($normalizedName, self::BUILT_IN_SECTIONS, true)) {
                 throw new \InvalidArgumentException(sprintf(
@@ -86,7 +93,7 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file is missing or unparsable, an !env tag is refused,
      *        or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromYamlFile(string $path, array $sectionFactories = []): self
     {
@@ -103,7 +110,7 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a file is missing or unparsable,
      *        an !env tag is refused, or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -119,7 +126,7 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a present file is unparsable,
      *        an !env tag is refused, or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromOptionalYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -132,7 +139,7 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file is missing, is a YAML file that does not parse, fails to load,
      *        or does not return an array, an !env tag is refused, or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromFile(string $path, array $sectionFactories = []): self
     {
@@ -170,7 +177,7 @@ final readonly class Configuration
      * @throws ConfigurationException when a path is not a non-empty string, a file is missing, is a YAML file
      *        that does not parse, fails to load or does not return an array, an !env tag is refused,
      *        or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromFiles(array $paths, array $sectionFactories = []): self
     {
@@ -185,7 +192,7 @@ final readonly class Configuration
      * @throws ConfigurationException when a path is not a non-empty string, a present file is a YAML file
      *        that does not parse, fails to load or does not return an array, an !env tag is refused,
      *        or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
      */
     public static function fromOptionalFiles(array $paths, array $sectionFactories = []): self
     {

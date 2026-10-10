@@ -476,4 +476,12 @@ final class ConfigurationTest extends TestCase
 
         Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']], ['_database' => MailerConfig::class]);
     }
+
+    public function testFromArrayRefusesAFactoryKeyedByListIndexNamingTheIndex(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('index 0');
+
+        Configuration::fromArray([], [ApplicationConfig::class]);
+    }
 }
