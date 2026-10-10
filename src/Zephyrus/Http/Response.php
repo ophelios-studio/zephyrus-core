@@ -110,9 +110,8 @@ final readonly class Response
     /**
      * Redirects to $target when it is a local path, otherwise to $fallback. Use it for targets read from a request.
      *
-     * A local path starts with a single "/", has no backslash and no ASCII control character. Browsers read "/\" like
-     * "//", another host. A non-string $target falls back too. A percent-encoded CRLF stays local: it is inert in a
-     * Location header.
+     * A local path starts with a single "/", has no backslash and no ASCII control character. A non-string $target
+     * falls back too. A percent-encoded CRLF stays local: it is inert in a Location header.
      *
      * @throws InvalidArgumentException When $fallback is not a local path.
      */
