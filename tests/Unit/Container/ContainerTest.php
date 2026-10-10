@@ -238,13 +238,17 @@ final class ContainerTest extends TestCase
      */
     public static function malformedIdProvider(): iterable
     {
+        yield 'leading digit' => ['1abc'];
+        yield 'double backslash' => ['Vendor\\\\Name'];
+        yield 'trailing backslash' => ['Vendor\\'];
+    }
+
+    public static function idPhpRejectsBeforeAutoloaderProvider(): iterable
+    {
         yield 'parent segment' => ['../x'];
         yield 'space' => ['A B'];
         yield 'nul byte' => ["\0"];
         yield 'empty' => [''];
-        yield 'leading digit' => ['1abc'];
-        yield 'double backslash' => ['Vendor\\\\Name'];
-        yield 'trailing backslash' => ['Vendor\\'];
     }
 
     #[DataProvider('malformedIdProvider')]
@@ -273,6 +277,16 @@ final class ContainerTest extends TestCase
         });
 
         self::assertSame(0, $calls);
+    }
+
+    #[DataProvider('idPhpRejectsBeforeAutoloaderProvider')]
+    public function testGetRefusesIdThatIsNotAClassNameAndHasIsFalse(string $id): void
+    {
+        self::assertFalse($this->container->has($id));
+
+        $this->expectException(NotFoundException::class);
+
+        $this->container->get($id);
     }
 
     public function testAutoWireNamesBuiltInTypeThatCannotBeProvided(): void
