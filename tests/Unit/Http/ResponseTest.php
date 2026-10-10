@@ -532,6 +532,7 @@ final class ResponseTest extends TestCase
         yield 'dot segments are allowed' => ['/../x', true];
         yield 'protocol-relative' => ['//evil', false];
         yield 'slash then backslash' => ['/\\evil', false];
+        yield 'backslash inside a path' => ['/a\\b', false];
         yield 'absolute URL' => ['http://x', false];
         yield 'relative' => ['a', false];
         yield 'empty' => ['', false];

@@ -459,7 +459,7 @@ final class Rules
 
     /**
      * Accepts five non-empty fields separated by spaces or tabs; field values are not range-checked.
-     * Any other control character fails.
+     * Any other ASCII control character (including DEL) fails.
      */
     public static function cronExpression(string $message = 'Must be a valid cron expression.'): Rule
     {
