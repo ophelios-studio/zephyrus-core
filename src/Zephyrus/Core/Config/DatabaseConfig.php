@@ -84,14 +84,14 @@ final readonly class DatabaseConfig
             );
         }
 
-        // Only the characters that could break out of the DSN parameter are checked here;
-        // libpq reports a missing file at connect time.
-        if ($this->sslRootCert !== null && preg_match('/^[^\\s;\'"]+$/D', $this->sslRootCert) !== 1) {
+        // Whitespace, semicolons, quotes and backslashes are DSN syntax to libpq; whether the
+        // file exists is reported at connect time.
+        if ($this->sslRootCert !== null && preg_match('/^[^\\s;\'"\\\\]+$/D', $this->sslRootCert) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
                 'sslrootcert',
                 $this->sslRootCert,
-                'must be null or a non-empty path free of whitespace, semicolons and quotes, '
+                'must be null or a non-empty path free of whitespace, semicolons, quotes and backslashes, '
                     . 'any of which would truncate or extend the DSN',
             );
         }

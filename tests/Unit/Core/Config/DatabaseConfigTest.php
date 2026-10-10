@@ -406,6 +406,26 @@ final class DatabaseConfigTest extends TestCase
         ]);
     }
 
+    public function testThrowsForSslRootCertContainingABackslash(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sslrootcert');
+
+        DatabaseConfig::fromArray([
+            'database'    => 'db',
+            'username'    => 'u',
+            'sslrootcert' => 'C:\\certs\\root.crt',
+        ]);
+    }
+
+    public function testThrowsForSslRootCertContainingABackslashThroughTheConstructor(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sslrootcert');
+
+        new DatabaseConfig('pgsql', 'localhost', 5432, 'db', 'u', '', 'utf8', null, '/etc/ssl/a\\b.crt');
+    }
+
     public function testColumnCacheVersionDefaultsToEmptyString(): void
     {
         $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u']);
