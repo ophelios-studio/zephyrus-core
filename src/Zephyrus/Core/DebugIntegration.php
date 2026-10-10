@@ -313,21 +313,35 @@ final class DebugIntegration
         Exposer::exposeObject($iterator, $value, $describer);
         $iterator->setFlags($flags);
 
-        $describer->addPropertyTo($value, 'storage', self::withBareKeys($iterator->getArrayCopy()), Value::PropertyPrivate, null, ArrayIterator::class);
+        $describer->addPropertyTo($value, 'storage', self::withBareKeys($iterator->getArrayCopy(), $describer), Value::PropertyPrivate, null, ArrayIterator::class);
         $value->value .= ' (' . count($iterator) . ')';
     }
 
     /**
      * Strip the class or wildcard prefix PHP puts on the keys of a wrapped object's non-public properties.
      *
+     * A property listed as Class::$name in the describer's keysToHide is wrapped as sensitive before its
+     * prefix is lost, so the declaring class still decides what is masked.
+     *
      * @param array<array-key, mixed> $entries
      * @return array<array-key, mixed>
      */
-    private static function withBareKeys(array $entries): array
+    private static function withBareKeys(array $entries, Describer $describer): array
     {
         $bare = [];
         foreach ($entries as $key => $entry) {
-            $name = is_string($key) && str_starts_with($key, "\0") ? substr($key, (int) strrpos($key, "\0") + 1) : $key;
+            if (!is_string($key) || !str_starts_with($key, "\0")) {
+                $bare[$key] = $entry;
+                continue;
+            }
+
+            $separator = (int) strrpos($key, "\0");
+            $class = substr($key, 1, $separator - 1);
+            $name = substr($key, $separator + 1);
+            if (isset($describer->keysToHide[strtolower($class . '::$' . $name)])) {
+                $entry = new SensitiveParameterValue($entry);
+            }
+
             $bare[$name] = $entry;
         }
 

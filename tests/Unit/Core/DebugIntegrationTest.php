@@ -506,6 +506,56 @@ final class DebugIntegrationTest extends TestCase
         }
     }
 
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksTheTraceOfAnExceptionInAnArrayIterator(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+        $message = self::marker('message');
+        $iterator = new \ArrayIterator(self::exceptionCarrying($message, $secret));
+
+        $html = Dumper::toHtml($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($message, $output, "Control: $label must dump the exception message.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered the trace of an exception inside an ArrayIterator.");
+        }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksTheRawBodyOfARequestBodyInAnArrayIterator(): void
+    {
+        DebugIntegration::initialize(debug: true);
+        $secret = self::marker('password');
+        $user = self::marker('user');
+        $iterator = new \ArrayIterator(new \Zephyrus\Http\RequestBody(['username' => $user], "password=$secret"));
+
+        $html = Dumper::toHtml($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+        $text = Dumper::toText($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        foreach (['toHtml()' => $html, 'toText()' => $text] as $label => $output) {
+            self::assertStringContainsString($user, $output, "Control: $label must dump the parsed body.");
+            self::assertStringNotContainsString($secret, $output, "$label rendered the raw body of a RequestBody inside an ArrayIterator.");
+        }
+    }
+
+    private static function exceptionCarrying(string $message, string $secret): \RuntimeException
+    {
+        try {
+            self::throwCarrying($message, $secret);
+        } catch (\RuntimeException $exception) {
+            return $exception;
+        }
+    }
+
+    private static function throwCarrying(string $message, string $secret): never
+    {
+        throw new \RuntimeException($message);
+    }
+
     private static function throwWithPhpMailer(PHPMailer $mail): never
     {
         throw new \RuntimeException('delivery refused');
