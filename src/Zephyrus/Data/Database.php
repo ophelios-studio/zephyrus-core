@@ -85,7 +85,7 @@ final class Database
 
     private const RETURNING_PATTERN = '/\bRETURNING\b/i';
 
-    /** Built-in PostgreSQL type conversions, keyed by the pg_field_type() name. */
+    /** Built-in PostgreSQL type conversions, keyed by the uppercased native_type from getColumnMeta(). */
     private const BUILTIN_TYPE_CONVERSIONS = [
         // Integer types
         'INT2' => 'intval',
@@ -120,7 +120,7 @@ final class Database
      * Register a callback to convert values from a PostgreSQL column type
      * (e.g. 'JSONB', 'JSON') before rows are returned from select methods.
      *
-     * @param string $typeName PostgreSQL type name (case-insensitive, matched via pg_field_type).
+     * @param string $typeName PostgreSQL type name (case-insensitive, matched against the uppercased native_type).
      * @param callable(string): mixed $converter Receives the raw string value, returns converted value.
      */
     public function registerTypeConversion(string $typeName, callable $converter): void
@@ -182,6 +182,7 @@ final class Database
 
         // Opt-in: libpq already negotiates TLS ('prefer' by default). A pinned mode makes it refuse what it
         // would otherwise accept unencrypted. The DSN is part of the shape cache key: changing it orphans APCu entries.
+        // DatabaseConfig validates sslMode and sslRootCert before they reach the DSN.
         if ($config->sslMode !== null) {
             $dsn .= ';sslmode=' . $config->sslMode;
         }
@@ -743,6 +744,8 @@ final class Database
      * Inside an open transaction, $work runs in a savepoint, so its failure undoes only its own writes.
      * A failed query() that $work caught leaves the server aborted (PostgreSQL): the commit or release is refused
      * with SQLSTATE 25P02 rather than reported as done. A statement run through pdo() is not tracked.
+     * Let the exception propagate, or catch it around a nested transaction(). A failed rollback never replaces
+     * the original error.
      *
      * @throws DatabaseException when the database fails to begin, commit, or set or release a savepoint,
      *         or with SQLSTATE 25P02 as described above. Its message carries the stage and the SQLSTATE only;
@@ -1157,7 +1160,7 @@ final class Database
             if (isset($this->typeConversions[$nativeType])) {
                 $map[$name] = $this->typeConversions[$nativeType];
             } elseif (str_starts_with($nativeType, '_')) {
-                // PostgreSQL array types (e.g. _INT4, _TEXT) → PHP arrays.
+                // PostgreSQL array types (e.g. _INT4, _TEXT) => PHP arrays.
                 $map[$name] = PostgresArrayParser::parse(...);
             }
         }
@@ -1272,7 +1275,7 @@ final class Database
     /**
      * Apply registered type conversions to a fetched row in-place.
      *
-     * @param array<string, callable> $columnTypes column name → converter
+     * @param array<string, callable> $columnTypes column name => converter
      */
     private function applyTypeConversions(\stdClass $row, array $columnTypes): void
     {
@@ -1292,7 +1295,7 @@ final class Database
             $this->typeConversions[$type] = $fn;
         }
 
-        // JSONB / JSON → decoded PHP value (stdClass or array).
+        // JSONB / JSON => decoded PHP value (stdClass or array).
         $jsonDecoder = static fn (string $v): mixed => json_decode($v);
         $this->typeConversions['JSONB'] = $jsonDecoder;
         $this->typeConversions['JSON'] = $jsonDecoder;

@@ -11,8 +11,10 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * Raised when a PDO-level database operation fails.
  *
  * Driver messages can echo row values (PostgreSQL's DETAIL line, for example,
- * prints `Key (email)=(jane@example.com) already exists.`), so the factories
- * keep them out of the message: read them through sql() and driverMessage().
+ * prints `Key (email)=(jane@example.com) already exists.`), so queryExecutionFailed() and
+ * transactionExecutionFailed() keep them out of the message: read them through sql() and driverMessage().
+ * queryFailed() and connectionFailed() print what their caller passes; fromConfig() passes the driver's
+ * connect error, which names the server and user but holds no row data.
  * No flag restores them in the message, so every sink that prints exceptions stays safe.
  */
 final class DatabaseException extends ZephyrusRuntimeException
@@ -122,7 +124,8 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
-     * The five-character SQLSTATE reported by the driver, or null when the instance has none.
+     * The five-character SQLSTATE reported by the driver. Set by queryExecutionFailed(), transactionExecutionFailed(),
+     * transactionProbeFailed() and transactionAborted(); null from the other factories.
      * PDO reports a connection lost mid-session as HY000, not 08006.
      */
     public function sqlState(): ?string
