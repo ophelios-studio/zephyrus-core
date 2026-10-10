@@ -246,10 +246,6 @@ final class Mailer
      */
     public function attachContent(string $content, string $name, ?string $mimeType = null): self
     {
-        if ($name === '') {
-            throw MailerException::attachmentRejected('display name', $name, 'must not be empty');
-        }
-
         $this->assertDisplayName($name, true);
 
         if ($mimeType !== null && strlen($mimeType) > self::MAX_HEADER_VALUE_BYTES) {
@@ -257,7 +253,7 @@ final class Mailer
         }
 
         if ($mimeType !== null && preg_match(self::MIME_TYPE_PATTERN, $mimeType) !== 1) {
-            throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype optionally followed by ; name=value parameters other than name, filename or boundary');
+            throw MailerException::attachmentRejected('media type', $mimeType, 'is not type/subtype optionally followed by ; attribute=value parameters; name, filename and boundary are set by the mailer; pass the file name as $name');
         }
 
         $this->mail->addStringAttachment($content, $name, PHPMailer::ENCODING_BASE64, $mimeType ?? '');

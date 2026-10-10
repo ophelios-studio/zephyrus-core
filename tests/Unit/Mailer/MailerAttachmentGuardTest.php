@@ -164,11 +164,6 @@ final class MailerAttachmentGuardTest extends TestCase
     }
 
     /**
-     * The display name lands in a MIME header and is what the recipient's
-     * client writes to disk, so a separator in it is a vector against the
-     * RECIPIENT rather than against us.
-     */
-    /**
      * @return iterable<string, array{string}>
      */
     public static function unusableDisplayNameProvider(): iterable

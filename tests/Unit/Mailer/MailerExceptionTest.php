@@ -66,19 +66,13 @@ final class MailerExceptionTest extends TestCase
 
     public function testTransportTextIsAbsentFromEveryDumpAndCast(): void
     {
-        $previous = ini_set('zend.exception_ignore_args', '1');
-
-        try {
-            $exception = MailerException::recipientsRefused('550 jane.tremblay@example.test mailbox unavailable');
-            $outputs = [
-                'print_r' => print_r($exception, true),
-                'var_export' => var_export($exception, true),
-                'array cast' => print_r((array) $exception, true),
-                'var_dump' => $this->captureVarDump($exception),
-            ];
-        } finally {
-            ini_set('zend.exception_ignore_args', (string) $previous);
-        }
+        $exception = MailerException::recipientsRefused('550 jane.tremblay@example.test mailbox unavailable');
+        $outputs = [
+            'print_r' => print_r($exception, true),
+            'var_export' => var_export($exception, true),
+            'array cast' => print_r((array) $exception, true),
+            'var_dump' => $this->captureVarDump($exception),
+        ];
 
         foreach ($outputs as $label => $output) {
             self::assertStringNotContainsString('jane.tremblay', $output, $label);

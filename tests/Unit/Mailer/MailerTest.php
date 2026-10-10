@@ -663,6 +663,26 @@ final class MailerTest extends TestCase
         $mailer->attachContent('content', str_repeat('a', 256) . '.pdf');
     }
 
+    public function testAnEmptyDisplayNameIsRefusedByAttachContentWithOneMessage(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('is not a usable file name');
+
+        $mailer->attachContent('content', '');
+    }
+
+    public function testAMalformedMediaTypeMessageNamesTheParameterPlaceholderAndTheFileNameRule(): void
+    {
+        $mailer = new Mailer($this->config);
+
+        $this->expectException(MailerException::class);
+        $this->expectExceptionMessage('attribute=value parameters; name, filename and boundary are set by the mailer; pass the file name as $name');
+
+        $mailer->attachContent('content', 'report.pdf', 'text');
+    }
+
     public function testAttachContentAcceptsWhitespaceBeforeTheParameterSeparator(): void
     {
         $mailer = new Mailer($this->config);
