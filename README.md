@@ -335,6 +335,8 @@ Commits are one semantic line (`type(scope): description`), with no body and no 
 .github/scripts/check-commit-messages.sh origin/dev..HEAD
 ```
 
+The pull request title is checked the same way, because GitHub squash-merges with it. Check it locally with `.github/scripts/check-commit-messages.sh --title "feat(scope): description"`.
+
 ---
 
 ## Documentation
