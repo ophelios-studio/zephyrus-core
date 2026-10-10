@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Http;
 
 use InvalidArgumentException;
+use Zephyrus\Exceptions\MessageValue;
 
 final readonly class Response
 {
@@ -187,8 +188,8 @@ final readonly class Response
      *
      * @param array<string, string> $headers
      * @throws InvalidArgumentException When a key is an integer: a list, or a numeric name PHP cast to int.
-     * @throws InvalidArgumentException When a value is not a string.
      * @throws InvalidArgumentException When any name is not a valid header name.
+     * @throws InvalidArgumentException When a value is not a string.
      * @throws InvalidArgumentException When any value holds a control character other than HTAB.
      */
     public function withHeaders(array $headers): self
@@ -202,6 +203,7 @@ final readonly class Response
                 ));
             }
 
+            self::assertValidHeaderName($name);
             if (!is_string($value)) { // @phpstan-ignore function.alreadyNarrowedType
                 throw new InvalidArgumentException(sprintf(
                     'Invalid value for HTTP header "%s": it must be a string.',
@@ -209,7 +211,6 @@ final readonly class Response
                 ));
             }
 
-            self::assertValidHeaderName($name);
             self::assertValidHeaderValue($name, $value);
             $normalized[strtolower($name)] = $value;
         }
@@ -230,8 +231,8 @@ final readonly class Response
     {
         if (preg_match(self::HEADER_NAME_PATTERN, $name) !== 1) {
             throw new InvalidArgumentException(sprintf(
-                'Invalid HTTP header name "%s": a field name may only contain RFC 9110 token characters.',
-                $name,
+                'Invalid HTTP header name %s: a field name may only contain RFC 9110 token characters.',
+                MessageValue::quote($name),
             ));
         }
     }

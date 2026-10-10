@@ -718,6 +718,19 @@ final class ResponseTest extends TestCase
         Response::text('ok')->withHeaders(['Retry-After' => 60]);
     }
 
+    public function testWithHeadersRefusesAnInvalidNameBeforeLookingAtItsValue(): void
+    {
+        try {
+            Response::text('ok')->withHeaders(["X\r\nY" => 1]);
+            self::fail('A header name with a CRLF must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'Invalid HTTP header name "X\r\nY": a field name may only contain RFC 9110 token characters.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testWithHeadersNamesAListPassedByMistake(): void
     {
         try {
@@ -753,6 +766,19 @@ final class ResponseTest extends TestCase
             self::assertStringContainsString('X-Injected', $exception->getMessage());
             self::assertStringContainsString('control character', $exception->getMessage());
             self::assertStringNotContainsString('Set-Cookie', $exception->getMessage());
+        }
+    }
+    public function testHeaderNameRefusalQuotesTheNameWithItsControlCharactersEscaped(): void
+    {
+        try {
+            Response::text('ok')->withHeader("X-Test\r\nSet-Cookie: s=1", 'v');
+            self::fail('A header name with a CRLF must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'Invalid HTTP header name "X-Test\r\nSet-Cookie: s=1": a field name may only contain RFC 9110 token '
+                . 'characters.',
+                $exception->getMessage(),
+            );
         }
     }
 
