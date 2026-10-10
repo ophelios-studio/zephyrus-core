@@ -391,14 +391,14 @@ final class Formatter
     // ─── Custom Formatters ────────────────────────────────────────────
 
     /**
-     * Register a custom named formatter.
+     * Register a custom named formatter. A built-in name, in any case, overrides that built-in.
      *
      * @param string   $name      Formatter name (e.g. 'phone').
      * @param callable $formatter A callable that receives mixed args and returns string.
      */
     public function register(string $name, callable $formatter): void
     {
-        $this->customFormatters[$name] = $formatter;
+        $this->customFormatters[$this->builtInName($name) ?? $name] = $formatter;
     }
 
     /**
@@ -432,10 +432,9 @@ final class Formatter
             return (string) $custom(...$args);
         }
 
-        foreach (self::BUILT_IN_FORMATTERS as $builtIn) {
-            if (strcasecmp($builtIn, $name) === 0) {
-                return $this->$builtIn(...$args);
-            }
+        $builtIn = $this->builtInName($name);
+        if ($builtIn !== null) {
+            return $this->$builtIn(...$args);
         }
 
         throw FormatterException::unknownFormatter($name, self::BUILT_IN_FORMATTERS);
@@ -455,9 +454,19 @@ final class Formatter
             return $this->customFormatters[$name];
         }
 
+        $builtIn = $this->builtInName($name);
+
+        return $builtIn === null ? null : ($this->customFormatters[$builtIn] ?? null);
+    }
+
+    /**
+     * Canonical built-in name matching the given name ignoring case, or null.
+     */
+    private function builtInName(string $name): ?string
+    {
         foreach (self::BUILT_IN_FORMATTERS as $builtIn) {
             if (strcasecmp($builtIn, $name) === 0) {
-                return $this->customFormatters[$builtIn] ?? null;
+                return $builtIn;
             }
         }
 

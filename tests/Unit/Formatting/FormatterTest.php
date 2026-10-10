@@ -535,6 +535,18 @@ final class FormatterTest extends TestCase
         self::assertSame('custom money', $this->formatter->format('money', 5));
     }
 
+    public function testBuiltInOverrideRegisteredInOtherCaseAppliesToCanonicalName(): void
+    {
+        $this->formatter->register('Money', static fn (): string => 'custom money');
+        $this->formatter->register('spellout', static fn (): string => 'custom spellout');
+
+        self::assertSame('custom money', $this->formatter->format('money', 5));
+        self::assertSame('custom money', $this->formatter->format('MONEY', 5));
+        self::assertSame('custom spellout', $this->formatter->format('spellOut', 5));
+        self::assertTrue($this->formatter->hasCustomFormatter('money'));
+        self::assertSame(['money', 'spellOut'], $this->formatter->getCustomFormatterNames());
+    }
+
     public function testFormatKeepsCustomFormatterNameCaseSensitive(): void
     {
         $this->formatter->register('phone', static fn (): string => 'custom');
