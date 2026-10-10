@@ -6,6 +6,7 @@ namespace Zephyrus\Security;
 
 use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigBoolean;
+use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\Response;
 
@@ -110,7 +111,7 @@ final readonly class SecureHeadersConfig
      */
     public static function fromArray(array $values): self
     {
-        self::assertKnownKeys($values);
+        ConfigKeys::assertKnown('security.headers', $values, self::SPELLINGS);
         $defaults = self::defaults();
 
         return new self(
@@ -125,34 +126,6 @@ final readonly class SecureHeadersConfig
         );
     }
 
-    /**
-     * @param array<string, mixed> $values
-     * @throws ConfigurationException
-     */
-    private static function assertKnownKeys(array $values): void
-    {
-        foreach ($values as $key => $value) {
-            if (!self::isKnownKey((string) $key)) {
-                throw ConfigurationException::invalidValue(
-                    'security.headers',
-                    (string) $key,
-                    $value,
-                    'unknown key, the accepted keys are ' . implode(', ', array_keys(self::SPELLINGS)),
-                );
-            }
-        }
-    }
-
-    private static function isKnownKey(string $key): bool
-    {
-        foreach (self::SPELLINGS as $spellings) {
-            if (in_array($key, $spellings, true)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     /**
      * @param array<string, mixed> $values

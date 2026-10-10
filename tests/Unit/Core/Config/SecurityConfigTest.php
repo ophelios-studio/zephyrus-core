@@ -979,4 +979,63 @@ final class SecurityConfigTest extends TestCase
 
         SecurityConfig::fromArray(['headers' => ['contentSecurityPolicy' => "default-src 'self'"]]);
     }
+
+    public function testAMisspelledForceHttpsIsRefusedRatherThanLeavingHttpsOff(): void
+    {
+        try {
+            SecurityConfig::fromArray(['forceHtps' => true]);
+
+            self::fail('A misspelled forceHttps was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field 'forceHtps' is an unknown key: did you mean \"forceHttps\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnUnknownKeyInsideTheCsrfSectionIsRefused(): void
+    {
+        try {
+            SecurityConfig::fromArray(['csrf' => ['enabeld' => false]]);
+
+            self::fail('A misspelled csrf key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field 'csrf.enabeld' is an unknown key: did you mean \"csrf.enabled\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnUnknownKeyInsideTheEncryptionSectionIsRefusedWithoutItsValue(): void
+    {
+        try {
+            SecurityConfig::fromArray(['encryption' => ['kye' => 'key-material-not-to-print']]);
+
+            self::fail('A misspelled encryption key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field 'encryption.kye' is an unknown key: "
+                . 'did you mean "encryption.key"?',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnUnknownKeyNearNoSettingListsTheAcceptedKeys(): void
+    {
+        try {
+            SecurityConfig::fromArray(['timeout' => 5]);
+
+            self::fail('An unknown key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'security' field 'timeout' is an unknown key: the accepted keys are "
+                . 'forceHttps, csrf.enabled, csrf.autoHtml, csrf.exceptions, allowedHosts, maxBodySize, '
+                . 'trustedProxies, trustedHeaders, encryption.key, headers.',
+                $exception->getMessage(),
+            );
+        }
+    }
 }

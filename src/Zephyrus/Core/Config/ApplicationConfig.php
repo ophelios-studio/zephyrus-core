@@ -9,6 +9,12 @@ namespace Zephyrus\Core\Config;
  */
 final readonly class ApplicationConfig
 {
+    /** Accepted keys per property; any other key is refused. */
+    private const array SPELLINGS = [
+        'environment' => ['environment'],
+        'debug' => ['debug'],
+    ];
+
     public function __construct(
         public Environment $environment,
         public bool $debug,
@@ -17,10 +23,12 @@ final readonly class ApplicationConfig
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when the debug value is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown, or the debug value is not a recognisable boolean.
      */
     public static function fromArray(array $values): self
     {
+        ConfigKeys::assertKnown('application', $values, self::SPELLINGS);
+
         $environment = isset($values['environment'])
             ? Environment::fromString((string) $values['environment'])
             : Environment::Production;

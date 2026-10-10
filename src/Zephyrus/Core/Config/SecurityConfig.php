@@ -28,7 +28,7 @@ use Zephyrus\Security\SecureHeadersConfig;
  *       key: !env ENCRYPTION_KEY
  *
  * Flat keys (csrfEnabled, csrfExceptions, encryptionKey) are still accepted at the top level,
- * and every key also accepts snake_case.
+ * and every key also accepts snake_case. Any other key is refused.
  *
  * Defaults:
  *   - forceHttps:     false. Enable it explicitly in production.
@@ -60,26 +60,20 @@ use Zephyrus\Security\SecureHeadersConfig;
 final readonly class SecurityConfig
 {
     /**
-     * The spellings fromArray() reads each setting from, in order of preference:
-     * [section, key], where section 'values' is the top level.
+     * The keys fromArray() reads each setting from, in order of preference; 'csrf.enabled' is the key enabled
+     * of the csrf mapping. Any other key is refused.
      */
     private const array SPELLINGS = [
-        'forceHttps'     => [['values', 'forceHttps'], ['values', 'force_https']],
-        'csrfEnabled'    => [
-            ['csrf', 'enabled'], ['csrf', 'csrf_enabled'], ['values', 'csrfEnabled'], ['values', 'csrf_enabled'],
-        ],
-        'csrfAutoHtml'   => [
-            ['csrf', 'autoHtml'], ['csrf', 'auto_html'], ['values', 'csrfAutoHtml'], ['values', 'csrf_auto_html'],
-        ],
-        'csrfExceptions' => [
-            ['csrf', 'exceptions'], ['csrf', 'csrf_exceptions'], ['values', 'csrfExceptions'], ['values', 'csrf_exceptions'],
-        ],
-        'allowedHosts'   => [['values', 'allowedHosts'], ['values', 'allowed_hosts']],
-        'maxBodySize'    => [['values', 'maxBodySize'], ['values', 'max_body_size']],
-        'trustedProxies' => [['values', 'trustedProxies'], ['values', 'trusted_proxies']],
-        'trustedHeaders' => [['values', 'trustedHeaders'], ['values', 'trusted_headers']],
-        'encryptionKey'  => [['encryption', 'key'], ['values', 'encryptionKey'], ['values', 'encryption_key']],
-        'headers'        => [['values', 'headers']],
+        'forceHttps'     => ['forceHttps', 'force_https'],
+        'csrfEnabled'    => ['csrf.enabled', 'csrf.csrf_enabled', 'csrfEnabled', 'csrf_enabled'],
+        'csrfAutoHtml'   => ['csrf.autoHtml', 'csrf.auto_html', 'csrfAutoHtml', 'csrf_auto_html'],
+        'csrfExceptions' => ['csrf.exceptions', 'csrf.csrf_exceptions', 'csrfExceptions', 'csrf_exceptions'],
+        'allowedHosts'   => ['allowedHosts', 'allowed_hosts'],
+        'maxBodySize'    => ['maxBodySize', 'max_body_size'],
+        'trustedProxies' => ['trustedProxies', 'trusted_proxies'],
+        'trustedHeaders' => ['trustedHeaders', 'trusted_headers'],
+        'encryptionKey'  => ['encryption.key', 'encryptionKey', 'encryption_key'],
+        'headers'        => ['headers'],
     ];
 
     /** The security response headers, read from the security.headers section. */
@@ -140,13 +134,15 @@ final readonly class SecurityConfig
      * Nested keys (csrf:, encryption:) take precedence over the flat ones.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if a value is not a boolean, csrf.autoHtml is true, allowedHosts
-     *         is null or names nothing, maxBodySize is negative or not a number of bytes, or a list entry is invalid
-     *         (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders), or headers is neither null nor a
-     *         mapping, or a header setting is invalid (see SecureHeadersConfig::fromArray()).
+     * @throws ConfigurationException if a key is unknown, a value is not a boolean, csrf.autoHtml is true,
+     *         allowedHosts is null or names nothing, maxBodySize is negative or not a number of bytes, or a list
+     *         entry is invalid (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders), or headers is neither
+     *         null nor a mapping, or a header setting is invalid (see SecureHeadersConfig::fromArray()).
      */
     public static function fromArray(array $values): self
     {
+        ConfigKeys::assertKnown('security', $values, self::SPELLINGS);
+
         $headers = $values['headers'] ?? null;
         if ($headers !== null && !is_array($headers)) {
             throw ConfigurationException::invalidValue(
@@ -349,7 +345,8 @@ final readonly class SecurityConfig
         $declared = [];
 
         foreach (self::SPELLINGS as $canonical => $spellings) {
-            foreach ($spellings as [$section, $key]) {
+            foreach ($spellings as $path) {
+                [$section, $key] = self::location($path);
                 if (array_key_exists($key, $sections[$section])) {
                     $declared[] = $canonical;
                     continue 2;
@@ -390,14 +387,27 @@ final readonly class SecurityConfig
      */
     private static function findWritten(string $canonical, array $sections): ?array
     {
-        foreach (self::SPELLINGS[$canonical] as [$section, $key]) {
+        foreach (self::SPELLINGS[$canonical] as $path) {
+            [$section, $key] = self::location($path);
             $value = $sections[$section][$key] ?? null;
 
             if ($value !== null) {
-                return [$section === 'values' ? $key : $section . '.' . $key, $value];
+                return [$path, $value];
             }
         }
 
         return null;
+    }
+
+    /**
+     * The section and key of a spelling, the top level being 'values'.
+     *
+     * @return array{string, string}
+     */
+    private static function location(string $path): array
+    {
+        $parts = explode('.', $path, 2);
+
+        return count($parts) === 2 ? [$parts[0], $parts[1]] : ['values', $path];
     }
 }

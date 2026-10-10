@@ -16,6 +16,7 @@ namespace Zephyrus\Core\Config;
  *   - port: 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
  *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
+ *   - keys: a key no setting reads is refused (fromArray only).
  *   - sslMode, sslRootCert, columnCacheVersion: one spelling per setting (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
  *   - host, database and sslRootCert: non-empty, valid UTF-8, with no ASCII whitespace, semicolons, equals
@@ -54,6 +55,20 @@ final readonly class DatabaseConfig
      * A silently ignored key would leave the file documenting a knob that no longer exists.
      */
     public const array REMOVED_EMULATE_PREPARES_KEYS = ['emulatePrepares', 'emulate_prepares'];
+
+    /** Accepted keys per property, preferred first; any other key is refused. */
+    private const array SPELLINGS = [
+        'driver' => ['driver'],
+        'host' => ['host'],
+        'port' => ['port'],
+        'database' => ['database'],
+        'username' => ['username'],
+        'password' => ['password'],
+        'charset' => ['charset'],
+        'sslMode' => ['sslMode', 'sslmode', 'ssl_mode'],
+        'sslRootCert' => ['sslRootCert', 'sslrootcert', 'ssl_root_cert'],
+        'columnCacheVersion' => ['columnCacheVersion', 'column_cache_version'],
+    ];
 
     public function __construct(
         public string $driver,
@@ -97,8 +112,8 @@ final readonly class DatabaseConfig
      * mean null, except a blank columnCacheVersion, which becomes ''.
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if a removed emulate_prepares key is present, two spellings of one
-     *                                setting are present, a required field is missing, or a value is invalid.
+     * @throws ConfigurationException if a removed emulate_prepares key or an unknown key is present, two spellings
+     *                                of one setting are present, a required field is missing, or a value is invalid.
      */
     public static function fromArray(array $values): self
     {
@@ -108,6 +123,8 @@ final readonly class DatabaseConfig
                 throw self::removedEmulatePrepares($removed);
             }
         }
+
+        ConfigKeys::assertKnown('database', $values, self::SPELLINGS);
 
         $driver   = (string) ($values['driver']   ?? 'pgsql');
         $host     = trim((string) ($values['host']     ?? 'localhost'));

@@ -285,4 +285,18 @@ final class ConfigurationExceptionTest extends TestCase
         $e = ConfigurationException::invalidPath('Config path must not be empty.');
         self::assertSame('Config path must not be empty.', $e->getMessage());
     }
+
+    public function testUnknownKeyNamesTheSectionAndFieldButNoValue(): void
+    {
+        $e = ConfigurationException::unknownKey('session', 'secur', 'secure', ['name', 'secure']);
+
+        self::assertSame(
+            "Configuration section 'session' field 'secur' is an unknown key: did you mean \"secure\"?",
+            $e->getMessage(),
+        );
+        self::assertSame('session', $e->section());
+        self::assertSame('secur', $e->field());
+        self::assertNull($e->reason());
+        self::assertNull($e->messageWithoutValue());
+    }
 }

@@ -116,4 +116,18 @@ final class CsrfConfigTest extends TestCase
 
         CsrfConfig::fromArray(['csrf_auto_html' => 'yes']);
     }
+
+    public function testFromArrayRefusesAMisspelledKey(): void
+    {
+        try {
+            CsrfConfig::fromArray(['enabeld' => false]);
+
+            self::fail('A misspelled key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'csrf' field 'enabeld' is an unknown key: did you mean \"enabled\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
 }

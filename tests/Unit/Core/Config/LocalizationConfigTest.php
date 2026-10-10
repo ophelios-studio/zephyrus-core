@@ -289,4 +289,18 @@ final class LocalizationConfigTest extends TestCase
             );
         }
     }
+
+    public function testAMisspelledTimezoneIsRefused(): void
+    {
+        try {
+            LocalizationConfig::fromArray(['timezon' => 'America/Toronto']);
+
+            self::fail('A misspelled timezone was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'localization' field 'timezon' is an unknown key: did you mean \"timezone\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
 }

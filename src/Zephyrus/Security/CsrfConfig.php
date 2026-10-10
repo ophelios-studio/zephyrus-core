@@ -6,6 +6,7 @@ namespace Zephyrus\Security;
 
 use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigBoolean;
+use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
 
@@ -68,6 +69,17 @@ final class CsrfConfig
 
     private const string EXAMPLE_PATTERN = '#^/webhooks/#';
 
+    /** Keys fromArray() accepts per property, preferred first; any other key is refused. */
+    private const array SPELLINGS = [
+        'enabled' => ['enabled', 'csrf_enabled', 'csrfEnabled'],
+        'bodyField' => ['bodyField', 'body_field'],
+        'headerName' => ['headerName', 'header_name'],
+        'injectToken' => ['injectToken', 'inject_token', 'csrf_auto_html', 'csrfAutoHtml'],
+        'excludedPathPatterns' => [
+            'excludedPathPatterns', 'excluded_path_patterns', 'csrf_exceptions', 'csrfExceptions',
+        ],
+    ];
+
     /**
      * PCRE patterns for paths that skip CSRF validation, each one validated.
      *
@@ -126,13 +138,16 @@ final class CsrfConfig
      * headerName | header_name (default "X-CSRF-Token");
      * injectToken | inject_token | csrf_auto_html | csrfAutoHtml (must be false);
      * excludedPathPatterns | excluded_path_patterns | csrf_exceptions | csrfExceptions.
+     * Any other key is refused.
      *
      * @param array<string, mixed> $config
      * @throws InvalidArgumentException when injectToken is true or an exclusion list or pattern is refused.
-     * @throws ConfigurationException when enabled or injectToken is not a recognisable boolean.
+     * @throws ConfigurationException when a key is unknown, or enabled or injectToken is not a recognisable boolean.
      */
     public static function fromArray(array $config): self
     {
+        ConfigKeys::assertKnown('csrf', $config, self::SPELLINGS);
+
         return new self(
             enabled: ConfigBoolean::firstSet('csrf', $config, ['enabled', 'csrf_enabled', 'csrfEnabled'], true),
             bodyField: (string) ($config['bodyField'] ?? $config['body_field'] ?? '_csrf_token'),

@@ -420,4 +420,18 @@ final class SessionConfigTest extends TestCase
             );
         }
     }
+
+    public function testAMisspelledSecureIsRefusedRatherThanLeavingTheCookieWithoutSecure(): void
+    {
+        try {
+            SessionConfig::fromArray(['secur' => true]);
+
+            self::fail('A misspelled secure was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'session' field 'secur' is an unknown key: did you mean \"secure\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
 }

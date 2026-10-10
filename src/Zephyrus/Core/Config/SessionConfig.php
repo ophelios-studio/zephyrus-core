@@ -49,6 +49,17 @@ final readonly class SessionConfig
     /** The largest value the INTEGER expire column of the documented session table holds. */
     private const EXPIRE_COLUMN_MAX = 2_147_483_647;
 
+    /** Accepted keys per property, preferred first; any other key is refused. */
+    private const array SPELLINGS = [
+        'name' => ['name'],
+        'lifetime' => ['lifetime'],
+        'httpOnly' => ['httpOnly', 'http_only'],
+        'secure' => ['secure'],
+        'sameSite' => ['sameSite', 'same_site'],
+        'cookiePath' => ['cookiePath', 'cookie_path'],
+        'idleTimeout' => ['idleTimeout', 'idle_timeout'],
+    ];
+
     /**
      * @param bool $secure     Force the Secure attribute on regardless of the request.
      * @param bool $secureAuto Add Secure when the request is HTTPS. Ignored when $secure is true.
@@ -110,12 +121,14 @@ final readonly class SessionConfig
      * Accepts camelCase and snake_case keys (e.g. http_only, same_site, idle_timeout).
      *
      * @param array<string, mixed> $values
-     * @throws ConfigurationException on a non-boolean secure or httpOnly, an idleTimeout that is not
+     * @throws ConfigurationException on an unknown key, a non-boolean secure or httpOnly, an idleTimeout that is not
      *         a positive integer within range, or any constructor rule (empty name, negative lifetime,
      *         unknown sameSite, or a combination browsers would discard).
      */
     public static function fromArray(array $values): self
     {
+        ConfigKeys::assertKnown('session', $values, self::SPELLINGS);
+
         $rawSecure = $values['secure'] ?? null;
         $auto = $rawSecure === null
             || (is_string($rawSecure) && strtolower(trim($rawSecure)) === 'auto');

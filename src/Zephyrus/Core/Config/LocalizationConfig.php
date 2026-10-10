@@ -9,7 +9,7 @@ use Zephyrus\Formatting\FormatterInput;
 /**
  * Immutable localization bootstrap config.
  *
- * YAML keys (snake_case aliases accepted where listed):
+ * YAML keys (snake_case aliases accepted where listed; any other key is refused):
  * - locale (defaultLocale, default_locale): translator default locale, lower-cased, so 'fr-CA' is
  *   stored as 'fr-ca'. Default 'en'.
  * - supportedLocales (supported_locales): negotiation allowlist. Trimmed, lower-cased, blanks dropped.
@@ -28,6 +28,19 @@ use Zephyrus\Formatting\FormatterInput;
  */
 final readonly class LocalizationConfig
 {
+    /** Accepted keys per property, preferred first; any other key is refused. */
+    private const array SPELLINGS = [
+        'locale' => ['locale', 'defaultLocale', 'default_locale'],
+        'supportedLocales' => ['supportedLocales', 'supported_locales'],
+        'localePath' => ['localePath', 'locale_path', 'jsonLocalePaths', 'json_locale_paths'],
+        'timezone' => ['timezone'],
+        'currency' => ['currency'],
+        'dateFormat' => ['dateFormat', 'date_format'],
+        'timeFormat' => ['timeFormat', 'time_format'],
+        'datetimeFormat' => ['datetimeFormat', 'datetime_format'],
+        'groupingSeparator' => ['groupingSeparator', 'grouping_separator'],
+    ];
+
     /**
      * @param string[] $supportedLocales
      */
@@ -46,10 +59,13 @@ final readonly class LocalizationConfig
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if locale or timezone is blank, or currency or grouping_separator is invalid.
+     * @throws ConfigurationException if a key is unknown, locale or timezone is blank, or currency or
+     *         grouping_separator is invalid.
      */
     public static function fromArray(array $values): self
     {
+        ConfigKeys::assertKnown('localization', $values, self::SPELLINGS);
+
         $locale = trim((string) ($values['locale'] ?? $values['defaultLocale'] ?? $values['default_locale'] ?? 'en'));
         $supportedLocales = (array) ($values['supportedLocales'] ?? $values['supported_locales'] ?? []);
 

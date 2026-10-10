@@ -325,8 +325,8 @@ final class SecureHeadersConfigTest extends TestCase
             self::fail('An unknown key containing a NUL byte was accepted.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'security.headers' field \"csp\\u0000x\" has invalid value \"default-src 'self'\": "
-                . 'unknown key, the accepted keys are xFrameOptions, xContentTypeOptions, referrerPolicy, xssProtection, '
+                "Configuration section 'security.headers' field \"csp\\u0000x\" is an unknown key: "
+                . 'the accepted keys are xFrameOptions, xContentTypeOptions, referrerPolicy, xssProtection, '
                 . 'hstsMaxAge, hstsIncludeSubdomains, csp, permissionsPolicy.',
                 $exception->getMessage(),
             );

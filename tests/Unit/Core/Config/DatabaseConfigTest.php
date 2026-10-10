@@ -1050,4 +1050,32 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('db.example.com', $config->host);
         self::assertSame('my_db', $config->database);
     }
+
+    public function testAnUpperCaseSslModeIsRefusedRatherThanLeavingLibpqOnPrefer(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'SSL_MODE' => 'require']);
+
+            self::fail('An upper-case SSL_MODE was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'database' field 'SSL_MODE' is an unknown key: did you mean \"ssl_mode\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAMisspelledPasswordKeyIsRefusedWithoutShowingItsValue(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'app', 'username' => 'app', 'pasword' => 'hunter2-secret']);
+
+            self::fail('A misspelled password key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'database' field 'pasword' is an unknown key: did you mean \"password\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
 }

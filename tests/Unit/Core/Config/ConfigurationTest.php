@@ -743,6 +743,14 @@ final class ConfigurationTest extends TestCase
 
         Configuration::fromArray([])->section('Database');
     }
+
+    public function testAnUnknownKeyInABuiltInSectionIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("Configuration section 'session' field 'secur' is an unknown key: did you mean \"secure\"?");
+
+        Configuration::fromArray(['session' => ['secur' => true]]);
+    }
 }
 
 /**

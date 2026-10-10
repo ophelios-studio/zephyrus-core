@@ -66,4 +66,18 @@ final class ApplicationConfigTest extends TestCase
 
         ApplicationConfig::fromArray(['environment' => 'development', 'debug' => $value]);
     }
+
+    public function testAMisspelledDebugIsRefused(): void
+    {
+        try {
+            ApplicationConfig::fromArray(['debgu' => false]);
+
+            self::fail('A misspelled debug was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'application' field 'debgu' is an unknown key: did you mean \"debug\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
 }

@@ -65,6 +65,28 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
+     * A key the section does not read, with the closest accepted spelling, or the accepted keys when no spelling
+     * is close. The key's value stays out of the message.
+     *
+     * @param list<string> $acceptedKeys
+     */
+    public static function unknownKey(string $section, string $field, ?string $suggestion, array $acceptedKeys): self
+    {
+        $exception = new self(sprintf(
+            "Configuration section '%s' field %s is an unknown key: %s",
+            $section,
+            self::shownField($field),
+            $suggestion === null
+                ? 'the accepted keys are ' . implode(', ', $acceptedKeys) . '.'
+                : 'did you mean ' . MessageValue::quote($suggestion) . '?',
+        ));
+        $exception->section = $section;
+        $exception->field = $field;
+
+        return $exception;
+    }
+
+    /**
      * The value is shown through MessageValue::describe(), so never pass a secret. It is stored in no property
      * and hidden from this call's trace frame; a caller's frame still holds it unless that parameter is marked
      * #[\SensitiveParameter]. A field longer than 64 bytes or holding anything but ASCII letters, digits and
@@ -95,9 +117,9 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The section named by invalidValue(), missingRequired() or removedField(), or null for any other refusal:
-     * its configuration key (such as 'database' or 'security.headers'), or the class name of the ConfigSection
-     * whose getter refused a value.
+     * The section named by invalidValue(), missingRequired(), removedField() or unknownKey(), or null for any
+     * other refusal: its configuration key (such as 'database' or 'security.headers'), or the class name of the
+     * ConfigSection whose getter refused a value.
      */
     public function section(): ?string
     {
@@ -105,7 +127,7 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * The field named by invalidValue(), missingRequired() or removedField(), as passed, or null.
+     * The field named by invalidValue(), missingRequired(), removedField() or unknownKey(), as passed, or null.
      */
     public function field(): ?string
     {
