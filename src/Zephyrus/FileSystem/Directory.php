@@ -11,13 +11,8 @@ use RecursiveIteratorIterator;
 /**
  * Object-oriented wrapper for directory operations.
  *
- * Usage:
- *
  *   $dir = new Directory('/path/to/dir');
  *   $files = $dir->files('*.php');
- *   $subdirs = $dir->directories();
- *   $dir->create();
- *   $dir->delete(recursive: true);
  */
 final class Directory extends FileSystemNode
 {
@@ -121,7 +116,7 @@ final class Directory extends FileSystemNode
     public function create(int $permissions = 0755): void
     {
         if (is_dir($this->path)) {
-            return; // Already exists — idempotent.
+            return;
         }
 
         if (!@mkdir($this->path, $permissions, true) && !is_dir($this->path)) {
@@ -132,10 +127,8 @@ final class Directory extends FileSystemNode
     /**
      * Delete the directory.
      *
-     * Every removal is checked. A recursive delete that cannot remove something
-     * throws naming the first path that survived, so a caller performing a
-     * statutory destruction can never log a successful purge over data that is
-     * still on disk.
+     * A recursive delete throws on the first entry it cannot remove, so a
+     * partial purge is never reported as a success.
      *
      * @param bool $recursive If true, delete all contents first.
      * @throws FileSystemException if any file or directory could not be removed.
@@ -143,7 +136,7 @@ final class Directory extends FileSystemNode
     public function delete(bool $recursive = false): void
     {
         if (!$this->exists()) {
-            return; // Already gone — idempotent.
+            return;
         }
 
         if ($recursive) {
@@ -208,9 +201,7 @@ final class Directory extends FileSystemNode
         foreach ($iterator as $item) {
             $path = $item->getPathname();
 
-            // isDir() follows symbolic links, so a link pointing at a directory
-            // would be handed to rmdir() and silently survive. A link of any
-            // kind is removed with unlink(), which also leaves its target alone.
+            // isDir() follows links: a link is unlinked, never rmdir()ed, so its target survives.
             $removed = $item->isDir() && !$item->isLink() ? @rmdir($path) : @unlink($path);
 
             if (!$removed) {

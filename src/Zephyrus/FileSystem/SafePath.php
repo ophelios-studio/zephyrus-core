@@ -8,16 +8,11 @@ namespace Zephyrus\FileSystem;
  * Resolves a caller-supplied relative path against a trusted root and refuses
  * anything that escapes it.
  *
- * Stripping leading separators is not a containment check: it stops
- * `/etc/passwd` from becoming an absolute path but does nothing about
- * `../../etc/passwd`. Containment needs two things, and this helper does both:
+ * Containment needs two checks: a lexical refusal of `..` segments and null
+ * bytes, and a `realpath()` comparison against the root so that a symbolic link
+ * inside the root cannot point outside it.
  *
- * 1. A lexical refusal of `..` segments and null bytes, so a traversal never
- *    reaches the filesystem at all.
- * 2. A `realpath()` comparison against the root, so a symbolic link inside the
- *    root cannot point outside it.
- *
- * @internal Shared by the rendering engines and the asset manager.
+ * @internal
  */
 final class SafePath
 {

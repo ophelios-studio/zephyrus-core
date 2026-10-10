@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\FileSystem;
 
 /**
- * Abstract base for filesystem nodes (files and directories).
- *
- * Provides common metadata accessors for any filesystem entry.
+ * Base for filesystem nodes (files and directories).
  */
 abstract class FileSystemNode
 {

@@ -7,30 +7,17 @@ namespace Zephyrus\FileSystem;
 /**
  * Object-oriented wrapper for file operations.
  *
- * Provides a clean API for reading, writing, copying, moving, and
- * inspecting individual files.
- *
- * Usage:
- *
  *   $file = new File('/path/to/file.txt');
- *   $content = $file->read();
  *   $file->write('new content');
- *   $file->append("\nmore content");
  *   $copy = $file->copy('/path/to/copy.txt');
- *   $file->delete();
  *
  * ## Permissions
- * A newly created file is chmod'ed to {@see self::DEFAULT_PERMISSIONS}. Relying
- * on the process umask is not enough: a worker or CLI running under `umask 0`
- * would otherwise leave every written file world-writable.
+ * A file created by this class is chmod'ed to {@see self::DEFAULT_PERMISSIONS},
+ * whatever the process umask.
  *
  * ## Symbolic links
- * The three operations that REPLACE content (`create()`, `write()`, `copy()`)
- * remove a symbolic link sitting at the destination and write a regular file in
- * its place, matching `move()`, which renames over the link. Otherwise a link
- * planted at a predictable path would redirect the write to an arbitrary file.
- * `append()` deliberately still follows a link, because appending means adding
- * to what is already there and replacing the link would destroy it.
+ * create(), write() and copy() replace a symbolic link at the destination with a
+ * regular file instead of following it. append() still follows the link.
  */
 final class File extends FileSystemNode
 {
@@ -235,7 +222,7 @@ final class File extends FileSystemNode
     public function delete(): void
     {
         if (!$this->exists()) {
-            return; // Already gone — idempotent.
+            return;
         }
 
         if (!@unlink($this->path)) {
@@ -268,8 +255,7 @@ final class File extends FileSystemNode
     }
 
     /**
-     * Remove a symbolic link sitting at `$path` so the caller writes a regular
-     * file there instead of following the link to an arbitrary target.
+     * Remove a symbolic link at `$path`, if any.
      *
      * @throws FileSystemException if the link is present but cannot be removed.
      */
@@ -284,9 +270,6 @@ final class File extends FileSystemNode
         }
     }
 
-    /**
-     * @throws FileSystemException if the mode cannot be applied.
-     */
     private static function applyDefaultPermissions(string $path): void
     {
         if (!@chmod($path, self::DEFAULT_PERMISSIONS)) {
