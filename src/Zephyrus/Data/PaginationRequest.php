@@ -5,18 +5,11 @@ declare(strict_types=1);
 namespace Zephyrus\Data;
 
 /**
- * Immutable page/per-page pair for offset pagination.
+ * Immutable page and per-page pair for offset pagination.
  *
- * TWO FACTORIES, TWO CONTRACTS. They read the SAME request parameter names, so
- * picking the wrong one is silent:
- *
- *   - fromQuery() is the UNTRUSTED-INPUT sibling. It clamps per-page to
- *     $maxPerPage (100 by default) and clamps the page to a representable value.
- *     Hand it $_GET.
- *   - fromArray() takes PRE-VALIDATED input. Without the optional $maxPerPage
- *     ceiling it applies no bound at all, so ['per_page' => 100000000] really does
- *     become LIMIT 100000000. Pass $maxPerPage whenever the array came from a
- *     request.
+ * fromQuery() takes untrusted input such as $_GET and clamps per-page to $maxPerPage.
+ * fromArray() takes pre-validated input and applies no ceiling unless $maxPerPage is passed,
+ * so never hand it a raw request array without one. Both read the same request keys.
  */
 final class PaginationRequest implements \JsonSerializable
 {
@@ -38,15 +31,7 @@ final class PaginationRequest implements \JsonSerializable
      */
     public function offset(): int
     {
-        // ($page - 1) * $perPage silently promotes int to float once the product
-        // passes PHP_INT_MAX, and the `: int` return type then raises a raw
-        // TypeError, NOT the DatabaseException this class contracts on, so every
-        // caller catching DatabaseException 500s instead. Rejecting the overflow
-        // explicitly makes the far end of the range symmetric with the
-        // constructor's `page < 1` rejection at the near end.
-        //
-        // The check is the division form of the multiplication: perPage is >= 1
-        // (constructor) and page is >= 1, so neither side can overflow on its own.
+        // Checked before multiplying: an overflowing product would become a float and break the int return type.
         if ($this->page - 1 > intdiv(PHP_INT_MAX, $this->perPage)) {
             throw DatabaseException::queryFailed(
                 'pagination',
@@ -63,20 +48,10 @@ final class PaginationRequest implements \JsonSerializable
     }
 
     /**
-     * Build from an array of ALREADY VALIDATED values.
-     *
-     * With $maxPerPage left null this applies NO ceiling: the per-page value is
-     * taken as given and reaches LIMIT verbatim. That is intentional (an internal
-     * caller asking for 5000 rows must get 5000 rows), and it is also the trap:
-     * this method reads the same per_page / perPage / page_size / pageSize / limit
-     * keys as fromQuery(), so handing it a raw request array removes the bound the
-     * caller most likely assumed was there.
-     *
-     * Pass $maxPerPage, or use fromQuery(), for anything derived from a request.
+     * Build from pre-validated values. Without $maxPerPage no ceiling applies and the per-page value reaches LIMIT as given.
      *
      * @param array<string, mixed> $data
-     * @param int|null $maxPerPage optional ceiling; per-page is then clamped into
-     *                             [1, $maxPerPage] exactly as fromQuery() does.
+     * @param int|null $maxPerPage optional ceiling; per-page is then clamped into [1, $maxPerPage].
      * @throws DatabaseException when $maxPerPage is supplied and is below 1.
      */
     public static function fromArray(array $data, ?int $maxPerPage = null): self
@@ -112,14 +87,7 @@ final class PaginationRequest implements \JsonSerializable
         $requestedPerPage = self::resolvePerPage($data, $defaultPerPage);
         $perPage = min(max($requestedPerPage, 1), $maxPerPage);
 
-        // per-page is clamped in BOTH directions above; the page used to be only
-        // FLOORED, with nothing capping it, so ?page=99999999999999999 travelled
-        // through this documented-safe path and overflowed inside offset().
-        //
-        // The ceiling is DERIVED (the largest page whose offset is still an int)
-        // rather than an invented round number, so this clamp can only ever rewrite
-        // a page that would otherwise have thrown. No page an application could
-        // actually paginate changes value.
+        // The page ceiling is the largest page whose offset still fits in an int.
         $page = min(max(self::resolvePage($data, $perPage), 1), intdiv(PHP_INT_MAX, $perPage));
 
         return new self(
@@ -160,10 +128,8 @@ final class PaginationRequest implements \JsonSerializable
     }
 
     /**
-     * Build from an UNTRUSTED request array. Per-page is clamped into
-     * [1, $maxPerPage] and the page is clamped to a representable value, so no
-     * combination of query parameters can produce an unbounded LIMIT or an
-     * overflowing OFFSET. This is the factory to reach for on $_GET.
+     * Build from an untrusted request array (e.g. $_GET). Per-page is clamped into [1, $maxPerPage]
+     * and the page into a representable value, so no query can yield an unbounded LIMIT or an overflowing OFFSET.
      *
      * @param array<string, mixed> $query
      */

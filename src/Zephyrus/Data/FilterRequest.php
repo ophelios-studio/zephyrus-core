@@ -173,8 +173,7 @@ final class FilterRequest implements \JsonSerializable
     }
 
     /**
-     * Quote a column identifier for safe SQL interpolation (PostgreSQL double-quote style).
-     * Supports dot-separated qualified names (e.g. "table"."column").
+     * Quote each dot-separated part of a column identifier (PostgreSQL double-quote style).
      */
     private static function quoteIdentifier(string $identifier): string
     {

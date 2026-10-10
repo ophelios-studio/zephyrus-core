@@ -5,22 +5,12 @@ declare(strict_types=1);
 namespace Zephyrus\Data;
 
 /**
- * Immutable column/direction pair for an ORDER BY clause.
+ * Immutable column and direction pair for an ORDER BY clause.
  *
- * TWO FACTORIES, TWO CONTRACTS. They read the SAME request parameter names
- * (sort_by / sortBy / order_by / orderBy), so picking the wrong one is silent:
- *
- *   - fromQuery() is the UNTRUSTED-INPUT sibling. An allowlist is REQUIRED and a
- *     column outside it falls back to the default. Hand it $_GET.
- *   - fromArray() takes PRE-VALIDATED input. Without the optional $allowedColumns
- *     it accepts ANY identifier-shaped column, including one that appears in no
- *     SELECT, which turns a listing into a blind ORDER BY oracle: an attacker
- *     infers a hidden column's ranking from the row order, and a non-existent
- *     column turns a 200 into an error. Pass $allowedColumns whenever the array
- *     came from a request.
- *
- * The blast radius of that trap is disclosure, not injection: the constructor
- * regex forbids quotes and quoteIdentifier() double-quotes every dotted part.
+ * fromQuery() takes untrusted input such as $_GET and requires an allowlist. fromArray() takes
+ * pre-validated input and accepts any identifier-shaped column unless $allowedColumns is passed:
+ * without that allowlist a request can order by a column that is not published, which discloses
+ * its ranking. Both read the same request keys.
  */
 final class SortRequest implements \JsonSerializable
 {
@@ -30,6 +20,7 @@ final class SortRequest implements \JsonSerializable
         public readonly string $column,
         string $direction = 'ASC',
     ) {
+        // The pattern forbids quotes; quoteIdentifier() also quotes every dotted part.
         if ($column === '' || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_\.]*$/', $column)) {
             throw DatabaseException::queryFailed('sorting', 'Invalid sort column');
         }
@@ -43,19 +34,10 @@ final class SortRequest implements \JsonSerializable
     }
 
     /**
-     * Build from an array of ALREADY VALIDATED values.
-     *
-     * With $allowedColumns left null this validates NOTHING beyond the identifier
-     * shape: any column name survives into the ORDER BY. That is intentional (an
-     * internal caller sorting by a column it chose itself must not need a list),
-     * and it is also the trap, because this method reads the same sort_by / sortBy
-     * / order_by / orderBy keys as fromQuery().
-     *
-     * Pass $allowedColumns, or use fromQuery(), for anything derived from a request.
+     * Build from pre-validated values. Without $allowedColumns any identifier-shaped column is accepted.
      *
      * @param array<string, mixed> $data
-     * @param array<int, string>|null $allowedColumns optional allowlist; a column
-     *        outside it falls back to $defaultColumn, exactly as fromQuery() does.
+     * @param array<int, string>|null $allowedColumns optional allowlist; a column outside it falls back to $defaultColumn.
      */
     public static function fromArray(
         array $data,
@@ -75,10 +57,8 @@ final class SortRequest implements \JsonSerializable
     }
 
     /**
-     * Build from an UNTRUSTED request array. The allowlist is mandatory and a
-     * column outside it silently falls back to $defaultColumn, so no query
-     * parameter can order by a column the caller did not publish. This is the
-     * factory to reach for on $_GET.
+     * Build from an untrusted request array (e.g. $_GET). A column outside the mandatory
+     * allowlist falls back to $defaultColumn.
      *
      * @param array<string, mixed> $query
      * @param array<int, string> $allowedColumns
@@ -108,8 +88,7 @@ final class SortRequest implements \JsonSerializable
     }
 
     /**
-     * Quote a column identifier for safe SQL interpolation (PostgreSQL double-quote style).
-     * Supports dot-separated qualified names (e.g. "table"."column").
+     * Quote each dot-separated part of a column identifier (PostgreSQL double-quote style).
      */
     private static function quoteIdentifier(string $identifier): string
     {
