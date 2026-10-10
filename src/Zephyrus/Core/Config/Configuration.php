@@ -42,37 +42,54 @@ final readonly class Configuration
     /**
      * Build a Configuration tree from a nested key-value array.
      *
-     * The built-in keys are the BUILT_IN_SECTIONS constant (omit database to leave it null). A custom factory runs only when its key holds
-     * an array, and is read back with section().
+     * The built-in keys are listed in BUILT_IN_SECTIONS (omit database to leave it null).
+     * A custom factory runs only when its key holds an array, and is read back with section().
      *
      * @param array<string, mixed> $config
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      *        Section name => ConfigSection subclass.
-     * @throws ConfigurationException if any section value violates its constraints.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     * @throws ConfigurationException if any section value violates its constraints, a top-level key misspells
+     *        a built-in or registered section name, or a custom section is written under two spellings.
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromArray(array $config, array $sectionFactories = []): self
     {
+        self::refuseMisspelledBuiltInKeys($config);
+
         $customSections = [];
+        $readKeys = [];
         foreach ($sectionFactories as $name => $className) {
             if (!is_string($name)) { // @phpstan-ignore function.alreadyNarrowedType
                 throw new \InvalidArgumentException(self::unnamedFactoryMessage($name, $className));
             }
 
-            $normalizedName = self::normalizeKey($name);
-            if (in_array($normalizedName, self::BUILT_IN_SECTIONS, true)) {
+            if (self::normalizeKey(trim($name)) === '') {
+                throw new \InvalidArgumentException(self::blankFactoryNameMessage($className));
+            }
+
+            $builtIn = self::builtInSectionFor($name);
+            if ($builtIn !== null) {
                 throw new \InvalidArgumentException(sprintf(
-                    'Section factory "%s" collides with the built-in section "%s"; read it with $configuration->%s instead.',
+                    'Section factory "%s" collides with the built-in section "%s"; '
+                    . 'read it with $configuration->%s instead.',
                     $name,
-                    $normalizedName,
-                    $normalizedName,
+                    $builtIn,
+                    $builtIn,
                 ));
             }
 
-            if (isset($config[$name]) && is_array($config[$name])) {
-                $customSections[$normalizedName] = $className::fromArray($config[$name]);
+            $normalizedName = self::normalizeKey($name);
+            $configKey = self::configKeyFor($config, $normalizedName);
+            if ($configKey !== null) {
+                $readKeys[] = $configKey;
+            }
+            if ($configKey !== null && is_array($config[$configKey])) {
+                $customSections[$normalizedName] = $className::fromArray($config[$configKey]);
             }
         }
+
+        self::refuseMisspelledCustomKeys($config, $sectionFactories, $readKeys);
 
         return new self(
             application:    ApplicationConfig::fromArray((array) ($config['application'] ?? [])),
@@ -92,16 +109,142 @@ final readonly class Configuration
             return sprintf('Section factory at index %d must be keyed by its section name.', $index);
         }
 
-        $shortName = basename(str_replace('\\', '/', $className));
-        $sectionName = strtolower(preg_replace('/Config$/', '', $shortName) ?: $shortName);
+        return sprintf(
+            'Section factory %s at index %d must be keyed by its section name, for example %s.',
+            self::shortClassName($className),
+            $index,
+            self::factoryExample($className),
+        );
+    }
+
+    private static function blankFactoryNameMessage(mixed $className): string
+    {
+        if (!is_string($className)) {
+            return 'Section factory name must not be empty.';
+        }
 
         return sprintf(
-            "Section factory %s at index %d must be keyed by its section name, for example ['%s' => %s::class].",
-            $shortName,
-            $index,
-            $sectionName,
-            $shortName,
+            'Section factory %s has an empty section name, for example %s.',
+            self::shortClassName($className),
+            self::factoryExample($className),
         );
+    }
+
+    private static function factoryExample(string $className): string
+    {
+        $shortName = self::shortClassName($className);
+
+        return sprintf("['%s' => %s::class]", self::suggestedSectionName($shortName), $shortName);
+    }
+
+    private static function shortClassName(string $className): string
+    {
+        return basename(str_replace('\\', '/', $className));
+    }
+
+    /**
+     * Derive the YAML spelling of a section from a class short name: PaymentGatewayConfig gives payment_gateway.
+     */
+    private static function suggestedSectionName(string $shortName): string
+    {
+        $base = preg_replace('/Config$/', '', $shortName) ?: $shortName;
+        $snake = preg_replace('/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/', '_', $base) ?? $base;
+
+        return strtolower($snake);
+    }
+
+    /**
+     * @param array<int|string, mixed> $config
+     * @throws ConfigurationException
+     */
+    private static function refuseMisspelledBuiltInKeys(array $config): void
+    {
+        foreach (array_keys($config) as $key) {
+            $key = (string) $key;
+            $builtIn = self::builtInSectionFor($key);
+
+            if ($builtIn !== null && $key !== $builtIn) {
+                throw new ConfigurationException(sprintf(
+                    "Configuration section '%s' is not recognised: did you mean '%s'?",
+                    $key,
+                    $builtIn,
+                ));
+            }
+        }
+    }
+
+    /**
+     * Refuse a top-level key that no factory read but that matches a registered factory name up to case and underscores.
+     *
+     * @param array<int|string, mixed> $config
+     * @param array<int|string, mixed> $sectionFactories
+     * @param list<string> $readKeys
+     * @throws ConfigurationException
+     */
+    private static function refuseMisspelledCustomKeys(array $config, array $sectionFactories, array $readKeys): void
+    {
+        $registered = [];
+        foreach (array_keys($sectionFactories) as $name) {
+            $registered[self::foldName((string) $name)] = (string) $name;
+        }
+
+        foreach (array_keys($config) as $key) {
+            $key = (string) $key;
+            $suggestion = $registered[self::foldName($key)] ?? null;
+
+            if ($suggestion !== null && !in_array($key, $readKeys, true)) {
+                throw new ConfigurationException(sprintf(
+                    "Configuration section '%s' is not recognised: did you mean '%s'?",
+                    $key,
+                    $suggestion,
+                ));
+            }
+        }
+    }
+
+    /**
+     * Find the top-level key that normalizes to $normalizedName, refusing two spellings of the same section.
+     *
+     * @param array<int|string, mixed> $config
+     * @throws ConfigurationException
+     */
+    private static function configKeyFor(array $config, string $normalizedName): ?string
+    {
+        $found = null;
+        foreach (array_keys($config) as $key) {
+            $key = (string) $key;
+            if (self::normalizeKey($key) !== $normalizedName) {
+                continue;
+            }
+
+            if ($found !== null) {
+                throw new ConfigurationException(sprintf(
+                    "Configuration section '%s' is written twice, as '%s' and '%s': keep one.",
+                    $normalizedName,
+                    $found,
+                    $key,
+                ));
+            }
+
+            $found = $key;
+        }
+
+        return $found;
+    }
+
+    /**
+     * The built-in section a name refers to, ignoring case and underscores, or null.
+     */
+    private static function builtInSectionFor(string $name): ?string
+    {
+        $folded = self::foldName($name);
+
+        return in_array($folded, self::BUILT_IN_SECTIONS, true) ? $folded : null;
+    }
+
+    private static function foldName(string $name): string
+    {
+        return strtolower(self::normalizeKey($name));
     }
 
     /**
@@ -109,8 +252,9 @@ final readonly class Configuration
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file is missing or unparsable, an !env tag is refused,
-     *        or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     *        or the configuration is refused by fromArray().
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromYamlFile(string $path, array $sectionFactories = []): self
     {
@@ -126,8 +270,9 @@ final readonly class Configuration
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a file is missing or unparsable,
-     *        an !env tag is refused, or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     *        an !env tag is refused, or the configuration is refused by fromArray().
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -142,8 +287,9 @@ final readonly class Configuration
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a present file is unparsable,
-     *        an !env tag is refused, or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     *        an !env tag is refused, or the configuration is refused by fromArray().
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromOptionalYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -155,8 +301,9 @@ final readonly class Configuration
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file is missing, is a YAML file that does not parse, fails to load,
-     *        or does not return an array, an !env tag is refused, or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     *        or does not return an array, an !env tag is refused, or the configuration is refused by fromArray().
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromFile(string $path, array $sectionFactories = []): self
     {
@@ -193,8 +340,9 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a file is missing, is a YAML file
      *        that does not parse, fails to load or does not return an array, an !env tag is refused,
-     *        or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     *        or the configuration is refused by fromArray().
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromFiles(array $paths, array $sectionFactories = []): self
     {
@@ -208,8 +356,9 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a path is not a non-empty string, a present file is a YAML file
      *        that does not parse, fails to load or does not return an array, an !env tag is refused,
-     *        or a section value is invalid.
-     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section name.
+     *        or the configuration is refused by fromArray().
+     * @throws \InvalidArgumentException if a factory is not keyed by a section name, or targets a built-in section
+     *        name (any spelling).
      */
     public static function fromOptionalFiles(array $paths, array $sectionFactories = []): self
     {
@@ -221,21 +370,23 @@ final readonly class Configuration
      *
      * Accepts both snake_case and camelCase keys.
      *
-     * @throws \InvalidArgumentException when the name is a built-in section, which is read from its typed property.
+     * @throws \InvalidArgumentException for any spelling of a built-in section (case or underscores), which is read
+     *        from its typed property.
      */
     public function section(string $name): ?ConfigSection
     {
-        $normalized = self::normalizeKey($name);
+        $builtIn = self::builtInSectionFor($name);
 
-        if (in_array($normalized, self::BUILT_IN_SECTIONS, true)) {
+        if ($builtIn !== null) {
             throw new \InvalidArgumentException(sprintf(
-                'Section "%s" is a built-in typed property; use $configuration->%s instead.',
-                $normalized,
-                $normalized,
+                'Section "%s" is a built-in typed property; use $configuration->%s or config(\'%s\') instead.',
+                $builtIn,
+                $builtIn,
+                $builtIn,
             ));
         }
 
-        return $this->customSections[$normalized] ?? null;
+        return $this->customSections[self::normalizeKey($name)] ?? null;
     }
 
     /**
@@ -301,6 +452,10 @@ final readonly class Configuration
         ];
 
         foreach ($this->customSections as $name => $section) {
+            if (array_key_exists($name, $result)) {
+                continue;
+            }
+
             $result[$name] = $section->toArray($revealSecrets);
         }
 
@@ -391,12 +546,16 @@ final readonly class Configuration
 
         foreach ($paths as $index => $path) {
             if (!is_string($path)) {
-                throw ConfigurationException::invalidPath(sprintf('Configuration file path at index %d must be a string.', $index));
+                throw ConfigurationException::invalidPath(
+                    sprintf('Configuration file path at index %d must be a string.', $index),
+                );
             }
 
             $trimmed = trim($path);
             if ($trimmed === '') {
-                throw ConfigurationException::invalidPath(sprintf('Configuration file path at index %d must not be empty.', $index));
+                throw ConfigurationException::invalidPath(
+                    sprintf('Configuration file path at index %d must not be empty.', $index),
+                );
             }
 
             if (in_array($trimmed, $normalized, true)) {

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ApplicationConfig;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Core\Config\Environment;
@@ -497,4 +499,224 @@ final class ConfigurationTest extends TestCase
 
         Configuration::fromArray([], [new \stdClass()]);
     }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function blankFactoryNames(): iterable
+    {
+        yield 'empty string' => [''];
+        yield 'spaces' => ['   '];
+        yield 'tab and newline' => ["\t\n"];
+    }
+
+    #[DataProvider('blankFactoryNames')]
+    public function testFromArrayRefusesABlankFactoryNameWithAnExample(string $name): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("['mailer' => MailerConfig::class]");
+
+        Configuration::fromArray([], [$name => MailerConfig::class]);
+    }
+
+    public function testFromArrayRefusesAFactoryNamedAsABuiltInInAnotherCase(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('"Security" collides with the built-in section "security"');
+
+        Configuration::fromArray([], ['Security' => MailerConfig::class]);
+    }
+
+    public function testSectionRefusesABuiltInNameInAnotherCase(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('$configuration->database');
+
+        Configuration::fromArray([])->section('Database');
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function misspelledBuiltInKeys(): iterable
+    {
+        yield 'capitalised' => ['Database', 'database'];
+        yield 'upper case' => ['SECURITY', 'security'];
+        yield 'underscore inside' => ['Data_base', 'database'];
+    }
+
+    #[DataProvider('misspelledBuiltInKeys')]
+    public function testFromArrayRefusesATopLevelKeyThatMisspellsABuiltInSection(string $key, string $suggestion): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            sprintf("Configuration section '%s' is not recognised: did you mean '%s'?", $key, $suggestion),
+        );
+
+        Configuration::fromArray([$key => []]);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function customSectionSpellings(): iterable
+    {
+        yield 'file snake_case, factory camelCase' => ['payment_gateway', 'paymentGateway'];
+        yield 'file camelCase, factory snake_case' => ['paymentGateway', 'payment_gateway'];
+    }
+
+    #[DataProvider('customSectionSpellings')]
+    public function testFactoryReadsTheCustomSectionWrittenUnderAnotherSpelling(string $key, string $factoryName): void
+    {
+        $config = Configuration::fromArray(
+            [$key => ['name' => 'stripe']],
+            [$factoryName => FactoryNameSectionConfig::class],
+        );
+
+        $section = $config->section('paymentGateway');
+        self::assertInstanceOf(FactoryNameSectionConfig::class, $section);
+        self::assertSame('stripe', $section->getString('name'));
+    }
+
+    public function testFromArrayRefusesACustomSectionWrittenTwiceInTwoSpellings(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("'payment_gateway' and 'paymentGateway': keep one");
+
+        Configuration::fromArray(
+            ['payment_gateway' => ['name' => 'a'], 'paymentGateway' => ['name' => 'b']],
+            ['paymentGateway' => FactoryNameSectionConfig::class],
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function unnamedFactoryExamples(): iterable
+    {
+        yield 'two words' => ['App\Billing\PaymentGatewayConfig', "['payment_gateway' => PaymentGatewayConfig::class]"];
+        yield 'acronym' => ['App\HTTPClientConfig', "['http_client' => HTTPClientConfig::class]"];
+    }
+
+    #[DataProvider('unnamedFactoryExamples')]
+    public function testUnnamedFactoryMessageSuggestsTheSnakeCaseKey(string $className, string $example): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage($example);
+
+        Configuration::fromArray([], [$className]);
+    }
+
+    public function testFromArrayRefusesAFactoryWhoseNameFoldsOntoABuiltInThroughSpaces(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('collides with the built-in section "database"');
+
+        Configuration::fromArray(
+            ['database' => ['database' => 'app', 'username' => 'root', 'password' => 's3cr3t']],
+            ['database _' => FactoryNameSectionConfig::class],
+        );
+    }
+
+    public function testToArrayNeverLetsACustomSectionOverwriteABuiltInEntry(): void
+    {
+        $config = new Configuration(
+            application: ApplicationConfig::fromArray([]),
+            session: SessionConfig::fromArray([]),
+            security: SecurityConfig::fromArray([]),
+            localization: LocalizationConfig::fromArray([]),
+            database: DatabaseConfig::fromArray(['database' => 'app', 'username' => 'root', 'password' => 's3cr3t']),
+            customSections: ['database' => FactoryNameSectionConfig::fromArray(['password' => 's3cr3t'])],
+        );
+
+        $exported = $config->toArray();
+
+        self::assertIsArray($exported['database']);
+        self::assertSame(ConfigSection::REDACTED, $exported['database']['password']);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function normalisedBlankFactoryNames(): iterable
+    {
+        yield 'empty' => [''];
+        yield 'spaces' => ['  '];
+        yield 'underscores' => ['__'];
+        yield 'single underscore' => ['_'];
+        yield 'underscores and spaces' => ['_ _'];
+    }
+
+    #[DataProvider('normalisedBlankFactoryNames')]
+    public function testFromArrayRefusesAFactoryNameThatIsBlankOnceNormalised(string $name): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('has an empty section name');
+
+        Configuration::fromArray(['_' => ['a' => 1]], [$name => FactoryNameSectionConfig::class]);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function caseVariantsOfACustomSection(): iterable
+    {
+        yield 'file capitalised' => ['Payment', 'payment'];
+        yield 'file snake_case, factory PascalCase' => ['payment_gateway', 'PaymentGateway'];
+        yield 'file upper case' => ['PAYMENT', 'payment'];
+    }
+
+    #[DataProvider('caseVariantsOfACustomSection')]
+    public function testFromArrayRefusesACaseVariantOfACustomSectionName(string $key, string $factoryName): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage(
+            sprintf("Configuration section '%s' is not recognised: did you mean '%s'?", $key, $factoryName),
+        );
+
+        Configuration::fromArray([$key => ['name' => 'x']], [$factoryName => FactoryNameSectionConfig::class]);
+    }
+
+    public function testFromYamlFilesRefusesACaseVariantOfACustomSectionAfterTheMerge(): void
+    {
+        $first = tempnam(sys_get_temp_dir(), 'zcfg') . '.yml';
+        $second = tempnam(sys_get_temp_dir(), 'zcfg') . '.yml';
+        file_put_contents($first, "payment:\n  name: a\n");
+        file_put_contents($second, "Payment:\n  name: b\n");
+
+        try {
+            $this->expectException(ConfigurationException::class);
+            $this->expectExceptionMessage("did you mean 'payment'?");
+
+            Configuration::fromYamlFiles([$first, $second], ['payment' => FactoryNameSectionConfig::class]);
+        } finally {
+            @unlink($first);
+            @unlink($second);
+        }
+    }
+
+    public function testFromArrayAllowsATopLevelKeyMatchingNoRegisteredFactory(): void
+    {
+        $config = Configuration::fromArray(
+            ['Other' => ['a' => 1], 'payment' => ['name' => 'x']],
+            ['payment' => FactoryNameSectionConfig::class],
+        );
+
+        self::assertTrue($config->hasSection('payment'));
+    }
+
+    public function testSectionAdviceForABuiltInNameAlsoPointsToTheConfigHelper(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("or config('database') instead");
+
+        Configuration::fromArray([])->section('Database');
+    }
+}
+
+/**
+ * Minimal custom section used by the factory name tests.
+ */
+final class FactoryNameSectionConfig extends ConfigSection
+{
 }
