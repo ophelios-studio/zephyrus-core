@@ -104,18 +104,18 @@ final class ConfigKeysTest extends TestCase
 
     public function testAMisspelledMappingNameIsSuggested(): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'csfr' is an unknown key: did you mean \"csrf\"?");
-
-        ConfigKeys::read('example', ['csfr' => ['enabled' => false]], self::SPELLINGS);
+        self::assertSame(
+            "Configuration section 'example' field 'csfr' is an unknown key: did you mean \"csrf\"?",
+            self::refusalOf(['csfr' => ['enabled' => false]]),
+        );
     }
 
     public function testADottedTopLevelKeyIsNotReadAsANestedOne(): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'csrf.enabled' is an unknown key: did you mean \"csrfEnabled\"?");
-
-        ConfigKeys::read('example', ['csrf.enabled' => false], self::SPELLINGS);
+        self::assertSame(
+            "Configuration section 'example' field 'csrf.enabled' is an unknown key: did you mean \"csrfEnabled\"?",
+            self::refusalOf(['csrf.enabled' => false]),
+        );
     }
 
     /**
@@ -198,10 +198,10 @@ final class ConfigKeysTest extends TestCase
 
     public function testAShortKeyIsNotMatchedToAnUnrelatedShortSpelling(): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'hp' is an unknown key: " . self::ACCEPTED);
-
-        ConfigKeys::read('example', ['hp' => 'x'], self::SPELLINGS);
+        self::assertSame(
+            "Configuration section 'example' field 'hp' is an unknown key: " . self::ACCEPTED,
+            self::refusalOf(['hp' => 'x']),
+        );
     }
 
     /**
@@ -252,5 +252,19 @@ final class ConfigKeysTest extends TestCase
         self::assertNull($keys->value('csrfEnabled'));
         self::assertSame('csrf.enabled', $keys->key('csrfEnabled'));
         self::assertSame([], $keys->properties());
+    }
+
+    /**
+     * @param array<array-key, mixed> $values
+     */
+    private static function refusalOf(array $values): string
+    {
+        try {
+            ConfigKeys::read('example', $values, self::SPELLINGS);
+        } catch (ConfigurationException $exception) {
+            return $exception->getMessage();
+        }
+
+        self::fail('The values were accepted.');
     }
 }
