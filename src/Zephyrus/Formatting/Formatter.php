@@ -54,9 +54,10 @@ final class Formatter
      * @param string      $defaultDatetimePattern  Default for datetime(), same syntax.
      * @param string|null $groupingSeparator       Thousands separator for money(), decimal(), percent() and ordinal().
      *                                             Null keeps the locale's ICU default, '' disables grouping. Otherwise
-     *                                             at most 4 bytes, valid UTF-8, no digit, control, format or line
-     *                                             separator character, not the locale's decimal, monetary decimal or
-     *                                             minus sign.
+     *                                             at most 4 bytes of spaces, punctuation or symbols that cannot reorder
+     *                                             digits, not the locale's decimal, monetary decimal or minus sign.
+     *                                             Prefer U+00A0 or U+202F: a plain space or U+2019 can reverse the
+     *                                             digit groups when the amount sits inside right-to-left text.
      * @throws FormatterException if the grouping separator is not accepted.
      */
     public function __construct(
@@ -469,19 +470,19 @@ final class Formatter
     }
 
     /**
-     * Rejects a separator over 4 bytes, not valid UTF-8, containing a digit, control, format or line
-     * separator character, or equal to the locale's decimal, monetary decimal or minus sign (see
-     * reservedSeparators()).
+     * Rejects a separator refused by FormatterInput, or equal to the locale's decimal, monetary decimal or minus sign.
      *
      * @throws FormatterException
      */
     private function assertValidGroupingSeparator(string $separator): void
     {
-        if (strlen($separator) > 4
-            || preg_match('/[\p{Nd}\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u', $separator) !== 0
-            || in_array($separator, $this->reservedSeparators(), true)
-        ) {
-            throw FormatterException::invalidGroupingSeparator();
+        $refusal = FormatterInput::groupingSeparatorRefusal($separator);
+        if ($refusal !== null) {
+            throw FormatterException::invalidGroupingSeparator($refusal);
+        }
+
+        if (in_array($separator, $this->reservedSeparators(), true)) {
+            throw FormatterException::reservedGroupingSeparator($this->locale);
         }
     }
 

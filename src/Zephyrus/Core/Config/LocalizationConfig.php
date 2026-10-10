@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Zephyrus\Formatting\FormatterInput;
+
 /**
  * Immutable localization bootstrap config.
  *
@@ -19,7 +21,9 @@ namespace Zephyrus\Core\Config;
  * - dateFormat (date_format), timeFormat (time_format), datetimeFormat (datetime_format): ICU
  *   pattern or preset for Formatter::date(), time() and datetime(). Defaults 'medium', 'short', 'medium'.
  * - groupingSeparator (grouping_separator): thousands separator. Null keeps the locale default,
- *   '' disables grouping. At most 4 bytes, valid UTF-8, no digit, control, format or line separator character.
+ *   '' disables grouping. Otherwise at most 4 bytes of spaces, punctuation or symbols that cannot
+ *   reorder digits. Prefer U+00A0 or U+202F: a plain space or U+2019 can reverse the digit groups
+ *   when the amount sits inside right-to-left text.
  */
 final readonly class LocalizationConfig
 {
@@ -89,15 +93,14 @@ final readonly class LocalizationConfig
     }
 
     /**
-     * Validate the grouping separator. The locale-dependent checks run in Formatter.
+     * Validate the grouping separator with FormatterInput. The locale-dependent checks run in Formatter.
      *
-     * @throws ConfigurationException if the value is not a string of at most 4 bytes that is valid UTF-8
-     *         and has no digit, control, format or line separator character.
+     * @throws ConfigurationException if the value is not a string, or not '' and refused by FormatterInput.
      */
     private static function resolveGroupingSeparator(mixed $value): ?string
     {
-        if ($value === null) {
-            return null;
+        if ($value === null || $value === '') {
+            return $value;
         }
 
         if (!is_string($value)) {
@@ -105,16 +108,9 @@ final readonly class LocalizationConfig
         }
 
         $display = addcslashes($value, "\x00..\x1F\x7F");
-        if (strlen($value) > 4) {
-            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must be at most 4 bytes');
-        }
-
-        if (preg_match('//u', $value) !== 1) {
-            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must be valid UTF-8');
-        }
-
-        if (preg_match('/[\p{Nd}\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u', $value) === 1) {
-            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, 'must not contain a digit, control, format or line separator character');
+        $refusal = FormatterInput::groupingSeparatorRefusal($value);
+        if ($refusal !== null) {
+            throw ConfigurationException::invalidValue('localization', 'grouping_separator', $display, $refusal);
         }
 
         return $value;

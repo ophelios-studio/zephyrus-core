@@ -7,9 +7,11 @@ namespace Zephyrus\Tests\Unit\Formatting;
 use DateTime;
 use NumberFormatter;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Formatting\FormatterException;
+use Zephyrus\Formatting\FormatterInput;
 
 final class FormatterTest extends TestCase
 {
@@ -741,16 +743,15 @@ final class FormatterTest extends TestCase
         new Formatter('fr_CA', groupingSeparator: ',');
     }
 
-    public function testGroupingSeparatorOptionIsRefusedWhenItContainsADigit(): void
+    public function testGroupingSeparatorRefusalForAReservedSignNamesTheLocale(): void
     {
-        $this->expectException(FormatterException::class);
-        new Formatter('en_US', groupingSeparator: '1');
-    }
-
-    public function testGroupingSeparatorOptionIsRefusedWhenItContainsANonAsciiDigit(): void
-    {
-        $this->expectException(FormatterException::class);
-        new Formatter('en_US', groupingSeparator: "\u{0661}");
+        try {
+            new Formatter('fr_CA', groupingSeparator: ',');
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
+            self::assertStringContainsString('fr_CA', $exception->getMessage());
+            self::assertStringContainsString('decimal', $exception->getMessage());
+        }
     }
 
     public function testGroupingSeparatorOptionIsRefusedWhenLongerThanFourBytes(): void
@@ -774,49 +775,43 @@ final class FormatterTest extends TestCase
         new Formatter('fr_CA', groupingSeparator: (string) $monetary);
     }
 
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function controlCharacterSeparators(): iterable
-    {
-        yield 'NUL' => ["\0"];
-        yield 'tab' => ["\t"];
-        yield 'line feed' => ["\n"];
-        yield 'carriage return' => ["\r"];
-        yield 'escape' => ["\x1B"];
-    }
-
-    #[DataProvider('controlCharacterSeparators')]
-    public function testGroupingSeparatorOptionIsRefusedWhenItContainsAControlCharacter(string $separator): void
-    {
-        $this->expectException(FormatterException::class);
-        new Formatter('en_US', groupingSeparator: $separator);
-    }
-
     public function testGroupingSeparatorOptionIsRefusedWhenItIsInvalidUtf8(): void
     {
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: "\xC3\x28");
     }
 
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function formatAndLineSeparators(): iterable
-    {
-        yield 'right-to-left override' => ["\u{202E}"];
-        yield 'left-to-right isolate' => ["\u{2066}"];
-        yield 'zero-width space' => ["\u{200B}"];
-        yield 'byte order mark' => ["\u{FEFF}"];
-        yield 'line separator' => ["\u{2028}"];
-        yield 'paragraph separator' => ["\u{2029}"];
-    }
-
-    #[DataProvider('formatAndLineSeparators')]
-    public function testGroupingSeparatorOptionIsRefusedWhenItIsAFormatOrLineSeparatorCharacter(string $separator): void
+    #[DataProviderExternal(FormatterInputTest::class, 'refusedGroupingSeparators')]
+    public function testGroupingSeparatorOptionRefusesACharacterThatCanHideOrReorderDigits(string $separator): void
     {
         $this->expectException(FormatterException::class);
         new Formatter('en_US', groupingSeparator: $separator);
+    }
+
+    public function testGroupingSeparatorRefusalGivesTheSharedReasonWithoutEchoingTheValue(): void
+    {
+        $separator = "\u{05F3}";
+
+        try {
+            new Formatter('en_US', groupingSeparator: $separator);
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
+            self::assertStringContainsString((string) FormatterInput::groupingSeparatorRefusal($separator), $exception->getMessage());
+            self::assertStringNotContainsString($separator, $exception->getMessage());
+        }
+    }
+
+    #[DataProviderExternal(FormatterInputTest::class, 'acceptedGroupingSeparators')]
+    public function testGroupingSeparatorOptionAcceptsSpacesAndNeutralPunctuation(string $separator): void
+    {
+        $formatter = new Formatter('en_US', groupingSeparator: $separator);
+
+        self::assertSame("1{$separator}234.5", $formatter->decimal(1234.5, 1));
+    }
+
+    public function testGroupingSeparatorOptionAcceptsACommaWhereTheLocaleDoesNotReserveIt(): void
+    {
+        self::assertSame('1,234.5', (new Formatter('en_US', groupingSeparator: ','))->decimal(1234.5, 1));
     }
 
     public function testGroupingSeparatorOptionAcceptsNoBreakSpaces(): void

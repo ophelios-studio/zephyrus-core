@@ -30,12 +30,18 @@ final class FormatterExceptionTest extends TestCase
         self::assertSame($previous, $exception->getPrevious());
     }
 
-    public function testInvalidGroupingSeparatorStatesTheRules(): void
+    public function testInvalidGroupingSeparatorStatesTheReason(): void
     {
-        $message = FormatterException::invalidGroupingSeparator()->getMessage();
-        self::assertStringContainsString('at most 4 bytes', $message);
-        self::assertStringContainsString('format or line separator character', $message);
-        self::assertStringContainsString('minus sign', $message);
+        $message = FormatterException::invalidGroupingSeparator('must be at most 4 bytes')->getMessage();
+
+        self::assertSame('Invalid grouping separator: it must be at most 4 bytes.', $message);
+    }
+
+    public function testReservedGroupingSeparatorNamesTheLocale(): void
+    {
+        $message = FormatterException::reservedGroupingSeparator('fr_CA')->getMessage();
+
+        self::assertStringContainsString('minus sign of locale fr_CA', $message);
     }
 
     public function testInvalidLocale(): void

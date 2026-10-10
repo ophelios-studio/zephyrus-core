@@ -19,11 +19,17 @@ final class FormatterException extends ZephyrusRuntimeException
         );
     }
 
-    public static function invalidGroupingSeparator(): self
+    public static function invalidGroupingSeparator(string $reason): self
     {
-        return new self(
-            'Invalid grouping separator: expected at most 4 bytes, no digit, control, format or line separator character, and not the locale decimal, monetary or minus sign.',
-        );
+        return new self(sprintf('Invalid grouping separator: it %s.', $reason));
+    }
+
+    public static function reservedGroupingSeparator(string $locale): self
+    {
+        return new self(sprintf(
+            'Invalid grouping separator: it is the decimal, monetary decimal or minus sign of locale %s.',
+            $locale,
+        ));
     }
 
     /**

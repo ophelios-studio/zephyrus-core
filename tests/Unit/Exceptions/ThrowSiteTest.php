@@ -41,7 +41,7 @@ final class ThrowSiteTest extends TestCase
         yield 'session' => [static fn (): \Throwable => SessionException::invalidKey('a key'), __LINE__];
         yield 'cryptography' => [static fn (): \Throwable => CryptographyException::invalidArgument('bad'), __LINE__];
         yield 'localization' => [static fn (): \Throwable => LocalizationException::formatterRequired('money', 'price'), __LINE__];
-        yield 'formatting' => [static fn (): \Throwable => FormatterException::invalidGroupingSeparator(), __LINE__];
+        yield 'formatting' => [static fn (): \Throwable => FormatterException::invalidGroupingSeparator('must not be empty'), __LINE__];
         yield 'filesystem' => [static fn (): \Throwable => FileSystemException::notFound('/var/data'), __LINE__];
         yield 'rendering' => [static fn (): \Throwable => RenderException::engineError('template failed'), __LINE__];
     }

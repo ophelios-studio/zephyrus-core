@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
-use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\DataProviderExternal;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\LocalizationConfig;
+use Zephyrus\Formatting\FormatterInput;
+use Zephyrus\Tests\Unit\Formatting\FormatterInputTest;
 
 final class LocalizationConfigTest extends TestCase
 {
@@ -218,52 +220,36 @@ final class LocalizationConfigTest extends TestCase
         self::assertSame("\u{2009}'", LocalizationConfig::fromArray(['grouping_separator' => "\u{2009}'"])->groupingSeparator);
     }
 
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function formatAndLineSeparators(): iterable
+    #[DataProviderExternal(FormatterInputTest::class, 'refusedGroupingSeparators')]
+    public function testFromArrayRefusesAGroupingSeparatorThatCanHideOrReorderDigits(string $separator): void
     {
-        yield 'right-to-left override' => ["\u{202E}"];
-        yield 'left-to-right isolate' => ["\u{2066}"];
-        yield 'zero-width space' => ["\u{200B}"];
-        yield 'byte order mark' => ["\u{FEFF}"];
-        yield 'line separator' => ["\u{2028}"];
-        yield 'paragraph separator' => ["\u{2029}"];
+        try {
+            LocalizationConfig::fromArray(['grouping_separator' => $separator]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("field 'grouping_separator'", $exception->getMessage());
+            self::assertStringContainsString((string) FormatterInput::groupingSeparatorRefusal($separator), $exception->getMessage());
+        }
     }
 
-    #[DataProvider('formatAndLineSeparators')]
-    public function testFromArrayRefusesAGroupingSeparatorThatIsAFormatOrLineSeparatorCharacter(string $separator): void
+    #[DataProviderExternal(FormatterInputTest::class, 'acceptedGroupingSeparators')]
+    public function testFromArrayAcceptsSpacesAndNeutralPunctuationAsGroupingSeparators(string $separator): void
+    {
+        self::assertSame($separator, LocalizationConfig::fromArray(['grouping_separator' => $separator])->groupingSeparator);
+    }
+
+    public function testFromArrayLeavesTheDotAndCommaChecksToTheLocale(): void
+    {
+        self::assertSame('.', LocalizationConfig::fromArray(['grouping_separator' => '.'])->groupingSeparator);
+        self::assertSame(',', LocalizationConfig::fromArray(['grouping_separator' => ','])->groupingSeparator);
+    }
+
+    public function testFromArrayRefusesAGroupingSeparatorThatIsNotValidUtf8(): void
     {
         $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('must be valid UTF-8');
 
-        LocalizationConfig::fromArray(['grouping_separator' => $separator]);
-    }
-
-    public function testFromArrayAcceptsNoBreakSpacesAsGroupingSeparators(): void
-    {
-        self::assertSame("\u{00A0}", LocalizationConfig::fromArray(['grouping_separator' => "\u{00A0}"])->groupingSeparator);
-        self::assertSame("\u{202F}", LocalizationConfig::fromArray(['grouping_separator' => "\u{202F}"])->groupingSeparator);
-    }
-
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function unsafeGroupingSeparators(): iterable
-    {
-        yield 'digit' => ['1'];
-        yield 'arabic-indic digit' => ["\u{0661}"];
-        yield 'NUL' => ["\0"];
-        yield 'tab' => ["\t"];
-        yield 'line feed' => ["\n"];
-        yield 'invalid UTF-8' => ["\xC3\x28"];
-    }
-
-    #[DataProvider('unsafeGroupingSeparators')]
-    public function testFromArrayRefusesAGroupingSeparatorWithADigitControlCharacterOrInvalidUtf8(string $separator): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        LocalizationConfig::fromArray(['grouping_separator' => $separator]);
+        LocalizationConfig::fromArray(['grouping_separator' => "\xC3\x28"]);
     }
 
     public function testTheRefusalMessageDoesNotEchoAControlCharacter(): void
