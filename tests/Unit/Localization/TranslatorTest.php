@@ -607,6 +607,47 @@ final class TranslatorTest extends TestCase
         App::reset();
     }
 
+    public function testEmptyValueSkipsBuiltInFormatterSoDefaultApplies(): void
+    {
+        App::setFormatter(new Formatter('en_US', 'USD'));
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('N/D', $translator->trans('{v|money|default:N/D}', ['v' => null]));
+        self::assertSame('N/D', $translator->trans('{v|money|default:N/D}', ['v' => '']));
+
+        App::reset();
+    }
+
+    public function testEmptyValueIsNeverPassedToCustomFormatter(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('strict', static function (string $value): string {
+            throw new \RuntimeException('called with ' . $value);
+        });
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        self::assertSame('none', $translator->trans('{v|strict|default:none}', ['v' => '']));
+
+        App::reset();
+    }
+
+    public function testEmptyValueStillRejectsUnknownPipeName(): void
+    {
+        App::setFormatter(new Formatter('en_US'));
+
+        $translator = $this->buildTranslator();
+
+        $this->expectException(LocalizationException::class);
+        try {
+            $translator->trans('{v|mony|default:N/D}', ['v' => null]);
+        } finally {
+            App::reset();
+        }
+    }
+
     private function buildTranslator(): Translator
     {
         $loader = new JsonLocaleLoader(__DIR__ . '/../../Fixtures/locales');

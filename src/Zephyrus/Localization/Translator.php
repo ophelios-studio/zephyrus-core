@@ -321,6 +321,10 @@ final class Translator
             throw LocalizationException::unknownPipe($pipeName, $key);
         }
 
+        if ($value === '') {
+            return $value;
+        }
+
         return $formatter->format($pipeName, $isCustom ? $value : $this->castPipeValue($value));
     }
 
