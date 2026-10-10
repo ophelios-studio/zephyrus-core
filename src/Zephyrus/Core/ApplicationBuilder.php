@@ -589,14 +589,16 @@ final class ApplicationBuilder
             $unwired['security.allowedHosts'] = $this->describeUnwiredValue(
                 AllowedHostsMiddleware::class,
                 "the configuration's security->allowedHosts",
-                static fn (AllowedHostsMiddleware $instance): ?string => $instance->allowedHosts() === []
+                static fn (AllowedHostsMiddleware $instance, bool $sole): ?string => $instance->allowedHosts() === []
                     ? 'carries an empty allowlist, which accepts every host; ' . $rebuildHosts
                     : self::describeListDifference(
                         $instance->allowedHosts(),
                         $declaredHosts,
                         'security.allowedHosts',
-                        ['allows', 'omits'],
+                        'allows',
+                        'omits',
                         $rebuildHosts,
+                        $sole,
                     ),
             );
         }
@@ -612,15 +614,22 @@ final class ApplicationBuilder
             $unwired['security.csrf'] = $this->describeUnwiredValue(
                 CsrfMiddleware::class,
                 "the configuration's security through CsrfConfig::fromSecurityConfig()",
-                static fn (CsrfMiddleware $instance): ?string => $instance->config()->enabled
+                static fn (CsrfMiddleware $instance, bool $sole): ?string => $instance->config()->enabled
                     ? self::describeListDifference(
                         $instance->config()->excludedPathPatterns,
                         $declaredExceptions,
                         'security.csrf.exceptions',
-                        ['excludes', 'does not exclude'],
+                        'excludes',
+                        'does not exclude',
                         $rebuildCsrf,
+                        $sole,
                     )
-                    : 'is disabled; ' . $rebuildCsrf,
+                    : self::describeDisabledCsrf(
+                        $instance->config()->excludedPathPatterns,
+                        $declaredExceptions,
+                        $rebuildCsrf,
+                        $sole,
+                    ),
                 routeOnlyHint: ', and list the exempt routes under security.csrf.exceptions',
             );
         }
@@ -671,7 +680,8 @@ final class ApplicationBuilder
      * @template T of object
      * @param class-string<T> $middleware
      * @param string $declaredValue Where a missing instance takes its value from.
-     * @param Closure(T): ?string $differenceOf What an instance carries instead and how to fix it, or null.
+     * @param Closure(T, bool): ?string $differenceOf What an instance carries instead and how to fix it, or null;
+     *                                                 the flag is true when it is the only global instance.
      * @param string $routeOnlyHint Added to the mount instruction when only route names hold the middleware.
      */
     private function describeUnwiredValue(
@@ -691,7 +701,7 @@ final class ApplicationBuilder
 
         $differences = [];
         foreach ($mounted as $index => $instance) {
-            $difference = $differenceOf($instance);
+            $difference = $differenceOf($instance, count($mounted) === 1);
             if ($difference !== null) {
                 $differences[$index] = $difference;
             }
@@ -710,10 +720,10 @@ final class ApplicationBuilder
         $count = count($differences);
         $summary = $count === $total
             ? 'none of the ' . $total . ' global ' . $middleware . ' instances enforces it as declared, '
-                . 'and each instance applies its own: fix each one'
+                . 'and every global instance must carry the declared value: fix each one'
             : $count . ' of the ' . $total . ' global ' . $middleware . ' instances '
                 . ($count === 1 ? 'does' : 'do') . ' not enforce it as declared, '
-                . 'and each instance applies its own: fix or remove ' . ($count === 1 ? 'it' : 'them');
+                . 'and every global instance must carry the declared value: fix or remove ' . ($count === 1 ? 'it' : 'them');
 
         foreach ($differences as $index => $difference) {
             $summary .= "\n    - instance " . ($index + 1) . ' of ' . $total . ' ' . $difference;
@@ -743,14 +753,19 @@ final class ApplicationBuilder
      *
      * @param list<string> $carried
      * @param list<string> $declared
-     * @param array{string, string} $verbs What the instance does with a value it holds, then with one it lacks.
+     * @param string $heldVerb What the instance does with a value it holds.
+     * @param string $lackedVerb What the instance does with a value it lacks.
+     * @param bool $sole False when other global instances exist: editing the declaration would then contradict them,
+     *                   so only the rebuild advice is given.
      */
     private static function describeListDifference(
         array $carried,
         array $declared,
         string $setting,
-        array $verbs,
+        string $heldVerb,
+        string $lackedVerb,
         string $rebuild,
+        bool $sole,
     ): ?string {
         $extra = array_values(array_unique(array_diff($carried, $declared)));
         $missing = array_values(array_unique(array_diff($declared, $carried)));
@@ -761,10 +776,14 @@ final class ApplicationBuilder
 
         $clauses = [];
         if ($extra !== []) {
-            $clauses[] = $verbs[0] . ' ' . self::quoted($extra) . ', which ' . $setting . ' does not list';
+            $clauses[] = $heldVerb . ' ' . self::quoted($extra) . ', which ' . $setting . ' does not list';
         }
         if ($missing !== []) {
-            $clauses[] = $verbs[1] . ' ' . self::quoted($missing) . ', which ' . $setting . ' lists';
+            $clauses[] = $lackedVerb . ' ' . self::quoted($missing) . ', which ' . $setting . ' lists';
+        }
+
+        if (!$sole) {
+            return implode(', and ', $clauses) . '; ' . $rebuild;
         }
 
         $alignment = match (true) {
@@ -777,6 +796,24 @@ final class ApplicationBuilder
     }
 
     /**
+     * Says a disabled CSRF instance must be rebuilt, naming first the exclusions it holds that are not declared
+     * (only when it is the sole global instance: declaring them would exempt the paths other instances check).
+     *
+     * @param list<string> $carried
+     * @param list<string> $declared
+     */
+    private static function describeDisabledCsrf(array $carried, array $declared, string $rebuild, bool $sole): string
+    {
+        $extra = array_values(array_unique(array_diff($carried, $declared)));
+        if ($extra === [] || !$sole) {
+            return 'is disabled; ' . $rebuild;
+        }
+
+        return 'is disabled and excludes ' . self::quoted($extra) . '; declare ' . (count($extra) === 1 ? 'it' : 'them') . ' in security.csrf.exceptions, then '
+            . $rebuild;
+    }
+
+    /**
      * The values as comma-separated JSON strings.
      *
      * @param list<string> $values
@@ -785,12 +822,22 @@ final class ApplicationBuilder
     {
         // JSON-escaped so a control character in a value never reaches a log line raw.
         return implode(', ', array_map(
-            static fn (string $value): string => json_encode(
+            static fn (string $value): string => self::escapeDeleteAndC1(json_encode(
                 $value,
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR,
-            ),
+            )),
             $values,
         ));
+    }
+
+    /** Escapes DEL and U+0080 to U+009F, which json_encode leaves raw, as JSON and YAML double-quoted escapes. */
+    private static function escapeDeleteAndC1(string $json): string
+    {
+        return preg_replace_callback(
+            '/[\x{7f}\x{80}-\x{9f}]/u',
+            static fn (array $match): string => sprintf('\\u%04x', mb_ord($match[0])),
+            $json,
+        ) ?? $json;
     }
 
     /**

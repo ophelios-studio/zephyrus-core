@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -472,7 +473,7 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
                 'security.maxBodySize is not enforced: 1 of the 2 global ' . MaxBodySizeMiddleware::class
-                . ' instances does not enforce it as declared, and each instance applies its own: fix or remove it'
+                . ' instances does not enforce it as declared, and every global instance must carry the declared value: fix or remove it'
                 . "\n    - instance 2 of 2 carries a looser limit (" . $describedLimit . ') than security.maxBodySize '
                 . '(11534336 bytes); give it a positive limit no larger than security.maxBodySize',
                 $exception->getMessage(),
@@ -505,7 +506,7 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
                 'security.maxBodySize is not enforced: none of the 2 global ' . MaxBodySizeMiddleware::class
-                . ' instances enforces it as declared, and each instance applies its own: fix each one'
+                . ' instances enforces it as declared, and every global instance must carry the declared value: fix each one'
                 . "\n    - instance 1 of 2 carries a looser limit (0, unlimited) than security.maxBodySize "
                 . '(2097152 bytes); give it a positive limit no larger than security.maxBodySize'
                 . "\n    - instance 2 of 2 carries a looser limit (4194304 bytes) than security.maxBodySize "
@@ -527,7 +528,7 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
                 'security.headers is not enforced: none of the 2 global ' . SecureHeadersMiddleware::class
-                . ' instances enforces it as declared, and each instance applies its own: fix each one'
+                . ' instances enforces it as declared, and every global instance must carry the declared value: fix each one'
                 . "\n    - instance 1 of 2 carries another configuration; "
                 . "build the middleware from the configuration's security->headers"
                 . "\n    - instance 2 of 2 carries another configuration; ",
@@ -549,7 +550,7 @@ final class SecurityConfigurationWiringTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertStringContainsString(
                 'security.headers is not enforced: 1 of the 2 global ' . SecureHeadersMiddleware::class
-                . ' instances does not enforce it as declared, and each instance applies its own: fix or remove it'
+                . ' instances does not enforce it as declared, and every global instance must carry the declared value: fix or remove it'
                 . "\n    - instance 1 of 2 carries another configuration; "
                 . "build the middleware from the configuration's security->headers\n",
                 $exception->getMessage(),
@@ -774,6 +775,260 @@ final class SecurityConfigurationWiringTest extends TestCase
             ->build();
 
         self::assertInstanceOf(Application::class, $application);
+    }
+
+    // =====================================================================
+    // Several global instances, escaping and disabled exclusions
+    // =====================================================================
+
+    public function testTwoGlobalCsrfInstancesOnlyGetTheRebuildAdvice(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['enabled' => true]]],
+            'security.csrf',
+            new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()),
+            new CsrfMiddleware(new WiringTokenManager(), new CsrfConfig(excludedPathPatterns: ['#^/api/#'])),
+        );
+
+        self::assertSame(
+            '1 of the 2 global ' . CsrfMiddleware::class . ' instances does not enforce it as declared, '
+            . 'and every global instance must carry the declared value: fix or remove it'
+            . "\n    - instance 2 of 2 excludes \"#^/api/#\", which security.csrf.exceptions does not list; "
+            . 'build the middleware with CsrfConfig::fromSecurityConfig()',
+            $instruction,
+        );
+    }
+
+    public function testTwoGlobalAllowedHostsInstancesOnlyGetTheRebuildAdvice(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['allowed_hosts' => ['app.test']]],
+            'security.allowedHosts',
+            new AllowedHostsMiddleware(['app.test']),
+            new AllowedHostsMiddleware(['app.test', 'evil.test']),
+        );
+
+        self::assertSame(
+            '1 of the 2 global ' . AllowedHostsMiddleware::class . ' instances does not enforce it as declared, '
+            . 'and every global instance must carry the declared value: fix or remove it'
+            . "\n    - instance 2 of 2 allows \"evil.test\", which security.allowedHosts does not list; "
+            . "build the middleware from the configuration's security->allowedHosts",
+            $instruction,
+        );
+    }
+
+    public function testTwoGlobalInstancesThatBothDifferSayEveryOneMustCarryTheDeclaredValue(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['allowed_hosts' => ['app.test']]],
+            'security.allowedHosts',
+            new AllowedHostsMiddleware(['evil.test']),
+            new AllowedHostsMiddleware(['app.test', 'evil.test']),
+        );
+
+        self::assertStringStartsWith(
+            'none of the 2 global ' . AllowedHostsMiddleware::class . ' instances enforces it as declared, '
+            . 'and every global instance must carry the declared value: fix each one',
+            $instruction,
+        );
+        self::assertStringNotContainsString('declare it in', $instruction);
+        self::assertStringNotContainsString('make security.allowedHosts match', $instruction);
+    }
+
+    public function testSeveralGlobalInstancesDifferingAreCountedInThePlural(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['max_body_size' => 2_097_152]],
+            'security.maxBodySize',
+            new MaxBodySizeMiddleware(2_097_152),
+            new MaxBodySizeMiddleware(0),
+            new MaxBodySizeMiddleware(4_194_304),
+        );
+
+        self::assertStringStartsWith(
+            '2 of the 3 global ' . MaxBodySizeMiddleware::class . ' instances do not enforce it as declared, '
+            . 'and every global instance must carry the declared value: fix or remove them' . "\n",
+            $instruction,
+        );
+    }
+
+    public function testADisabledCsrfMiddlewareExcludingUndeclaredPathsSaysToDeclareThemFirst(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['enabled' => true]]],
+            'security.csrf',
+            new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(enabled: false, excludedPathPatterns: ['#^/webhooks/#', '#^/webhooks/#']),
+            ),
+        );
+
+        self::assertSame(
+            'the global ' . CsrfMiddleware::class . ' is disabled and excludes "#^/webhooks/#"; '
+            . 'declare it in security.csrf.exceptions, then build the middleware with '
+            . 'CsrfConfig::fromSecurityConfig()',
+            $instruction,
+        );
+    }
+
+    public function testADisabledCsrfMiddlewareExcludingSeveralUndeclaredPathsSaysToDeclareThem(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['enabled' => true]]],
+            'security.csrf',
+            new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(enabled: false, excludedPathPatterns: ['#^/webhooks/#', '#^/z/#']),
+            ),
+        );
+
+        self::assertSame(
+            'the global ' . CsrfMiddleware::class . ' is disabled and excludes "#^/webhooks/#", "#^/z/#"; '
+            . 'declare them in security.csrf.exceptions, then build the middleware with '
+            . 'CsrfConfig::fromSecurityConfig()',
+            $instruction,
+        );
+    }
+
+    public function testADisabledCsrfInstanceAmongSeveralDoesNotAskToDeclareItsExclusions(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['enabled' => true]]],
+            'security.csrf',
+            new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()),
+            new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(enabled: false, excludedPathPatterns: ['#^/z/#']),
+            ),
+        );
+
+        self::assertSame(
+            '1 of the 2 global ' . CsrfMiddleware::class . ' instances does not enforce it as declared, '
+            . 'and every global instance must carry the declared value: fix or remove it'
+            . "\n    - instance 2 of 2 is disabled; build the middleware with CsrfConfig::fromSecurityConfig()",
+            $instruction,
+        );
+    }
+
+    public function testRebuildingTheDisabledInstanceAmongSeveralBootsAndKeepsTheExcludedPathChecked(): void
+    {
+        $protected = new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults());
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['csrf' => ['enabled' => true]]])
+            ->withRouter(new Router())
+            ->withMiddleware($protected)
+            ->withMiddleware(new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+        $response = $protected->process(
+            Request::fromArray('POST', '/z/'),
+            static fn (): Response => Response::text('HANDLED'),
+        );
+        self::assertSame(403, $response->status);
+    }
+
+    public function testADisabledCsrfMiddlewareWhoseExclusionsAreDeclaredOnlySaysToRebuildIt(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['enabled' => true, 'exceptions' => ['#^/webhooks/#']]]],
+            'security.csrf',
+            new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(enabled: false, excludedPathPatterns: ['#^/webhooks/#']),
+            ),
+        );
+
+        self::assertSame(
+            'the global ' . CsrfMiddleware::class . ' is disabled; '
+            . 'build the middleware with CsrfConfig::fromSecurityConfig()',
+            $instruction,
+        );
+    }
+
+    public function testRepeatedExtraValuesAreNamedOnce(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['exceptions' => []]]],
+            'security.csrf',
+            new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(excludedPathPatterns: ['#^/api/#', '#^/api/#']),
+            ),
+        );
+
+        self::assertStringContainsString(' excludes "#^/api/#", which', $instruction);
+        self::assertStringNotContainsString('"#^/api/#", "#^/api/#"', $instruction);
+    }
+
+    public function testDeleteAndC1ControlCharactersAreEscapedInTheMessage(): void
+    {
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['exceptions' => []]]],
+            'security.csrf',
+            new CsrfMiddleware(
+                new WiringTokenManager(),
+                new CsrfConfig(excludedPathPatterns: ["#^/a\x7f\u{85}\u{9f}/#"]),
+            ),
+        );
+
+        self::assertStringContainsString(' excludes "#^/a\u007f\u0085\u009f/#", which', $instruction);
+        self::assertSame(1, preg_match('/^[^\x00-\x1f\x7f]*$/u', str_replace("\n", '', $instruction)));
+        self::assertStringNotContainsString("\x7f", $instruction);
+        self::assertStringNotContainsString("\u{85}", $instruction);
+    }
+
+    public function testAnEscapedPatternPastedBackIntoYamlLoadsAsTheSameString(): void
+    {
+        $pattern = "#^/a\x7f\u{85}/#";
+        $instruction = $this->instructionFor(
+            ['security' => ['csrf' => ['exceptions' => []]]],
+            'security.csrf',
+            new CsrfMiddleware(new WiringTokenManager(), new CsrfConfig(excludedPathPatterns: [$pattern])),
+        );
+        self::assertSame(1, preg_match('/excludes ("[^"]*"), which/', $instruction, $matches));
+
+        $file = tempnam(sys_get_temp_dir(), 'zephyrus-yaml-');
+        self::assertIsString($file);
+        try {
+            file_put_contents($file, "security:\n  csrf:\n    exceptions:\n      - " . $matches[1] . "\n");
+            $configuration = Configuration::fromYamlFile($file);
+        } finally {
+            unlink($file);
+        }
+
+        self::assertSame([$pattern], $configuration->security->csrfExceptions);
+    }
+
+    /**
+     * Boots with the given global middlewares and returns what build() says about one setting.
+     *
+     * @param array<string, mixed> $configuration
+     */
+    private function instructionFor(array $configuration, string $setting, MiddlewareInterface ...$middlewares): string
+    {
+        $builder = ApplicationBuilder::create()->withConfigurationArray($configuration)->withRouter(new Router());
+        foreach ($middlewares as $middleware) {
+            $builder = $builder->withMiddleware($middleware);
+        }
+
+        try {
+            $builder->build();
+        } catch (ConfigurationException $exception) {
+            $prefix = '  - ' . $setting . ' is not enforced';
+            foreach (explode("\n  - ", "\n" . $exception->getMessage()) as $block) {
+                $block = '  - ' . $block;
+                if (str_starts_with($block, $prefix)) {
+                    $block = preg_replace('/\n\nApply the fix.*$/s', '', $block);
+                    self::assertIsString($block);
+
+                    return substr($block, strpos($block, ': ', strlen($prefix)) + 2);
+                }
+            }
+            self::fail($setting . ' was not reported: ' . $exception->getMessage());
+        }
+
+        self::fail('build() accepted the configuration.');
     }
 
     // =====================================================================
