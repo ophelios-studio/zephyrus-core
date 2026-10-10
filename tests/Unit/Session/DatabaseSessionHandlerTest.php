@@ -515,6 +515,7 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertCount(1, $warnings);
         self::assertSame(E_USER_WARNING, $warnings[0][0]);
         self::assertStringContainsString('read()', $warnings[0][1]);
+        self::assertStringContainsString('so nothing is stored', $warnings[0][1]);
         self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $warnings[0][1]);
     }
 
@@ -664,6 +665,7 @@ final class DatabaseSessionHandlerTest extends TestCase
             self::fail('read() was expected to fail');
         } catch (SessionException $exception) {
             self::assertStringContainsString('TEXT', $exception->getMessage());
+            self::assertStringContainsString('of the table session returned', $exception->getMessage());
             self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $exception->getMessage());
         }
 

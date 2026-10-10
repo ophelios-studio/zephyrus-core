@@ -354,6 +354,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * turns every page load into a write transaction.
      *
      * @throws SessionException when the data column holds something other than text.
+     * @throws \Zephyrus\Data\DatabaseException when the SELECT fails.
      */
     public function read(string $id): string
     {
@@ -371,7 +372,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         try {
             // Under a savepoint in the caller's transaction, so a failure leaves it able to run the unlock.
             $row = $this->database->inTransaction() ? $this->database->transaction($select) : $select();
-            $payload = $row === null ? null : self::decodePayload($row->data);
+            $payload = $row === null ? null : $this->decodePayload($row->data);
         } catch (Throwable $failure) {
             // PHP does not call close() when read() throws out of session_start().
             $this->idStates[$id] = self::STATE_READ_FAILED;
@@ -474,10 +475,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * @throws SessionException when the data column holds something other than text.
      */
-    private static function decodePayload(mixed $stored): string
+    private function decodePayload(mixed $stored): string
     {
         if (!is_string($stored)) {
-            throw SessionException::dataColumnNotText(get_debug_type($stored));
+            throw SessionException::dataColumnNotText($this->table, get_debug_type($stored));
         }
 
         if (!str_starts_with($stored, self::ENCODED_PAYLOAD_PREFIX)) {
@@ -523,7 +524,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     private static function refuseUnreadId(): false
     {
         trigger_error(
-            'DatabaseSessionHandler refused to write a session it never read, so the changes are lost. '
+            'DatabaseSessionHandler refused to write a session it never read, so nothing is stored. '
             . 'A handler wrapping it must delegate read() before write() or updateTimestamp().',
             E_USER_WARNING,
         );
@@ -615,7 +616,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * session id. Released by write(), updateTimestamp(), destroy() and
      * close(), so the paths a wrapper commonly forwards all release it.
      *
-     * Best-effort by design (see LOCK_WAIT_SECONDS). A driver other than pgsql
+     * Best-effort by design (see bestEffort() and waitForLock()). A driver other than pgsql
      * takes no lock at all.
      */
     private function acquireLock(string $id): void

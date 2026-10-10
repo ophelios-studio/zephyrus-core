@@ -66,11 +66,12 @@ final class SessionException extends ZephyrusException
         );
     }
 
-    public static function dataColumnNotText(string $type): self
+    public static function dataColumnNotText(string $table, string $type): self
     {
         return new self(sprintf(
-            'The data column of the session table returned %s instead of a string. '
+            'The data column of the table %s returned %s instead of a string. '
             . 'Declare it TEXT NOT NULL, as DatabaseSessionHandler documents.',
+            $table,
             $type,
         ));
     }
