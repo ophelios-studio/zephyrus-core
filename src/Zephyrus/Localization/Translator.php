@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Zephyrus\Localization;
 
 use Zephyrus\Core\App;
+use Zephyrus\Formatting\Formatter;
 use Zephyrus\Formatting\FormatterException;
 
 final class Translator
 {
+    private const TEXT_PIPES = [
+        'lower', 'upper', 'title', 'trim', 'ltrim', 'rtrim', 'number', 'truncate', 'plural', 'default',
+    ];
+
     /** @var array<string, array<string, mixed>> */
     private array $catalogCache = [];
 
@@ -23,6 +28,8 @@ final class Translator
 
     /**
      * @param array<string, scalar|null> $parameters
+     *
+     * @throws LocalizationException
      */
     public function trans(string $key, array $parameters = [], ?string $locale = null): string
     {
@@ -319,7 +326,11 @@ final class Translator
 
         $isCustom = $formatter->hasCustomFormatter($pipeName);
         if (!$formatter->has($pipeName)) {
-            throw LocalizationException::unknownPipe($pipeName, $key);
+            throw LocalizationException::unknownPipe($pipeName, $key, [
+                ...self::TEXT_PIPES,
+                ...Formatter::BUILT_IN_FORMATTERS,
+                ...$formatter->getCustomFormatterNames(),
+            ]);
         }
 
         if ($value === '') {

@@ -527,6 +527,27 @@ final class TranslatorTest extends TestCase
         }
     }
 
+    public function testUnknownPipeMessageListsValidPipeNamesAndRegistrationHint(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('wallet', static fn (string $value): string => $value);
+        App::setFormatter($formatter);
+
+        $translator = $this->buildTranslator();
+
+        try {
+            $translator->trans('{v|walet}', ['v' => 'x']);
+            self::fail('An unknown pipe must not render silently.');
+        } catch (LocalizationException $e) {
+            self::assertStringContainsString('lower, upper', $e->getMessage());
+            self::assertStringContainsString('money', $e->getMessage());
+            self::assertStringContainsString('wallet', $e->getMessage());
+            self::assertStringContainsString('Formatter::register()', $e->getMessage());
+        } finally {
+            App::reset();
+        }
+    }
+
     public function testCustomFormatterExceptionPropagatesInsteadOfRawValue(): void
     {
         $formatter = new Formatter('en_US');
@@ -545,17 +566,6 @@ final class TranslatorTest extends TestCase
         } finally {
             App::reset();
         }
-    }
-
-    public function testBuiltInFormatterPipeMatchesNameIgnoringCase(): void
-    {
-        App::setFormatter(new Formatter('en_US', 'USD'));
-
-        $translator = $this->buildTranslator();
-
-        self::assertStringContainsString('19.99', $translator->trans('{amount|MONEY}', ['amount' => '19.99']));
-
-        App::reset();
     }
 
     public function testCustomFormatterReceivesNumericStringUnchanged(): void

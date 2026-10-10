@@ -68,12 +68,19 @@ final class LocalizationException extends ZephyrusRuntimeException
     }
 
     /**
-     * A pipe that is neither a text pipe nor a registered formatter. Names the
-     * pipe and the key, never the value being rendered.
+     * A pipe that is neither a text pipe nor a formatter name. Names the pipe,
+     * the key and the valid pipes, never the value being rendered.
+     *
+     * @param list<string> $validPipes
      */
-    public static function unknownPipe(string $pipe, string $key): self
+    public static function unknownPipe(string $pipe, string $key, array $validPipes): self
     {
-        return new self(sprintf('Unknown pipe "%s" in translation key "%s".', $pipe, $key));
+        return new self(sprintf(
+            'Unknown pipe "%s" in translation key "%s". Valid pipes: %s. Add a formatter with Formatter::register().',
+            $pipe,
+            $key,
+            implode(', ', $validPipes),
+        ));
     }
 
     /**
