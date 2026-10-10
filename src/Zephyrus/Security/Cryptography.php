@@ -284,6 +284,7 @@ final class Cryptography
             throw CryptographyException::invalidArgument('Length must be at least 1.');
         }
 
+        /** @var int<1, max> $bytesNeeded */
         $bytesNeeded = (int) ceil($length * 3 / 4) + 1;
         $raw = random_bytes($bytesNeeded);
 
@@ -319,6 +320,7 @@ final class Cryptography
             throw CryptographyException::invalidArgument('Length must be at least 1.');
         }
 
+        /** @var int<1, max> $bytesNeeded */
         $bytesNeeded = (int) ceil($length / 2);
         return substr(bin2hex(random_bytes($bytesNeeded)), 0, $length);
     }
