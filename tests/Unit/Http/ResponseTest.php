@@ -677,6 +677,40 @@ final class ResponseTest extends TestCase
         Response::redirect('/home' . $value);
     }
 
+    public function testWithHeadersNamesTheHeaderWhenTheValueIsNotAString(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid value for HTTP header "Retry-After": it must be a string.');
+
+        Response::text('ok')->withHeaders(['Retry-After' => 60]);
+    }
+
+    public function testWithHeadersNamesAListPassedByMistake(): void
+    {
+        try {
+            Response::text('ok')->withHeaders(['Cache-Control: no-store']);
+            self::fail('A list must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'withHeaders() takes a name => value map; key 0 is not a header name.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testWithHeadersNamesANumericKeyThatPhpTurnedIntoAnInteger(): void
+    {
+        try {
+            Response::text('ok')->withHeaders(['123' => 'x']);
+            self::fail('An integer key must be refused.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'withHeaders() takes a name => value map; key 123 is not a header name.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testControlCharacterRefusalNamesTheHeaderButNotTheValue(): void
     {
         try {

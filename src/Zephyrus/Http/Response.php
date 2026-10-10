@@ -170,6 +170,7 @@ final readonly class Response
      * Returns a copy with the headers set, as withHeader() does.
      *
      * @param array<string, string> $headers
+     * @throws InvalidArgumentException When a key is an integer, which means a list was passed.
      * @throws InvalidArgumentException When any name is not a valid header name.
      * @throws InvalidArgumentException When any value holds a control character other than HTAB.
      */
@@ -177,6 +178,20 @@ final readonly class Response
     {
         $normalized = $this->headers;
         foreach ($headers as $name => $value) {
+            if (!is_string($name)) { // @phpstan-ignore function.alreadyNarrowedType
+                throw new InvalidArgumentException(sprintf(
+                    'withHeaders() takes a name => value map; key %d is not a header name.',
+                    $name,
+                ));
+            }
+
+            if (!is_string($value)) { // @phpstan-ignore function.alreadyNarrowedType
+                throw new InvalidArgumentException(sprintf(
+                    'Invalid value for HTTP header "%s": it must be a string.',
+                    $name,
+                ));
+            }
+
             self::assertValidHeaderName($name);
             self::assertValidHeaderValue($name, $value);
             $normalized[strtolower($name)] = $value;
