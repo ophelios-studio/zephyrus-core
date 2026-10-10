@@ -19,9 +19,8 @@ use Symfony\Component\Yaml\Yaml;
  * The tag format is: !env VAR_NAME[, default_value]
  *
  * Environment variables are resolved from $_ENV and the process environment at
- * parse time, so .env files must be loaded before this class is used. Names
- * starting with HTTP_, REDIRECT_, ORIG_, SSL_ or H2_, exact request names such as
- * QUERY_STRING, and names containing a NUL byte are refused with a ConfigurationException.
+ * parse time, so .env files must be loaded before this class is used. Refused
+ * names raise a ConfigurationException, see {@see EnvironmentVariable::read()}.
  */
 final class ConfigurationFile
 {
@@ -142,8 +141,7 @@ final class ConfigurationFile
 
     /**
      * Resolve an !env tag value (VAR_NAME[, default_value]) from $_ENV or the process environment.
-     * Names starting with HTTP_, REDIRECT_, ORIG_, SSL_ or H2_, exact request names such as
-     * QUERY_STRING, a NUL inside the name and an empty name are refused with a ConfigurationException.
+     * An empty name and the names refused by {@see EnvironmentVariable::read()} raise a ConfigurationException.
      */
     private function resolveEnvTag(mixed $value, string $key): mixed
     {
