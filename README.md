@@ -300,6 +300,21 @@ $middleware = new CsrfMiddleware(
 
 The callback receives attacker-controlled input: it should only answer the refusal, never replay the request or act on the account from it.
 
+### Database sessions
+
+`DatabaseSessionHandler` stores sessions in a table. In the bootstrap above, register it after `new SessionManager()` and before `build()`, with a Closure so the `Database` is only built when a session callback first needs it:
+
+```php
+use Zephyrus\Data\Database;
+use Zephyrus\Session\DatabaseSessionHandler;
+
+$session->setHandler(new DatabaseSessionHandler(fn (): Database => Database::fromConfig($configuration->database), 'core.session'));
+```
+
+Return the application's shared `Database` from the Closure instead if it has one.
+
+If the Closure throws or returns anything but a `Database`, the callback that needed it throws a `SessionException`, and so does every later callback that needs the database, for the life of the handler instance (one per request in the usual bootstrap): nothing falls back to an empty session and the Closure is not run again. After a thrown failure, the original error is the previous exception. With the default serializer, a new session that stays empty is not stored, so a visitor who never writes to the session leaves no row. Under strict mode, the next request then refuses the id of that never-stored session, so an anonymous visitor gets a new id and a new `Set-Cookie` on each request until something is stored.
+
 ### Process model
 
 `App` holds its services (configuration, translator, formatter, session, asset, URL generator, CSP nonce) for the whole process, and `SessionMiddleware` sets the session per request. This assumes one request per process (php-fpm, mod_php), as does the PHP session. Persistent workers (RoadRunner, Swoole, FrankenPHP worker mode) are not supported: `App::reset()` is a testing tool, not a between-requests hook.

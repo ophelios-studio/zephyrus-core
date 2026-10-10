@@ -40,8 +40,11 @@ use Zephyrus\Data\DatabaseException;
  *
  * Pass a Closure instead of the Database to register the handler before the database can be built. It runs
  * at most once, at the first callback that needs the database. When it throws or returns anything else, that
- * callback and every later one throw a SessionException: there is no fallback and no retry.
- * A new session that stays empty is not stored.
+ * callback and every later callback that needs the database throw a SessionException, for the life of this
+ * handler instance. After a thrown failure, the original error is its previous exception.
+ * With the default serializer, a new session that stays empty is not stored. Under strict mode the next request
+ * then refuses the id of a session that was never stored, so an anonymous visitor gets a new id and a new
+ * Set-Cookie on each request until something is stored.
  *
  * A wrapper must forward open() and close() as well as the data callbacks: close() releases the
  * advisory lock taken by read().
@@ -116,7 +119,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /** Set once the Closure has run successfully. */
     private ?Database $resolved = null;
 
-    /** Set once the Closure has failed; every later callback refuses the same way. */
+    /** Set once the Closure has failed; every later callback that needs the database throws it again. */
     private ?SessionException $unavailable = null;
 
     /**
@@ -206,6 +209,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *
      * Implementing this method is what makes PHP enforce session.use_strict_mode for this handler.
      * Refusing unknown ids only narrows session fixation: rotating the id on each privilege change defeats it.
+     *
+     * @throws SessionException when the database could not be resolved.
      */
     public function validateId(string $id): bool
     {
@@ -245,7 +250,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *
      * An expired row reads as absent and is left in place: gc() owns removal.
      *
-     * @throws SessionException when the data column holds something other than text.
+     * @throws SessionException when the database could not be resolved or the data column holds something
+     *   other than text.
      * @throws DatabaseException when the SELECT fails.
      */
     public function read(string $id): string
@@ -300,7 +306,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      *
      * The statement depends on what read() saw. A resumed session gets a bare UPDATE, so a row deleted in the
      * meantime stays deleted. A created session gets one INSERT ... ON CONFLICT DO UPDATE, so two concurrent
-     * creators cannot collide, unless its payload is empty: then nothing is stored. A session whose read() failed, or an id never read, is not written.
+     * creators cannot collide. An empty created session is not stored. A session whose read() failed, or an id never
+     * read, is not written.
      *
      * Requires the id column to be a PRIMARY KEY or carry a UNIQUE constraint.
      */
