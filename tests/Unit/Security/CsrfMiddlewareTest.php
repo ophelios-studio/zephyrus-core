@@ -708,4 +708,53 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertFalse($called);
         self::assertSame(200, $response->status);
     }
+
+    // ── default refusal per client ────────────────────────────────────────────
+
+    public function testDefaultRefusalIsJsonForAnApiClient(): void
+    {
+        $mw       = $this->makeMiddleware();
+        $request  = new Request('POST', 'https://example.com/submit', [], null, ['Accept' => '*/*']);
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(403, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type'] ?? '');
+        self::assertSame('{"error":"Invalid or missing CSRF token."}', $response->body);
+    }
+
+    public function testDefaultRefusalIsJsonWhenNoAcceptHeaderIsSent(): void
+    {
+        $mw       = $this->makeMiddleware();
+        $request  = new Request('POST', 'https://example.com/submit');
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type'] ?? '');
+        self::assertSame('{"error":"Invalid or missing CSRF token."}', $response->body);
+    }
+
+    public function testDefaultRefusalIsPlainTextForABrowserFormPost(): void
+    {
+        $mw       = $this->makeMiddleware();
+        $request  = new Request('POST', 'https://example.com/submit', [], null, [
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        ]);
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(403, $response->status);
+        self::assertSame('text/plain; charset=utf-8', $response->headers['content-type'] ?? '');
+        self::assertSame(
+            'This form could not be verified. Your session may have expired or not been saved. '
+            . 'Reload the page and try again.',
+            $response->body,
+        );
+    }
+
+    public function testAcceptMatchOnTextHtmlIsCaseInsensitive(): void
+    {
+        $mw       = $this->makeMiddleware();
+        $request  = new Request('POST', 'https://example.com/submit', [], null, ['Accept' => 'TEXT/HTML']);
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame('text/plain; charset=utf-8', $response->headers['content-type'] ?? '');
+    }
 }

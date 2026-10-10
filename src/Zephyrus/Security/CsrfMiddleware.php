@@ -10,6 +10,8 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
 use function preg_match;
+use function str_contains;
+use function strtolower;
 
 /**
  * Middleware that enforces synchronizer-token CSRF protection.
@@ -75,6 +77,9 @@ final class CsrfMiddleware implements MiddlewareInterface
     /** HTTP methods that do not mutate server state and are exempt from CSRF checks. */
     private const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS', 'TRACE'];
 
+    private const FORM_REFUSAL = 'This form could not be verified. Your session may have expired or not been saved. '
+        . 'Reload the page and try again.';
+
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,
         private readonly CsrfConfig $config = new CsrfConfig(),
@@ -101,12 +106,17 @@ final class CsrfMiddleware implements MiddlewareInterface
 
     /**
      * Answers a refused request with the application's failure callback, or
-     * with the default 403 when none was given.
+     * with the default 403: plain text for a browser form post (Accept lists
+     * text/html), JSON for every other client.
      */
     private function refuse(Request $request, CsrfFailure $failure): Response
     {
         if ($this->onFailure !== null) {
             return ($this->onFailure)($request, $failure);
+        }
+
+        if (str_contains(strtolower($request->headers()->get('Accept') ?? ''), 'text/html')) {
+            return Response::text(self::FORM_REFUSAL, 403);
         }
 
         return Response::json(
