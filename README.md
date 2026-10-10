@@ -292,7 +292,7 @@ Run with coverage (requires Xdebug):
 XDEBUG_MODE=coverage php vendor/bin/phpunit --coverage-text
 ```
 
-CI gates coverage on Codecov: each patch needs 90% coverage, and the project may not drop more than 0.5%. Every change should come with tests.
+A pull request to `dev` must pass the CI checks (commit messages and the PHP test matrix) and `codecov/patch` before it can merge. Codecov requires 90% coverage on each patch, and the project may not drop more than 0.5%. Every change should come with tests.
 
 Commits are one semantic line (`type(scope): description`), with no body and no co-author trailer. Check yours before pushing:
 
