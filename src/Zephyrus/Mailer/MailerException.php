@@ -103,7 +103,7 @@ final class MailerException extends ZephyrusRuntimeException
     {
         $cut = strlen($value) > self::SHOWN_VALUE_MAX_LENGTH;
         $shown = addcslashes(
-            $cut ? mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8') : $value,
+            mb_scrub($cut ? mb_strcut($value, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8') : $value, 'UTF-8'),
             "\\\0..\37\177",
         );
         $length = '';

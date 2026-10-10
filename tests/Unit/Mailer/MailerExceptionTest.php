@@ -201,6 +201,23 @@ final class MailerExceptionTest extends TestCase
         );
     }
 
+    public function testAttachmentRejectedKeepsAnInvalidUtf8ValueEncodable(): void
+    {
+        $exception = MailerException::attachmentRejected('display name', "\xC3\x28bad name", 'is not valid');
+
+        self::assertNotFalse(json_encode(['message' => $exception->getMessage()], JSON_THROW_ON_ERROR));
+        self::assertTrue(mb_check_encoding($exception->getMessage(), 'UTF-8'));
+    }
+
+    public function testAttachmentRejectedScrubsAnInvalidUtf8ValueOverSixtyFourBytes(): void
+    {
+        $value = str_repeat("\xFF", 100);
+        $exception = MailerException::attachmentRejected('path', $value, 'is refused');
+
+        self::assertTrue(mb_check_encoding($exception->getMessage(), 'UTF-8'));
+        self::assertStringContainsString('(100 bytes)', $exception->getMessage());
+    }
+
     public function testConfigurationMissingCarriesConfigurationMissingFailure(): void
     {
         self::assertSame(
