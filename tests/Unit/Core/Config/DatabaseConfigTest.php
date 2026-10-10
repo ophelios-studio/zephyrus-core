@@ -452,7 +452,7 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('', $blank->columnCacheVersion);
     }
 
-    public function testIntegerColumnCacheVersionIsKeptAsItsDigits(): void
+    public function testIntegerAndQuotedColumnCacheVersionsKeepTheirDigits(): void
     {
         $config = DatabaseConfig::fromArray([
             'database' => 'db',
@@ -460,7 +460,14 @@ final class DatabaseConfigTest extends TestCase
             'columnCacheVersion' => 12,
         ]);
 
+        $dotted = DatabaseConfig::fromArray([
+            'database' => 'db',
+            'username' => 'u',
+            'columnCacheVersion' => '1.10',
+        ]);
+
         self::assertSame('12', $config->columnCacheVersion);
+        self::assertSame('1.10', $dotted->columnCacheVersion);
     }
 
     /**
@@ -509,23 +516,6 @@ final class DatabaseConfigTest extends TestCase
         ]);
     }
 
-    public function testQuotedAndIntegerColumnCacheVersionsStayDistinct(): void
-    {
-        $quoted = DatabaseConfig::fromArray([
-            'database' => 'db',
-            'username' => 'u',
-            'columnCacheVersion' => '1.10',
-        ]);
-        $integer = DatabaseConfig::fromArray([
-            'database' => 'db',
-            'username' => 'u',
-            'columnCacheVersion' => 110,
-        ]);
-
-        self::assertSame('1.10', $quoted->columnCacheVersion);
-        self::assertSame('110', $integer->columnCacheVersion);
-    }
-
     public function testThrowsForSslModeThatIsAnArray(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -548,5 +538,102 @@ final class DatabaseConfigTest extends TestCase
             'username'    => 'u',
             'sslRootCert' => ['/etc/ssl/root.crt'],
         ]);
+    }
+
+    public function testSnakeCaseSslSettingsAreAccepted(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'      => 'db',
+            'username'      => 'u',
+            'ssl_mode'      => 'verify-full',
+            'ssl_root_cert' => '/etc/ssl/root.crt',
+        ]);
+
+        self::assertSame('verify-full', $config->sslMode);
+        self::assertSame('/etc/ssl/root.crt', $config->sslRootCert);
+    }
+
+    public function testCamelCaseSslSettingsWinOverSnakeCase(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'database'      => 'db',
+            'username'      => 'u',
+            'sslMode'       => 'require',
+            'ssl_mode'      => 'disable',
+            'sslRootCert'   => '/a.crt',
+            'ssl_root_cert' => '/b.crt',
+        ]);
+
+        self::assertSame('require', $config->sslMode);
+        self::assertSame('/a.crt', $config->sslRootCert);
+    }
+
+    public function testThrowsForCharsetEndingInANewline(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('charset');
+
+        DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'charset' => "utf8\n"]);
+    }
+
+    public function testThrowsForCharsetEndingInANewlineThroughTheConstructor(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('charset');
+
+        new DatabaseConfig('pgsql', 'localhost', 5432, 'db', 'u', '', "utf8\n");
+    }
+
+    public function testThrowsForSslRootCertEndingInANewlineThroughTheConstructor(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('sslrootcert');
+
+        new DatabaseConfig('pgsql', 'localhost', 5432, 'db', 'u', '', 'utf8', null, "/etc/ssl/root.crt\n");
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function optionalSettingSpellings(): iterable
+    {
+        yield 'sslMode' => ['sslMode', 'sslMode'];
+        yield 'sslmode' => ['sslmode', 'sslmode'];
+        yield 'ssl_mode' => ['ssl_mode', 'ssl_mode'];
+        yield 'sslRootCert' => ['sslRootCert', 'sslRootCert'];
+        yield 'sslrootcert' => ['sslrootcert', 'sslrootcert'];
+        yield 'ssl_root_cert' => ['ssl_root_cert', 'ssl_root_cert'];
+        yield 'columnCacheVersion' => ['columnCacheVersion', 'columnCacheVersion'];
+        yield 'column_cache_version' => ['column_cache_version', 'column_cache_version'];
+    }
+
+    #[DataProvider('optionalSettingSpellings')]
+    public function testRefusalNamesTheKeyAsWritten(string $key, string $expected): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', $key => false]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("field '" . $expected . "' has invalid value", $e->getMessage());
+        }
+    }
+
+    public function testQuoteHintIsOnlyShownForColumnCacheVersion(): void
+    {
+        foreach (['sslMode', 'ssl_root_cert'] as $key) {
+            try {
+                DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', $key => 1.5]);
+                self::fail('Expected a ConfigurationException.');
+            } catch (ConfigurationException $e) {
+                self::assertStringNotContainsString('1.10', $e->getMessage());
+            }
+        }
+
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'columnCacheVersion' => 1.5]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("'1.10'", $e->getMessage());
+        }
     }
 }

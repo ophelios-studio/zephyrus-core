@@ -30,8 +30,8 @@ namespace Zephyrus\Core\Config;
  * It is part of the shared column shape cache key, see Database. Write a literal that changes with every
  * migration (for example the latest migration id), and change it after the migration has run and before
  * the release serves traffic. It helps when the PHP master survives a release and re-reads config.yml
- * (symlink deploys, graceful reloads). A process restart already clears the cache. Processes still running
- * old code keep their cache until APCU_TTL expires or flushSharedColumnMetadata() runs from a web request.
+ * (symlink deploys). A process restart already clears the cache. Processes still running
+ * old code keep their cache until APCU_TTL (one hour) expires or flushSharedColumnMetadata() runs from a web request.
  */
 final readonly class DatabaseConfig
 {
@@ -66,7 +66,7 @@ final readonly class DatabaseConfig
         // empty to null).
 
         // A quote and a semicolon in charset would open a second statement in SET client_encoding.
-        if (preg_match('/^[a-zA-Z0-9_]+$/', $this->charset) !== 1) {
+        if (preg_match('/^[a-zA-Z0-9_]+$/D', $this->charset) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
                 'charset',
@@ -86,7 +86,7 @@ final readonly class DatabaseConfig
 
         // Only the characters that could break out of the DSN parameter are checked here;
         // libpq reports a missing file at connect time.
-        if ($this->sslRootCert !== null && preg_match('/^[^\\s;\'"]+$/', $this->sslRootCert) !== 1) {
+        if ($this->sslRootCert !== null && preg_match('/^[^\\s;\'"]+$/D', $this->sslRootCert) !== 1) {
             throw ConfigurationException::invalidValue(
                 'database',
                 'sslrootcert',
@@ -100,8 +100,9 @@ final readonly class DatabaseConfig
     /**
      * Build a DatabaseConfig from a plain key-value array.
      *
-     * Accepts sslMode or sslmode, sslRootCert or sslrootcert, and columnCacheVersion or column_cache_version.
-     * Blank values mean null.
+     * Accepts sslMode, sslmode or ssl_mode, sslRootCert, sslrootcert or ssl_root_cert, and columnCacheVersion
+     * or column_cache_version, the first spelling listed winning. Blank values mean null, except a blank
+     * columnCacheVersion, which becomes ''.
      *
      * @param array<string, mixed> $values
      * @throws ConfigurationException if a removed emulate_prepares key is present, a required
@@ -123,11 +124,12 @@ final readonly class DatabaseConfig
         $username = (string) ($values['username'] ?? '');
         $password = (string) ($values['password'] ?? '');
         $charset  = (string) ($values['charset']  ?? 'utf8');
-        $sslMode     = self::normalizeOptional($values['sslMode'] ?? $values['sslmode'] ?? null, 'sslMode');
-        $sslRootCert = self::normalizeOptional($values['sslRootCert'] ?? $values['sslrootcert'] ?? null, 'sslRootCert');
-        $columnCacheVersion = self::normalizeOptional(
-            $values['columnCacheVersion'] ?? $values['column_cache_version'] ?? null,
-            'columnCacheVersion',
+        $sslMode = self::optionalSetting($values, ['sslMode', 'sslmode', 'ssl_mode']);
+        $sslRootCert = self::optionalSetting($values, ['sslRootCert', 'sslrootcert', 'ssl_root_cert']);
+        $columnCacheVersion = self::optionalSetting(
+            $values,
+            ['columnCacheVersion', 'column_cache_version'],
+            ": quote a number such as '1.10' to keep its digits",
         ) ?? '';
 
         // libpq matches sslmode exactly, so REQUIRE is folded. The cert path is case-sensitive.
@@ -152,7 +154,7 @@ final readonly class DatabaseConfig
             );
         }
 
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $charset)) {
+        if (!preg_match('/^[a-zA-Z0-9_]+$/D', $charset)) {
             throw ConfigurationException::invalidValue(
                 'database',
                 'charset',
@@ -209,27 +211,35 @@ final readonly class DatabaseConfig
     }
 
     /**
-     * Trims an optional string. Null, blank and whitespace-only all become null.
+     * Reads an optional string from the first spelling set to a non-null value.
      *
+     * @param array<string, mixed> $values
+     * @param list<string>         $spellings Accepted keys, the first one winning.
+     * @param string               $hint      Appended to the refusal message.
      * @throws ConfigurationException if the value is neither a string nor an integer.
      */
-    private static function normalizeOptional(mixed $value, string $field): ?string
+    private static function optionalSetting(array $values, array $spellings, string $hint = ''): ?string
     {
-        if ($value === null) {
-            return null;
+        foreach ($spellings as $key) {
+            $value = $values[$key] ?? null;
+            if ($value === null) {
+                continue;
+            }
+
+            if (!is_string($value) && !is_int($value)) {
+                throw ConfigurationException::invalidValue(
+                    'database',
+                    $key,
+                    get_debug_type($value),
+                    'must be a string or an integer' . $hint,
+                );
+            }
+
+            $normalized = trim((string) $value);
+
+            return $normalized === '' ? null : $normalized;
         }
 
-        if (!is_string($value) && !is_int($value)) {
-            throw ConfigurationException::invalidValue(
-                'database',
-                $field,
-                get_debug_type($value),
-                "must be a string or an integer: quote a number such as '1.10' to keep its digits",
-            );
-        }
-
-        $normalized = trim((string) $value);
-
-        return $normalized === '' ? null : $normalized;
+        return null;
     }
 }
