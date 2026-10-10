@@ -322,7 +322,8 @@ final class Mailer
             $this->refuseName($name, $fromFileName, 'contains a control, bidirectional formatting or line separator character');
         }
 
-        $sent = trim((string) ($isStringAttachment ? PHPMailer::mb_pathinfo($name, PATHINFO_BASENAME) : $name));
+        $basename = $isStringAttachment ? PHPMailer::mb_pathinfo($name, PATHINFO_BASENAME) : $name;
+        $sent = trim(is_string($basename) ? $basename : '');
 
         if ($sent !== $name || str_ends_with($name, '.') || in_array($name, ['', '0', '.', '..'], true)) {
             $this->refuseName(
