@@ -6,8 +6,10 @@ namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Container\Container;
+use Zephyrus\Core\ExceptionEvent;
 use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
+use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -312,12 +314,22 @@ final class KernelBuilderTest extends TestCase
 
     public function testBuildWithoutAnEngineLeavesTheControllerUntouched(): void
     {
+        $events = new EventDispatcher();
+        $reported = [];
+        $events->addListener(ExceptionEvent::class, static function (ExceptionEvent $event) use (&$reported): void {
+            $reported[] = $event->getException();
+        });
+
         $kernel = KernelBuilder::create()
             ->withRouter((new Router())->get('/page', KernelBuilderRenderingController::class . '@page'))
+            ->withEventDispatcher($events)
             ->build();
 
         self::assertSame(500, $kernel->handle(Request::fromArray('GET', '/page'))->status);
+        self::assertCount(1, $reported);
+        self::assertStringContainsString('No render engine', $reported[0]->getMessage());
     }
+
     // -- Middleware lookup ----------------------------------------------------
 
     public function testHasGlobalMiddlewareSeesAGlobalRegistration(): void
@@ -371,6 +383,7 @@ final class KernelBuilderTest extends TestCase
 
         self::assertArrayHasKey('auth', $builder->namedMiddlewares());
     }
+
     public function testHasGlobalMiddlewareIsFalseOnAnEmptyBuilder(): void
     {
         $middleware = $this->makeMiddleware('X-Absent', 'yes');

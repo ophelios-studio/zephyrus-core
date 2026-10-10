@@ -688,7 +688,7 @@ final class ApplicationBuilderTest extends TestCase
         self::assertSame('yes', $response->headers['x-app']);
     }
 
-    public function testWithRenderEngineReachesAControllerRegisteredAfterIt(): void
+    public function testWithRenderEngineReachesAControllerWhoseFactoryIsRegisteredAfterIt(): void
     {
         $app = ApplicationBuilder::create()
             ->withRouter((new Router())->get('/page', ApplicationBuilderRenderingController::class . '@page'))

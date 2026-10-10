@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Integration;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
@@ -150,22 +151,57 @@ final class SecurityConfigurationWiringTest extends TestCase
             ->build();
     }
 
-    public function testCsrfRegisteredOnlyUnderARouteNameRefusesToBoot(): void
-    {
-        // A named middleware runs only for the routes that reference its name,
-        // so CSRF registered this way protects nothing on the other routes.
+    /**
+     * @param array<string, mixed> $configuration
+     */
+    #[DataProvider('nameOnlyMiddlewareProvider')]
+    public function testASecurityMiddlewareRegisteredOnlyUnderARouteNameRefusesToBoot(
+        array $configuration,
+        string $qualifiedSetting,
+        MiddlewareInterface $middleware,
+    ): void {
         try {
             ApplicationBuilder::create()
-                ->withConfigurationArray(['security' => ['csrf' => ['enabled' => true]]])
+                ->withConfigurationArray($configuration)
                 ->withRouter(new Router())
-                ->registerMiddleware('csrf', new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()))
+                ->registerMiddleware('guard', $middleware)
                 ->build();
 
-            self::fail('build() accepted CSRF that only a route name references');
+            self::fail(sprintf('build() accepted %s that only a route name references', $qualifiedSetting));
         } catch (ConfigurationException $exception) {
-            self::assertStringContainsString('security.csrf', $exception->getMessage());
+            self::assertStringContainsString($qualifiedSetting, $exception->getMessage());
             self::assertStringContainsString('withMiddleware()', $exception->getMessage());
         }
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string, MiddlewareInterface}>
+     */
+    public static function nameOnlyMiddlewareProvider(): iterable
+    {
+        yield 'forceHttps' => [
+            ['security' => ['force_https' => true]],
+            'security.forceHttps',
+            new ForceHttpsMiddleware(),
+        ];
+
+        yield 'allowedHosts' => [
+            ['security' => ['allowed_hosts' => ['app.test']]],
+            'security.allowedHosts',
+            new AllowedHostsMiddleware(['app.test']),
+        ];
+
+        yield 'csrf' => [
+            ['security' => ['csrf' => ['enabled' => true]]],
+            'security.csrf',
+            new CsrfMiddleware(new WiringTokenManager(), CsrfConfig::defaults()),
+        ];
+
+        yield 'maxBodySize' => [
+            ['security' => ['max_body_size' => 2_097_152]],
+            'security.maxBodySize',
+            new MaxBodySizeMiddleware(2_097_152),
+        ];
     }
 
     public function testCsrfRegisteredGloballyBootsNormally(): void
