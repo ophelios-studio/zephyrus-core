@@ -235,7 +235,8 @@ final readonly class Request
 
     /**
      * Convenience factory for testing. Accepts plain arrays for all parameters
-     * and constructs sub-objects internally.
+     * and constructs sub-objects internally. It does not parse $rawBody: to test
+     * a malformed body, use the constructor with `new RequestBody([], $raw, malformed: true)`.
      *
      * @param array<string, mixed> $body
      * @param array<string, mixed>|null $query Null derives the query from the URI.
@@ -243,8 +244,6 @@ final readonly class Request
      * @param array<string, string> $cookies
      * @param array<string, mixed> $attributes
      * @param array<string, mixed> $files Native $_FILES entries or FileUpload values.
-     *
-     * fromArray() does not parse $rawBody: use fromGlobals() or a RequestBody to test a malformed body.
      */
     public static function fromArray(
         string $method,
