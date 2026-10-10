@@ -19,6 +19,8 @@ use Zephyrus\Security\CsrfMiddleware;
 use Zephyrus\Security\CsrfTokenManagerInterface;
 use Zephyrus\Security\ForceHttpsMiddleware;
 use Zephyrus\Security\MaxBodySizeMiddleware;
+use Zephyrus\Security\SecureHeadersConfig;
+use Zephyrus\Security\SecureHeadersMiddleware;
 
 /**
  * The security: block must not be inert: declared keys have to reach a middleware. The framework
@@ -89,6 +91,99 @@ final class SecurityConfigurationWiringTest extends TestCase
         // An absent section is not reported, although the defaults still yield values for it.
         $application = ApplicationBuilder::create()
             ->withConfigurationArray(['application' => ['debug' => false]])
+            ->withRouter(new Router())
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testDeclaredHeadersWithoutTheMiddlewareRefuseToBoot(): void
+    {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(['security' => ['headers' => ['csp' => "default-src 'self'"]]])
+                ->withRouter(new Router())
+                ->build();
+
+            self::fail('build() accepted declared security headers that nothing sends.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('security.headers', $exception->getMessage());
+            self::assertStringContainsString(SecureHeadersMiddleware::class, $exception->getMessage());
+        }
+    }
+
+    private const array DECLARED_HEADERS = ['security' => ['headers' => ['csp' => "default-src 'self'"]]];
+
+    public function testDeclaredHeadersWithTheMiddlewareMountedBootNormally(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(self::DECLARED_HEADERS)
+            ->withRouter(new Router())
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testDeclaredHeadersWithTheMiddlewareMountedWithAnotherConfigurationRefuseToBoot(): void
+    {
+        try {
+            ApplicationBuilder::create()
+                ->withConfigurationArray(self::DECLARED_HEADERS)
+                ->withRouter(new Router())
+                ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+                ->build();
+
+            self::fail('build() accepted a declared csp that the mounted middleware never sends.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('security.headers', $exception->getMessage());
+            self::assertStringContainsString('a configuration other than security.headers', $exception->getMessage());
+            self::assertStringContainsString(
+                'new SecureHeadersMiddleware($configuration->security->headers)',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testDeclaredHeadersWithAnotherConfigurationAcknowledgedBootNormally(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(self::DECLARED_HEADERS)
+            ->withAcknowledgedSecurityKeys(['headers'])
+            ->withRouter(new Router())
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testDeclaredHeadersBootWhenOneOfTwoMountedMiddlewaresCarriesThem(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(self::DECLARED_HEADERS)
+            ->withRouter(new Router())
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+            ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'self'"])))
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testDeclaredHeadersAcknowledgedBootNormally(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['headers' => ['csp' => "default-src 'self'"]]])
+            ->withAcknowledgedSecurityKeys(['headers'])
+            ->withRouter(new Router())
+            ->build();
+
+        self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testUndeclaredHeadersBootWithoutTheMiddleware(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['csrf' => ['enabled' => false]]])
             ->withRouter(new Router())
             ->build();
 

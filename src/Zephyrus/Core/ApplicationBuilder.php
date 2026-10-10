@@ -23,6 +23,8 @@ use Zephyrus\Security\AllowedHostsMiddleware;
 use Zephyrus\Security\CsrfMiddleware;
 use Zephyrus\Security\ForceHttpsMiddleware;
 use Zephyrus\Security\MaxBodySizeMiddleware;
+use Zephyrus\Security\SecureHeadersConfig;
+use Zephyrus\Security\SecureHeadersMiddleware;
 
 final class ApplicationBuilder
 {
@@ -428,7 +430,8 @@ final class ApplicationBuilder
      * build() only knows the middlewares mounted on this builder. A setting enforced by a load balancer, by the web
      * server or by a decorator around a framework middleware must be acknowledged here.
      *
-     * Accepted names: forceHttps, allowedHosts, csrf and maxBodySize, short or qualified ("security.maxBodySize").
+     * Accepted names: forceHttps, allowedHosts, csrf, maxBodySize and headers, short or qualified
+     * ("security.maxBodySize").
      * Any other name is ignored.
      *
      * @param string[] $keys
@@ -521,8 +524,9 @@ final class ApplicationBuilder
      *
      * The security section is never wired from configuration: registering the middlewares here would give
      * applications that mount their own a second CSRF or header middleware. Checked: forceHttps, a non-empty
-     * allowedHosts and a finite maxBodySize, each only when declared, and csrfEnabled when any csrf key is
-     * declared; a protection counts as enforced only when its middleware is mounted with withMiddleware().
+     * allowedHosts, a finite maxBodySize and the headers section, each only when declared, and csrfEnabled when
+     * any csrf key is declared; a protection counts as enforced only when its middleware is mounted with
+     * withMiddleware(), and the headers only when a mounted SecureHeadersMiddleware carries security.headers.
      * Not checked: trustedProxies, trustedHeaders and encryptionKey, which are consumed outside the builder.
      *
      * @throws ConfigurationException when a declared protection is not mounted and not acknowledged.
@@ -569,6 +573,13 @@ final class ApplicationBuilder
             $unwired['maxBodySize'] = MaxBodySizeMiddleware::class;
         }
 
+        if (
+            $security->isDeclared('headers')
+            && !$this->secureHeadersMountedWith($security->headers)
+        ) {
+            $unwired['headers'] = SecureHeadersMiddleware::class;
+        }
+
         foreach ($this->acknowledgedSecurityKeys as $acknowledged) {
             unset($unwired[$acknowledged]);
         }
@@ -583,6 +594,17 @@ final class ApplicationBuilder
         }
     }
 
+    private function secureHeadersMountedWith(SecureHeadersConfig $headers): bool
+    {
+        foreach ($this->kernelBuilder->globalMiddlewaresOf(SecureHeadersMiddleware::class) as $middleware) {
+            if ($middleware->config() == $headers) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Names the middleware a boot error should ask for, noting when the class
      * is registered under a route name only.
@@ -591,6 +613,14 @@ final class ApplicationBuilder
      */
     private function describeUnwiredMiddleware(string $middleware): string
     {
+        if (
+            $middleware === SecureHeadersMiddleware::class
+            && $this->kernelBuilder->hasGlobalMiddleware($middleware)
+        ) {
+            return $middleware . ' (mounted with a configuration other than security.headers, so the declared headers'
+                . ' are never sent: mount new SecureHeadersMiddleware($configuration->security->headers))';
+        }
+
         if (!$this->kernelBuilder->hasMiddleware($middleware)) {
             return $middleware;
         }

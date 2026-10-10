@@ -226,6 +226,21 @@ final class KernelBuilder
     }
 
     /**
+     * The globally registered middlewares of the given class, in registration order.
+     *
+     * @template T of object
+     * @param class-string<T> $class
+     * @return list<T>
+     */
+    public function globalMiddlewaresOf(string $class): array
+    {
+        return array_values(array_filter(
+            $this->globalMiddlewares,
+            static fn (object $middleware): bool => $middleware instanceof $class,
+        ));
+    }
+
+    /**
      * Assembles a fully wired HttpKernel. The builder is unchanged and can build again.
      *
      * @throws ConfigurationException When an enforced ContentSecurityPolicyMiddleware is registered

@@ -27,11 +27,18 @@ use Zephyrus\Http\Response;
  *   $kernel = KernelBuilder::create()
  *       ->withMiddleware(new SecureHeadersMiddleware($config))
  *       ->build();
+ *   // or, from a loaded configuration: new SecureHeadersMiddleware($configuration->security->headers)
  */
 final class SecureHeadersMiddleware implements MiddlewareInterface
 {
     public function __construct(private readonly SecureHeadersConfig $config)
     {
+    }
+
+    /** The configuration this middleware sends. */
+    public function config(): SecureHeadersConfig
+    {
+        return $this->config;
     }
 
     public function process(Request $request, callable $next): Response

@@ -10,6 +10,7 @@ use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
+use Zephyrus\Security\SecureHeadersConfig;
 
 final class SecurityConfigTest extends TestCase
 {
@@ -795,5 +796,52 @@ final class SecurityConfigTest extends TestCase
         $this->expectException(ConfigurationException::class);
 
         SecurityConfig::fromArray(['csrfEnabled' => '']);
+    }
+
+    public function testAbsentHeadersSectionGivesTheDefaultsAndIsNotDeclared(): void
+    {
+        $config = SecurityConfig::fromArray([]);
+
+        self::assertEquals(SecureHeadersConfig::defaults(), $config->headers);
+        self::assertFalse($config->isDeclared('headers'));
+    }
+
+    public function testHeadersSectionIsReadThroughSecureHeadersConfig(): void
+    {
+        $config = SecurityConfig::fromArray([
+            'headers' => ['xFrameOptions' => 'DENY', 'hstsMaxAge' => '31536000'],
+        ]);
+
+        self::assertSame('DENY', $config->headers->xFrameOptions);
+        self::assertSame(31_536_000, $config->headers->hstsMaxAge);
+        self::assertSame('nosniff', $config->headers->xContentTypeOptions);
+        self::assertTrue($config->isDeclared('headers'));
+    }
+
+    public function testNullHeadersSectionIsDeclaredAndGivesTheDefaults(): void
+    {
+        $config = SecurityConfig::fromArray(['headers' => null]);
+
+        self::assertEquals(SecureHeadersConfig::defaults(), $config->headers);
+        self::assertTrue($config->isDeclared('headers'));
+    }
+
+    public function testAScalarHeadersSectionIsRefusedNamingTheSection(): void
+    {
+        try {
+            SecurityConfig::fromArray(['headers' => true]);
+
+            self::fail('A scalar headers section was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString('security.headers section', $exception->getMessage());
+        }
+    }
+
+    public function testAHeadersSectionWithAMisspelledKeyIsRefused(): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessageMatches("/field 'contentSecurityPolicy'/");
+
+        SecurityConfig::fromArray(['headers' => ['contentSecurityPolicy' => "default-src 'self'"]]);
     }
 }

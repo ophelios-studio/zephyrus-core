@@ -8,6 +8,7 @@ use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
 use Zephyrus\Security\AllowedHostsMiddleware;
 use Zephyrus\Security\CsrfConfig;
+use Zephyrus\Security\SecureHeadersConfig;
 
 /**
  * Immutable configuration section for HTTP security behaviour.
@@ -19,6 +20,7 @@ use Zephyrus\Security\CsrfConfig;
  *     maxBodySize: 2097152
  *     trustedProxies: []
  *     trustedHeaders: [x-forwarded-for, x-forwarded-host, x-forwarded-proto, x-forwarded-port]
+ *     headers: { xFrameOptions: DENY, hstsMaxAge: 31536000 }
  *     csrf:
  *       enabled: true
  *       exceptions: []
@@ -37,6 +39,7 @@ use Zephyrus\Security\CsrfConfig;
  *   - trustedProxies: [] (no proxy trusted, so forwarded headers are ignored).
  *   - trustedHeaders: the X-Forwarded-* family (Request::TRUSTED_HEADERS_DEFAULT). 'forwarded',
  *                     'x-real-ip', 'cf-connecting-ip' and 'x-client-ip' are opt-in. [] reads none.
+ *   - headers:        SecureHeadersConfig::defaults(), read by fromArray() from the headers section.
  *   - encryptionKey:  null. Required for Cryptography usage.
  *
  * Validation:
@@ -76,7 +79,11 @@ final readonly class SecurityConfig
         'trustedProxies' => [['values', 'trustedProxies'], ['values', 'trusted_proxies']],
         'trustedHeaders' => [['values', 'trustedHeaders'], ['values', 'trusted_headers']],
         'encryptionKey'  => [['encryption', 'key'], ['values', 'encryptionKey'], ['values', 'encryption_key']],
+        'headers'        => [['values', 'headers']],
     ];
+
+    /** The security response headers, read from the security.headers section. */
+    public SecureHeadersConfig $headers;
 
     /**
      * @param bool     $forceHttps      Redirect plain-HTTP requests to HTTPS.
@@ -93,6 +100,7 @@ final readonly class SecurityConfig
      *                                  Trusting a proxy does not trust every header it passes through.
      * @param string[] $declaredKeys    Canonical names the SOURCE ARRAY contained. See isDeclared();
      *                                  empty when built directly rather than through fromArray().
+     * @param ?SecureHeadersConfig $headers  Response headers. Null means SecureHeadersConfig::defaults().
      */
     public function __construct(
         public bool $forceHttps,
@@ -106,7 +114,9 @@ final readonly class SecurityConfig
         public ?string $encryptionKey = null,
         public array $trustedHeaders = Request::TRUSTED_HEADERS_DEFAULT,
         public array $declaredKeys = [],
+        ?SecureHeadersConfig $headers = null,
     ) {
+        $this->headers = $headers ?? SecureHeadersConfig::defaults();
     }
 
     /**
@@ -117,7 +127,7 @@ final readonly class SecurityConfig
      * nothing consumes, without failing applications that never mention the section.
      *
      * Accepts the canonical camelCase name: forceHttps, csrfEnabled, csrfAutoHtml, csrfExceptions,
-     * allowedHosts, maxBodySize, trustedProxies, trustedHeaders, encryptionKey.
+     * allowedHosts, maxBodySize, trustedProxies, trustedHeaders, encryptionKey, headers.
      */
     public function isDeclared(string $key): bool
     {
@@ -132,10 +142,21 @@ final readonly class SecurityConfig
      * @param array<string, mixed> $values
      * @throws ConfigurationException if a value is not a boolean, csrf.autoHtml is true, allowedHosts
      *         is null or names nothing, maxBodySize is negative, or a list entry is invalid
-     *         (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders).
+     *         (csrfExceptions, allowedHosts, trustedProxies, trustedHeaders), or headers is neither null nor a
+     *         mapping, or a header setting is invalid (see SecureHeadersConfig::fromArray()).
      */
     public static function fromArray(array $values): self
     {
+        $headers = $values['headers'] ?? null;
+        if ($headers !== null && !is_array($headers)) {
+            throw ConfigurationException::invalidValue(
+                'security',
+                'headers',
+                self::rawValueForMessage($headers),
+                'the security.headers section must be a mapping of header settings, such as xFrameOptions and csp',
+            );
+        }
+
         $csrf = isset($values['csrf']) && is_array($values['csrf']) ? $values['csrf'] : [];
         $encryption = isset($values['encryption']) && is_array($values['encryption']) ? $values['encryption'] : [];
         $sections = ['values' => $values, 'csrf' => $csrf, 'encryption' => $encryption];
@@ -264,6 +285,7 @@ final readonly class SecurityConfig
             encryptionKey: $encryptionKey,
             trustedHeaders: $normalizedTrustedHeaders,
             declaredKeys: $declaredKeys,
+            headers: is_array($headers) ? SecureHeadersConfig::fromArray($headers) : null,
         );
     }
 

@@ -126,7 +126,7 @@ use Zephyrus\Security\CsrfConfig;
 $kernel = KernelBuilder::create()
     ->withRouter($router)
     ->registerMiddleware('auth', $apiAuth)
-    ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+    ->withMiddleware(new SecureHeadersMiddleware($configuration->security->headers))
     ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
     ->withMiddleware(new CsrfMiddleware($csrf, CsrfConfig::fromSecurityConfig($configuration->security)))
     ->build();
@@ -205,7 +205,6 @@ use Zephyrus\Core\KernelBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Routing\Router;
 use Zephyrus\Security\CsrfMiddleware;
-use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
 use Zephyrus\Session\SessionCsrfTokenManager;
 use Zephyrus\Session\SessionManager;
@@ -221,7 +220,7 @@ $csrf = new SessionCsrfTokenManager($session);
 
 $kernel = KernelBuilder::create()
     ->withRouter($router)
-    ->withMiddleware(new SecureHeadersMiddleware(SecureHeadersConfig::defaults()))
+    ->withMiddleware(new SecureHeadersMiddleware($configuration->security->headers))
     ->withMiddleware(new SessionMiddleware(SessionConfig::fromArray([]), $session))
     ->withMiddleware(new CsrfMiddleware($csrf))
     ->build();
