@@ -96,6 +96,20 @@ final class FormatterTest extends TestCase
         self::assertStringContainsString('19.99', $result);
     }
 
+    public function testMoneyTreatsAnEmptyDefaultCurrencyAsNoDefault(): void
+    {
+        $formatter = new Formatter('fr_CA', '');
+
+        self::assertSame((new Formatter('fr_CA'))->money(19.99), $formatter->money(19.99));
+    }
+
+    public function testMoneyTreatsAnEmptyExplicitCurrencyAsNoCurrency(): void
+    {
+        $formatter = new Formatter('fr_CA');
+
+        self::assertSame($formatter->money(19.99), $formatter->money(19.99, ''));
+    }
+
     // ─── Decimal ──────────────────────────────────────────────────────
 
     public function testDecimalFormatsWithGrouping(): void

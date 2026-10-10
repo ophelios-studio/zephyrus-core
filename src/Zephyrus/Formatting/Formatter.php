@@ -48,7 +48,7 @@ final class Formatter
 
     /**
      * @param string      $locale                 ICU locale identifier (e.g. 'en', 'en_US', 'fr_CA').
-     * @param string|null $defaultCurrency         ISO 4217 code used by money() when none is given. Null uses the locale's currency.
+     * @param string|null $defaultCurrency         ISO 4217 code used by money() when none is given. Null or '' uses the locale's currency.
      * @param string      $defaultDatePattern      Default for date(): ICU preset ('short', 'medium', 'long', 'full') or ICU pattern.
      * @param string      $defaultTimePattern      Default for time(), same syntax.
      * @param string      $defaultDatetimePattern  Default for datetime(), same syntax.
@@ -121,20 +121,22 @@ final class Formatter
     /**
      * Formats a monetary amount.
      *
-     * The currency is the explicit $currency, else the default currency, else the locale's native currency. A locale
-     * without a region (en, fr) has no native currency and prints ¤; set $defaultCurrency.
+     * The currency is the explicit $currency, else the default currency, else the locale's native currency. An empty
+     * string counts as no currency. A locale without a region (en, fr) has no native currency and prints ¤; set
+     * $defaultCurrency.
      *
      * @param float       $amount   The monetary value.
-     * @param string|null $currency ISO 4217 code (e.g. 'USD', 'EUR').
+     * @param string|null $currency ISO 4217 code (e.g. 'USD', 'EUR'). Null or '' uses the default currency.
      *
      * @throws FormatterException When ICU cannot format the amount.
      */
     public function money(float $amount, ?string $currency = null): string
     {
         $fmt = $this->groupedNumberFormatter(NumberFormatter::CURRENCY);
-        $resolvedCurrency = $currency
-            ?? $this->defaultCurrency
-            ?? $fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE) ?: 'USD';
+        $resolvedCurrency = self::nonEmptyCurrency($currency)
+            ?? self::nonEmptyCurrency($this->defaultCurrency)
+            ?? self::nonEmptyCurrency($fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE))
+            ?? 'USD';
 
         $result = $fmt->formatCurrency($amount, $resolvedCurrency);
 
@@ -481,6 +483,14 @@ final class Formatter
         ) {
             throw FormatterException::invalidGroupingSeparator();
         }
+    }
+
+    /**
+     * @param string|false|null $code
+     */
+    private static function nonEmptyCurrency(string|false|null $code): ?string
+    {
+        return is_string($code) && $code !== '' ? $code : null;
     }
 
     /**
