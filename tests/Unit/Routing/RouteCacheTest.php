@@ -1047,7 +1047,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid constraints map');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid constraints map');
     }
 
     public function testLoadThrowsWhenMiddlewaresContainNonStringValues(): void
@@ -1070,7 +1070,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid middlewares list');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid middlewares list');
     }
 
     public function testLoadThrowsWhenDecodedPayloadIsNotArray(): void
@@ -1159,7 +1159,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid HTTP method format');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid HTTP method format');
     }
 
     /**
@@ -1184,6 +1184,22 @@ final class RouteCacheTest extends TestCase
     /**
      * @param \Closure(): mixed $action
      */
+    private function assertExactRefusal(\Closure $action, string $problem): void
+    {
+        try {
+            $action();
+        } catch (RouteCacheException $exception) {
+            self::assertSame(
+                sprintf('Route cache file %s has %s; rebuild the cache with save() or warm()', $this->cacheFile, $problem),
+                $exception->getMessage(),
+            );
+
+            return;
+        }
+
+        self::fail('The route cache was accepted but should be refused');
+    }
+
     private function assertRefused(\Closure $action, string $problem): void
     {
         try {
@@ -1226,7 +1242,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry that is not an object');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route that is not an object');
     }
 
     public function testLoadThrowsWhenRouteEntryMissingRequiredKey(): void
@@ -1242,7 +1258,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry without a valid "handler"');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route without a valid "handler"');
     }
 
     public function testLoadThrowsWhenOptionalFieldsAreInvalid(): void
@@ -1266,7 +1282,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with invalid optional fields');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with invalid optional fields');
     }
 
     public function testLoadThrowsWhenMethodFormatIsInvalid(): void
@@ -1289,7 +1305,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid HTTP method format');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid HTTP method format');
     }
 
     public function testLoadThrowsWhenPathIsInvalid(): void
@@ -1312,7 +1328,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid route path');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid route path');
     }
 
     public function testLoadThrowsWhenHandlerFormatIsInvalid(): void
@@ -1335,7 +1351,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid handler format at entry 0 ["GET","/health"]');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid handler format at entry 0 ["GET","/health"]');
     }
 
     public function testLoadThrowsWhenRouteNameIsBlankString(): void
@@ -1358,7 +1374,7 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route entry with an invalid route name');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'a route with an invalid route name');
     }
 
     public function testLoadThrowsWhenDuplicateRouteNamesExist(): void
@@ -1396,7 +1412,62 @@ final class RouteCacheTest extends TestCase
 
         $cache = new RouteCache($this->cacheFile);
 
-        $this->assertRefused(static fn (): mixed => $cache->load(), 'Duplicate route names detected: users.show');
+        $this->assertRefused(static fn (): mixed => $cache->load(), 'more than one route is named "users.show"; give each route a unique name');
+    }
+
+    public function testLoadNamesEveryDuplicatedRouteNameOnce(): void
+    {
+        $entries = [
+            ['method' => 'GET', 'path' => '/users/1', 'handler' => 'UserController@showOne', 'constraints' => [], 'middlewares' => [], 'name' => 'users.show'],
+            ['method' => 'GET', 'path' => '/users/2', 'handler' => 'UserController@edit', 'constraints' => [], 'middlewares' => [], 'name' => 'users.edit'],
+            ['method' => 'GET', 'path' => '/users/3', 'handler' => 'UserController@showThree', 'constraints' => [], 'middlewares' => [], 'name' => 'users.show'],
+            ['method' => 'GET', 'path' => '/users/4', 'handler' => 'UserController@editFour', 'constraints' => [], 'middlewares' => [], 'name' => 'users.edit'],
+        ];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $this->assertExactRefusal(
+            fn (): mixed => (new RouteCache($this->cacheFile))->load(),
+            'more than one route is named "users.edit", "users.show"; give each route a unique name',
+        );
+    }
+
+    public function testLoadQuotesNumericDuplicatedRouteNames(): void
+    {
+        $entries = [
+            ['method' => 'GET', 'path' => '/a', 'handler' => 'A@one', 'constraints' => [], 'middlewares' => [], 'name' => '7'],
+            ['method' => 'GET', 'path' => '/b', 'handler' => 'A@two', 'constraints' => [], 'middlewares' => [], 'name' => '7'],
+        ];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $this->assertExactRefusal(
+            fn (): mixed => (new RouteCache($this->cacheFile))->load(),
+            'more than one route is named "7"; give each route a unique name',
+        );
+    }
+
+    public function testLoadEscapesControlAndBidiCharactersInDuplicatedRouteNames(): void
+    {
+        $entries = [
+            ['method' => 'GET', 'path' => '/a', 'handler' => 'A@one', 'constraints' => [], 'middlewares' => [], 'name' => "x\x1b\u{0085}\u{202E}\x7f"],
+            ['method' => 'GET', 'path' => '/b', 'handler' => 'A@two', 'constraints' => [], 'middlewares' => [], 'name' => "x\x1b\u{0085}\u{202E}\x7f"],
+        ];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $this->assertExactRefusal(
+            fn (): mixed => (new RouteCache($this->cacheFile))->load(),
+            'more than one route is named "x\u001b\u0085\u202e\u007f"; give each route a unique name',
+        );
+    }
+
+    public function testLoadEscapesControlAndBidiCharactersInTheRefusedEntry(): void
+    {
+        $entries = [['method' => 'GET', 'path' => "/x\x1b\u{0085}\u{202E}\x7f", 'handler' => 'Missing']];
+        file_put_contents($this->cacheFile, json_encode(['meta' => self::metadataFor($entries), 'routes' => $entries], JSON_THROW_ON_ERROR));
+
+        $this->assertExactRefusal(
+            fn (): mixed => (new RouteCache($this->cacheFile))->load(),
+            'a route with an invalid handler format at entry 0 ["GET","/x\u001b\u0085\u202e\u007f"]',
+        );
     }
 
     public function testInspectReportsAnEditedRoutesSectionAsAnInvalidPayload(): void
@@ -1428,7 +1499,7 @@ final class RouteCacheTest extends TestCase
         $state = $cache->inspect(new RouteCollection(), 60, 1700000000);
 
         self::assertSame('invalid-payload', $state['reason']);
-        self::assertSame('a route entry with an invalid HTTP method format at entry 0 ["get","/health"]', $state['problem']);
+        self::assertSame('a route with an invalid HTTP method format at entry 0 ["get","/health"]', $state['problem']);
         self::assertTrue($state['metadata_valid']);
         self::assertFalse($state['fresh']);
         self::assertSame(1700000000, $state['generated_at']);
@@ -1450,7 +1521,7 @@ final class RouteCacheTest extends TestCase
 
         self::assertFalse($cache->isFresh($live));
         self::assertFalse($cache->canUseWithin($live, 60, 1700000000));
-        $this->assertRefused(static fn (): mixed => $cache->ensureFreshWithin($live, 60, 1700000000), 'Duplicate route names detected: users.show');
+        $this->assertRefused(static fn (): mixed => $cache->ensureFreshWithin($live, 60, 1700000000), 'more than one route is named "users.show"; give each route a unique name');
     }
 
     public function testEnsureFreshWithinNamesAGenerationTimestampInTheFuture(): void
@@ -1631,8 +1702,7 @@ final class RouteCacheTest extends TestCase
                 $write();
                 self::fail('Expected a RouteCacheException');
             } catch (RouteCacheException $exception) {
-                self::assertStringContainsString('Duplicate route names detected: users.show', $exception->getMessage());
-                self::assertStringContainsString('two routes sharing a name (Duplicate route names detected: users.show); rename one', $exception->getMessage());
+                self::assertStringContainsString('more than one route is named "users.show"; give each route a unique name', $exception->getMessage());
             }
         }
 

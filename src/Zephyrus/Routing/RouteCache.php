@@ -240,7 +240,7 @@ final class RouteCache
 
         $problem = $this->buildRoutes(json_decode($json, true, 512, JSON_THROW_ON_ERROR)['routes']);
         if (is_string($problem)) {
-            throw new RouteCacheException(sprintf('Route cache not written: the routes have %s', $problem));
+            throw new RouteCacheException(sprintf('Route cache not written: %s', $problem));
         }
 
         $directory = dirname($this->cacheFile);
@@ -647,10 +647,12 @@ final class RouteCache
             $collection->add($route);
         }
 
-        try {
-            $collection->assertNoDuplicateRouteNames();
-        } catch (RouteSignatureException $exception) {
-            return 'two routes sharing a name (' . $exception->getMessage() . '); rename one';
+        $duplicates = $collection->duplicateRouteNames();
+        if ($duplicates !== []) {
+            return sprintf(
+                'more than one route is named %s; give each route a unique name',
+                implode(', ', array_map(static fn (int|string $name): string => self::encodeForMessage((string) $name), $duplicates)),
+            );
         }
 
         return $collection;
@@ -665,23 +667,28 @@ final class RouteCache
             return sprintf(' at entry %d', $index);
         }
 
-        $methodAndPath = json_encode(
-            [$entry['method'] ?? null, $entry['path'] ?? null],
-            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
-        );
+        return sprintf(' at entry %d %s', $index, self::encodeForMessage([$entry['method'] ?? null, $entry['path'] ?? null]));
+    }
 
-        return sprintf(' at entry %d %s', $index, $methodAndPath);
+    /**
+     * JSON-encodes a value for a message. Raw DEL is escaped too, since JSON leaves it unescaped.
+     */
+    private static function encodeForMessage(mixed $value): string
+    {
+        $json = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+
+        return $json === false ? '(unencodable)' : str_replace("\x7f", '\u007f', $json);
     }
 
     private function routeFromEntry(mixed $entry): Route|string
     {
         if (!is_array($entry)) {
-            return 'a route entry that is not an object';
+            return 'a route that is not an object';
         }
 
         foreach (['method', 'path', 'handler'] as $requiredKey) {
             if (!array_key_exists($requiredKey, $entry) || !is_string($entry[$requiredKey])) {
-                return sprintf('a route entry without a valid "%s"', $requiredKey);
+                return sprintf('a route without a valid "%s"', $requiredKey);
             }
         }
 
@@ -696,11 +703,11 @@ final class RouteCache
         $excludedMiddlewares = $entry[self::EXCLUDED_MIDDLEWARES_KEY] ?? [];
 
         if (!is_array($constraints) || !is_array($middlewares) || ($name !== null && !is_string($name))) {
-            return 'a route entry with invalid optional fields';
+            return 'a route with invalid optional fields';
         }
 
         if (!is_array($excludedMiddlewares)) {
-            return 'a route entry with an invalid excluded middlewares list';
+            return 'a route with an invalid excluded middlewares list';
         }
 
         $problem = $this->constraintsFailure($constraints)
@@ -722,7 +729,7 @@ final class RouteCache
                 excludedMiddlewares: $excludedMiddlewares,
             );
         } catch (RouteSignatureException | RouteMiddlewareException $exception) {
-            return 'a route entry that is rejected: ' . $exception->getMessage();
+            return 'a route that is rejected: ' . $exception->getMessage();
         }
     }
 
@@ -733,7 +740,7 @@ final class RouteCache
     {
         foreach ($constraints as $parameter => $pattern) {
             if (!is_string($parameter) || !is_string($pattern)) {
-                return 'a route entry with an invalid constraints map';
+                return 'a route with an invalid constraints map';
             }
         }
 
@@ -746,7 +753,7 @@ final class RouteCache
     private function excludedMiddlewaresFailure(array $middlewares): ?string
     {
         if (!array_is_list($middlewares)) {
-            return 'a route entry with an invalid excluded middlewares list';
+            return 'a route with an invalid excluded middlewares list';
         }
 
         return $this->allStringsFailure($middlewares, 'excluded middlewares');
@@ -759,7 +766,7 @@ final class RouteCache
     {
         foreach ($values as $value) {
             if (!is_string($value)) {
-                return sprintf('a route entry with an invalid %s list', $label);
+                return sprintf('a route with an invalid %s list', $label);
             }
         }
 
@@ -769,15 +776,15 @@ final class RouteCache
     private function methodPathAndHandlerFailure(string $method, string $path, string $handler): ?string
     {
         if (preg_match('/^[A-Z]+$/D', $method) !== 1) {
-            return 'a route entry with an invalid HTTP method format';
+            return 'a route with an invalid HTTP method format';
         }
 
         if ($path === '' || !str_starts_with($path, '/')) {
-            return 'a route entry with an invalid route path';
+            return 'a route with an invalid route path';
         }
 
         if ($handler === '' || !str_contains($handler, '@')) {
-            return 'a route entry with an invalid handler format';
+            return 'a route with an invalid handler format';
         }
 
         return null;
@@ -785,6 +792,6 @@ final class RouteCache
 
     private function routeNameFailure(?string $name): ?string
     {
-        return $name !== null && trim($name) === '' ? 'a route entry with an invalid route name' : null;
+        return $name !== null && trim($name) === '' ? 'a route with an invalid route name' : null;
     }
 }
