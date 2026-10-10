@@ -1,32 +1,12 @@
-# Baseline for the level 6 gate. READ THIS BEFORE ADDING TO IT.
-#
-# This file is hand-grouped, not generated. Every entry states why the finding
-# is deferred rather than fixed, because a baseline that swallows everything
-# manufactures a green check over an unexamined codebase, which is the exact
-# failure mode this gate exists to prevent.
-#
-# Entries are keyed by identifier + path + count, not by line number, so a
-# refactor that moves code does not silently re-open a hole. If a count stops
-# matching, the run FAILS: that is deliberate. Re-examine, do not just bump it.
-#
-# Nothing in here is unexamined. The findings that turned out to be real bugs
-# were reported to the maintainer instead of being quietly patched under cover
-# of a typing pass, and they are marked as such below.
+# Baseline for the level 6 gate. Hand-grouped, not generated: each group states
+# why its findings are deferred rather than fixed.
+# Entries match on identifier, path and count, not line number. A count that stops
+# matching fails the run on purpose: re-examine it, do not bump it.
 
 parameters:
     ignoreErrors:
 
-        # ------------------------------------------------------------------
-        # 1. Config sections hydrate their readonly properties in fromArray(),
-        #    not in the constructor.
-        #
-        #    ConfigSection subclasses build an instance and then assign each
-        #    readonly property from inside the class scope. PHP allows this;
-        #    PHPStan wants constructor promotion instead. Fixing it means
-        #    reshaping the fromArray() contract of every config section and
-        #    every consumer that subclasses ConfigSection, which is a real
-        #    refactor and not a typing pass. Deferred as a unit, on purpose.
-        # ------------------------------------------------------------------
+        # 1. Readonly properties assigned in fromArray(), not the constructor: fixing it reshapes every config section, so it is deferred as a unit.
         -
             identifier: property.uninitializedReadonly
             path: src/Zephyrus/Mailer/MailerConfig.php
@@ -44,16 +24,9 @@ parameters:
             path: src/Zephyrus/Rendering/RenderConfig.php
             count: 5
 
-        # ------------------------------------------------------------------
-        # 2. Runtime guards the declared types make unreachable.
-        #
-        #    DO NOT "FIX" THESE BY DELETING THE GUARD. This framework is
-        #    vendored into applications that pass whatever they like across
-        #    the boundary; a PHPDoc promise is not a runtime guarantee, and
-        #    several of these sit directly in front of a security decision.
-        #    The finding is correct about the declared type and wrong about
-        #    the value that actually arrives.
-        # ------------------------------------------------------------------
+        # 2. Guards that the declared types make unreachable.
+        #    DO NOT FIX BY DELETING THE GUARD: callers can pass any value across the boundary,
+        #    and several sit in front of a security decision.
         -
             identifier: function.alreadyNarrowedType
             path: src/Zephyrus/Core/Bootstrap/ApplicationBootstrap.php
@@ -74,40 +47,25 @@ parameters:
             identifier: instanceof.alwaysTrue
             path: src/Zephyrus/Http/Request.php
             count: 1
-        # new ReflectionClass() on a class-string still throws when the class
-        # cannot be autoloaded. The catch is live at runtime.
+        # new ReflectionClass() throws on an unloadable class-string: the catch is live at runtime.
         -
             identifier: catch.neverThrown
             path: src/Zephyrus/Routing/RouteAttributeReader.php
             count: 1
 
-        # ------------------------------------------------------------------
-        # 3. Analyser limitations. The code is correct; PHPStan is not.
-        # ------------------------------------------------------------------
-        # Iterating the public properties of a stdClass with foreach is valid
-        # PHP. PHPStan only accepts declared iterables.
+        # 3. Analyser limitations: the code is correct, PHPStan is not.
+        # stdClass public properties are valid to iterate, but PHPStan only accepts declared iterables.
         -
             identifier: foreach.nonIterable
             path: src/Zephyrus/Data/Entity.php
             count: 1
-        # A trait published for consumer controllers, used zero times inside
-        # src/ itself. It is exercised by tests/, which this config does not
-        # analyse.
+        # Published for consumer controllers; tests/ exercises it, and this config does not analyse tests/.
         -
             identifier: trait.unused
             path: src/Zephyrus/Rendering/RenderResponses.php
             count: 1
 
-        # ------------------------------------------------------------------
-        # 4. Redundant normalisation kept on purpose.
-        #
-        #    array_values() on a value a docblock already calls a list, and
-        #    "?? default" on an offset PHPStan proves is always set. Each one
-        #    costs nothing and holds if a caller ignores the docblock or a
-        #    preg_* call fails. Three of the four array_values() sit in the
-        #    security middleware, which is not where trust in a docblock is
-        #    worth saving a function call.
-        # ------------------------------------------------------------------
+        # 4. Redundant normalisation kept on purpose: a cheap guard if a caller ignores a docblock or a preg_* call fails.
         -
             identifier: arrayValues.list
             path: src/Zephyrus/Core/Config/EnvironmentContract.php
@@ -141,43 +99,25 @@ parameters:
             path: src/Zephyrus/Core/ApplicationBuilder.php
             count: 3
 
-        # ------------------------------------------------------------------
         # 5. Signatures that answer to something other than PHPStan.
-        # ------------------------------------------------------------------
-        # SessionHandlerInterface::gc() is declared int|false. Narrowing the
-        # implementation to int is legal under covariance but changes a public
-        # signature, which is not this change's job.
+        # SessionHandlerInterface::gc() is declared int|false; narrowing it to int changes a public signature.
         -
             identifier: return.unusedType
             path: src/Zephyrus/Session/DatabaseSessionHandler.php
             count: 1
-        # Entity::build() calls new static(). The contract is that an Entity
-        # subclass keeps a no-argument constructor. Declaring that with
-        # @phpstan-consistent-constructor would start failing analysis inside
-        # every consumer application that vendors this framework, so it is a
-        # deliberate coordination decision and not a docblock fix.
+        # Entity::build() calls new static(): subclasses keep a no-argument constructor.
+        # Declaring @phpstan-consistent-constructor would fail analysis in consumers.
         -
             identifier: new.static
             path: src/Zephyrus/Data/Entity.php
             count: 1
-        # ConfigSection::fromArray() calls new static() for exactly the same
-        # reason, and carries the same contract: a section subclass keeps the
-        # base constructor signature. This entry REPLACES the staticMethod.
-        # notFound entry that used to sit in a "real findings" group, because
-        # the finding it recorded is now fixed: Configuration::fromArray()
-        # calls a method the class actually declares.
+        # ConfigSection::fromArray() calls new static(): section subclasses keep the base constructor signature.
         -
             identifier: new.static
             path: src/Zephyrus/Core/Config/ConfigSection.php
             count: 1
 
-        # ------------------------------------------------------------------
-        # 6. Missing iterable docblocks, deferred ONLY because these files
-        #    were under concurrent edit by other work when this gate landed.
-        #
-        #    These are one-line @param additions and nothing more. This group
-        #    should be empty. Sweep it and delete it.
-        # ------------------------------------------------------------------
+        # 6. Missing iterable docblocks, deferred: one-line @param additions. Add them and delete this group.
         -
             identifier: missingType.iterableValue
             path: src/Zephyrus/Core/Bootstrap/ApplicationBootstrap.php
@@ -186,10 +126,6 @@ parameters:
             identifier: missingType.iterableValue
             path: src/Zephyrus/Core/Config/ConfigSection.php
             count: 1
-        # RenderConfig's entry was RESOLVED, not swept: its fromArray() override
-        # now inherits the @param array<string, mixed> declared on the
-        # ConfigSection::fromArray() it overrides. MailerConfig::fromArray()
-        # already carried its own and was never listed here.
         -
             identifier: missingType.iterableValue
             path: src/Zephyrus/functions.php
