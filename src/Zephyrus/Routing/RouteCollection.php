@@ -345,7 +345,7 @@ final class RouteCollection
     {
         $normalizedPath = $this->normalizePath($path);
 
-        if (!self::isWellFormedValue($normalizedPath)) {
+        if (self::isRefusedRawPath($path) || !self::isWellFormedValue($normalizedPath)) {
             return [];
         }
 
@@ -446,7 +446,7 @@ final class RouteCollection
      * the same path. A 405 is raised only when a route matches the path but none accepts the
      * method; a GET route also accepts HEAD.
      *
-     * @throws RouteNotFoundException When no route matches, or the path is not valid UTF-8 or contains a NUL byte.
+     * @throws RouteNotFoundException When no route matches, or the path is not valid UTF-8 or contains a control character.
      * @throws MethodNotAllowedException When the path matches but no route accepts the method.
      * @throws RouteSignatureException When a route constraint is not a valid regular expression.
      */
@@ -454,9 +454,9 @@ final class RouteCollection
     {
         $normalizedPath = $this->normalizePath($path);
 
-        if (!self::isWellFormedValue($normalizedPath)) {
+        if (self::isRefusedRawPath($path) || !self::isWellFormedValue($normalizedPath)) {
             throw new RouteNotFoundException(sprintf(
-                'No route matched %s: the request path is not valid UTF-8 or contains a NUL byte',
+                'No route matched %s: the request path is not valid UTF-8 or contains a control character',
                 strtoupper($method),
             ));
         }
@@ -577,6 +577,17 @@ final class RouteCollection
 
         return @preg_match('//u', $value) === 1;
     }
+
+    /**
+     * Whether the raw request path holds a control byte or DEL, or is not valid UTF-8.
+     *
+     * Checked before normalizePath(), because parse_url() rewrites control bytes to "_" rather than failing.
+     */
+    private static function isRefusedRawPath(string $path): bool
+    {
+        return preg_match('/[\x00-\x1F\x7F]/', $path) === 1 || !self::isWellFormedValue($path);
+    }
+
 
     /**
      * Reduces a request path to the form routes are matched against.

@@ -118,16 +118,45 @@ final class RouteMatchingHardeningTest extends TestCase
         $collection->match('GET', $path);
     }
 
-    public function testARawNulByteCannotReachAHandlerArgument(): void
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function rawControlByteProvider(): array
     {
-        // parse_url() replaces a raw NUL with "_" before the guard runs; only the outcome is asserted.
+        return [
+            'raw NUL' => ["/users/4\0"],
+            'raw SOH' => ["/users/4\x01"],
+            'raw unit separator' => ["/users/4\x1F"],
+            'raw DEL' => ["/users/4\x7F"],
+        ];
+    }
+
+    #[DataProvider('rawControlByteProvider')]
+    public function testARawControlByteIsRefusedBeforeParseUrlRewritesIt(string $path): void
+    {
         $collection = new RouteCollection();
-        $collection->add(Route::define('GET', '/a/{value}', 'C@show'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
 
-        $value = $collection->match('GET', "/a/ab\0cd")->parameter('value');
+        $this->expectException(RouteNotFoundException::class);
+        $collection->match('GET', $path);
+    }
 
-        self::assertIsString($value);
-        self::assertStringNotContainsString("\0", $value);
+    #[DataProvider('rawControlByteProvider')]
+    public function testRoutesForPathRefusesARawControlByte(string $path): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        self::assertSame([], $collection->routesForPath($path));
+    }
+
+    public function testAPercentEncodedNulIsStillRefusedWhenItsValueIsDecoded(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $this->expectException(RouteNotFoundException::class);
+        $collection->match('GET', '/users/4%00');
     }
 
     public function testValidMultibyteSegmentsStillMatch(): void
