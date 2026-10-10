@@ -7,6 +7,8 @@ namespace Zephyrus\Container;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionNamedType;
+use ReflectionType;
+use ReflectionUnionType;
 
 /**
  * Dependency injection container with auto-wiring of unbound concrete classes.
@@ -17,6 +19,7 @@ use ReflectionNamedType;
  *   $c->instance(Config::class, Config::fromArray($_ENV));
  *
  *   // Mailer's typed constructor parameters are resolved from the container.
+ *   // Scalar variadics (string, int, float, bool, array) receive no argument; other variadics are refused.
  *   $mailer = $c->get(Mailer::class);
  */
 final class Container implements ContainerInterface
@@ -106,6 +109,9 @@ final class Container implements ContainerInterface
         }
     }
 
+    /** Built-in types a variadic parameter may have to receive no argument during auto-wiring. */
+    private const array SCALAR_VARIADIC_TYPES = ['string', 'int', 'float', 'bool', 'array'];
+
     /**
      * Shape a string must have before it reaches the autoloader: a fully-qualified class name.
      * Guards has(), get() and make().
@@ -167,7 +173,34 @@ final class Container implements ContainerInterface
     }
 
     /**
+     * Return true when $type is string, int, float, bool or array, or a union or nullable made only of them.
+     */
+    private function isScalarVariadicType(ReflectionType $type): bool
+    {
+        if ($type instanceof ReflectionUnionType) {
+            foreach ($type->getTypes() as $member) {
+                if (!$this->isScalarVariadicType($member) && !$this->isNullType($member)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return $type instanceof ReflectionNamedType
+            && $type->isBuiltin()
+            && in_array($type->getName(), self::SCALAR_VARIADIC_TYPES, true);
+    }
+
+    /** Return true when $type is the null member of a union. */
+    private function isNullType(ReflectionType $type): bool
+    {
+        return $type instanceof ReflectionNamedType && $type->getName() === 'null';
+    }
+
+    /**
      * Construct $className, resolving each typed constructor parameter from this container.
+     * A variadic of a scalar type receives no argument; every other variadic is refused.
      *
      * @throws NotFoundException  When $className is not a loadable class.
      * @throws ContainerException When a constructor parameter cannot be resolved.
@@ -198,11 +231,20 @@ final class Container implements ContainerInterface
         $args = [];
 
         foreach ($constructor->getParameters() as $param) {
+            $type = $param->getType();
+
             if ($param->isVariadic()) {
+                if ($type === null || !$this->isScalarVariadicType($type)) {
+                    $kind = $type === null ? 'untyped' : "typed [{$type}]";
+
+                    throw new ContainerException(
+                        "Cannot auto-wire parameter \${$param->getName()} of [{$className}]: it is variadic and {$kind}; "
+                        . "the container cannot choose how many to pass: bind [{$className}] explicitly with a factory."
+                    );
+                }
+
                 continue;
             }
-
-            $type = $param->getType();
 
             if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
                 $args[] = $this->get($type->getName());
@@ -219,7 +261,7 @@ final class Container implements ContainerInterface
             if ($type === null) {
                 throw new ContainerException(
                     "Cannot auto-wire parameter \${$name} of [{$className}]: it has no type hint and no default value; "
-                    . "add a type, give it a default value, or bind [{$className}] explicitly."
+                    . "add a class or interface type, give it a default value, or bind [{$className}] explicitly."
                 );
             }
 
@@ -230,7 +272,7 @@ final class Container implements ContainerInterface
             throw new ContainerException(
                 "Cannot auto-wire parameter \${$name} of [{$className}]: it has the {$typeName}, "
                 . "which the container cannot provide, and no default value; "
-                . "bind [{$className}] explicitly or give \${$name} a default value."
+                . "add a class or interface type, give it a default value, or bind [{$className}] explicitly."
             );
         }
 

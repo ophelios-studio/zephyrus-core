@@ -92,12 +92,68 @@ final class ServiceWithClassVariadic
 
 final class ServiceWithUntypedVariadic
 {
-    /** @var list<mixed> */
-    public readonly array $items;
+    public function __construct(...$items) {}
+}
 
-    public function __construct(...$items)
+final class ServiceWithMixedVariadic
+{
+    public function __construct(mixed ...$items) {}
+}
+
+final class ServiceWithCallableVariadic
+{
+    public function __construct(callable ...$handlers) {}
+}
+
+final class ServiceWithIterableVariadic
+{
+    public function __construct(iterable ...$items) {}
+}
+
+final class ServiceWithObjectVariadic
+{
+    public function __construct(object ...$items) {}
+}
+
+final class ServiceWithIntersectionVariadic
+{
+    public function __construct(\Countable&\Traversable ...$items) {}
+}
+
+final class ServiceWithNullableClassVariadic
+{
+    public function __construct(?SimpleService ...$services) {}
+}
+
+final class ServiceWithUnionClassVariadic
+{
+    public function __construct(SimpleService|int ...$values) {}
+}
+
+final class ServiceWithByReferenceClassVariadic
+{
+    public function __construct(SimpleService &...$services) {}
+}
+
+final class ServiceWithBuiltinUnionVariadic
+{
+    /** @var list<int|string> */
+    public readonly array $values;
+
+    public function __construct(int|string ...$values)
     {
-        $this->items = $items;
+        $this->values = $values;
+    }
+}
+
+final class ServiceWithNullableUnionVariadic
+{
+    /** @var list<int|string|null> */
+    public readonly array $values;
+
+    public function __construct(int|string|null ...$values)
+    {
+        $this->values = $values;
     }
 }
 
@@ -348,8 +404,10 @@ final class ContainerTest extends TestCase
         } catch (ContainerException $e) {
             self::assertStringContainsString('parameter $dsn of [' . ServiceWithUnresolvableParam::class . ']', $e->getMessage());
             self::assertStringContainsString('built-in type string', $e->getMessage());
-            self::assertStringContainsString('bind [' . ServiceWithUnresolvableParam::class . '] explicitly', $e->getMessage());
-            self::assertStringContainsString('give $dsn a default value', $e->getMessage());
+            self::assertStringContainsString(
+                'add a class or interface type, give it a default value, or bind [' . ServiceWithUnresolvableParam::class . '] explicitly',
+                $e->getMessage(),
+            );
             self::assertStringNotContainsString('no type hint', $e->getMessage());
         }
     }
@@ -362,7 +420,7 @@ final class ContainerTest extends TestCase
         } catch (ContainerException $e) {
             self::assertStringContainsString('parameter $value of [' . ServiceWithUntypedParam::class . ']', $e->getMessage());
             self::assertStringContainsString(
-                'add a type, give it a default value, or bind [' . ServiceWithUntypedParam::class . '] explicitly',
+                'add a class or interface type, give it a default value, or bind [' . ServiceWithUntypedParam::class . '] explicitly',
                 $e->getMessage(),
             );
         }
@@ -375,18 +433,71 @@ final class ContainerTest extends TestCase
         self::assertSame([], $svc->tags);
     }
 
-    public function testAutoWireResolvesClassVariadicToNoArguments(): void
+    public function testAutoWireResolvesBuiltinUnionVariadicToNoArguments(): void
     {
-        $svc = $this->container->get(ServiceWithClassVariadic::class);
-        self::assertInstanceOf(ServiceWithClassVariadic::class, $svc);
-        self::assertSame([], $svc->services);
+        $svc = $this->container->get(ServiceWithBuiltinUnionVariadic::class);
+        self::assertInstanceOf(ServiceWithBuiltinUnionVariadic::class, $svc);
+        self::assertSame([], $svc->values);
     }
 
-    public function testAutoWireResolvesUntypedVariadicToNoArguments(): void
+    public function testAutoWireResolvesNullableScalarUnionVariadicToNoArguments(): void
     {
-        $svc = $this->container->get(ServiceWithUntypedVariadic::class);
-        self::assertInstanceOf(ServiceWithUntypedVariadic::class, $svc);
-        self::assertSame([], $svc->items);
+        $svc = $this->container->get(ServiceWithNullableUnionVariadic::class);
+        self::assertInstanceOf(ServiceWithNullableUnionVariadic::class, $svc);
+        self::assertSame([], $svc->values);
+    }
+
+    /**
+     * @return iterable<string, array{string, string, string}> Class, parameter name, refused kind.
+     */
+    public static function refusedVariadicProvider(): iterable
+    {
+        $class = SimpleService::class;
+
+        yield 'class' => [ServiceWithClassVariadic::class, 'services', "typed [{$class}]"];
+        yield 'nullable class' => [ServiceWithNullableClassVariadic::class, 'services', "typed [?{$class}]"];
+        yield 'union containing a class' => [ServiceWithUnionClassVariadic::class, 'values', "typed [{$class}|int]"];
+        yield 'by-reference class' => [ServiceWithByReferenceClassVariadic::class, 'services', "typed [{$class}]"];
+        yield 'intersection' => [ServiceWithIntersectionVariadic::class, 'items', 'typed [Countable&Traversable]'];
+        yield 'untyped' => [ServiceWithUntypedVariadic::class, 'items', 'untyped'];
+        yield 'mixed' => [ServiceWithMixedVariadic::class, 'items', 'typed [mixed]'];
+        yield 'callable' => [ServiceWithCallableVariadic::class, 'handlers', 'typed [callable]'];
+        yield 'iterable' => [ServiceWithIterableVariadic::class, 'items', 'typed [iterable]'];
+        yield 'object' => [ServiceWithObjectVariadic::class, 'items', 'typed [object]'];
+    }
+
+    #[DataProvider('refusedVariadicProvider')]
+    public function testAutoWireRefusesVariadicWhoseTypeIsNotScalar(string $id, string $param, string $kind): void
+    {
+        $this->assertAutoWireRefusesVariadic($id, $param, $kind);
+    }
+
+    public function testAutoWireRefusesClassVariadicEvenWhenItsClassIsBound(): void
+    {
+        $this->container->bind(SimpleService::class, fn(): SimpleService => new SimpleService());
+
+        $this->assertAutoWireRefusesVariadic(
+            ServiceWithClassVariadic::class,
+            'services',
+            'typed [' . SimpleService::class . ']',
+        );
+    }
+
+    /**
+     * Asserts that auto-wiring $id is refused with the full variadic message for $param of kind $kind.
+     */
+    private function assertAutoWireRefusesVariadic(string $id, string $param, string $kind): void
+    {
+        try {
+            $this->container->get($id);
+            self::fail("Variadic \${$param} of [{$id}] must be refused, not resolved.");
+        } catch (ContainerException $e) {
+            self::assertSame(
+                "Cannot auto-wire parameter \${$param} of [{$id}]: it is variadic and {$kind}; "
+                . "the container cannot choose how many to pass: bind [{$id}] explicitly with a factory.",
+                $e->getMessage(),
+            );
+        }
     }
 
     /**
