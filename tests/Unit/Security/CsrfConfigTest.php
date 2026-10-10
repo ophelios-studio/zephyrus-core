@@ -97,4 +97,23 @@ final class CsrfConfigTest extends TestCase
     {
         self::assertFalse(CsrfConfig::fromArray(['enabled' => '0'])->enabled);
     }
+
+    public function testAnEmptyInjectTokenValueIsRefusedInsteadOfReadAsOff(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        CsrfConfig::fromArray(['injectToken' => '']);
+    }
+
+    public function testAnInjectTokenValueOfOffIsAccepted(): void
+    {
+        self::assertFalse(CsrfConfig::fromArray(['inject_token' => 'off'])->injectToken);
+    }
+
+    public function testAnInjectTokenValueOfYesIsRefusedAsEnabled(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        CsrfConfig::fromArray(['csrf_auto_html' => 'yes']);
+    }
 }

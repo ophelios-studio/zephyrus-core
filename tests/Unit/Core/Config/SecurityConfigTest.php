@@ -782,4 +782,23 @@ final class SecurityConfigTest extends TestCase
     {
         self::assertFalse(SecurityConfig::fromArray(['csrfEnabled' => '0'])->csrfEnabled);
     }
+
+    public function testNestedCsrfEnabledOffDisablesCsrf(): void
+    {
+        self::assertFalse(SecurityConfig::fromArray(['csrf' => ['enabled' => 'off']])->csrfEnabled);
+    }
+
+    public function testNestedCsrfEnabledEmptyStringIsRefusedInsteadOfDisablingCsrf(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SecurityConfig::fromArray(['csrf' => ['enabled' => '']]);
+    }
+
+    public function testFlatCsrfEnabledEmptyStringIsRefusedInsteadOfDisablingCsrf(): void
+    {
+        $this->expectException(ConfigurationException::class);
+
+        SecurityConfig::fromArray(['csrfEnabled' => '']);
+    }
 }
