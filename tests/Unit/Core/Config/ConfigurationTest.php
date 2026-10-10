@@ -488,11 +488,21 @@ final class ConfigurationTest extends TestCase
         }
     }
 
-    public function testFromArrayRefusesAFactoryKeyedByListIndexNamingTheIndex(): void
+    public function testFromArrayRefusesAFactoryKeyedByListIndexNamingTheClassAndTheFix(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('index 0');
+        $this->expectExceptionMessage(
+            "Section factory MailerConfig at index 0 must be keyed by its section name, for example ['mailer' => MailerConfig::class].",
+        );
 
-        Configuration::fromArray([], [ApplicationConfig::class]);
+        Configuration::fromArray([], [MailerConfig::class]);
+    }
+
+    public function testFromArrayRefusesAFactoryWithANonStringValueAtAListIndex(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Section factory at index 0 must be keyed by its section name.');
+
+        Configuration::fromArray([], [new \stdClass()]);
     }
 }

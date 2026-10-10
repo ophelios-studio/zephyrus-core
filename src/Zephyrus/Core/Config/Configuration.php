@@ -57,10 +57,7 @@ final readonly class Configuration
         $customSections = [];
         foreach ($sectionFactories as $name => $className) {
             if (!is_string($name)) { // @phpstan-ignore function.alreadyNarrowedType
-                throw new \InvalidArgumentException(sprintf(
-                    'Section factory at index %d must be keyed by its section name.',
-                    $name,
-                ));
+                throw new \InvalidArgumentException(self::unnamedFactoryMessage($name, $className));
             }
 
             $normalizedName = self::normalizeKey($name);
@@ -87,6 +84,24 @@ final readonly class Configuration
                 ? DatabaseConfig::fromArray((array) $config['database'])
                 : null,
             customSections: $customSections,
+        );
+    }
+
+    private static function unnamedFactoryMessage(int|string $index, mixed $className): string
+    {
+        if (!is_string($className)) {
+            return sprintf('Section factory at index %d must be keyed by its section name.', $index);
+        }
+
+        $shortName = basename(str_replace('\\', '/', $className));
+        $sectionName = strtolower(preg_replace('/Config$/', '', $shortName) ?: $shortName);
+
+        return sprintf(
+            "Section factory %s at index %d must be keyed by its section name, for example ['%s' => %s::class].",
+            $shortName,
+            $index,
+            $sectionName,
+            $shortName,
         );
     }
 
