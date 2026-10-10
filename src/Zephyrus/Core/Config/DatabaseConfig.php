@@ -223,7 +223,8 @@ final readonly class DatabaseConfig
                 'database',
                 $field,
                 $value,
-                'host is empty: set DB_HOST or remove the key to use localhost',
+                'must not be empty: give DB_HOST a value (an empty variable does not fall back to its !env default) '
+                    . 'or remove the key to use localhost',
             );
         }
 
@@ -235,7 +236,7 @@ final readonly class DatabaseConfig
             throw ConfigurationException::invalidValue(
                 'database',
                 $field,
-                $value,
+                $singleHost ? self::withoutUserinfo($value) : $value,
                 'must be non-empty, valid UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, '
                     . 'quotes, backslashes or control characters, any of which would truncate or extend the DSN'
                     . ($singleHost && str_contains($value, ',')
@@ -243,6 +244,15 @@ final readonly class DatabaseConfig
                         : ''),
             );
         }
+    }
+
+    /**
+     * The host with the credentials of a URL (before the last @ that precedes the first / after the scheme)
+     * replaced by ***.
+     */
+    private static function withoutUserinfo(string $host): string
+    {
+        return preg_replace('#^([^/]*://)?[^/]*@#', '$1***@', $host) ?? '***';
     }
 
     private static function conflictingSpellings(string $first, string $second): ConfigurationException

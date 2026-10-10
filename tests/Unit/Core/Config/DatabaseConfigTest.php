@@ -891,6 +891,32 @@ final class DatabaseConfigTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function hostsWithCredentials(): iterable
+    {
+        yield 'url' => ['postgres://app:s3cr=t@db.example.test/app', '"postgres://***@db.example.test/app"'];
+        yield 'at sign in the password' => ['postgres://app:p@ss=1@db.example.test', '"postgres://***@db.example.test"'];
+        yield 'no scheme' => ['app:s3cr=t@db.example.test', '"***@db.example.test"'];
+        yield 'at sign after the path only' => ['db.example.test/a=b@c', '"db.example.test/a=b@c"'];
+    }
+
+    #[DataProvider('hostsWithCredentials')]
+    public function testHostRefusalHidesTheCredentialsOfAUrl(string $host, string $shown): void
+    {
+        try {
+            DatabaseConfig::fromArray(['host' => $host, 'database' => 'db', 'username' => 'u']);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'database' field 'host' has invalid value $shown: must be non-empty, valid "
+                . 'UTF-8 and must not contain ASCII whitespace, semicolons, equals signs, quotes, backslashes or '
+                . 'control characters, any of which would truncate or extend the DSN.',
+                $e->getMessage(),
+            );
+        }
+    }
     public function testHostRefusalWithoutACommaDoesNotMentionAList(): void
     {
         try {
@@ -913,8 +939,9 @@ final class DatabaseConfigTest extends TestCase
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
             self::assertSame(
-                "Configuration section 'database' field 'host' has invalid value \"\": host is empty: set DB_HOST or "
-                . 'remove the key to use localhost.',
+                "Configuration section 'database' field 'host' has invalid value \"\": must not be empty: give DB_HOST "
+                . 'a value (an empty variable does not fall back to its !env default) or remove the key to use '
+                . 'localhost.',
                 $e->getMessage(),
             );
         }
@@ -927,8 +954,9 @@ final class DatabaseConfigTest extends TestCase
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
             self::assertSame(
-                "Configuration section 'database' field 'host' has invalid value \"\": host is empty: set DB_HOST or "
-                . 'remove the key to use localhost.',
+                "Configuration section 'database' field 'host' has invalid value \"\": must not be empty: give DB_HOST "
+                . 'a value (an empty variable does not fall back to its !env default) or remove the key to use '
+                . 'localhost.',
                 $e->getMessage(),
             );
         }
