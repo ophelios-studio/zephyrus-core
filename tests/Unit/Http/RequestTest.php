@@ -919,6 +919,26 @@ final class RequestTest extends TestCase
         yield 'above the port range' => ['65536'];
         yield 'signed' => ['+80'];
         yield 'trailing newline' => ["80\n"];
+        yield 'zero' => ['0'];
+        yield 'leading zeros' => ['00080'];
+        yield 'leading zero on a valid port' => ['080'];
+    }
+
+    public function testFromGlobalsKeepsServerPortWhenForwardedPortHasLeadingZeros(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'        => 'GET',
+                'HTTP_HOST'             => 'app.internal',
+                'REQUEST_URI'           => '/public',
+                'REMOTE_ADDR'           => '10.0.0.1',
+                'SERVER_PORT'           => '8080',
+                'HTTP_X_FORWARDED_PORT' => '08080',
+            ],
+            trustedProxies: ['*'],
+        );
+
+        self::assertSame('http://app.internal:8080/public', $request->uri()->full());
     }
 
     public function testFromGlobalsIgnoresForwardedElementPortThatIsNotAPortNumber(): void

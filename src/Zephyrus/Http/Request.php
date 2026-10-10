@@ -752,11 +752,11 @@ final readonly class Request
     }
 
     /**
-     * The port when it is one to five digits and at most 65535, otherwise null.
+     * The port when it is a decimal number without leading zeros, at most 65535, otherwise null.
      */
     private static function portNumber(?string $port): ?string
     {
-        if ($port === null || preg_match('/^\d{1,5}$/D', $port) !== 1 || (int) $port > 65535) {
+        if ($port === null || preg_match('/^[1-9][0-9]{0,4}$/D', $port) !== 1 || (int) $port > 65535) {
             return null;
         }
 
