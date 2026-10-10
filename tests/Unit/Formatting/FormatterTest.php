@@ -843,13 +843,21 @@ final class FormatterTest extends TestCase
     }
 
 
-    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMonetarySeparator(): void
+    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMonetarySeparatorOnly(): void
     {
-        $monetary = (new NumberFormatter('fr_CA', NumberFormatter::DECIMAL))
-            ->getSymbol(NumberFormatter::MONETARY_SEPARATOR_SYMBOL);
+        $symbols = new NumberFormatter('en_BE', NumberFormatter::DECIMAL);
+        self::assertSame(',', $symbols->getSymbol(NumberFormatter::DECIMAL_SEPARATOR_SYMBOL));
+        self::assertSame('.', $symbols->getSymbol(NumberFormatter::MONETARY_SEPARATOR_SYMBOL));
 
-        $this->expectException(FormatterException::class);
-        new Formatter('fr_CA', groupingSeparator: (string) $monetary);
+        try {
+            new Formatter('en_BE', groupingSeparator: '.');
+            self::fail('The monetary decimal sign of the locale must be refused as a grouping separator.');
+        } catch (FormatterException $exception) {
+            self::assertSame(
+                'Invalid grouping separator: it is the decimal or monetary decimal sign of locale en_BE.',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testGroupingSeparatorOptionIsRefusedWhenItIsInvalidUtf8(): void

@@ -100,7 +100,7 @@ final class FormatterInputTest extends TestCase
     }
 
     #[DataProvider('acceptedGroupingSeparators')]
-    public function testAcceptsTheSeparatorsRealLocalesUse(string $separator): void
+    public function testAcceptsTheListedSeparators(string $separator): void
     {
         self::assertNull(FormatterInput::groupingSeparatorRefusal($separator));
     }

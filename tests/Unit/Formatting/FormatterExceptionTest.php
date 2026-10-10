@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Formatting;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 use Zephyrus\Formatting\FormatterException;
+use Zephyrus\Formatting\FormatterInput;
 
 final class FormatterExceptionTest extends TestCase
 {
@@ -32,9 +33,14 @@ final class FormatterExceptionTest extends TestCase
 
     public function testInvalidGroupingSeparatorStatesTheReason(): void
     {
-        $message = FormatterException::invalidGroupingSeparator('must be at most 4 bytes')->getMessage();
+        $message = FormatterException::invalidGroupingSeparator((string) FormatterInput::groupingSeparatorRefusal('x'))
+            ->getMessage();
 
-        self::assertSame('Invalid grouping separator: it must be at most 4 bytes.', $message);
+        self::assertSame(
+            "Invalid grouping separator: it must be one of , . ' U+2019, a space, U+00A0, U+202F or U+2009, or empty "
+            . 'to turn grouping off.',
+            $message,
+        );
     }
 
     public function testReservedGroupingSeparatorNamesTheLocale(): void
