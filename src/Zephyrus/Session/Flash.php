@@ -8,33 +8,16 @@ use stdClass;
 use Zephyrus\Core\App;
 
 /**
- * Typed flash message facade built on top of SessionManager.
+ * Typed flash messages built on top of SessionManager, for POST, redirect, GET flows.
  *
- * Flash messages survive exactly one readAll() call — they are cleared
- * immediately after being read. This makes them ideal for status messages
- * passed across a POST→redirect→GET flow.
+ * Messages are cleared by the first readAll() that follows them.
  *
- * Usage:
+ *   Flash::success('Profile updated.');          // before the redirect
+ *   $flash = Flash::readAll();                   // after the redirect
+ *   // $flash->success === ['Profile updated.'], and error, warning and info likewise
  *
- *   // In a controller action (before redirect):
- *   Flash::success('Profile updated.');
- *   Flash::error(['Name is required.', 'Email is invalid.']);
- *
- *   // In the template (after redirect):
- *   $flash = Flash::readAll();
- *   // $flash->success === ['Profile updated.']
- *   // $flash->error   === ['Name is required.', 'Email is invalid.']
- *   // $flash->warning  === []
- *   // $flash->info     === []
- *
- * Messages are stored in the session under `_flash_{type}` keys.
- *
- * ## Flash values are UNTRUSTED OUTPUT
- * Nothing here sanitizes a message. A message routinely carries a value the
- * user supplied (a rejected field, a filename, a search term), it is persisted
- * across a redirect, and it is then printed on a later page, which is the exact
- * shape of stored XSS. Latte auto-escapes; the PhpEngine does not, so the
- * example above must be written `<?= e($message) ?>` on that engine.
+ * Flash messages are untrusted output: they often carry user input and are rendered on a later page.
+ * Escape them when rendering; the Latte engine does so automatically, the PhpEngine does not.
  */
 final class Flash
 {
@@ -44,8 +27,6 @@ final class Flash
     private const KEY_INFO = '_flash_info';
 
     /**
-     * Add one or more success messages.
-     *
      * @param string|string[] $message
      */
     public static function success(string|array $message): void
@@ -54,8 +35,6 @@ final class Flash
     }
 
     /**
-     * Add one or more error messages.
-     *
      * @param string|string[] $message
      */
     public static function error(string|array $message): void
@@ -64,8 +43,6 @@ final class Flash
     }
 
     /**
-     * Add one or more warning messages.
-     *
      * @param string|string[] $message
      */
     public static function warning(string|array $message): void
@@ -74,8 +51,6 @@ final class Flash
     }
 
     /**
-     * Add one or more informational messages.
-     *
      * @param string|string[] $message
      */
     public static function info(string|array $message): void
@@ -86,9 +61,7 @@ final class Flash
     /**
      * Read all flash messages and clear them from the session.
      *
-     * Returns an object with four array properties: success, error,
-     * warning, info. Each is an array of strings (empty if no messages
-     * of that type were set).
+     * Returns an object with the array properties success, error, warning and info.
      */
     public static function readAll(): stdClass
     {
