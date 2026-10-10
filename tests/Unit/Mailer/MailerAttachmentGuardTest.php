@@ -252,6 +252,11 @@ final class MailerAttachmentGuardTest extends TestCase
         yield 'left-to-right isolate' => ["inv\u{2066}oice.pdf"];
         yield 'right-to-left isolate' => ["inv\u{2067}oice.pdf"];
         yield 'pop directional isolate' => ["inv\u{2069}oice.pdf"];
+        yield 'C1 control' => ["inv\u{0085}oice.pdf"];
+        yield 'C1 control at the top of the range' => ["inv\u{009F}oice.pdf"];
+        yield 'Arabic letter mark' => ["inv\u{061C}oice.pdf"];
+        yield 'line separator' => ["inv\u{2028}oice.pdf"];
+        yield 'paragraph separator' => ["inv\u{2029}oice.pdf"];
     }
 
     #[DataProvider('controlOrBidiCharacterNameProvider')]

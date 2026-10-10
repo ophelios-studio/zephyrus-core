@@ -56,9 +56,9 @@ final class Mailer
     private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
 
     /**
-     * C0 controls, DEL and the bidi controls U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069. Matched on bytes, so invalid UTF-8 is covered too.
+     * C0 and C1 controls, DEL, U+061C, U+2028, U+2029 and the bidi controls U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069. Matched on bytes.
      */
-    private const string CONTROL_OR_BIDI_PATTERN = '~[\x00-\x1F\x7F]|\xE2\x80[\x8E\x8F\xAA-\xAE]|\xE2\x81[\xA6-\xA9]~';
+    private const string CONTROL_OR_BIDI_PATTERN = '~[\x00-\x1F\x7F]|\xC2[\x80-\x9F]|\xD8\x9C|\xE2\x80[\x8E\x8F\xA8-\xAE]|\xE2\x81[\xA6-\xA9]~';
 
     /** Longest display name: PHPMailer folds header lines over 998 bytes unindented. */
     private const int MAX_HEADER_VALUE_BYTES = 255;
