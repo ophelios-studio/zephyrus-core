@@ -251,10 +251,19 @@ final class RouteCache
     /**
      * Writes the routes to the cache file.
      *
-     * @throws RouteCacheException When encoding, creating the directory or writing the file fails.
+     * @throws RouteCacheException When two routes share a name, or encoding, creating the directory or writing the file fails.
      */
     public function save(RouteCollection $routes): void
     {
+        try {
+            $routes->assertNoDuplicateRouteNames();
+        } catch (RouteSignatureException $exception) {
+            throw new RouteCacheException(
+                $exception->getMessage() . '; rename the routes so each name is unique before caching',
+                previous: $exception,
+            );
+        }
+
         $routesPayload = $this->routesToPayload($routes->all());
 
         $payload = [

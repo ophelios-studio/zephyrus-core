@@ -1399,6 +1399,27 @@ final class RouteCacheTest extends TestCase
         $this->assertRefused(static fn (): mixed => $cache->load(), 'Duplicate route names detected: users.show');
     }
 
+    public function testSaveAndWarmRefuseDuplicateRouteNamesWithoutWritingTheFile(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/1', 'UserController@showOne', name: 'users.show'));
+        $routes->add(Route::define('GET', '/users/2', 'UserController@showTwo', name: 'users.show'));
+
+        $cache = new RouteCache($this->cacheFile);
+
+        foreach ([static fn () => $cache->save($routes), static fn () => $cache->warm($routes), static fn () => $cache->warmIfStale($routes, 60)] as $write) {
+            try {
+                $write();
+                self::fail('Expected a RouteCacheException');
+            } catch (RouteCacheException $exception) {
+                self::assertStringContainsString('Duplicate route names detected: users.show', $exception->getMessage());
+                self::assertStringContainsString('rename', $exception->getMessage());
+            }
+        }
+
+        self::assertFileDoesNotExist($this->cacheFile);
+    }
+
     public function testSaveThrowsWhenCacheDirectoryCannotBeCreated(): void
     {
         $routes = new RouteCollection();
