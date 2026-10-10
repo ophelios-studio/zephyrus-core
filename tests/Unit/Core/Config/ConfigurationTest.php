@@ -427,4 +427,36 @@ final class ConfigurationTest extends TestCase
             @unlink($path);
         }
     }
+
+    public function testSectionRefusesEveryBuiltInNameAndNamesTheTypedProperty(): void
+    {
+        $config = Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']]);
+
+        foreach (['application', 'session', 'security', 'localization', 'database'] as $name) {
+            try {
+                $config->section($name);
+                self::fail("section('$name') should refuse a built-in name");
+            } catch (\InvalidArgumentException $e) {
+                self::assertStringContainsString('$configuration->' . $name, $e->getMessage());
+            }
+        }
+    }
+
+    public function testSectionRefusesAnUnconfiguredBuiltInName(): void
+    {
+        $config = Configuration::fromArray([]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('$configuration->database');
+
+        $config->section('database');
+    }
+
+    public function testHasSectionStaysFalseForBuiltInNames(): void
+    {
+        $config = Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']]);
+
+        self::assertFalse($config->hasSection('database'));
+        self::assertFalse($config->hasSection('application'));
+    }
 }

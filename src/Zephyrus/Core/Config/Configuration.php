@@ -30,6 +30,8 @@ namespace Zephyrus\Core\Config;
  */
 final readonly class Configuration
 {
+    private const BUILT_IN_SECTIONS = ['application', 'session', 'security', 'localization', 'database'];
+
     /**
      * @param array<string, ConfigSection> $customSections
      */
@@ -65,10 +67,8 @@ final readonly class Configuration
     public static function fromArray(array $config, array $sectionFactories = []): self
     {
         $customSections = [];
-        $builtInSections = ['application', 'session', 'security', 'localization', 'database'];
-
         foreach ($sectionFactories as $name => $className) {
-            if (in_array($name, $builtInSections, true)) {
+            if (in_array($name, self::BUILT_IN_SECTIONS, true)) {
                 continue;
             }
 
@@ -190,10 +190,22 @@ final readonly class Configuration
      * Get a custom configuration section by name.
      *
      * Accepts both snake_case and camelCase keys.
+     *
+     * @throws \InvalidArgumentException when the name is a built-in section, which is read from its typed property.
      */
     public function section(string $name): ?ConfigSection
     {
-        return $this->customSections[self::normalizeKey($name)] ?? null;
+        $normalized = self::normalizeKey($name);
+
+        if (in_array($normalized, self::BUILT_IN_SECTIONS, true)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Section "%s" is a built-in typed property; use $configuration->%s instead.',
+                $normalized,
+                $normalized,
+            ));
+        }
+
+        return $this->customSections[$normalized] ?? null;
     }
 
     /**

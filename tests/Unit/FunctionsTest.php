@@ -162,6 +162,13 @@ final class FunctionsTest extends TestCase
         self::assertNull(config('database'));
     }
 
+    public function testConfigReturnsTheDefaultForAnUnconfiguredDatabaseProperty(): void
+    {
+        App::setConfiguration(Configuration::fromArray([]));
+
+        self::assertSame('fallback', config('database', 'host', 'fallback'));
+    }
+
     public function testConfigReturnsSessionSection(): void
     {
         $config = Configuration::fromArray([

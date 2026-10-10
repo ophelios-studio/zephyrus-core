@@ -78,7 +78,7 @@ if (!function_exists('config')) {
         };
 
         // Fall back to custom sections.
-        $configSection = $builtIn ?? $configuration->section($section);
+        $configSection = $builtIn ?? ($configuration->hasSection($section) ? $configuration->section($section) : null);
         if ($configSection === null) {
             return $default;
         }
