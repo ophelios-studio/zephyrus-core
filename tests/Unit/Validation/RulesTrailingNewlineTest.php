@@ -69,4 +69,23 @@ final class RulesTrailingNewlineTest extends TestCase
         self::assertFalse($rule->test($valid . "\n"));
     }
 
+    public function testIntegerRefusesBooleanTrue(): void
+    {
+        self::assertFalse(Rules::integer()->test(true));
+    }
+
+    public function testIntegerRefusesBooleanFalse(): void
+    {
+        self::assertFalse(Rules::integer()->test(false));
+    }
+
+    public function testIntegerStillAcceptsPaddedIntegerString(): void
+    {
+        self::assertTrue(Rules::integer()->test(' 5 '));
+    }
+
+    public function testIntegerStillAcceptsInt(): void
+    {
+        self::assertTrue(Rules::integer()->test(0));
+    }
 }

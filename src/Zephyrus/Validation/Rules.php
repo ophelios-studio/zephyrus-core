@@ -56,14 +56,14 @@ final class Rules
     }
 
     /**
-     * Accepts ints, integer strings ('5', '+5', padded ' 5 '), the bool true (read as 1) and whole floats
+     * Accepts ints, integer strings ('5', '+5', padded ' 5 ') and whole floats
      * below 1e14 (5.0) with the default precision ini of 14.
-     * Fractional floats, '05' and '5.0' fail.
+     * Booleans, fractional floats, '05' and '5.0' fail.
      */
     public static function integer(string $message = 'Must be an integer.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => filter_var($v, FILTER_VALIDATE_INT) !== false,
+            fn (mixed $v) => !is_bool($v) && filter_var($v, FILTER_VALIDATE_INT) !== false,
             $message,
         );
     }
