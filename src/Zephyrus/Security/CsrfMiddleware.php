@@ -96,10 +96,7 @@ final class CsrfMiddleware implements MiddlewareInterface
             );
         }
 
-        /** @var Response $response */
-        $response = $next($request);
-
-        return $response;
+        return $next($request);
     }
 
     /**
