@@ -7,13 +7,15 @@ namespace Zephyrus\Formatting;
 use IntlChar;
 
 /**
- * Locale-independent checks on the grouping separator, shared by Formatter and LocalizationConfig so
- * both refuse the same values with the same reason.
+ * Locale-independent checks on the grouping separator and currency code, shared by Formatter and
+ * LocalizationConfig so both refuse the same values with the same reason.
  *
  * @internal
  */
 final class FormatterInput
 {
+    public const string CURRENCY_CODE_RULE = 'must be three ASCII letters, for example CAD';
+
     private const int SEPARATOR_MAX_BYTES = 4;
 
     private const string SEPARATOR_CHARACTER_RULE = 'must contain only spaces, punctuation or symbols, not a letter, '
@@ -67,6 +69,14 @@ final class FormatterInput
         }
 
         return null;
+    }
+
+    /**
+     * Tells whether the code is three ASCII letters (the shape of an ISO 4217 code).
+     */
+    public static function isCurrencyCode(string $code): bool
+    {
+        return preg_match('/^[A-Za-z]{3}$/D', $code) === 1;
     }
 
     private static function isSeparatorCharacter(string $character): bool

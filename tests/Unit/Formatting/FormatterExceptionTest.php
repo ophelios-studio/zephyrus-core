@@ -44,6 +44,13 @@ final class FormatterExceptionTest extends TestCase
         self::assertStringContainsString('minus sign of locale fr_CA', $message);
     }
 
+    public function testInvalidCurrencyCodeStatesTheExpectedShape(): void
+    {
+        $message = FormatterException::invalidCurrencyCode()->getMessage();
+
+        self::assertSame('Invalid currency code: it must be three ASCII letters, for example CAD.', $message);
+    }
+
     public function testInvalidLocale(): void
     {
         $exception = FormatterException::invalidLocale('xx_YY');

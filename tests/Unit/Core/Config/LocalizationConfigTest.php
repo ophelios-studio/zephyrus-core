@@ -252,6 +252,19 @@ final class LocalizationConfigTest extends TestCase
         LocalizationConfig::fromArray(['grouping_separator' => "\xC3\x28"]);
     }
 
+    #[DataProviderExternal(FormatterInputTest::class, 'invalidCurrencyCodes')]
+    public function testFromArrayRefusesACurrencyThatIsNotThreeAsciiLetters(string $currency): void
+    {
+        try {
+            LocalizationConfig::fromArray(['currency' => $currency]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("field 'currency'", $exception->getMessage());
+            self::assertStringContainsString('three ASCII letters, for example CAD', $exception->getMessage());
+            self::assertSame(1, preg_match('/^[\x20-\x7E]*$/D', $exception->getMessage()));
+        }
+    }
+
     public function testTheRefusalMessageDoesNotEchoAControlCharacter(): void
     {
         try {

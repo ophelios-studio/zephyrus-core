@@ -122,6 +122,37 @@ final class FormatterTest extends TestCase
         self::assertStringContainsString('€', $result);
     }
 
+    public function testAnEmptyDefaultCurrencyIsStoredAsNoCurrency(): void
+    {
+        self::assertNull((new Formatter('fr_CA', ''))->getDefaultCurrency());
+    }
+
+    public function testMoneyAcceptsALowercaseCurrencyCode(): void
+    {
+        self::assertSame($this->formatter->money(19.99, 'CAD'), $this->formatter->money(19.99, 'cad'));
+    }
+
+    #[DataProviderExternal(FormatterInputTest::class, 'invalidCurrencyCodes')]
+    public function testMoneyRefusesACurrencyThatIsNotThreeAsciiLetters(string $currency): void
+    {
+        try {
+            $this->formatter->money(1234.5, $currency);
+            self::fail('Expected a FormatterException.');
+        } catch (FormatterException $exception) {
+            self::assertStringContainsString('three ASCII letters, for example CAD', $exception->getMessage());
+            self::assertStringNotContainsString($currency, $exception->getMessage());
+        }
+    }
+
+    #[DataProviderExternal(FormatterInputTest::class, 'invalidCurrencyCodes')]
+    public function testConstructorRefusesADefaultCurrencyThatIsNotThreeAsciiLetters(string $currency): void
+    {
+        $this->expectException(FormatterException::class);
+        $this->expectExceptionMessage('three ASCII letters, for example CAD');
+
+        new Formatter('en_US', $currency);
+    }
+
     // ─── Decimal ──────────────────────────────────────────────────────
 
     public function testDecimalFormatsWithGrouping(): void

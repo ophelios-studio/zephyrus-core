@@ -17,7 +17,8 @@ use Zephyrus\Formatting\FormatterInput;
  * - localePath (locale_path, jsonLocalePaths, json_locale_paths): one directory of locales.
  *   The legacy array form keeps its last non-empty entry. Default null.
  * - timezone: applied with date_default_timezone_set() by ApplicationBuilder. Default 'UTC'.
- * - currency: default currency code for Formatter::money(). Default null.
+ * - currency: default currency code for Formatter::money(), three ASCII letters, trimmed; '' means
+ *   none. Default null.
  * - dateFormat (date_format), timeFormat (time_format), datetimeFormat (datetime_format): ICU
  *   pattern or preset for Formatter::date(), time() and datetime(). Defaults 'medium', 'short', 'medium'.
  * - groupingSeparator (grouping_separator): thousands separator. Null keeps the locale default,
@@ -45,7 +46,7 @@ final readonly class LocalizationConfig
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException if locale or timezone is blank, or grouping_separator is invalid.
+     * @throws ConfigurationException if locale or timezone is blank, or currency or grouping_separator is invalid.
      */
     public static function fromArray(array $values): self
     {
@@ -55,7 +56,7 @@ final readonly class LocalizationConfig
         $localePath = self::resolveLocalePath($values);
 
         $timezone = trim((string) ($values['timezone'] ?? 'UTC'));
-        $currency = isset($values['currency']) ? trim((string) $values['currency']) : null;
+        $currency = self::resolveCurrency($values['currency'] ?? null);
         $dateFormat = trim((string) ($values['dateFormat'] ?? $values['date_format'] ?? 'medium'));
         $timeFormat = trim((string) ($values['timeFormat'] ?? $values['time_format'] ?? 'short'));
         $datetimeFormat = trim((string) ($values['datetimeFormat'] ?? $values['datetime_format'] ?? 'medium'));
@@ -67,10 +68,6 @@ final readonly class LocalizationConfig
 
         if ($timezone === '') {
             throw ConfigurationException::invalidValue('localization', 'timezone', $timezone, 'must be non-empty');
-        }
-
-        if ($currency === '') {
-            $currency = null;
         }
 
         $supportedLocales = array_values(array_filter(array_map(static function (mixed $locale): string {
@@ -114,6 +111,30 @@ final readonly class LocalizationConfig
         }
 
         return $value;
+    }
+
+    /**
+     * Validate the currency code after trimming; '' means none.
+     *
+     * @throws ConfigurationException if the code is not three ASCII letters.
+     */
+    private static function resolveCurrency(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $currency = trim((string) $value);
+        if ($currency === '') {
+            return null;
+        }
+
+        if (!FormatterInput::isCurrencyCode($currency)) {
+            $display = addcslashes($currency, "\x00..\x1F\x7F..\xFF");
+            throw ConfigurationException::invalidValue('localization', 'currency', $display, FormatterInput::CURRENCY_CODE_RULE);
+        }
+
+        return $currency;
     }
 
     /**

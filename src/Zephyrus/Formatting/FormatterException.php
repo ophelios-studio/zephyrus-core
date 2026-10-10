@@ -32,6 +32,11 @@ final class FormatterException extends ZephyrusRuntimeException
         ));
     }
 
+    public static function invalidCurrencyCode(): self
+    {
+        return new self(sprintf('Invalid currency code: it %s.', FormatterInput::CURRENCY_CODE_RULE));
+    }
+
     /**
      * Raised by the global format() helper when App has no Formatter.
      */

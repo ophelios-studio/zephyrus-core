@@ -66,6 +66,22 @@ final class FormatterInputTest extends TestCase
         yield 'accepted character then right-to-left letter' => ["'\u{05F3}"];
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidCurrencyCodes(): iterable
+    {
+        yield 'zero' => ['0'];
+        yield 'digits' => ['100'];
+        yield 'markup' => ['<b>'];
+        yield 'two letters' => ['US'];
+        yield 'four letters' => ['USDX'];
+        yield 'inner space' => ['C D'];
+        yield 'NUL' => ["CA\0"];
+        yield 'right-to-left override' => ["\u{202E}AB"];
+        yield 'non-ASCII letter' => ["\u{00C9}U"];
+    }
+
     #[DataProvider('acceptedGroupingSeparators')]
     public function testAcceptsSpacesAndNeutralPunctuation(string $separator): void
     {
@@ -103,5 +119,24 @@ final class FormatterInputTest extends TestCase
     {
         self::assertSame('must be valid UTF-8', FormatterInput::groupingSeparatorRefusal("\xC3\x28"));
         self::assertSame('must be valid UTF-8', FormatterInput::groupingSeparatorRefusal("\xED\xA0\x80"));
+    }
+
+    public function testAcceptsThreeAsciiLettersAsACurrencyCode(): void
+    {
+        self::assertTrue(FormatterInput::isCurrencyCode('CAD'));
+        self::assertTrue(FormatterInput::isCurrencyCode('eur'));
+    }
+
+    #[DataProvider('invalidCurrencyCodes')]
+    public function testRefusesACurrencyCodeThatIsNotThreeAsciiLetters(string $code): void
+    {
+        self::assertFalse(FormatterInput::isCurrencyCode($code));
+    }
+
+    public function testRefusesAnEmptyOrPaddedCurrencyCode(): void
+    {
+        self::assertFalse(FormatterInput::isCurrencyCode(''));
+        self::assertFalse(FormatterInput::isCurrencyCode(' CAD'));
+        self::assertFalse(FormatterInput::isCurrencyCode("CAD\n"));
     }
 }
