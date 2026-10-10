@@ -37,10 +37,11 @@ abstract class Entity implements JsonSerializable
      */
     public static function build(?stdClass $row): ?static
     {
-        if ($row === null) {
-            return null;
-        }
+        return $row === null ? null : self::fromRow($row);
+    }
 
+    private static function fromRow(stdClass $row): static
+    {
         $instance = new static();
         $instance->rawData = $row;
         $reflection = new ReflectionClass($instance);
@@ -82,6 +83,7 @@ abstract class Entity implements JsonSerializable
                 settype($value, $reflectionType->getName());
                 $instance->$name = $value;
             } else {
+                /** @var class-string $className */
                 $className = $reflectionType->getName();
                 $innerReflection = new ReflectionClass($className);
 
@@ -115,7 +117,7 @@ abstract class Entity implements JsonSerializable
      */
     public static function buildArray(array $rows): array
     {
-        return array_map(static::build(...), $rows);
+        return array_map(self::fromRow(...), $rows);
     }
 
     /**
