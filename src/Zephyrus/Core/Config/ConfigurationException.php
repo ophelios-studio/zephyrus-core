@@ -87,14 +87,15 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * A top-level key that misspells a section, with the section's name.
+     * A top-level key that misspells a section, with the section's name and an optional sentence of advice.
      */
-    public static function unknownSection(string $section, string $suggestion): self
+    public static function unknownSection(string $section, string $suggestion, string $advice = ''): self
     {
         $exception = new self(sprintf(
-            'Configuration section %s is an unknown section: did you mean %s?',
+            'Configuration key %s is not a known section: did you mean %s?%s',
             self::shownField($section),
             MessageValue::quote($suggestion),
+            $advice === '' ? '' : ' ' . $advice,
         ));
         $exception->section = $section;
 

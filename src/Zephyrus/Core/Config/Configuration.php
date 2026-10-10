@@ -26,6 +26,9 @@ final readonly class Configuration
     /** Names of the sections read through the typed properties. */
     public const array BUILT_IN_SECTIONS = ['application', 'session', 'security', 'localization', 'database'];
 
+    private const string CUSTOM_SECTION_ADVICE = 'A section of your own needs a factory registered under its name in '
+        . 'the $sectionFactories argument of the Configuration factories.';
+
     /**
      * @param array<string, ConfigSection> $customSections
      */
@@ -48,15 +51,15 @@ final readonly class Configuration
      * @param array<string, mixed> $config
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      *        Section name => ConfigSection subclass.
-     * @throws ConfigurationException if any section value violates its constraints, a top-level key misspells
-     *        a built-in or registered section name, or a custom section is written under two spellings.
+     * @throws ConfigurationException if any section value violates its constraints, a top-level key that no factory
+     *        reads is one edit from a built-in section name, or two edits with the same first letter (ignoring
+     *        case, underscores, hyphens and spaces), a key is another spelling of a registered section name, or a
+     *        custom section is written twice.
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromArray(#[\SensitiveParameter] array $config, array $sectionFactories = []): self
     {
-        self::refuseMisspelledKeys($config, self::canonicalNames(self::BUILT_IN_SECTIONS), []);
-
         foreach ($sectionFactories as $name => $className) {
             if (!is_string($name)) { // @phpstan-ignore function.alreadyNarrowedType
                 throw new \InvalidArgumentException(self::unnamedFactoryMessage($name, $className));
@@ -80,20 +83,24 @@ final readonly class Configuration
 
         $canonicalFactories = self::canonicalNames(array_keys($sectionFactories));
 
-        $customSections = [];
-        $readKeys = [];
-        foreach ($sectionFactories as $name => $className) {
-            $normalizedName = self::normalizeKey($name);
-            $configKey = self::configKeyFor($config, $normalizedName);
+        $factoryKeys = [];
+        foreach (array_keys($sectionFactories) as $name) {
+            $configKey = self::configKeyFor($config, self::normalizeKey($name));
             if ($configKey !== null) {
-                $readKeys[] = $configKey;
-            }
-            if ($configKey !== null && is_array($config[$configKey])) {
-                $customSections[$normalizedName] = $className::fromArray($config[$configKey]);
+                $factoryKeys[self::normalizeKey($name)] = $configKey;
             }
         }
 
-        self::refuseMisspelledKeys($config, $canonicalFactories, $readKeys);
+        self::refuseMisspelledBuiltInKeys($config, array_values($factoryKeys));
+        self::refuseMisspelledKeys($config, $canonicalFactories, array_values($factoryKeys));
+
+        $customSections = [];
+        foreach ($sectionFactories as $name => $className) {
+            $configKey = $factoryKeys[self::normalizeKey($name)] ?? null;
+            if ($configKey !== null && is_array($config[$configKey])) {
+                $customSections[self::normalizeKey($name)] = $className::fromArray($config[$configKey]);
+            }
+        }
 
         return new self(
             application:    ApplicationConfig::fromArray((array) ($config['application'] ?? [])),
@@ -155,6 +162,40 @@ final readonly class Configuration
         $snake = preg_replace('/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/', '_', $base) ?? $base;
 
         return strtolower($snake);
+    }
+
+    /**
+     * Refuse a top-level key that is not a built-in section name yet is near one (see ConfigKeys::closest()):
+     * one edit away, or two edits away with the same first letter. A key a section factory reads is accepted.
+     *
+     * @param array<int|string, mixed> $config
+     * @param list<string> $factoryKeys
+     * @throws ConfigurationException
+     */
+    private static function refuseMisspelledBuiltInKeys(#[\SensitiveParameter] array $config, array $factoryKeys): void
+    {
+        foreach (array_keys($config) as $key) {
+            $key = (string) $key;
+            if (in_array($key, self::BUILT_IN_SECTIONS, true) || in_array($key, $factoryKeys, true)) {
+                continue;
+            }
+
+            $suggestion = ConfigKeys::closest($key, self::BUILT_IN_SECTIONS);
+            if ($suggestion === null) {
+                continue;
+            }
+
+            $folded = ConfigKeys::fold($key);
+            $distance = levenshtein($folded, $suggestion);
+            // A typo seldom changes the first letter: version or lesson stay keys of the application's own.
+            if ($distance <= 1 || $folded[0] === $suggestion[0]) {
+                throw ConfigurationException::unknownSection(
+                    $key,
+                    $suggestion,
+                    $distance === 0 ? '' : self::CUSTOM_SECTION_ADVICE,
+                );
+            }
+        }
     }
 
     /**

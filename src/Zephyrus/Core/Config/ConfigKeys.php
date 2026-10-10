@@ -212,7 +212,7 @@ final readonly class ConfigKeys
      *
      * @param list<string> $candidates
      */
-    private static function closest(string $key, array $candidates): ?string
+    public static function closest(string $key, array $candidates): ?string
     {
         $folded = self::fold($key);
         if ($folded === '' || strlen($key) > self::MAX_COMPARED_LENGTH) {

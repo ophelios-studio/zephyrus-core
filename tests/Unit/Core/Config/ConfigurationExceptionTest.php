@@ -316,11 +316,21 @@ final class ConfigurationExceptionTest extends TestCase
         $e = ConfigurationException::unknownSection("securty\u{202E}", 'security');
 
         self::assertSame(
-            'Configuration section "securty\u202e" is an unknown section: did you mean "security"?',
+            'Configuration key "securty\u202e" is not a known section: did you mean "security"?',
             $e->getMessage(),
         );
         self::assertSame("securty\u{202E}", $e->section());
         self::assertNull($e->field());
         self::assertNull($e->reason());
+    }
+
+    public function testUnknownSectionEndsWithTheAdviceWhenGiven(): void
+    {
+        $e = ConfigurationException::unknownSection('databases', 'database', 'Register a factory.');
+
+        self::assertSame(
+            'Configuration key \'databases\' is not a known section: did you mean "database"? Register a factory.',
+            $e->getMessage(),
+        );
     }
 }

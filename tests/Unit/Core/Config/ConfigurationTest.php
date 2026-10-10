@@ -538,12 +538,98 @@ final class ConfigurationTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
-    public static function misspelledBuiltInKeys(): iterable
+    public static function otherSpellingsOfABuiltInSection(): iterable
     {
         yield 'capitalised' => ['Database', 'database'];
         yield 'upper case' => ['SECURITY', 'security'];
+        yield 'camelCase' => ['dataBase', 'database'];
         yield 'underscore inside' => ['Data_base', 'database'];
+        yield 'trailing underscore' => ['application_', 'application'];
         yield 'hyphen inside' => ['local-ization', 'localization'];
+    }
+
+    #[DataProvider('otherSpellingsOfABuiltInSection')]
+    public function testFromArrayRefusesAnotherSpellingOfABuiltInSection(string $key, string $suggestion): void
+    {
+        try {
+            Configuration::fromArray([$key => []]);
+
+            self::fail('Another spelling of a built-in section was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                sprintf("Configuration key '%s' is not a known section: did you mean \"%s\"?", $key, $suggestion),
+                $exception->getMessage(),
+            );
+            self::assertSame($key, $exception->section());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function misspelledBuiltInKeys(): iterable
+    {
+        yield 'letter missing' => ['securty', 'security'];
+        yield 'letter missing again' => ['sesion', 'session'];
+        yield 'letter dropped' => ['databse', 'database'];
+        yield 'letters swapped' => ['sessoin', 'session'];
+        yield 'British spelling' => ['localisation', 'localization'];
+        yield 'two letters missing' => ['aplicaton', 'application'];
+        yield 'snake_case with a typo' => ['data_bse', 'database'];
+        yield 'a section of its own without a factory' => ['databases', 'database'];
+        yield 'first letter of security missing' => ['ecurity', 'security'];
+        yield 'first letter of session missing' => ['ession', 'session'];
+        yield 'first letter of database missing' => ['atabase', 'database'];
+        yield 'first letter of application missing' => ['pplication', 'application'];
+        yield 'first letter of localization missing' => ['ocalization', 'localization'];
+        yield 'first letter of session changed' => ['cession', 'session'];
+    }
+
+    public function testFromArrayReadsARegisteredSectionNamedNearABuiltInOne(): void
+    {
+        $config = Configuration::fromArray(
+            ['sessions' => ['name' => 'redis']],
+            ['sessions' => FactoryNameSectionConfig::class],
+        );
+
+        $section = $config->section('sessions');
+        self::assertInstanceOf(FactoryNameSectionConfig::class, $section);
+        self::assertSame('redis', $section->getString('name'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function keysFarFromEveryBuiltInSection(): iterable
+    {
+        yield 'three edits away' => ['versions'];
+        yield 'short' => ['app'];
+        yield 'unrelated' => ['mailer'];
+        yield 'numeric' => ['0'];
+        yield 'empty' => [''];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function ownKeysTwoEditsFromABuiltInSectionWithAnotherFirstLetter(): iterable
+    {
+        yield 'version' => ['version'];
+        yield 'mission' => ['mission'];
+        yield 'lesson' => ['lesson'];
+        yield 'passion' => ['passion'];
+    }
+
+    #[DataProvider('ownKeysTwoEditsFromABuiltInSectionWithAnotherFirstLetter')]
+    public function testFromArrayLoadsTheDefaultsBesideAKeyTwoEditsAwayWithAnotherFirstLetter(string $key): void
+    {
+        self::assertEquals(Configuration::defaults(), Configuration::fromArray([$key => ['name' => 'x']]));
+    }
+
+    #[DataProvider('keysFarFromEveryBuiltInSection')]
+    public function testFromArrayLoadsTheDefaultsBesideAKeyFarFromEveryBuiltInSection(string $key): void
+    {
+        self::assertEquals(Configuration::defaults(), Configuration::fromArray([$key => ['name' => 'x']]));
     }
 
     #[DataProvider('misspelledBuiltInKeys')]
@@ -555,7 +641,13 @@ final class ConfigurationTest extends TestCase
             self::fail('A misspelled built-in section was accepted.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                sprintf("Configuration section '%s' is an unknown section: did you mean \"%s\"?", $key, $suggestion),
+                sprintf(
+                    "Configuration key '%s' is not a known section: did you mean \"%s\"? A section of your own "
+                    . 'needs a factory registered under its name in the $sectionFactories argument of the '
+                    . 'Configuration factories.',
+                    $key,
+                    $suggestion,
+                ),
                 $exception->getMessage(),
             );
             self::assertSame($key, $exception->section());
@@ -682,7 +774,7 @@ final class ConfigurationTest extends TestCase
             self::fail('A variant of a custom section name was accepted.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                sprintf("Configuration section '%s' is an unknown section: did you mean \"%s\"?", $key, $factoryName),
+                sprintf("Configuration key '%s' is not a known section: did you mean \"%s\"?", $key, $factoryName),
                 $exception->getMessage(),
             );
         }
@@ -730,7 +822,7 @@ final class ConfigurationTest extends TestCase
             self::fail('A variant of a custom section name was accepted.');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'Payment' is an unknown section: did you mean \"payment\"?",
+                "Configuration key 'Payment' is not a known section: did you mean \"payment\"?",
                 $exception->getMessage(),
             );
         } finally {
