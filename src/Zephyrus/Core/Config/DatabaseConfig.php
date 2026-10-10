@@ -179,9 +179,10 @@ final readonly class DatabaseConfig
      */
     private static function removedEmulatePrepares(string $key): ConfigurationException
     {
-        return new ConfigurationException(sprintf(
-            "Configuration section 'database' field '%s' has been REMOVED from Zephyrus and is no "
-            . 'longer honoured. Client-side parameter emulation '
+        return ConfigurationException::removedField(
+            'database',
+            $key,
+            'Client-side parameter emulation '
             . '(PDO::ATTR_EMULATE_PREPARES) was taken out because it is a security downgrade, not a '
             . "tuning knob:\n"
             . "  - binding invalid UTF-8 kills the worker process instead of raising;\n"
@@ -194,8 +195,7 @@ final readonly class DatabaseConfig
             . 'To fix: delete this line from the database section. There is no replacement setting, '
             . 'and setting it to false is not accepted either, because the line would keep '
             . 'documenting a knob that no longer exists.',
-            $key,
-        ));
+        );
     }
 
     /**

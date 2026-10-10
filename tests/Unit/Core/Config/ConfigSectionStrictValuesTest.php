@@ -173,4 +173,17 @@ final class ConfigSectionStrictValuesTest extends TestCase
             self::assertStringContainsString('enabled', $exception->getMessage());
         }
     }
+
+    public function testTheRefusalNamesTheSectionByItsClass(): void
+    {
+        $section = $this->section(['requireMfa' => 'enabled']);
+
+        try {
+            $section->getBool('requireMfa', true);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame($section::class, $exception->section());
+            self::assertSame('requireMfa', $exception->field());
+        }
+    }
 }

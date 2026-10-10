@@ -24,6 +24,104 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertStringContainsString('host', $e->getMessage());
     }
 
+    public function testMissingRequiredExposesItsSectionAndFieldOnly(): void
+    {
+        $e = ConfigurationException::missingRequired('database', 'host');
+
+        self::assertSame('database', $e->section());
+        self::assertSame('host', $e->field());
+        self::assertNull($e->reason());
+        self::assertNull($e->messageWithoutValue());
+    }
+
+    public function testRemovedFieldExposesItsSectionAndFieldOnly(): void
+    {
+        $e = ConfigurationException::removedField('database', 'emulate_prepares', 'Delete this line.');
+
+        self::assertSame(
+            "Configuration section 'database' field 'emulate_prepares' has been REMOVED from Zephyrus and is no "
+            . 'longer honoured. Delete this line.',
+            $e->getMessage(),
+        );
+        self::assertSame('database', $e->section());
+        self::assertSame('emulate_prepares', $e->field());
+        self::assertNull($e->reason());
+        self::assertNull($e->messageWithoutValue());
+    }
+
+    public function testInvalidValueExposesItsPartsAndTheMessageWithoutTheValue(): void
+    {
+        $e = ConfigurationException::invalidValue('mailer', 'smtp.port', 'abc', 'must be an integer');
+
+        self::assertSame('mailer', $e->section());
+        self::assertSame('smtp.port', $e->field());
+        self::assertSame('must be an integer', $e->reason());
+        self::assertSame(
+            "Configuration section 'mailer' field 'smtp.port' has invalid value [value]: must be an integer.",
+            $e->messageWithoutValue(),
+        );
+    }
+
+    public function testMessageWithoutValueQuotesAFieldThatIsNotAPlainKeyAsTheMessageDoes(): void
+    {
+        $e = ConfigurationException::invalidValue('security.headers', "csp\u{202E}", ['x'], 'unknown key');
+
+        self::assertSame("csp\u{202E}", $e->field());
+        self::assertSame(
+            "Configuration section 'security.headers' field \"csp\\u202e\" has invalid value [value]: unknown key.",
+            $e->messageWithoutValue(),
+        );
+    }
+
+    public function testInvalidValueKeepsTheRawValueOutOfItsProperties(): void
+    {
+        $e = ConfigurationException::invalidValue('mailer', 'smtp.password', 'raw-secret-value', 'too short');
+
+        $properties = (array) $e;
+        unset($properties["\0*\0message"], $properties["\0Exception\0string"], $properties["\0Exception\0trace"]);
+
+        self::assertStringNotContainsString('raw-secret-value', serialize($properties));
+    }
+
+    public function testInvalidValueKeepsTheRawValueOutOfTheTraceArguments(): void
+    {
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            $e = ConfigurationException::invalidValue('mailer', 'smtp.password', 'raw-secret-value', 'too short');
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+
+        $frame = $e->getTrace()[0];
+        self::assertSame('invalidValue', $frame['function']);
+        self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][2] ?? null);
+    }
+
+    /**
+     * @return iterable<string, array{ConfigurationException}>
+     */
+    public static function factoriesWithoutAField(): iterable
+    {
+        yield 'fileNotFound' => [ConfigurationException::fileNotFound('/srv/app.yml')];
+        yield 'loadFailed' => [ConfigurationException::loadFailed('/srv/app.yml')];
+        yield 'parseFailed' => [ConfigurationException::parseFailed('/srv/app.yml')];
+        yield 'invalidFormat' => [ConfigurationException::invalidFormat('/srv/app.yml')];
+        yield 'invalidPath' => [ConfigurationException::invalidPath('Config path must not be empty.')];
+        yield 'unwiredSecurity' => [ConfigurationException::unwiredSecurity(['security.csrf' => 'mount it'])];
+        yield 'shadowedContentSecurityPolicy' => [ConfigurationException::shadowedContentSecurityPolicy()];
+        yield 'constructor' => [new ConfigurationException('Configuration refused.')];
+    }
+
+    #[DataProvider('factoriesWithoutAField')]
+    public function testOtherFactoriesLeaveEveryPartNull(ConfigurationException $e): void
+    {
+        self::assertNull($e->section());
+        self::assertNull($e->field());
+        self::assertNull($e->reason());
+        self::assertNull($e->messageWithoutValue());
+    }
+
     public function testInvalidValueQuotesAStringValue(): void
     {
         $e = ConfigurationException::invalidValue('session', 'sameSite', 'bad', 'must be Strict, Lax, or None');

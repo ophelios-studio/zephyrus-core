@@ -18,31 +18,111 @@ final class ConfigurationException extends ZephyrusException
 {
     private const string PLAIN_FIELD_PATTERN = '/\A[A-Za-z0-9._\-\[\]]{1,64}\z/';
 
+    private const string INVALID_VALUE_FORMAT = "Configuration section '%s' field %s has invalid value %s: %s.";
+
+    private const string VALUE_PLACEHOLDER = '[value]';
+
     /** Absolute path set by the file factories, kept out of the message. Null when none. */
     private ?string $path = null;
 
+    private ?string $section = null;
+
+    private ?string $field = null;
+
+    private ?string $reason = null;
+
+    private ?string $messageWithoutValue = null;
+
     public static function missingRequired(string $section, string $field): self
     {
-        return new self(
+        $exception = new self(
             sprintf("Configuration section '%s' requires field '%s' but none was provided.", $section, $field),
         );
+        $exception->section = $section;
+        $exception->field = $field;
+
+        return $exception;
     }
 
     /**
-     * The raw value is shown through MessageValue::describe(), so never pass a secret. A field longer than 64 bytes
-     * or holding anything but ASCII letters, digits and . _ - [ ] is shown through MessageValue::quote().
+     * A field the framework no longer reads, followed by the explanation of what to do instead.
      */
-    public static function invalidValue(string $section, string $field, mixed $value, string $reason): self
+    public static function removedField(string $section, string $field, string $explanation): self
     {
-        return new self(
-            sprintf(
-                "Configuration section '%s' field %s has invalid value %s: %s.",
-                $section,
-                preg_match(self::PLAIN_FIELD_PATTERN, $field) === 1 ? "'" . $field . "'" : MessageValue::quote($field),
-                MessageValue::describe($value),
-                $reason,
-            ),
+        $exception = new self(sprintf(
+            "Configuration section '%s' field %s has been REMOVED from Zephyrus and is no longer honoured. %s",
+            $section,
+            self::shownField($field),
+            $explanation,
+        ));
+        $exception->section = $section;
+        $exception->field = $field;
+
+        return $exception;
+    }
+
+    /**
+     * The value is shown through MessageValue::describe(), so never pass a secret. It is stored in no property
+     * and hidden from this call's trace frame; a caller's frame still holds it unless that parameter is marked
+     * #[\SensitiveParameter]. A field longer than 64 bytes or holding anything but ASCII letters, digits and
+     * . _ - [ ] is shown through MessageValue::quote().
+     */
+    public static function invalidValue(
+        string $section,
+        string $field,
+        #[\SensitiveParameter] mixed $value,
+        string $reason,
+    ): self {
+        $shownField = self::shownField($field);
+        $exception = new self(
+            sprintf(self::INVALID_VALUE_FORMAT, $section, $shownField, MessageValue::describe($value), $reason),
         );
+        $exception->section = $section;
+        $exception->field = $field;
+        $exception->reason = $reason;
+        $exception->messageWithoutValue = sprintf(
+            self::INVALID_VALUE_FORMAT,
+            $section,
+            $shownField,
+            self::VALUE_PLACEHOLDER,
+            $reason,
+        );
+
+        return $exception;
+    }
+
+    /**
+     * The section named by invalidValue(), missingRequired() or removedField(), or null for any other refusal:
+     * its configuration key (such as 'database' or 'security.headers'), or the class name of the ConfigSection
+     * whose getter refused a value.
+     */
+    public function section(): ?string
+    {
+        return $this->section;
+    }
+
+    /**
+     * The field named by invalidValue(), missingRequired() or removedField(), as passed, or null.
+     */
+    public function field(): ?string
+    {
+        return $this->field;
+    }
+
+    /**
+     * The reason given to invalidValue(), or null.
+     */
+    public function reason(): ?string
+    {
+        return $this->reason;
+    }
+
+    /**
+     * The invalidValue() message with the value replaced by [value], or null for any other refusal.
+     */
+    public function messageWithoutValue(): ?string
+    {
+        return $this->messageWithoutValue;
     }
 
     public static function fileNotFound(string $path): self
@@ -83,6 +163,11 @@ final class ConfigurationException extends ZephyrusException
     public function path(): ?string
     {
         return $this->path;
+    }
+
+    private static function shownField(string $field): string
+    {
+        return preg_match(self::PLAIN_FIELD_PATTERN, $field) === 1 ? "'" . $field . "'" : MessageValue::quote($field);
     }
 
     private static function withPath(string $message, string $path, ?\Throwable $previous = null): self

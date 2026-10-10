@@ -243,6 +243,17 @@ final class DatabaseConfigTest extends TestCase
         }
     }
 
+    public function testTheRemovedKeyRefusalNamesItsSectionAndField(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'emulatePrepares' => false]);
+            self::fail('expected the removed key to be rejected');
+        } catch (ConfigurationException $e) {
+            self::assertSame('database', $e->section());
+            self::assertSame('emulatePrepares', $e->field());
+        }
+    }
+
     /**
      * The property is gone from the value object too, not only from the file format.
      */
