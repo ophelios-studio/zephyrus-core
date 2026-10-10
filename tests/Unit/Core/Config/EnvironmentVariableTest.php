@@ -315,8 +315,9 @@ final class EnvironmentVariableTest extends TestCase
     public static function refusalSources(): iterable
     {
         foreach ([
-            'QUERY_STRING' => ['QUERY_STRING', 'the web server'],
-            'PHP_AUTH_PW' => ['PHP_AUTH_PW', 'the web server'],
+            'QUERY_STRING' => ['QUERY_STRING', 'the web server or PHP'],
+            'PHP_AUTH_PW' => ['PHP_AUTH_PW', 'the web server or PHP'],
+            'PHP_SELF' => ['PHP_SELF', 'the web server or PHP'],
             'SERVER_SIGNATURE' => ['SERVER_SIGNATURE', 'Apache'],
             'HTTP2' => ['HTTP2', 'Apache mod_http2'],
             'H2_PUSH_POLICY' => ['H2_PUSH_POLICY', 'Apache mod_http2'],
