@@ -19,13 +19,8 @@ final class PostgresArrayParser
     /**
      * Parse a literal into nested PHP arrays of strings and nulls.
      *
-     * Splitting on commas is not enough: a quoted element may hold commas,
-     * braces or escaped quotes, and NULL is a SQL null only when unquoted.
-     * Working byte by byte is safe for UTF-8, because every delimiter is ASCII
-     * and no continuation byte can equal one.
-     *
-     * A value that is not a well-formed literal comes back unchanged rather
-     * than truncated, so the caller sees exactly what the driver sent.
+     * Quoted elements may contain commas, braces and escaped quotes; only an unquoted NULL is null.
+     * A malformed literal is returned unchanged. Byte-wise scanning is UTF-8 safe: delimiters are ASCII.
      *
      * @return list<mixed>|string
      */
@@ -33,8 +28,7 @@ final class PostgresArrayParser
     {
         $pos = 0;
 
-        // An array whose lower bound is not 1 is printed with a decoration such
-        // as [0:1]={a,b}; the decoration is not one of the elements.
+        // A lower bound other than 1 is printed as a prefix such as [0:1]={a,b}, not as an element.
         if (str_starts_with($literal, '[')) {
             $equals = strpos($literal, '=');
 
@@ -55,8 +49,7 @@ final class PostgresArrayParser
     }
 
     /**
-     * Read one {...} group starting at $pos and leave $pos just past its closing
-     * brace. Returns false on any syntax error.
+     * Read one {...} group at $pos, leaving $pos past its closing brace. Returns false on a syntax error.
      *
      * @return list<mixed>|false
      */
@@ -120,9 +113,7 @@ final class PostgresArrayParser
     }
 
     /**
-     * Read a double-quoted element. Inside quotes a backslash takes the next
-     * byte literally, and the quoted text is always a string, so "NULL" stays
-     * the string NULL.
+     * Read a double-quoted element, where a backslash escapes the next byte. The result is always a string.
      *
      * @return string|false
      */
@@ -157,8 +148,7 @@ final class PostgresArrayParser
     }
 
     /**
-     * Read an unquoted element up to the next ',' or '}'. Surrounding whitespace
-     * is not part of it, but whitespace that was escaped is.
+     * Read an unquoted element up to the next ',' or '}'. Unescaped surrounding whitespace is dropped.
      *
      * @return string|null|false null for an unquoted NULL, false on a syntax error
      */
