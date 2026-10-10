@@ -57,7 +57,7 @@ use function strtolower;
  * constant-time comparison; the middleware itself does not generate tokens.
  *
  * A refused request is answered by the optional $onFailure closure, called as
- * ($onFailure)(Request, CsrfFailure) and returning the Response to send.
+ * ($onFailure)(Request, CsrfFailure). Returning null leaves the default refusal in place.
  *
  * Usage:
  *
@@ -83,6 +83,9 @@ final class CsrfMiddleware implements MiddlewareInterface
     private const FORM_REFUSAL = 'This form could not be verified. Your session may have expired or not been saved. '
         . 'Reload the page and try again.';
 
+    /**
+     * @param (Closure(Request, CsrfFailure): ?Response)|null $onFailure Answers a refusal; null from it, or no callback, gives the default refusal.
+     */
     public function __construct(
         private readonly CsrfTokenManagerInterface $tokenManager,
         private readonly CsrfConfig $config = new CsrfConfig(),
@@ -108,14 +111,18 @@ final class CsrfMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Answers a refused request with the application's failure callback, or
-     * with the default 403: plain text for a browser form post (Accept lists
-     * text/html), JSON for every other client.
+     * Answers a refused request with the failure callback when it returns a
+     * Response, otherwise with the default 403: plain text for a browser form
+     * post (Accept lists text/html), JSON for every other client.
      */
     private function refuse(Request $request, CsrfFailure $failure): Response
     {
         if ($this->onFailure !== null) {
-            return ($this->onFailure)($request, $failure);
+            $response = ($this->onFailure)($request, $failure);
+
+            if ($response !== null) {
+                return $response;
+            }
         }
 
         if (str_contains(strtolower($request->headers()->get('Accept') ?? ''), 'text/html')) {

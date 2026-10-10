@@ -749,6 +749,35 @@ final class CsrfMiddlewareTest extends TestCase
         );
     }
 
+    public function testNullFromFailureCallbackFallsBackToJsonRefusal(): void
+    {
+        $mw       = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            fn (Request $r, CsrfFailure $failure): ?Response => null,
+        );
+        $request  = new Request('POST', 'https://example.com/submit', [], null, ['Accept' => 'application/json']);
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(403, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['content-type'] ?? '');
+        self::assertSame('{"error":"Invalid or missing CSRF token."}', $response->body);
+    }
+
+    public function testNullFromFailureCallbackFallsBackToPlainTextForABrowserFormPost(): void
+    {
+        $mw       = new CsrfMiddleware(
+            $this->makeManager(),
+            CsrfConfig::defaults(),
+            fn (Request $r, CsrfFailure $failure): ?Response => null,
+        );
+        $request  = new Request('POST', 'https://example.com/submit', [], null, ['Accept' => 'text/html']);
+        $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame(403, $response->status);
+        self::assertSame('text/plain; charset=utf-8', $response->headers['content-type'] ?? '');
+    }
+
     public function testAcceptMatchOnTextHtmlIsCaseInsensitive(): void
     {
         $mw       = $this->makeMiddleware();
