@@ -5,13 +5,9 @@ declare(strict_types=1);
 namespace Zephyrus\Core\Config;
 
 /**
- * Abstract base class for typed configuration sections.
+ * Abstract base class for typed configuration sections, hydrated from a configuration array.
  *
- * Extend this class to create custom configuration sections that can be
- * hydrated from YAML config arrays. Provides dot-notation access and type
- * coercion helpers.
- *
- * Usage in a project:
+ * Provides dot-notation access and typed getters. Example subclass:
  *
  *   class AppConfig extends ConfigSection
  *   {
@@ -23,44 +19,31 @@ namespace Zephyrus\Core\Config;
  *       public static function fromArray(array $values): static
  *       {
  *           $instance = new static($values);
- *           // Hydrate your own properties:
  *           $instance->name = $instance->getString('name', 'MyApp');
  *           $instance->maintenance = $instance->getBool('maintenance', false);
  *           return $instance;
  *       }
  *   }
  *
- * ## The typed getters REFUSE a value they cannot read
+ * The typed getters refuse a value they cannot read rather than guess. getBool()
+ * accepts only true, false, 1, 0, on, off, yes and no (any case, surrounding
+ * whitespace ignored), so a typo cannot switch a protection off.
  *
- * getBool() accepts only true, false, 1, 0, on, off, yes and no (any case,
- * surrounding whitespace ignored). Any other value, including an empty string,
- * throws ConfigurationException, so a protection written in the config file
- * cannot switch itself off on a typo.
- *
- * Two coercions are kept deliberately, because they are unambiguous and
- * because existing configuration relies on them: a float in an int slot
- * truncates (3.14 -> 3), and a scalar in a string slot is cast.
+ * Two coercions are kept: a float in an int slot truncates (3.14 becomes 3), and a
+ * scalar in a string slot is cast. A numeric string is never truncated: '3.5' in an
+ * int slot is refused by getInt().
  */
 abstract class ConfigSection
 {
-    /**
-     * What toArray() substitutes for a secret it will not export.
-     *
-     * A distinctive literal on purpose: a reader must be able to tell "hidden"
-     * from "empty" and from a value that merely looks masked.
-     */
+    /** Replacement written by toArray() for a declared secret, distinct from '' and null. */
     public const string REDACTED = '[redacted]';
 
     /**
-     * Dot-notation keys whose value toArray() must never export.
-     *
-     * Declared by the subclass, because only the subclass knows which of its
-     * keys carry a secret:
+     * Dot-notation keys whose value toArray() must never export, declared by the subclass:
      *
      *   protected array $secretKeys = ['smtp.password', 'api.token'];
      *
-     * An empty or null value is left as-is: replacing it would make an
-     * UNCONFIGURED secret look configured, which is its own trap.
+     * An empty or null value is left as-is, so an unconfigured secret stays visibly unset.
      *
      * @var list<string>
      */
@@ -80,32 +63,9 @@ abstract class ConfigSection
     /**
      * Build a section from its raw configuration array.
      *
-     * ## Why this is concrete and not abstract
-     *
-     * Configuration::fromArray() calls $className::fromArray() through a
-     * class-string<ConfigSection>, and this class did not declare the method it
-     * calls. A consumer registering a section class that omitted it got
-     * "Call to undefined method" at BOOT, from inside the configuration load,
-     * which is about the worst place in the lifecycle to discover a typo.
-     *
-     * Declaring it `abstract` was tried and REJECTED. ConfigSection is
-     * instantiated directly today, as an anonymous subclass that wants only the
-     * typed getters and is never registered as a section factory; this suite
-     * alone holds 17 such sites. "Class ConfigSection@anonymous must implement
-     * 1 abstract method" is a fatal at the CLASS DECLARATION, not at boot, so
-     * the cure would have broken more than the disease, in every consumer
-     * vendoring this framework.
-     *
-     * A concrete default is fully backward compatible: it is the exact body
-     * every real subclass already writes, and MailerConfig and RenderConfig
-     * already declare `: static` and simply override it.
-     *
-     * ## The contract a subclass must keep
-     *
-     * `new static($values)` requires the subclass to keep this constructor
-     * signature, the same contract Entity::build() relies on. A subclass that
-     * needs different construction overrides this method, which is what a
-     * subclass hydrating typed properties does anyway.
+     * Concrete, not abstract: anonymous subclasses that only use the typed getters do not declare it.
+     * A subclass keeps the constructor signature, because `new static($values)` relies on it;
+     * a subclass hydrating typed properties overrides this method.
      *
      * @param array<string, mixed> $values
      */
@@ -122,12 +82,10 @@ abstract class ConfigSection
     {
         $normalized = self::normalizeKey($key);
 
-        // Direct key lookup first.
         if (array_key_exists($normalized, $this->values)) {
             return $this->values[$normalized];
         }
 
-        // Dot-notation traversal.
         if (str_contains($normalized, '.')) {
             $segments = explode('.', $normalized);
             $current = $this->values;
@@ -146,7 +104,7 @@ abstract class ConfigSection
     }
 
     /**
-     * @throws ConfigurationException when the value is not representable as a string.
+     * @throws ConfigurationException when the value is an array, or an object without __toString().
      */
     public function getString(string $key, string $default = ''): string
     {
@@ -172,13 +130,12 @@ abstract class ConfigSection
             return (string) $value;
         }
 
-        // An array used to become the literal string 'Array' plus a PHP
-        // warning, which is a value no configuration ever meant.
+        // Arrays are refused: casting one yields 'Array' plus a warning.
         throw $this->rejected($key, $value, 'is not representable as a string');
     }
 
     /**
-     * @throws ConfigurationException when the value is not an integer.
+     * @throws ConfigurationException when the value is not an integer, or is a NaN or infinite float.
      */
     public function getInt(string $key, int $default = 0): int
     {
@@ -197,8 +154,7 @@ abstract class ConfigSection
                 throw $this->rejected($key, $value, 'is not a finite number');
             }
 
-            // Kept: truncating a float is a defined, visible coercion, unlike
-            // turning a word into zero.
+            // Truncation is visible and defined; a word is never read as zero.
             return (int) $value;
         }
 
@@ -213,7 +169,7 @@ abstract class ConfigSection
     }
 
     /**
-     * @throws ConfigurationException when the value is not a number.
+     * @throws ConfigurationException when the value is not a number, or is a NaN or infinite float.
      */
     public function getFloat(string $key, float $default = 0.0): float
     {
@@ -246,7 +202,7 @@ abstract class ConfigSection
     }
 
     /**
-     * @throws ConfigurationException when the value is not a recognisable boolean.
+     * @throws ConfigurationException when the value is not one of the accepted boolean spellings.
      */
     public function getBool(string $key, bool $default = false): bool
     {
@@ -260,6 +216,8 @@ abstract class ConfigSection
     }
 
     /**
+     * Return the value as an array, or $default when it is absent or not an array.
+     *
      * @return array<mixed>
      */
     public function getArray(string $key, array $default = []): array
@@ -279,12 +237,10 @@ abstract class ConfigSection
     }
 
     /**
-     * Return the section values, with every declared secret redacted.
+     * Return the values with every declared secret replaced by REDACTED.
      *
-     * This is what a debug panel, a diagnostic endpoint or a config dump
-     * renders, so it defaults to the safe answer. Pass $revealSecrets only from
-     * a caller that genuinely needs the values, and never from a rendering
-     * path.
+     * Pass $revealSecrets only where the raw value is needed, never from a rendering path
+     * such as a debug panel or a config dump.
      *
      * @return array<string, mixed>
      */
@@ -305,10 +261,6 @@ abstract class ConfigSection
 
     /**
      * Replace one dot-notation key's value with REDACTED, in place.
-     *
-     * Each SEGMENT is normalized separately: normalizing the whole dotted
-     * string would mangle a snake_case leaf ('api_key' inside 'smtp.api_key'
-     * would come back capitalised).
      *
      * @param array<string, mixed> $values
      */
@@ -343,10 +295,8 @@ abstract class ConfigSection
     /**
      * Build the refusal for a value this section cannot read.
      *
-     * The value IS named. A configuration section holds hosts, ports, paths and
-     * feature switches; the one thing it holds that must never be echoed is a
-     * secret, and a secret never reaches here, because a secret is read with
-     * getString() and any string is already valid.
+     * The refused value is echoed in the message, so read secrets with getString(),
+     * which never refuses a string.
      */
     private function rejected(string $key, mixed $value, string $reason): ConfigurationException
     {
@@ -359,8 +309,7 @@ abstract class ConfigSection
     }
 
     /**
-     * Normalize all keys in an array to camelCase for uniform access.
-     * Supports both snake_case and camelCase keys.
+     * Normalize keys to camelCase, recursively.
      *
      * @param array<string, mixed> $values
      * @return array<string, mixed>

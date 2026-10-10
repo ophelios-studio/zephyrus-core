@@ -9,14 +9,10 @@ namespace Zephyrus\Core\Config;
 /**
  * Immutable top-level configuration tree.
  *
- * Aggregates all typed section objects from a single nested array, providing
- * a single entry point for application configuration. Every section except
- * `database` is always present with safe defaults so callers never need null
- * checks for the common sections. `database` is nullable because a database
- * connection is not universally required (CLI tools, API consumers, etc.).
- *
- * Configuration is loaded from YAML files using ConfigurationFile, which
- * supports the !env custom tag for environment variable resolution.
+ * Aggregates the typed section objects built from one nested array. Every section
+ * except `database` is always present with safe defaults; `database` is null when
+ * no connection is configured. YAML files are read by ConfigurationFile, which
+ * resolves the !env tag.
  *
  * Typical usage:
  *
@@ -24,9 +20,6 @@ namespace Zephyrus\Core\Config;
  *   $config->application->environment  // Environment::Production
  *   $config->database?->host           // 'localhost' or null if not configured
  *   $config->section('custom')         // CustomConfig section or null
- *
- * The `defaults()` factory produces a fully populated configuration using the
- * built-in defaults of every section -- useful in tests and minimal bootstraps.
  */
 final readonly class Configuration
 {
@@ -48,20 +41,13 @@ final readonly class Configuration
     /**
      * Build a Configuration tree from a nested key-value array.
      *
-     * Each top-level key maps to a configuration section:
-     *   'application'  => ApplicationConfig::fromArray(...)
-     *   'session'      => SessionConfig::fromArray(...)
-     *   'security'     => SecurityConfig::fromArray(...)
-     *   'localization' => LocalizationConfig::fromArray(...)
-     *   'database'     => DatabaseConfig::fromArray(...) -- omit to leave null
-     *
-     * Unknown top-level keys are available via section() if custom section
-     * factories are registered.
+     * The built-in keys are application, session, security, localization and database
+     * (omit database to leave it null). A custom factory runs only when its key holds
+     * an array, and is read back with section().
      *
      * @param array<string, mixed> $config
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     *        Map of section name => ConfigSection subclass FQCN. These classes
-     *        must have a static fromArray(array): static method.
+     *        Section name => ConfigSection subclass.
      * @throws ConfigurationException if any section value violates its constraints.
      * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
@@ -97,9 +83,10 @@ final readonly class Configuration
     /**
      * Build a Configuration tree from a YAML file.
      *
-     * Supports the !env custom tag for environment variable resolution.
-     *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
+     * @throws ConfigurationException when the file is missing or unparsable, an !env tag is refused,
+     *        or a section value is invalid.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromYamlFile(string $path, array $sectionFactories = []): self
     {
@@ -114,6 +101,9 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
+     * @throws ConfigurationException when a path is not a non-empty string, a file is missing or unparsable,
+     *        an !env tag is refused, or a section value is invalid.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -127,6 +117,9 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
+     * @throws ConfigurationException when a path is not a non-empty string, a present file is unparsable,
+     *        an !env tag is refused, or a section value is invalid.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromOptionalYamlFiles(array $paths, array $sectionFactories = []): self
     {
@@ -134,11 +127,12 @@ final readonly class Configuration
     }
 
     /**
-     * Build a Configuration tree from a PHP file that returns an array.
-     *
-     * Kept for backward compatibility and test usage.
+     * Build a Configuration tree from one file: YAML by extension, otherwise a PHP file returning an array.
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
+     * @throws ConfigurationException when the file is missing, is a YAML file that does not parse, fails to load,
+     *        or does not return an array, an !env tag is refused, or a section value is invalid.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromFile(string $path, array $sectionFactories = []): self
     {
@@ -173,6 +167,10 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
+     * @throws ConfigurationException when a path is not a non-empty string, a file is missing, is a YAML file
+     *        that does not parse, fails to load or does not return an array, an !env tag is refused,
+     *        or a section value is invalid.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromFiles(array $paths, array $sectionFactories = []): self
     {
@@ -184,6 +182,10 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
+     * @throws ConfigurationException when a path is not a non-empty string, a present file is a YAML file
+     *        that does not parse, fails to load or does not return an array, an !env tag is refused,
+     *        or a section value is invalid.
+     * @throws \InvalidArgumentException if a factory is registered under a built-in section name.
      */
     public static function fromOptionalFiles(array $paths, array $sectionFactories = []): self
     {
@@ -223,27 +225,11 @@ final readonly class Configuration
     }
 
     /**
-     * Export configuration sections to a plain associative array.
+     * Export the sections to a plain associative array, with secrets redacted.
      *
-     * ## Secrets are redacted by default
-     *
-     * This method is what a debug panel, a diagnostics route or a config dump
-     * renders. It used to export `security.encryptionKey` and
-     * `database.password` verbatim, alongside every custom section's raw
-     * backing array, so the single most damaging pair of values in the process
-     * travelled to whatever rendered a configuration overview -- and, together
-     * with the debugger serving its output to any client, to that client.
-     *
-     * The default is therefore the safe one. A caller that genuinely needs the
-     * values asks for them explicitly, at the call site, where a reader can see
-     * the request:
-     *
-     *   $config->toArray();              // safe to render
-     *   $config->toArray(revealSecrets: true);   // never render this
-     *
-     * A null or empty secret is left as-is rather than replaced, so an
-     * UNCONFIGURED key still reads as unconfigured instead of looking like a
-     * key somebody hid.
+     * Secrets are replaced by ConfigSection::REDACTED unless $revealSecrets is true.
+     * Pass true only where the raw values are needed, never when rendering a debug
+     * panel or a config dump.
      *
      * @return array<string, mixed>
      */
@@ -298,10 +284,9 @@ final readonly class Configuration
     }
 
     /**
-     * Produce a configuration tree where every section uses its built-in defaults.
+     * Build a configuration tree where every section uses its built-in defaults.
      *
-     * Equivalent to `Configuration::fromArray([])`. Useful in tests and
-     * minimal bootstraps that don't need a config file.
+     * Equivalent to `fromArray([])`.
      */
     public static function defaults(): self
     {
@@ -309,10 +294,8 @@ final readonly class Configuration
     }
 
     /**
-     * Substitute a secret unless the caller explicitly asked for values.
-     *
-     * Null and '' pass through untouched: there is nothing to hide, and
-     * masking them would make an unwired key look configured.
+     * Mask a secret unless $revealSecrets is true. Null and '' pass through: masking
+     * them would make an unset key look configured.
      */
     private static function redact(?string $value, bool $revealSecrets): ?string
     {

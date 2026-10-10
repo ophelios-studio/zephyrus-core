@@ -14,13 +14,15 @@ use Symfony\Component\Yaml\Yaml;
  *
  *   database:
  *     password: !env DB_PASSWORD
- *     hostname: !env DB_HOST, localhost
+ *     host: !env DB_HOST, localhost
  *
  * The tag format is: !env VAR_NAME[, default_value]
  *
  * Environment variables are resolved from $_ENV and the process environment at
- * parse time, so .env files must be loaded before this class is used. Refused
- * names raise a ConfigurationException, see {@see EnvironmentVariable::read()}.
+ * parse time, so .env files must be loaded before this class is used. An unset
+ * variable without a default resolves to null, and every !env value is a string
+ * or null. Refused names raise a ConfigurationException, see
+ * {@see EnvironmentVariable::read()}.
  */
 final class ConfigurationFile
 {
@@ -36,6 +38,7 @@ final class ConfigurationFile
      * Read the entire configuration or a specific top-level section.
      *
      * @return mixed The full config array, a specific section, or null if the section does not exist.
+     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
      */
     public function read(?string $section = null): mixed
     {
@@ -52,6 +55,7 @@ final class ConfigurationFile
      * Return the full parsed configuration as an array.
      *
      * @return array<string, mixed>
+     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
      */
     public function toArray(): array
     {
@@ -60,6 +64,8 @@ final class ConfigurationFile
 
     /**
      * Check whether a top-level section exists.
+     *
+     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
      */
     public function hasSection(string $section): bool
     {
@@ -70,6 +76,7 @@ final class ConfigurationFile
      * Return all top-level section names.
      *
      * @return string[]
+     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
      */
     public function sections(): array
     {
@@ -77,7 +84,7 @@ final class ConfigurationFile
     }
 
     /**
-     * Parse the YAML file (cached after first call).
+     * Parse the YAML file (cached after first call). A file that does not parse to an array reads as empty.
      *
      * @return array<string, mixed>
      */
@@ -107,10 +114,7 @@ final class ConfigurationFile
     }
 
     /**
-     * Recursively process custom YAML tags in the parsed content.
-     *
-     * Currently supports:
-     *   !env VAR_NAME[, default] - Resolves to the environment variable value.
+     * Resolve the custom YAML tags recursively. Only !env is resolved; other tags keep their value.
      *
      * @param array<string, mixed> $config
      * @return array<string, mixed>
