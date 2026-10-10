@@ -56,6 +56,23 @@ final class AcceptLanguageResolverTest extends TestCase
         self::assertSame('sr-Latn', $this->resolver->resolve('SR-lATN'));
     }
 
+    public function testHeaderTagLongerThanMaximumLengthIsIgnored(): void
+    {
+        self::assertSame('en', $this->resolver->resolve(str_repeat('a', 36)));
+        self::assertSame('fr', $this->resolver->resolve(str_repeat('a', 36) . ', fr;q=0.5', ['fr']));
+    }
+
+    public function testHeaderTagAtMaximumLengthIsKept(): void
+    {
+        self::assertSame(str_repeat('a', 35), $this->resolver->resolve(str_repeat('a', 35)));
+    }
+
+    public function testRequestedLocaleLongerThanMaximumLengthIsIgnored(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('', [], 'fr', str_repeat('a', 36)));
+        self::assertSame('de', $this->resolver->resolve('', [], 'de', str_repeat('a', 36)));
+    }
+
     // -- Quality value ordering -----------------------------------------------
 
     public function testQValueOrderingPicksHighestQuality(): void

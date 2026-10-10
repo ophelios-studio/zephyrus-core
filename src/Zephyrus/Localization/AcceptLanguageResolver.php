@@ -18,6 +18,9 @@ namespace Zephyrus\Localization;
  */
 final class AcceptLanguageResolver
 {
+    /** Longest language tag accepted (RFC 5646 practical maximum). Longer tags are ignored. */
+    private const MAX_TAG_LENGTH = 35;
+
     /**
      * @param string   $acceptLanguageHeader  Raw Accept-Language header value.
      * @param string[] $supportedLocales       Allowlist. Empty means "accept any".
@@ -168,7 +171,7 @@ final class AcceptLanguageResolver
     {
         $locale = trim(str_replace('_', '-', $locale));
 
-        if ($locale === '') {
+        if ($locale === '' || strlen($locale) > self::MAX_TAG_LENGTH) {
             return '';
         }
 
