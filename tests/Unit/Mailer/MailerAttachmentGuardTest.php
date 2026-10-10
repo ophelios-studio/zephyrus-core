@@ -158,7 +158,7 @@ final class MailerAttachmentGuardTest extends TestCase
         $mailer = new Mailer($this->config);
 
         $this->expectException(MailerException::class);
-        $this->expectExceptionMessage('contains a NUL byte, a line break or a path separator');
+        $this->expectExceptionMessage('contains a control or bidirectional formatting character');
 
         $mailer->attach($this->inside, $name);
     }
@@ -172,9 +172,7 @@ final class MailerAttachmentGuardTest extends TestCase
         yield 'dot' => ['.'];
         yield 'dot dot' => ['..'];
         yield 'blank' => [' '];
-        yield 'tab only' => ["\t"];
         yield 'zero padded with a space' => [' 0'];
-        yield 'zero before a tab' => ["0\t"];
         yield 'dot dot padded with a space' => [' ..'];
         yield 'dot dot before a space' => ['.. '];
         yield 'trailing dot' => ['report.'];
@@ -252,6 +250,11 @@ final class MailerAttachmentGuardTest extends TestCase
         yield 'left-to-right isolate' => ["inv\u{2066}oice.pdf"];
         yield 'right-to-left isolate' => ["inv\u{2067}oice.pdf"];
         yield 'pop directional isolate' => ["inv\u{2069}oice.pdf"];
+        yield 'NUL byte' => ["inv\0oice.pdf"];
+        yield 'carriage return' => ["inv\roice.pdf"];
+        yield 'line feed' => ["inv\noice.pdf"];
+        yield 'trailing NUL byte' => ["invoice.pdf\0"];
+        yield 'trailing line feed' => ["invoice.pdf\n"];
         yield 'C1 control' => ["inv\u{0085}oice.pdf"];
         yield 'C1 control at the top of the range' => ["inv\u{009F}oice.pdf"];
         yield 'Arabic letter mark' => ["inv\u{061C}oice.pdf"];

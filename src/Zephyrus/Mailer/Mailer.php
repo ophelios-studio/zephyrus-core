@@ -53,7 +53,7 @@ final class Mailer
 
     private const string MIME_TYPE_PATTERN = '~\A[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*(?:[ \t]*;[ \t]*(?!(?:name|filename|boundary)=)[a-z0-9][a-z0-9!#$&^_.+-]*=(?:[a-z0-9!#$&^_.+-]+|"[\x20\x21\x23-\x3A\x3C\x3E-\x5B\x5D-\x7E]*"))*\z~i';
 
-    private const string DISPLAY_NAME_PATTERN = '~[\x00\r\n/\\\\]~';
+    private const string PATH_SEPARATOR_PATTERN = '~[/\\\\]~';
 
     /**
      * C0 and C1 controls, DEL, U+061C, U+2028, U+2029 and the bidi controls U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069. Matched on bytes.
@@ -328,12 +328,16 @@ final class Mailer
             $this->refuseName($name, $fromFileName, 'is longer than ' . self::MAX_HEADER_VALUE_BYTES . ' bytes');
         }
 
-        if (preg_match(self::DISPLAY_NAME_PATTERN, $name) === 1) {
-            $this->refuseName($name, $fromFileName, 'contains a NUL byte, a line break or a path separator', 'pass a bare file name');
+        if (preg_match(self::PATH_SEPARATOR_PATTERN, $name) === 1) {
+            $this->refuseName($name, $fromFileName, 'contains a path separator', 'pass a bare file name');
         }
 
         if (str_contains($name, '=?')) {
             $this->refuseName($name, $fromFileName, 'contains "=?", an encoded word', 'pass a plain file name');
+        }
+
+        if (preg_match(self::CONTROL_OR_BIDI_PATTERN, $name) === 1) {
+            $this->refuseName($name, $fromFileName, 'contains a control or bidirectional formatting character');
         }
 
         $sent = trim((string) ($isStringAttachment ? PHPMailer::mb_pathinfo($name, PATHINFO_BASENAME) : $name));
@@ -346,9 +350,6 @@ final class Mailer
             );
         }
 
-        if (preg_match(self::CONTROL_OR_BIDI_PATTERN, $name) === 1) {
-            $this->refuseName($name, $fromFileName, 'contains a control or bidirectional formatting character');
-        }
     }
 
     /**
