@@ -84,11 +84,15 @@ final class TranslatorTest extends TestCase
         self::assertSame('Welcome {name}', $translator->trans('messages.welcome'));
     }
 
-    public function testInterpolationIgnoresUnknownPipeName(): void
+    public function testUnknownPipeNameWithoutFormatterThrows(): void
     {
+        App::reset();
+
         $translator = $this->buildTranslator();
 
-        self::assertSame('Value: alice', $translator->trans('messages.pipe_unknown', ['name' => 'alice']));
+        $this->expectException(LocalizationException::class);
+        $this->expectExceptionMessage('App::setFormatter()');
+        $translator->trans('messages.pipe_unknown', ['name' => 'alice']);
     }
 
     // -----------------------------------------------------------------
@@ -416,14 +420,20 @@ final class TranslatorTest extends TestCase
         App::reset();
     }
 
-    public function testUnknownPipeReturnValueUnchangedWhenNoFormatterRegistered(): void
+    public function testFormatterPipeWithoutFormatterThrowsInsteadOfRenderingRawValue(): void
     {
         App::reset();
 
         $translator = $this->buildTranslator();
-        $result = $translator->trans('{v|nonexistent}', ['v' => 'hello']);
 
-        self::assertSame('hello', $result);
+        try {
+            $translator->trans('SSN: {ssn|mask}', ['ssn' => '123456789']);
+            self::fail('A formatter pipe without a Formatter must not render the raw value.');
+        } catch (LocalizationException $e) {
+            self::assertStringContainsString('"mask"', $e->getMessage());
+            self::assertStringContainsString('App::setFormatter()', $e->getMessage());
+            self::assertStringNotContainsString('123456789', $e->getMessage());
+        }
     }
 
     public function testFormatterMethodFailureIsNotSwallowed(): void

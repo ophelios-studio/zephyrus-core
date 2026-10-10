@@ -304,9 +304,9 @@ final class Translator
      * Supports both built-in Formatter methods (money, date, decimal, …) and
      * custom formatters registered via Formatter::register().
      *
-     * The value passes through unchanged when no Formatter is registered in App.
-     * A name no formatter answers to throws LocalizationException, and a
-     * formatter's own exception propagates.
+     * A name no formatter answers to, or any formatter pipe while no Formatter is
+     * set in App, throws LocalizationException. A custom formatter's own exception
+     * propagates unchanged.
      *
      * @throws LocalizationException
      */
@@ -314,7 +314,7 @@ final class Translator
     {
         $formatter = App::getFormatter();
         if ($formatter === null) {
-            return $value;
+            throw LocalizationException::formatterRequired($pipeName, $key);
         }
 
         $isCustom = $formatter->hasCustomFormatter($pipeName);

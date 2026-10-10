@@ -7,7 +7,7 @@ namespace Zephyrus\Localization;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
- * Thrown when locale file loading or parsing fails.
+ * Thrown when locale file loading or parsing fails, or a translation pipe cannot be applied.
  *
  * ## The absolute server path is CONTEXT, never part of the sentence
  *
@@ -74,6 +74,18 @@ final class LocalizationException extends ZephyrusRuntimeException
     public static function unknownPipe(string $pipe, string $key): self
     {
         return new self(sprintf('Unknown pipe "%s" in translation key "%s".', $pipe, $key));
+    }
+
+    /**
+     * A formatter pipe was used while no Formatter is set in App.
+     */
+    public static function formatterRequired(string $pipe, string $key): self
+    {
+        return new self(sprintf(
+            'Pipe "%s" in translation key "%s" needs a Formatter: call App::setFormatter() first.',
+            $pipe,
+            $key,
+        ));
     }
 
     /**
