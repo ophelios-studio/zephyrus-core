@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
@@ -15,6 +16,7 @@ use Zephyrus\Routing\HandlerResolver;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCache;
 use Zephyrus\Routing\RouteCollection;
+use Zephyrus\Routing\RouteDispatcher;
 use Zephyrus\Routing\RouteMatch;
 
 /**
@@ -132,13 +134,107 @@ final class RouteMatchingHardeningTest extends TestCase
     }
 
     #[DataProvider('rawControlByteProvider')]
-    public function testARawControlByteIsRefusedBeforeParseUrlRewritesIt(string $path): void
+    public function testARawControlByteNeverReachesAHandler(string $path): void
     {
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
 
         $this->expectException(RouteNotFoundException::class);
         $collection->match('GET', $path);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function rawRequestTargetProvider(): array
+    {
+        return [
+            'NUL' => ["/users/4\0"],
+            'SOH' => ["/users/4\x01"],
+            'DEL' => ["/users/4\x7F"],
+            'LF' => ["/users/4\n"],
+            'absolute form' => ["http://app.example.test/users/4\0"],
+        ];
+    }
+
+    #[DataProvider('rawRequestTargetProvider')]
+    public function testADispatcherRefusesARequestWhoseTargetHoldsAControlByte(string $target): void
+    {
+        $dispatcher = $this->dispatcher();
+
+        foreach ([
+            Request::fromGlobals(
+                server: ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => $target, 'HTTP_HOST' => 'app.example.test'],
+                get: [],
+                post: [],
+                cookie: [],
+                files: [],
+                rawBody: '',
+            ),
+            Request::fromArray('GET', $target),
+        ] as $request) {
+            try {
+                $dispatcher->match($request);
+                self::fail('The request must not match a route');
+            } catch (RouteNotFoundException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
+    public function testADispatcherStillMatchesAPlainAndAPercentEncodedTarget(): void
+    {
+        $dispatcher = $this->dispatcher();
+
+        self::assertSame('4', $dispatcher->match(Request::fromArray('GET', '/users/4'))->parameter('id'));
+        self::assertSame('4%00', $dispatcher->match(Request::fromArray('GET', '/users/4%2500'))->parameter('id'));
+    }
+
+    public function testADispatcherIgnoresAControlByteInTheQuery(): void
+    {
+        $match = $this->dispatcher()->match(Request::fromArray('GET', "/users/4?q=a\x01b"));
+
+        self::assertSame('4', $match->parameter('id'));
+    }
+
+    public function testStaticRouteCountAgreesWithTheMatcher(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/files/x{y}z', 'FileController@show'));
+        $collection->add(Route::define('GET', '/files/{name}', 'FileController@show'));
+        $collection->add(Route::define('GET', '/files', 'FileController@index'));
+
+        self::assertSame(2, $collection->staticRouteCount());
+    }
+
+    #[DataProvider('queryOrFragmentProvider')]
+    public function testAControlByteOutsideThePathDoesNotRefuseTheRoute(string $target): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/search', 'SearchController@index'));
+
+        self::assertSame('/search', $collection->match('GET', $target)->route->path);
+        self::assertCount(1, $collection->routesForPath($target));
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function queryOrFragmentProvider(): array
+    {
+        return [
+            'control byte in query' => ["/search?q=a\x01b"],
+            'control byte in fragment' => ["/search#a\x01b"],
+            'high byte in query' => ["/search?q=\xE9"],
+        ];
+    }
+
+    private function dispatcher(): RouteDispatcher
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        return new RouteDispatcher($routes, new MiddlewarePipeline(), static fn (): Response => Response::text('ok'));
     }
 
     #[DataProvider('rawControlByteProvider')]

@@ -141,6 +141,12 @@ final readonly class Uri
         return $this->queryString;
     }
 
+    /** Whether the path as written holds a control character or DEL, which path() has already rewritten to "_". */
+    public function pathHasControlCharacter(): bool
+    {
+        return preg_match('/[\x00-\x1F\x7F]/', self::rawPath($this->url)) === 1;
+    }
+
     public function fragment(): string
     {
         return $this->fragment;
@@ -182,6 +188,17 @@ final readonly class Uri
         }
 
         return self::cutAuthority(substr($url, strlen($matches[0])));
+    }
+
+    /** The text from the end of the authority (if any) up to the first "?" or "#". */
+    private static function rawPath(string $url): string
+    {
+        if (preg_match(self::SCHEME_PATTERN, $url, $matches) === 1) {
+            $url = substr($url, strlen($matches[0]));
+            $url = substr($url, strcspn($url, '/?#'));
+        }
+
+        return substr($url, 0, strcspn($url, '?#'));
     }
 
     /** The authority at the start of the text after "scheme://". */

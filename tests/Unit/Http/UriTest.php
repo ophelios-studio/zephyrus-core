@@ -280,4 +280,29 @@ final class UriTest extends TestCase
     {
         self::assertSame($expected, (new Uri($url))->authority());
     }
+
+    /**
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function controlCharacterProvider(): array
+    {
+        return [
+            'plain path' => ['/users/4', false],
+            'NUL' => ["/users/4\0", true],
+            'DEL' => ["/users/4\x7F", true],
+            'LF' => ["/users/4\n", true],
+            'percent-encoded' => ['/users/4%00', false],
+            'in the query' => ["/users?q=a\x01", false],
+            'in the fragment' => ["/users#a\x01", false],
+            'absolute form' => ["http://example.com/a\x01", true],
+            'absolute form, query only' => ["http://example.com/a?q=\x01", false],
+            'no path' => ['http://example.com', false],
+        ];
+    }
+
+    #[DataProvider('controlCharacterProvider')]
+    public function testPathHasControlCharacterReadsThePathAsWritten(string $url, bool $expected): void
+    {
+        self::assertSame($expected, (new Uri($url))->pathHasControlCharacter());
+    }
 }
