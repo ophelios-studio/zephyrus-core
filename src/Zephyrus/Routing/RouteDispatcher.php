@@ -18,10 +18,8 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 /**
  * Resolves a request to a route and runs that route's middlewares and handler.
  *
- * Routing failures leave this class as exceptions. Turning them into HTTP
- * responses is HttpKernel's job, because that conversion has to happen inside
- * the global middleware pipeline for the error response to carry the global
- * security headers.
+ * Routing failures are thrown, not converted: HttpKernel renders them inside the
+ * global pipeline so that error responses carry the global security headers.
  */
 final readonly class RouteDispatcher
 {
@@ -36,9 +34,8 @@ final readonly class RouteDispatcher
     private Closure $routeMiddlewareResolver;
 
     /**
-     * @param MiddlewarePipeline $pipeline Base pipeline the matched route's own
-     *   middlewares are appended to. KernelBuilder passes an empty one, since
-     *   the global middlewares are run by HttpKernel instead.
+     * @param MiddlewarePipeline $pipeline Base pipeline the route middlewares are appended to
+     *   (KernelBuilder passes an empty one; HttpKernel runs the global middlewares).
      * @param callable(RouteMatch, Request): Response $resolver
      * @param callable(string): MiddlewareInterface|null $routeMiddlewareResolver
      */
@@ -55,13 +52,11 @@ final readonly class RouteDispatcher
     }
 
     /**
-     * Resolves the route for the given request.
+     * Resolves the route for the given request, or throws.
      *
-     * Resolves against the in-memory RouteCollection and either returns a
-     * RouteMatch or throws. HttpKernel calls this before entering the global
-     * middleware pipeline so the route parameters are already on the request
-     * when the global middlewares see it, and it defers the throw so that a
-     * 404 or a 405 is still rendered inside that pipeline.
+     * HttpKernel calls this before the global pipeline so that route parameters
+     * are already on the request, and defers the throw so a 404 or 405 still
+     * passes through the global middlewares.
      *
      * @throws RouteNotFoundException When no route matches the path.
      * @throws MethodNotAllowedException When the path matches but the method does not.
@@ -73,16 +68,12 @@ final readonly class RouteDispatcher
     }
 
     /**
-     * Runs an already-resolved route: its own middlewares, then its handler.
+     * Runs an already-resolved route: its middlewares, then its handler.
      *
-     * The request is expected to already carry the route parameters as
-     * attributes (see match() and HttpKernel::handle()).
+     * The request must already carry the route parameters as attributes (see match()).
+     * Through HttpKernel the full order is: global middlewares, route middlewares, handler.
      *
-     * Route middlewares are appended to this dispatcher's base pipeline. When
-     * the dispatcher is wired by KernelBuilder that base pipeline is EMPTY: the
-     * global middlewares are run by HttpKernel one layer further out so that
-     * they wrap error responses too. Execution order is unchanged either way,
-     * global middlewares first, then route middlewares, then the handler.
+     * @throws RouteMiddlewareException When a route middleware cannot be resolved.
      */
     public function dispatchMatch(RouteMatch $match, Request $request): Response
     {

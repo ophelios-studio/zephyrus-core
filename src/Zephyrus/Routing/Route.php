@@ -10,36 +10,18 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 final readonly class Route
 {
     /**
-     * The grammar every route placeholder name must satisfy.
+     * Grammar every route placeholder name must satisfy, enforced at registration.
      *
-     * The matcher used to accept ANY brace-delimited segment, so "{a b}",
-     * "{0}", "{client_ip}" and "{_zephyrus.unmatched_route}" were all valid
-     * placeholder names. Three separate problems followed, and all three are
-     * closed at registration because that is the only place they can be closed
-     * loudly.
-     *
-     *  - A NUMERIC name is renumbered by array_merge(), which is how a matched
-     *    parameter reaches the request attributes. "{0}" and "{1}" on one path
-     *    therefore did not keep the values they matched.
-     *  - A name outside [a-zA-Z0-9_]+ was unreachable for URL GENERATION:
-     *    RouteUrlGenerator scans for that grammar, so it emitted the raw
-     *    placeholder into the URL instead of throwing, while PASSING the same
-     *    name threw "Unexpected route parameter". One name grammar now governs
-     *    both directions.
-     *  - A name that collides with a framework attribute let the URL supply a
-     *    value the framework publishes. See RESERVED_PARAMETER_NAMES.
+     * It keeps numeric names (renumbered by array_merge()) out of both matching and URL generation,
+     * and any name RouteUrlGenerator would leave unsubstituted, since it only replaces {[a-zA-Z0-9_]+}.
      */
     public const PARAMETER_NAME_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/D';
 
     /**
-     * Attribute names a route parameter may not take, because the framework
-     * itself publishes them and reading one is a trust decision.
+     * Parameter names the framework publishes itself, which a URL segment must not supply.
      *
-     * "client_ip" is read by Request::clientIp() as a fallback source for the
-     * caller's address, so a route "/x/{client_ip}" let the URL choose the
-     * value a rate limiter or an audit record keys on. Anything under the
-     * "_zephyrus" prefix is framework-internal, ATTRIBUTE_UNMATCHED_ROUTE being
-     * the live example.
+     * "client_ip" is read by Request::clientIp() as a fallback source for the client address.
+     * Names under the "_zephyrus" prefix are refused too, Request::ATTRIBUTE_UNMATCHED_ROUTE included.
      */
     public const RESERVED_PARAMETER_NAMES = ['client_ip'];
 
@@ -47,14 +29,10 @@ final readonly class Route
     private const RESERVED_PARAMETER_PREFIX = '_zephyrus';
 
     /**
-     * A ready-made constraint for the common "an identifier in a URL" case:
-     * ASCII letters, digits, underscore and hyphen, and nothing else.
+     * Constraint for an identifier segment: ASCII letters, digits, underscore and hyphen.
      *
-     * The DEFAULT pattern for an unconstrained placeholder is "[^/]+", which is
-     * byte-oriented and therefore admits anything that is not a slash. Invalid
-     * UTF-8 is now refused by the matcher outright (see
-     * RouteCollection::isWellFormedValue()), but a route that wants a narrow,
-     * obviously safe segment should say so:
+     * An unconstrained placeholder accepts any valid UTF-8 value without "/" or NUL,
+     * so narrow segments should use it:
      *
      *   $router->get('/docs/{slug}', 'DocController@show', ['slug' => Route::SAFE_SLUG]);
      */
@@ -77,12 +55,9 @@ final readonly class Route
     }
 
     /**
-     * Validate every whole-segment placeholder in a route path.
+     * Validates every whole-segment placeholder in a route path.
      *
-     * Membership mirrors RouteCollection::isParameterSegment() exactly: the
-     * WHOLE segment is a placeholder or none of it is. A segment such as
-     * "x{y}z" is a literal to the matcher and is left alone here for the same
-     * reason.
+     * A segment such as "x{y}z" is a literal, as in RouteCollection::isParameterSegment().
      *
      * @throws RouteSignatureException
      */
@@ -133,8 +108,12 @@ final readonly class Route
     }
 
     /**
+     * Builds a route with a normalised path and an upper-case method.
+     *
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved.
      */
     public static function define(
         string $method,

@@ -7,7 +7,9 @@ namespace Zephyrus\Routing;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
+use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 
 final class Router
 {
@@ -31,10 +33,7 @@ final class Router
     }
 
     /**
-     * Controls whether incoming request paths ignore trailing slashes.
-     *
-     * When set to false, `/users` and `/users/` are treated as distinct paths.
-     * Returns a new Router instance and preserves registered routes.
+     * Returns a copy with trailing-slash tolerance set; with false, `/users` and `/users/` are distinct.
      */
     public function withTrailingSlashTolerance(bool $tolerant = true): self
     {
@@ -56,12 +55,9 @@ final class Router
     }
 
     /**
-     * Registers a reusable middleware group alias.
+     * Registers a middleware group alias, expanded by routes added after it.
      *
-     * Group entries may include both concrete middleware names and other group
-     * names; group expansion happens when routes are registered.
-     *
-     * @param array<int, string> $middlewares
+     * @param array<int, string> $middlewares Middleware names or other group names.
      */
     public function middlewareGroup(string $name, array $middlewares): self
     {
@@ -72,8 +68,15 @@ final class Router
     }
 
     /**
+     * Registers a route; group names in $middlewares are expanded at this point.
+     * Routes match in registration order, so a static route must be registered before
+     * a parameterised route that could match the same path.
+     *
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function add(
         string $method,
@@ -98,23 +101,21 @@ final class Router
     }
 
     /**
-     * Groups routes under a common URL prefix, shared middlewares, and an
-     * optional name prefix.
+     * Registers routes under a URL prefix, with shared middlewares and an optional name prefix.
      *
-     * Route names defined inside the group (via ->name() or #[Route(name:)])
-     * are preserved and, when $namePrefix is supplied, are prepended with that
-     * prefix so the caller can build a tidy name hierarchy:
+     * $namePrefix applies only to named routes; unnamed routes stay unnamed:
      *
-     *   $router->group('/api/v1', fn($r) => $r
+     *   $router = $router->group('/api/v1', fn($r) => $r
      *       ->get('/users', 'UserController@index')->name('users.index'),
      *       namePrefix: 'api.',
      *   );
      *   // findable as 'api.users.index'
      *
-     * Unnamed routes inside the group stay unnamed even when $namePrefix is set.
-     *
      * @param callable(self): self $registrar
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function group(
         string $prefix,
@@ -150,6 +151,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function get(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -159,6 +163,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function head(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -168,6 +175,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function options(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -177,6 +187,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function post(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -186,6 +199,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function put(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -195,6 +211,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function patch(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -204,6 +223,9 @@ final class Router
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function delete(string $path, string $handler, array $constraints = [], array $middlewares = []): self
     {
@@ -211,7 +233,7 @@ final class Router
     }
 
     /**
-     * Registers conventional CRUD routes for a resource controller.
+     * Registers conventional CRUD routes for a resource controller; {id} accepts digits only.
      *
      * Generated handlers:
      * - GET    /resource           -> Controller@index
@@ -222,6 +244,9 @@ final class Router
      * - DELETE /resource/{id}      -> Controller@delete
      *
      * @param array<int, string> $middlewares
+     *
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function resource(string $resourcePath, string $controller, array $middlewares = []): self
     {
@@ -237,10 +262,16 @@ final class Router
     }
 
     /**
-     * Registers all routes discovered via #[Route] attributes on the given
-     * controller class. Handler strings are set to `ClassName@methodName`.
+     * Registers the routes declared with #[Route] attributes on a controller class.
+     *
+     * Handler strings are set to `ClassName@methodName`. Only public methods declared by the class
+     * itself are read; inherited methods are not.
      *
      * @param class-string $className
+     *
+     * @throws RouteAttributeException When the class cannot be reflected or declares a duplicate route name.
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function controller(string $className): self
     {
@@ -267,24 +298,18 @@ final class Router
     }
 
     /**
-     * Recursively scans a directory for PHP classes and registers any that
-     * contain route attributes. Class names are derived from the given PSR-4
-     * namespace prefix mapped to the directory root.
+     * Recursively registers the controllers under a directory that declare route attributes.
      *
-     * Usage:
+     * Class names are derived from the PSR-4 namespace prefix and each file path. Every
+     * candidate file is autoloaded. A missing directory returns the router unchanged.
      *
-     *   $router = $router->discoverControllers(
-     *       namespace: 'App\\Controllers',
-     *       directory: ROOT_DIR . '/app/Controllers',
-     *   );
+     * @param string $namespace PSR-4 namespace prefix of the directory.
+     * @param string $directory Absolute path to the controllers directory.
+     * @param class-string|null $parentClass Only register subclasses of this class.
      *
-     * Every concrete class found under the directory whose public methods
-     * carry at least one route attribute (#[Get], #[Post], etc.) will be
-     * registered automatically — no manual ->controller() call needed.
-     *
-     * @param string            $namespace   PSR-4 namespace prefix for the directory.
-     * @param string            $directory   Absolute path to the controllers directory.
-     * @param class-string|null $parentClass Optional: only register subclasses of this class.
+     * @throws RouteAttributeException When a class cannot be reflected or declares a duplicate route name.
+     * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
     public function discoverControllers(
         string $namespace,
@@ -311,9 +336,6 @@ final class Router
     }
 
     /**
-     * Scan a directory recursively for concrete PHP classes matching
-     * a PSR-4 namespace prefix.
-     *
      * @return list<class-string>
      */
     private function scanDirectory(string $namespace, string $directory): array

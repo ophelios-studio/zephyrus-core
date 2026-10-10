@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 
 final readonly class RouteUrlGenerator
@@ -16,8 +17,16 @@ final readonly class RouteUrlGenerator
     }
 
     /**
+     * Builds the URL of a named route.
+     *
+     * Placeholder values are rawurlencoded (a slash becomes %2F), query keys are
+     * sorted and encoded as RFC 3986, and leading "#" characters are stripped from
+     * the fragment before it is encoded.
+     *
      * @param array<string, scalar> $parameters
      * @param array<string, scalar|array<scalar>> $query
+     *
+     * @throws RouteUrlGenerationException When the route is unknown or a parameter is missing, unexpected or invalid.
      */
     public function generate(string $routeName, array $parameters = [], array $query = [], ?string $fragment = null): string
     {
@@ -104,10 +113,7 @@ final readonly class RouteUrlGenerator
             return;
         }
 
-        // The D modifier must match RouteCollection::compileConstraintRegex().
-        // Without it "$" matches before a trailing newline, so generation would
-        // happily emit a value the matcher's own whitelist was written to
-        // exclude.
+        // The D modifier must match RouteCollection::compileConstraintRegex(): without it "$" accepts a trailing newline.
         $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
         if (@preg_match($regex, '') === false) {
             throw new RouteUrlGenerationException(sprintf(
@@ -130,8 +136,12 @@ final readonly class RouteUrlGenerator
     }
 
     /**
+     * Builds the URL of a named route and signs it.
+     *
      * @param array<string, scalar> $parameters
      * @param array<string, scalar|array<scalar>> $query
+     *
+     * @throws RouteUrlGenerationException As generate(), or when no RouteSignature is configured.
      */
     public function generateSigned(
         string $routeName,
@@ -143,8 +153,12 @@ final readonly class RouteUrlGenerator
     }
 
     /**
+     * Builds the URL of a named route and signs it, expiring $ttlSeconds from now.
+     *
      * @param array<string, scalar> $parameters
      * @param array<string, scalar|array<scalar>> $query
+     *
+     * @throws RouteUrlGenerationException When $ttlSeconds is not positive, no RouteSignature is configured, or generate() fails.
      */
     public function generateTemporarySigned(
         string $routeName,
@@ -166,8 +180,13 @@ final readonly class RouteUrlGenerator
     }
 
     /**
+     * Builds the URL of a named route and signs it, expiring at an absolute instant.
+     *
      * @param array<string, scalar> $parameters
      * @param array<string, scalar|array<scalar>> $query
+     *
+     * @throws RouteUrlGenerationException When no RouteSignature is configured or generate() fails.
+     * @throws RouteSignatureException When $expiresAt is not after the current time.
      */
     public function generateTemporarySignedUntil(
         string $routeName,
