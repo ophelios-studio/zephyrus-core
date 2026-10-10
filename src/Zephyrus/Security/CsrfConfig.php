@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Security;
 
 use InvalidArgumentException;
+use Zephyrus\Core\Config\SecurityConfig;
 
 use function is_array;
 use function is_string;
@@ -123,6 +124,19 @@ final class CsrfConfig
     public static function defaults(): self
     {
         return new self();
+    }
+
+    /**
+     * Build from the application's security configuration section.
+     *
+     * @throws InvalidArgumentException when an exclusion pattern is refused.
+     */
+    public static function fromSecurityConfig(SecurityConfig $security): self
+    {
+        return new self(
+            enabled: $security->csrfEnabled,
+            excludedPathPatterns: $security->csrfExceptions,
+        );
     }
 
     /**

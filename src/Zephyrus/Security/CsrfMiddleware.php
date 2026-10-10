@@ -32,16 +32,11 @@ use function preg_match;
  * public API endpoints protected by other means (bearer tokens, HMAC, …), or
  * health-check routes.
  *
- *   $config = CsrfConfig::fromArray([
- *       'excluded_path_patterns' => ['#^/webhooks/#', '#^/api/public/#'],
- *   ]);
+ *   $config = CsrfConfig::fromSecurityConfig($securityConfig);
  *   $mw = new CsrfMiddleware($sessionManager, $config);
  *
- * Note the trailing "/" on both. CsrfConfig refuses a pattern that is not
- * anchored at both ends, and the example here used to ship "#^/api/public#",
- * which stops mid-segment and therefore also exempted /api/publicity/42/delete:
- * a POST with no token returned 200 and changed state. See CsrfConfig for the
- * rule and for the second reproduced bypass.
+ * fromSecurityConfig() reads csrfEnabled and csrfExceptions from the
+ * application's security section. See CsrfConfig for the pattern rules.
  *
  * Unmatched routes
  * ----------------
