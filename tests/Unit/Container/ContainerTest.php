@@ -405,9 +405,10 @@ final class ContainerTest extends TestCase
             self::assertStringContainsString('parameter $dsn of [' . ServiceWithUnresolvableParam::class . ']', $e->getMessage());
             self::assertStringContainsString('built-in type string', $e->getMessage());
             self::assertStringContainsString(
-                'add a class or interface type, give it a default value, or bind [' . ServiceWithUnresolvableParam::class . '] explicitly',
+                'give it a default value, or bind [' . ServiceWithUnresolvableParam::class . '] explicitly',
                 $e->getMessage(),
             );
+            self::assertStringNotContainsString('add a class or interface type', $e->getMessage());
             self::assertStringNotContainsString('no type hint', $e->getMessage());
         }
     }
