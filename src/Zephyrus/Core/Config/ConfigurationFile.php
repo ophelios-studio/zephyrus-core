@@ -122,7 +122,7 @@ final class ConfigurationFile
             if (is_array($value)) {
                 $config[$key] = $this->processYamlTags($value);
             } elseif ($value instanceof TaggedValue) {
-                $config[$key] = $this->resolveTag($value);
+                $config[$key] = $this->resolveTag($value, (string) $key);
             }
         }
 
@@ -132,10 +132,10 @@ final class ConfigurationFile
     /**
      * Resolve a single YAML custom tag.
      */
-    private function resolveTag(TaggedValue $tagged): mixed
+    private function resolveTag(TaggedValue $tagged, string $key): mixed
     {
         return match ($tagged->getTag()) {
-            'env' => $this->resolveEnvTag($tagged->getValue()),
+            'env' => $this->resolveEnvTag($tagged->getValue(), $key),
             default => $tagged->getValue(),
         };
     }
@@ -143,14 +143,18 @@ final class ConfigurationFile
     /**
      * Resolve an !env tag value (VAR_NAME[, default_value]) from $_ENV or the process environment.
      * Names starting with HTTP_, REDIRECT_, ORIG_, SSL_ or H2_, exact request names such as
-     * QUERY_STRING, and names containing a NUL byte are refused with a ConfigurationException.
+     * QUERY_STRING, a NUL inside the name and an empty name are refused with a ConfigurationException.
      */
-    private function resolveEnvTag(mixed $value): mixed
+    private function resolveEnvTag(mixed $value, string $key): mixed
     {
         $raw = (string) $value;
         $arguments = explode(',', $raw, 2);
         $envKey = trim($arguments[0], " \t\n\r\0\x0B\"'");
         $default = isset($arguments[1]) ? trim($arguments[1], " \t\n\r\0\x0B\"'") : null;
+
+        if ($envKey === '') {
+            throw new ConfigurationException(sprintf('!env tag: the key "%s" has an empty variable name.', $key));
+        }
 
         try {
             return EnvironmentVariable::read($envKey) ?? $default;

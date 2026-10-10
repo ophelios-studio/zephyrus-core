@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Config;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
@@ -97,6 +98,25 @@ final class EnvTagHttpoxyTest extends TestCase
         $this->expectException(\Zephyrus\Core\Config\ConfigurationException::class);
 
         $this->resolve('PHP_AUTH_PW');
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function emptyNames(): iterable
+    {
+        yield 'empty quotes' => ['""'];
+        yield 'NUL only' => ['"\\0"'];
+        yield 'empty name with a default' => [', fallback'];
+    }
+
+    #[DataProvider('emptyNames')]
+    public function testAnEmptyNameInAnEnvTagIsRefusedNamingTheKey(string $tag): void
+    {
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage('"value"');
+
+        $this->resolve($tag);
     }
 
     public function testEnvTakesPrecedenceAndDefaultsStillApply(): void
