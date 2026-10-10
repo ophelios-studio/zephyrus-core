@@ -1260,6 +1260,41 @@ final class RequestTest extends TestCase
         self::assertSame('/', $request->path());
     }
 
+    public function testFromGlobalsReadsHostAndProtoFromTheElementAppendedByTheOutermostTrustedProxy(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=192.0.2.1;host=evil.example;proto=http, for=203.0.113.9;host=real.example;proto=https',
+            ],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('https://real.example/x', $request->uri()->full());
+        self::assertSame('203.0.113.9', $request->clientIp());
+    }
+
+    public function testFromGlobalsReadsTheLeftmostForwardedElementWhenEveryHopIsTrusted(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=10.0.0.2;host=first.example;proto=https, for=10.0.0.1;host=second.example;proto=http',
+            ],
+            trustedProxies: ['10.0.0.0/24'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('https://first.example/x', $request->uri()->full());
+    }
+
     public function testFromGlobalsDefaultsMethodToGetWhenAbsent(): void
     {
         $request = Request::fromGlobals(server: []);

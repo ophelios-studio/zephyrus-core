@@ -212,7 +212,7 @@ final readonly class Request
         // ("is this proxy trusted" and "may this header be read") stay a single
         // question everywhere downstream.
         $trusted = $trustForwarded ? self::normalizeTrustedHeaders($trustedHeaders) : [];
-        $uri     = self::buildUri($server, $trusted);
+        $uri     = self::buildUri($server, $trusted, $trustedProxies);
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
         $raw = $rawBody ?? (string) file_get_contents('php://input');
@@ -690,10 +690,14 @@ final readonly class Request
      * $trustedHeaders is already empty when the peer is not a trusted proxy, so
      * an empty list means "read nothing forwarded" and needs no separate flag.
      *
+     * X-Forwarded-Host, -Proto and -Port are read from their first value only, so
+     * the proxy in front of us must overwrite them, not append to them.
+     *
      * @param array<string, mixed> $server
      * @param list<string>         $trustedHeaders
+     * @param string[]             $trustedProxies
      */
-    private static function buildUri(array $server, array $trustedHeaders = []): string
+    private static function buildUri(array $server, array $trustedHeaders = [], array $trustedProxies = []): string
     {
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
@@ -708,7 +712,10 @@ final readonly class Request
         }
 
         $forwarded = in_array('forwarded', $trustedHeaders, true)
-            ? self::parseForwardedHeader(isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null)
+            ? self::parseForwardedHeader(
+                isset($server['HTTP_FORWARDED']) ? (string) $server['HTTP_FORWARDED'] : null,
+                $trustedProxies,
+            )
             : [];
 
         $https = isset($server['HTTPS']) && $server['HTTPS'] !== '' && $server['HTTPS'] !== 'off';
@@ -1132,20 +1139,29 @@ final readonly class Request
     }
 
     /**
-     * The connection parameters of the FIRST forwarding element, for buildUri().
-     * The client identity is deliberately not exposed here: resolveClientIp()
-     * needs every element, not the first one, and asking this helper for a "for"
-     * is what produced the leftmost-entry bug in the first place.
+     * The connection parameters of the forwarding element appended by the outermost
+     * trusted proxy, for buildUri(). A client can prepend elements, never append
+     * them, so the walk starts at the right and stops at the first element whose
+     * "for" is not a trusted proxy. When every element is trusted, the first one wins.
      *
+     * @param string[] $trustedProxies
      * @return array{proto?: string, host?: string, port?: string}
      */
-    private static function parseForwardedHeader(?string $header): array
+    private static function parseForwardedHeader(?string $header, array $trustedProxies): array
     {
         if ($header === null) {
             return [];
         }
 
-        $parameters = self::parseForwardedElement(explode(',', $header)[0] ?? '');
+        $elements   = explode(',', $header);
+        $parameters = [];
+        for ($i = count($elements) - 1; $i >= 0; $i--) {
+            $parameters = self::parseForwardedElement($elements[$i]);
+            $for        = self::normalizeIp($parameters['for'] ?? null);
+            if ($for === null || !self::isProxyTrusted($for, $trustedProxies)) {
+                break;
+            }
+        }
 
         $result = [];
         foreach (['proto', 'host', 'port'] as $key) {

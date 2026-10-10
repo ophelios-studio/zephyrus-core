@@ -127,7 +127,7 @@ parameters:
         -
             identifier: nullCoalesce.offset
             path: src/Zephyrus/Http/Request.php
-            count: 3
+            count: 2
         -
             identifier: nullCoalesce.offset
             path: src/Zephyrus/Routing/RouteCollection.php
