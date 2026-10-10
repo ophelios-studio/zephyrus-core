@@ -116,7 +116,7 @@ final readonly class LocalizationConfig
     /**
      * Validate the currency code after trimming; '' means none.
      *
-     * @throws ConfigurationException if the code is not three ASCII letters.
+     * @throws ConfigurationException if the value is not a string or the code is not three ASCII letters.
      */
     private static function resolveCurrency(mixed $value): ?string
     {
@@ -124,7 +124,11 @@ final readonly class LocalizationConfig
             return null;
         }
 
-        $currency = trim((string) $value);
+        if (!is_string($value)) {
+            throw ConfigurationException::invalidValue('localization', 'currency', get_debug_type($value), 'must be a string');
+        }
+
+        $currency = trim($value);
         if ($currency === '') {
             return null;
         }

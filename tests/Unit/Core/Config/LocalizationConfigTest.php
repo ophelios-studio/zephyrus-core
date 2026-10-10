@@ -253,6 +253,17 @@ final class LocalizationConfigTest extends TestCase
         }
     }
 
+    public function testFromArrayRefusesACurrencyThatIsNotAString(): void
+    {
+        try {
+            LocalizationConfig::fromArray(['currency' => ['CAD']]);
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $exception) {
+            self::assertStringContainsString("field 'currency'", $exception->getMessage());
+            self::assertStringContainsString('must be a string', $exception->getMessage());
+        }
+    }
+
     public function testTheRefusalMessageDoesNotEchoAControlCharacter(): void
     {
         try {
