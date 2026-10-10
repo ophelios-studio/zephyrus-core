@@ -987,7 +987,7 @@ final readonly class Request
 
         $forwarded = in_array('forwarded', $trustedHeaders, true) ? ($headers['forwarded'] ?? null) : null;
         if (is_string($forwarded)) {
-            foreach (explode(',', $forwarded) as $element) {
+            foreach (self::splitOutsideQuotes($forwarded, ',') as $element) {
                 $ip = self::normalizeIp(self::parseForwardedElement($element)['for'] ?? null);
                 if ($ip !== null) {
                     $chain[] = $ip;
@@ -1157,7 +1157,7 @@ final readonly class Request
             return [];
         }
 
-        $elements   = explode(',', $header);
+        $elements   = self::splitOutsideQuotes($header, ',');
         $parameters = [];
         for ($i = count($elements) - 1; $i >= 0; $i--) {
             if (trim($elements[$i]) === '') {
@@ -1182,6 +1182,43 @@ final readonly class Request
     }
 
     /**
+     * Split on a separator that sits outside quoted strings. A backslash inside
+     * quotes escapes the next character.
+     *
+     * @return list<string>
+     */
+    private static function splitOutsideQuotes(string $value, string $separator): array
+    {
+        $parts    = [];
+        $current  = '';
+        $inQuotes = false;
+        $length   = strlen($value);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $value[$i];
+
+            if ($inQuotes && $char === '\\' && $i + 1 < $length) {
+                $current .= $char . $value[++$i];
+                continue;
+            }
+
+            if ($char === '"') {
+                $inQuotes = !$inQuotes;
+            } elseif ($char === $separator && !$inQuotes) {
+                $parts[]  = $current;
+                $current  = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        $parts[] = $current;
+
+        return $parts;
+    }
+
+    /**
      * Parse ONE RFC 7239 forwarding element ("for=1.2.3.4;proto=https") into its
      * parameters: lowercased names mapped to unquoted values. Values keep their
      * original case, callers normalize when they need to.
@@ -1192,7 +1229,7 @@ final readonly class Request
     {
         $parameters = [];
 
-        foreach (explode(';', $element) as $pair) {
+        foreach (self::splitOutsideQuotes($element, ';') as $pair) {
             [$name, $value] = array_pad(explode('=', trim($pair), 2), 2, null);
             if ($name === null || $value === null) {
                 continue;

@@ -1296,6 +1296,57 @@ final class RequestTest extends TestCase
         self::assertSame('https://first.example/x', $request->uri()->full());
     }
 
+    public function testFromGlobalsDoesNotSplitForwardedElementsOnSeparatorsInsideQuotedStrings(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=203.0.113.9;host="legit.example.com,for=_x;host=evil.example;proto=https"',
+            ],
+            trustedProxies: ['10.0.0.0/24'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://legit.example.com%2Cfor%3D_x%3Bhost%3Devil.example%3Bproto%3Dhttps/x', $request->uri()->full());
+    }
+
+    public function testFromGlobalsIgnoresForwardedCommaInsideQuotedStringWhenResolvingClientIp(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=203.0.113.9;host="legit.example.com,for=198.51.100.7"',
+            ],
+            trustedProxies: ['10.0.0.0/24'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('203.0.113.9', $request->clientIp());
+    }
+
+    public function testFromGlobalsHonoursBackslashEscapesInsideForwardedQuotedStrings(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.internal',
+                'REQUEST_URI'    => '/x',
+                'REMOTE_ADDR'    => '10.0.0.1',
+                'HTTP_FORWARDED' => 'for=203.0.113.9;host="legit.example.com\\",for=10.0.0.9;proto=https"',
+            ],
+            trustedProxies: ['10.0.0.0/24'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://legit.example.com%5C%22%2Cfor%3D10.0.0.9%3Bproto%3Dhttps/x', $request->uri()->full());
+    }
+
     #[DataProvider('forwardedHeadersWithEmptyElements')]
     public function testFromGlobalsSkipsEmptyForwardedElementsWhenWalkingFromTheRight(string $header): void
     {
