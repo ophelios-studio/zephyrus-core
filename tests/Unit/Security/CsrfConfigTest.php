@@ -62,6 +62,14 @@ final class CsrfConfigTest extends TestCase
         CsrfConfig::fromSecurityConfig($this->security(true, ['#^/ok/#', '/webhooks/']));
     }
 
+    public function testFromSecurityConfigSuggestsAShapeForAnExclusionThatIsNotBounded(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/security\.csrf\.exceptions\[0\] must end with .+ \(expected a shape such as #\^\/webhooks\/#\)\./');
+
+        CsrfConfig::fromSecurityConfig($this->security(true, ['#^/webhooks#']));
+    }
+
     public function testFromSecurityConfigRefusesAnEmptyExclusionByConfigurationKey(): void
     {
         $this->expectException(InvalidArgumentException::class);

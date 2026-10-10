@@ -137,7 +137,7 @@ final class CsrfConfig
     {
         return new self(
             enabled: $security->csrfEnabled,
-            excludedPathPatterns: self::normalizeExcludedPathPatterns($security->csrfExceptions, fromSecurity: true),
+            excludedPathPatterns: self::normalizeExcludedPathPatterns($security->csrfExceptions, 'security.csrf.exceptions[%s]'),
         );
     }
 
@@ -178,11 +178,11 @@ final class CsrfConfig
     }
 
     /**
-     * @param mixed $patterns
-     * @param bool  $fromSecurity True when the patterns come from the security section, so errors name that key.
+     * @param mixed  $patterns
+     * @param string $label    Format naming the pattern in errors, its index is substituted for %s.
      * @return list<string>
      */
-    private static function normalizeExcludedPathPatterns(mixed $patterns, bool $fromSecurity = false): array
+    private static function normalizeExcludedPathPatterns(mixed $patterns, string $label = 'CSRF excluded path pattern at index %s'): array
     {
         if (!is_array($patterns)) {
             throw new InvalidArgumentException('CSRF excluded path patterns must be an array of regex strings.');
@@ -190,9 +190,7 @@ final class CsrfConfig
 
         $normalized = [];
         foreach ($patterns as $index => $pattern) {
-            $where = $fromSecurity
-                ? sprintf('security.csrf.exceptions[%s]', (string) $index)
-                : sprintf('CSRF excluded path pattern at index %s', (string) $index);
+            $where = sprintf($label, (string) $index);
 
             if (!is_string($pattern) || trim($pattern) === '') {
                 throw new InvalidArgumentException(sprintf('%s must be a non-empty string such as %s.', $where, self::EXAMPLE_PATTERN));
@@ -255,9 +253,10 @@ final class CsrfConfig
         if (!$endsAtBoundary) {
             throw new InvalidArgumentException(sprintf(
                 '%s must end with "/" (the route and everything under it) or "$" (that exact path), otherwise '
-                . 'it also exempts every sibling route sharing the prefix: %s',
+                . 'it also exempts every sibling route sharing the prefix: %s (expected a shape such as %s).',
                 $where,
                 $pattern,
+                self::EXAMPLE_PATTERN,
             ));
         }
     }
