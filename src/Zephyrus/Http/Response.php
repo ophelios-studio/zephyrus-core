@@ -18,7 +18,7 @@ final readonly class Response
     private const LOCAL_PATH_PATTERN = '#^/(?![/\\\\])[^\x00-\x1F\x7F\\\\]*+$#D';
 
     /** RFC 9110 allows HTAB as the only control character in a field value. */
-    private const HEADER_VALUE_FORBIDDEN_PATTERN = '/[\x00-\x08\x0A-\x1F\x7F]/D';
+    private const HEADER_VALUE_FORBIDDEN_PATTERN = '/[\x00-\x08\x0A-\x1F\x7F]/';
 
     private const STATUS_PHRASES = [
         100 => 'Continue',
@@ -65,6 +65,14 @@ final readonly class Response
         array $headers = [],
     ) {
         $this->headers = array_change_key_case($headers);
+    }
+
+    /**
+     * Whether a header value is free of control characters other than HTAB, the RFC 9110 rule for field values.
+     */
+    public static function isValidHeaderValue(string $value): bool
+    {
+        return preg_match(self::HEADER_VALUE_FORBIDDEN_PATTERN, $value) !== 1;
     }
 
     public static function text(string $body, int $status = 200): self
@@ -203,7 +211,7 @@ final readonly class Response
      */
     private static function assertValidHeaderValue(string $name, string $value): void
     {
-        if (preg_match(self::HEADER_VALUE_FORBIDDEN_PATTERN, $value) === 1) {
+        if (!self::isValidHeaderValue($value)) {
             throw new InvalidArgumentException(sprintf(
                 'Invalid value for HTTP header "%s": it contains a control character other than HTAB.',
                 $name,

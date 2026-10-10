@@ -705,6 +705,23 @@ final class ResponseTest extends TestCase
         self::assertSame('café', $response->headers['x-name']);
     }
 
+    #[DataProvider('controlCharacterValues')]
+    public function testIsValidHeaderValueRefusesEveryControlCharacter(string $value): void
+    {
+        self::assertFalse(Response::isValidHeaderValue($value));
+    }
+
+    #[DataProvider('allowedValues')]
+    public function testIsValidHeaderValueAcceptsHorizontalTabAndText(string $value): void
+    {
+        self::assertTrue(Response::isValidHeaderValue($value));
+    }
+
+    public function testIsValidHeaderValueAcceptsAnEmptyString(): void
+    {
+        self::assertTrue(Response::isValidHeaderValue(''));
+    }
+
     public function testConstructorStoresHeaderValuesWithoutValidation(): void
     {
         $response = new Response(headers: ['X-Raw' => "a\r\nb"]);

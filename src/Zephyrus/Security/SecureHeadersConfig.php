@@ -7,6 +7,7 @@ namespace Zephyrus\Security;
 use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\IpRange;
+use Zephyrus\Http\Response;
 
 /**
  * Immutable configuration for the HTTP security response headers.
@@ -166,7 +167,7 @@ final readonly class SecureHeadersConfig
             return '';
         }
 
-        if (preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $text) === 1) {
+        if (!Response::isValidHeaderValue($text)) {
             throw ConfigurationException::invalidValue(
                 'security.headers',
                 $key,
