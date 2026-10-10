@@ -4,6 +4,7 @@ on:
   push:
     branches: [dev, main]
   pull_request:
+    types: [opened, synchronize, reopened, edited]
     branches: [dev, main]
 
 permissions:
@@ -162,3 +163,9 @@ jobs:
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           REPOSITORY: ${{ github.repository }}
         run: .github/scripts/check-commit-messages.sh "$RANGE"
+
+      - name: Check the pull request title
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: .github/scripts/check-commit-messages.sh --title "$PR_TITLE"

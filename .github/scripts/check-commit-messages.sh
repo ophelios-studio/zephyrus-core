@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Usage: check-commit-messages.sh <git rev-list range>
+#        check-commit-messages.sh --title <pull request title>
 set -euo pipefail
 export LC_ALL=C
 
@@ -11,16 +12,25 @@ SCOPE_RE='^[a-z0-9,._/-]+$'
 GITHUB_COMMITTER='noreply@github.com'
 CI_SKIP_RE='\[(skip ci|ci skip|no ci|skip actions|actions skip)\]'
 
-if [ "$#" -ne 1 ] || [ -z "$1" ]; then
-  echo "usage: $0 <git rev-list range>" >&2
-  exit 2
-fi
-range=$1
-
-if [[ "$range" == *..* ]]; then
-  base=${range%%..*}
+if [ "${1:-}" = --title ]; then
+  title_mode=1
+  if [ "$#" -ne 2 ]; then
+    echo "usage: $0 --title <pull request title>" >&2
+    exit 2
+  fi
 else
-  base="${range%^!}^"
+  title_mode=0
+  if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+    echo "usage: $0 <git rev-list range>" >&2
+    echo "       $0 --title <pull request title>" >&2
+    exit 2
+  fi
+  range=$1
+  if [[ "$range" == *..* ]]; then
+    base=${range%%..*}
+  else
+    base="${range%^!}^"
+  fi
 fi
 
 escape() {
@@ -42,6 +52,14 @@ is_allowed_type() {
 }
 
 reasons=()
+
+join_reasons() {
+  local joined="" reason
+  for reason in "${reasons[@]}"; do
+    joined+="${joined:+; }$reason"
+  done
+  printf '%s' "$joined"
+}
 
 check_subject() {
   local subject=$1 head rest type scope
@@ -73,12 +91,56 @@ check_subject() {
   return 0
 }
 
+# Subject rules shared by commit messages and the pull request title.
+check_subject_line() {
+  local subject=$1
+  case "$subject" in
+    "fixup! "*|"squash! "*) reasons+=("starts with fixup! or squash!") ;;
+    'Revert "'*) reasons+=("write a revert as 'revert: <subject>' on one line") ;;
+    *) check_subject "$subject" ;;
+  esac
+}
+
+# Text rules shared by commit messages and the pull request title.
+check_text() {
+  local text=$1
+  if [[ "$text" == *[[:cntrl:]]* ]]; then
+    reasons+=("contains a control character")
+  fi
+  if printf '%s\n' "$text" | grep -Eqi "$CI_SKIP_RE"; then
+    reasons+=("contains a CI skip marker")
+  fi
+}
+
 # Dependabot generates the body, so only its subject is checked. Exempt only PRs
 # opened by dependabot[bot] from this repository: the head repo decides, not the actor.
 is_dependabot_pull_request() {
   [ "${EVENT_NAME:-}" = pull_request ] && [ "${PR_AUTHOR:-}" = 'dependabot[bot]' ] \
     && [ -n "${REPOSITORY:-}" ] && [ "${PR_HEAD_REPO:-}" = "$REPOSITORY" ]
 }
+
+# A squash merge uses the pull request title as the commit subject, so it gets the subject rules.
+check_title() {
+  local title=$1
+  reasons=()
+  check_subject_line "$title"
+  check_text "$title"
+  if [ "${#reasons[@]}" -gt 0 ]; then
+    printf '::error title=Pull request title::%s\n' "$(escape "$(join_reasons)")"
+    printf '  Title: %s\n' "$(escape "$title")"
+    echo ""
+    echo "Expected form: type(scope): description"
+    echo "Allowed types: ${ALLOWED_TYPES// /, }"
+    echo "Set the title to the commit message that dev will receive: GitHub squash-merges with it."
+    return 1
+  fi
+  echo "Pull request title is valid."
+}
+
+if [ "$title_mode" -eq 1 ]; then
+  check_title "$2" || exit 1
+  exit 0
+fi
 
 checked=0
 failed=0
@@ -109,38 +171,18 @@ while IFS= read -r commit; do
     if [ "$nonempty" -gt 1 ]; then
       reasons+=("has a body")
     fi
-    case "$subject" in
-      "fixup! "*|"squash! "*)
-        reasons+=("unsquashed fixup commit: git rebase -i --autosquash $base")
-        ;;
-      'Revert "'*)
-        reasons+=("write a revert as 'revert: <subject>' on one line")
-        ;;
-      *)
-        check_subject "$subject"
-        ;;
-    esac
+    check_subject_line "$subject"
   fi
 
   if printf '%s\n' "$msg" | grep -Eqi '^co-authored-by:'; then
     reasons+=("has a Co-Authored-By trailer")
   fi
 
-  if [[ "${msg//$'\n'/}" == *[[:cntrl:]]* ]]; then
-    reasons+=("contains a control character")
-  fi
-
-  if printf '%s\n' "$msg" | grep -Eqi "$CI_SKIP_RE"; then
-    reasons+=("contains a CI skip marker")
-  fi
+  check_text "${msg//$'\n'/}"
 
   if [ "${#reasons[@]}" -gt 0 ]; then
     failed=$((failed + 1))
-    joined=""
-    for ((i = 0; i < ${#reasons[@]}; i++)); do
-      joined+="${joined:+; }${reasons[i]}"
-    done
-    printf '::error title=Commit %s::%s\n' "$short" "$(escape "$joined")"
+    printf '::error title=Commit %s::%s\n' "$short" "$(escape "$(join_reasons)")"
     printf '  %s  %s\n' "$short" "$(escape "$subject")"
   fi
 done <<< "$commits"
