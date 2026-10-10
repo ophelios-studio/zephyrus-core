@@ -7,6 +7,7 @@ namespace Zephyrus\Session;
 use PDO;
 use Throwable;
 use Zephyrus\Data\Database;
+use Zephyrus\Data\DatabaseException;
 
 /**
  * SessionHandlerInterface implementation that stores session data in a database table.
@@ -38,6 +39,8 @@ use Zephyrus\Data\Database;
  *
  * A wrapper must forward open() and close() as well as the data callbacks: close() releases the
  * advisory lock taken by read().
+ * Close, regenerate or destroy the session outside a Database transaction on the same connection: a failing
+ * session write aborts it and the lock stays held until the connection closes.
  * Behind transaction pooling (PgBouncer pool_mode=transaction), construct the handler with lockSessions: false.
  */
 final class DatabaseSessionHandler implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
@@ -106,9 +109,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
     /**
      * @param string $idPattern Accepted session id shape. Override only for ids generated in another format.
-     * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). Pass false
-     *   behind transaction or statement pooling: the lock would stay on a server connection after the request
-     *   and fill the shared lock table until PostgreSQL runs out of shared memory.
+     * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). With false,
+     *   concurrent requests of one session can overwrite each other's changes. Pass false only behind transaction
+     *   or statement pooling: the lock would stay on a server connection after the request and fill the shared
+     *   lock table until PostgreSQL runs out of shared memory.
      */
     public function __construct(
         private readonly Database $database,
@@ -157,7 +161,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * Decide whether PHP may adopt a client-supplied session id: it must match the pattern and have a live row.
      *
      * Implementing this method is what makes PHP enforce session.use_strict_mode for this handler.
-     * Refusing unknown ids only narrows session fixation: rotating the id on each privilege change is the control that defeats it.
+     * Refusing unknown ids only narrows session fixation: rotating the id on each privilege change defeats it.
      */
     public function validateId(string $id): bool
     {
@@ -197,7 +201,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * An expired row reads as absent and is left in place: gc() owns removal.
      *
      * @throws SessionException when the data column holds something other than text.
-     * @throws \Zephyrus\Data\DatabaseException when the SELECT fails.
+     * @throws DatabaseException when the SELECT fails.
      */
     public function read(string $id): string
     {
@@ -225,7 +229,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         if ($payload === null) {
-            // Requests admitted before a logout may still race to recreate this id.
+            // The lock is not kept for a new session, so requests admitted before a logout
+            // may race to recreate this id.
             $this->idStates[$id] = self::STATE_CREATED;
             $this->releaseLock();
 
@@ -434,7 +439,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      * Block until the lock is granted or LOCK_WAIT_SECONDS pass.
      *
      * The lock_timeout is set inside the transaction or savepoint of the wait and rolled back with it,
-     * so a pooler cannot split the two, and the timeout never outlives the wait.
+     * so a pooler cannot split the two, and the timeout never outlives the wait. The session-level
+     * advisory lock survives that rollback and is still returned as granted.
      *
      * @param array{int, int} $key
      */

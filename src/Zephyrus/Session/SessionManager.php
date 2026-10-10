@@ -226,7 +226,7 @@ final class SessionManager
      * Does nothing when no session exists.
      *
      * @throws SessionException when PHP or the save handler refuses, so a logout never reports success
-     *   while the stored session survives.
+     *   while the stored session survives, or when the session is closed but still has an id.
      */
     public function destroy(): void
     {
