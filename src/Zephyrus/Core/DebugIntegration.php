@@ -124,6 +124,9 @@ final class DebugIntegration
      * calls run. productionMode is still set to true, because Tracy's dump()
      * prints unless it is true, and it defaults to null.
      *
+     * An application Closure or ConfigSection exporter in Dumper::$objectExporters
+     * must be registered after this call, or it is replaced.
+     *
      * @param bool                    $debug          Whether the application is in debug mode.
      * @param string|null             $logDirectory   Directory for Tracy log files. Null uses Tracy's default.
      * @param string|null             $email          Email for error notifications.
