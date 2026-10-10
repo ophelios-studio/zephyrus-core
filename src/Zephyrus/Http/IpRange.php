@@ -10,6 +10,8 @@ namespace Zephyrus\Http;
  */
 final class IpRange
 {
+    private const int SHOWN_LENGTH = 64;
+
     public const string IPV4_MAPPED_REFUSAL = 'an IPv4-mapped IPv6 range shorter than /96 covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
 
     /**
@@ -52,6 +54,22 @@ final class IpRange
         $mask = (0xff << (8 - $remainingBits)) & 0xff;
 
         return (ord($ipBinary[$fullBytes]) & $mask) === (ord($networkBinary[$fullBytes]) & $mask);
+    }
+
+    /**
+     * An entry as it may appear in an error message: at most 64 bytes, then the
+     * byte count when cut, with control characters escaped.
+     */
+    public static function shownEntry(string $entry): string
+    {
+        $shown = addcslashes(
+            mb_strcut(mb_scrub($entry, 'UTF-8'), 0, self::SHOWN_LENGTH, 'UTF-8'),
+            "\\\0..\37\177",
+        );
+
+        return strlen($entry) > self::SHOWN_LENGTH
+            ? sprintf('%s...(%d bytes)', $shown, strlen($entry))
+            : $shown;
     }
 
     /**

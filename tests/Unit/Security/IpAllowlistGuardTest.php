@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Security;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Security\IpAllowlistGuard;
@@ -60,25 +61,71 @@ final class IpAllowlistGuardTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string, string}>
+     * @return iterable<string, array{string}>
      */
-    public static function entriesThatMustNotAuthorize(): iterable
+    public static function invalidEntries(): iterable
     {
-        yield 'overflowing ipv4 prefix' => ['10.0.0.0/' . str_repeat('9', 309), '203.0.113.9'];
-        yield 'overflowing ipv6 prefix' => ['2001:db8::/' . str_repeat('9', 309), '2001:db8::1'];
-        yield 'letter O for zero' => ['10.0.0.0/O8', '203.0.113.9'];
-        yield 'alphabetic prefix' => ['10.0.0.0/abc', '10.0.0.1'];
-        yield 'nul byte after prefix' => ["10.0.0.0/8\0", '10.0.0.1'];
-        yield 'prefix above ipv4 width' => ['10.0.0.0/33', '10.0.0.1'];
-        yield 'ipv6 range with ipv4 client' => ['2001:db8::/32', '10.0.0.1'];
-        yield 'empty entry' => ['', '10.0.0.1'];
+        yield 'overflowing ipv4 prefix' => ['10.0.0.0/' . str_repeat('9', 309)];
+        yield 'overflowing ipv6 prefix' => ['2001:db8::/' . str_repeat('9', 309)];
+        yield 'letter O for zero' => ['10.0.0.0/O8'];
+        yield 'alphabetic prefix' => ['10.0.0.0/abc'];
+        yield 'nul byte after prefix' => ["10.0.0.0/8\0"];
+        yield 'prefix above ipv4 width' => ['10.0.0.0/33'];
+        yield 'empty entry' => [''];
+        yield 'hostname' => ['example.com'];
+        yield 'comma separated pair' => ['10.0.0.1,10.0.0.2'];
     }
 
-    #[DataProvider('entriesThatMustNotAuthorize')]
-    public function testRejectsEntriesThatAreNotValidRanges(string $entry, string $ip): void
+    #[DataProvider('invalidEntries')]
+    public function testConstructorRefusesEntriesThatAreNotValidRanges(string $entry): void
     {
-        $guard = new IpAllowlistGuard([$entry]);
-        $request = new Request(method: 'GET', uri: '/secure', clientIp: $ip);
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Allowed IP');
+
+        new IpAllowlistGuard(['127.0.0.1', $entry]);
+    }
+
+    public function testConstructorMessageNamesTheRefusedEntry(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Allowed IP "10.0.0.0/33":');
+
+        new IpAllowlistGuard(['10.0.0.0/33']);
+    }
+
+    public function testConstructorMessageBoundsAHugeRefusedEntry(): void
+    {
+        $entry = str_repeat('x', 5 * 1024 * 1024);
+
+        try {
+            new IpAllowlistGuard([$entry]);
+            self::fail('A hostname-sized entry must be refused.');
+        } catch (InvalidArgumentException $e) {
+            self::assertLessThan(300, strlen($e->getMessage()));
+            self::assertStringContainsString('(5242880 bytes)', $e->getMessage());
+        }
+    }
+
+    public function testConstructorMessageEscapesControlCharactersInTheEntry(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Allowed IP "10.0.0.1\\n10.0.0.2":');
+
+        new IpAllowlistGuard(["10.0.0.1\n10.0.0.2"]);
+    }
+
+    public function testConstructorRefusesShortIpv4MappedRangeWithTheIpv4Form(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('such as 10.0.0.0/8');
+
+        new IpAllowlistGuard(['::ffff:10.0.0.0/8']);
+    }
+
+    public function testEmptyAllowlistAcceptsNoClient(): void
+    {
+        $guard = new IpAllowlistGuard([]);
+        $request = new Request(method: 'GET', uri: '/secure', clientIp: '127.0.0.1');
 
         self::assertFalse($guard->isAuthorized($request));
     }
