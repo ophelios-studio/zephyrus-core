@@ -19,7 +19,6 @@ final class IpRangeTest extends TestCase
         yield 'ipv4 zero prefix' => ['0.0.0.0/0'];
         yield 'zero quad at /96 in mapped form' => ['::ffff:0.0.0.0/96'];
         yield 'mapped range at /104' => ['::ffff:10.0.0.0/104'];
-        yield 'hex form that reads as ipv4 at /8' => ['::a00:0/8'];
         yield 'ipv4 full prefix' => ['10.0.0.0/32'];
         yield 'ipv4 bare address' => ['10.0.0.1'];
         yield 'ipv4 three digit prefix' => ['10.0.0.0/008'];
@@ -40,6 +39,7 @@ final class IpRangeTest extends TestCase
     public static function invalidRanges(): iterable
     {
         yield 'empty' => [''];
+        yield 'hex form that reads as ipv4 at /8 with host bits' => ['::a00:0/8'];
         yield 'only a slash' => ['/8'];
         yield 'empty prefix' => ['10.0.0.0/'];
         yield 'alphabetic prefix' => ['10.0.0.0/abc'];
@@ -246,5 +246,43 @@ final class IpRangeTest extends TestCase
     public function testContainsMatchesAddressAgainstRange(string $range, string $ip, bool $expected): void
     {
         self::assertSame($expected, IpRange::contains($range, $ip));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> The entry, then the range it really covers.
+     */
+    public static function plainRangesWithHostBits(): iterable
+    {
+        yield 'ipv4 octet typo that widens a /8' => ['10.1.0.0/8', '10.0.0.0/8'];
+        yield 'ipv4 digit typo that widens a /3' => ['10.0.0.5/3', '0.0.0.0/3'];
+        yield 'ipv4 last bit after a /31' => ['192.168.1.1/31', '192.168.1.0/31'];
+        yield 'ipv4 address with a zero prefix' => ['10.0.0.5/0', '0.0.0.0/0'];
+        yield 'ipv6 address inside a /32' => ['2001:db8::1/32', '2001:db8::/32'];
+        yield 'ipv6 block inside a /16' => ['2001:db8:1::/16', '2001::/16'];
+        yield 'ipv6 address with a zero prefix' => ['::1/0', '::/0'];
+        yield 'ipv6 last bit after a /127' => ['2001:db8::1/127', '2001:db8::/127'];
+    }
+
+    #[DataProvider('plainRangesWithHostBits')]
+    public function testIsValidRefusesAPlainRangeWhoseAddressHasBitsAfterThePrefix(string $range, string $covered): void
+    {
+        self::assertFalse(IpRange::isValid($range));
+        self::assertStringContainsString(sprintf('%s covers %s', $range, $covered), IpRange::invalidEntryReason($range) ?? '');
+        self::assertTrue(IpRange::isValid($covered));
+    }
+
+    public function testTheReasonNamesTheSingleAddressAndTheCoveredRange(): void
+    {
+        self::assertSame(
+            '10.0.0.5/3 covers 0.0.0.0/3; write 10.0.0.5/32 or 0.0.0.0/3',
+            IpRange::invalidEntryReason('10.0.0.5/3'),
+        );
+    }
+
+    public function testAPlainRangeWithoutHostBitsStaysValid(): void
+    {
+        self::assertNull(IpRange::invalidEntryReason('10.0.0.0/8'));
+        self::assertNull(IpRange::invalidEntryReason('10.0.0.5/32'));
+        self::assertNull(IpRange::invalidEntryReason('2001:db8::/32'));
     }
 }

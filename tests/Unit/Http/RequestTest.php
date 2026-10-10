@@ -501,7 +501,7 @@ final class RequestTest extends TestCase
 
     public function testFromGlobalsTrustsIpv6CidrRange(): void
     {
-        // Mirrors the real deployment, whose internal network is fdaa::/8.
+        // Mirrors the real deployment, whose internal network is fd00::/8.
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'       => 'GET',
@@ -510,7 +510,7 @@ final class RequestTest extends TestCase
                 'REMOTE_ADDR'          => 'fdaa:0:2::5',
                 'HTTP_X_FORWARDED_FOR' => '198.51.100.66, 203.0.113.7, fdaa:0:2::9',
             ],
-            trustedProxies: ['fdaa::/8'],
+            trustedProxies: ['fd00::/8'],
         );
 
         self::assertSame('203.0.113.7', $request->clientIp());

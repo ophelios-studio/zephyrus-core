@@ -518,8 +518,9 @@ final class Rules
     }
 
     /**
-     * Validates IPv4/IPv6 CIDR notation (e.g. 10.0.0.0/8, 2001:db8::/32). IPv6 ranges below
-     * /96 that embed an IPv4 address are refused.
+     * Validates IPv4/IPv6 CIDR notation (e.g. 10.0.0.0/8, 2001:db8::/32). The address must have
+     * no bits after the prefix (10.1.0.0/8 is refused), and IPv6 ranges below /96 that embed an
+     * IPv4 address are refused.
      */
     public static function cidr(string $message = 'Must be a valid CIDR block.'): Rule
     {

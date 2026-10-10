@@ -913,6 +913,14 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::cidr()->test($block));
     }
 
+    public function testCidrRefusesAnAddressWithBitsAfterThePrefix(): void
+    {
+        self::assertFalse(Rules::cidr()->test('10.1.0.0/8'));
+        self::assertFalse(Rules::cidr()->test('10.0.0.5/3'));
+        self::assertFalse(Rules::cidr()->test('2001:db8::1/32'));
+        self::assertTrue(Rules::cidr()->test('10.0.0.0/8'));
+    }
+
     public function testCidrDefaultMessage(): void
     {
         self::assertSame('Must be a valid CIDR block.', Rules::cidr()->errorMessage());

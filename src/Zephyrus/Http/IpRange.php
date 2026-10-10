@@ -88,7 +88,7 @@ final class IpRange
             return 'not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32';
         }
 
-        return self::embeddedIpv4Refusal($entry, $parsed[0], $parsed[1]);
+        return self::refusal($entry, $parsed[0], $parsed[1]);
     }
 
     /**
@@ -97,11 +97,20 @@ final class IpRange
     private static function parse(string $range): ?array
     {
         $parsed = self::split($range);
-        if ($parsed === null || self::embeddedIpv4Refusal($range, $parsed[0], $parsed[1]) !== null) {
+        if ($parsed === null || self::refusal($range, $parsed[0], $parsed[1]) !== null) {
             return null;
         }
 
         return $parsed;
+    }
+
+    /**
+     * The reason a parsed range is refused, or null when it is safe.
+     */
+    private static function refusal(string $range, string $binary, int $prefix): ?string
+    {
+        return self::embeddedIpv4Refusal($range, $binary, $prefix)
+            ?? self::hostBitsRefusal($range, $binary, $prefix);
     }
 
     /**
@@ -168,6 +177,41 @@ final class IpRange
     private static function isIpv4Mapped(string $binary): bool
     {
         return strlen($binary) === 16 && substr($binary, 0, 12) === str_repeat("\0", 10) . "\xff\xff";
+    }
+
+    /**
+     * The refusal for a range whose address has bits after its prefix, naming the range it really covers.
+     */
+    private static function hostBitsRefusal(string $range, string $binary, int $prefix): ?string
+    {
+        if (!self::hasBitsAfterPrefix($binary, $prefix)) {
+            return null;
+        }
+
+        $address = explode('/', $range, 2)[0];
+        $network = inet_ntop($binary & self::netmask(strlen($binary), $prefix));
+        $addressBits = strlen($binary) * 8;
+
+        return sprintf(
+            '%s covers %s/%d; write %s/%d or %s/%d',
+            $range,
+            $network,
+            $prefix,
+            $address,
+            $addressBits,
+            $network,
+            $prefix,
+        );
+    }
+
+    private static function netmask(int $length, int $prefix): string
+    {
+        $mask = str_repeat("\xff", intdiv($prefix, 8));
+        if ($prefix % 8 !== 0) {
+            $mask .= chr((0xff << (8 - $prefix % 8)) & 0xff);
+        }
+
+        return str_pad($mask, $length, "\0");
     }
 
     /**
