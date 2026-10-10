@@ -945,4 +945,111 @@ final class RouteCollectionTest extends TestCase
 
         self::assertFalse($derived->isTrailingSlashTolerant());
     }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function pathsParseUrlRefuses(): array
+    {
+        return [
+            'port-like segment' => ['/x:80/admin'],
+            'word-like port segment' => ['/public:1/admin'],
+            'port-like root' => ['/:99999'],
+        ];
+    }
+
+    #[DataProvider('pathsParseUrlRefuses')]
+    public function testPathParseUrlRefusesDoesNotMatchTheRootRoute(string $path): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+
+        $this->expectException(RouteNotFoundException::class);
+
+        $collection->match('GET', $path);
+    }
+
+    #[DataProvider('pathsParseUrlRefuses')]
+    public function testPathParseUrlRefusesMatchesARouteRegisteredAsWritten(string $path): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+        $collection->add(Route::define('GET', $path, 'AdminController@index'));
+
+        $match = $collection->match('GET', $path);
+
+        self::assertSame($path, $match->route->path);
+        self::assertSame('AdminController@index', $match->route->handler);
+    }
+
+    #[DataProvider('pathsParseUrlRefuses')]
+    public function testRootRequestDoesNotMatchARouteWhosePathParseUrlRefuses(string $path): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', $path, 'AdminController@index'));
+
+        $this->expectException(RouteNotFoundException::class);
+
+        $collection->match('GET', '/');
+    }
+
+    #[DataProvider('pathsParseUrlRefuses')]
+    public function testPathParseUrlRefusesRejectsTrailingSlashInStrictMode(string $path): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', $path, 'AdminController@index'));
+
+        $this->expectException(RouteNotFoundException::class);
+
+        $collection->match('GET', $path . '/');
+    }
+
+    #[DataProvider('pathsParseUrlRefuses')]
+    public function testPathParseUrlRefusesMatchesTheExactPathInStrictMode(string $path): void
+    {
+        $collection = new RouteCollection(trailingSlashTolerant: false);
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+        $collection->add(Route::define('GET', '/y:99/other', 'OtherController@index'));
+        $collection->add(Route::define('GET', $path, 'AdminController@index'));
+
+        $match = $collection->match('GET', $path);
+
+        self::assertSame($path, $match->route->path);
+    }
+
+    #[DataProvider('pathsParseUrlRefuses')]
+    public function testPathParseUrlRefusesMatchesWithTrailingSlashInTolerantMode(string $path): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+        $collection->add(Route::define('GET', '/y:99/other', 'OtherController@index'));
+        $collection->add(Route::define('GET', $path, 'AdminController@index'));
+
+        $match = $collection->match('GET', $path . '/');
+
+        self::assertSame($path, $match->route->path);
+    }
+
+    public function testPathParseUrlRefusesCutsTheQueryStringAndFragmentBeforeMatching(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+        $collection->add(Route::define('GET', '/x:80/admin', 'AdminController@index'));
+
+        $match = $collection->match('GET', '/x:80/admin?a=1#f');
+
+        self::assertSame('/x:80/admin', $match->route->path);
+    }
+
+    public function testParameterizedRouteMatchesAPathParseUrlRefuses(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        $match = $collection->match('GET', '/users/12:30');
+
+        self::assertSame('/users/{id}', $match->route->path);
+        self::assertSame('12:30', $match->parameters['id']);
+    }
 }

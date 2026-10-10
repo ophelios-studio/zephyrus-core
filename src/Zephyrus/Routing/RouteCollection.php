@@ -646,7 +646,7 @@ final class RouteCollection
      */
     private static function pathRefusalReason(string $rawPath): ?RoutePathRefusal
     {
-        $rawPath = substr($rawPath, 0, strcspn($rawPath, '?#'));
+        $rawPath = self::pathBeforeQuery($rawPath);
 
         if (preg_match(Uri::CONTROL_CHARACTER_PATTERN, $rawPath) === 1) {
             return RoutePathRefusal::ControlCharacter;
@@ -657,6 +657,11 @@ final class RouteCollection
         }
 
         return null;
+    }
+
+    private static function pathBeforeQuery(string $path): string
+    {
+        return substr($path, 0, strcspn($path, '?#'));
     }
 
     /**
@@ -699,7 +704,8 @@ final class RouteCollection
      * Reduces a request path to the form routes are matched against.
      *
      * A leading run of slashes is collapsed first, because parse_url() reads "//host/x" as
-     * an authority. A malformed target, or one without a path, resolves to "/".
+     * an authority. A target parse_url() refuses is kept as written, up to "?" or "#"; a target
+     * without a path resolves to "/".
      */
     private function normalizePath(string $path): string
     {
@@ -708,6 +714,11 @@ final class RouteCollection
         }
 
         $parsed = parse_url($path, PHP_URL_PATH);
+
+        if ($parsed === false) {
+            $parsed = self::pathBeforeQuery($path);
+        }
+
         $parsedPath = is_string($parsed) && $parsed !== '' ? $parsed : '/';
 
         if ($this->trailingSlashTolerant) {
