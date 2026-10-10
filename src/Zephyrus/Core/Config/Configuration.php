@@ -56,7 +56,7 @@ final readonly class Configuration
     {
         $customSections = [];
         foreach ($sectionFactories as $name => $className) {
-            if (!is_string($name)) {
+            if (!is_string($name)) { // @phpstan-ignore function.alreadyNarrowedType
                 throw new \InvalidArgumentException(sprintf(
                     'Section factory at index %d must be keyed by its section name.',
                     $name,
