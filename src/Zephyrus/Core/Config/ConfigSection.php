@@ -32,9 +32,10 @@ namespace Zephyrus\Core\Config;
  *
  * ## The typed getters REFUSE a value they cannot read
  *
- * getBool() accepts only the spellings ConfigBoolean documents. Any other value,
- * including an empty string, throws ConfigurationException, so a protection
- * written in the config file cannot switch itself off on a typo.
+ * getBool() accepts only true, false, 1, 0, on, off, yes and no (any case,
+ * surrounding whitespace ignored). Any other value, including an empty string,
+ * throws ConfigurationException, so a protection written in the config file
+ * cannot switch itself off on a typo.
  *
  * Two coercions are kept deliberately, because they are unambiguous and
  * because existing configuration relies on them: a float in an int slot
