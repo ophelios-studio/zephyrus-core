@@ -59,6 +59,7 @@ use Zephyrus\Security\CsrfConfig;
  *   - csrf.autoHtml and its aliases are not settings: omit them. A value that
  *     casts to true is REJECTED at boot.
  *   - Each trustedProxies entry must be '*', a valid IP address or a valid CIDR range.
+ *     IPv4-mapped ranges (::ffff:a.b.c.d/N) below /96 are REJECTED.
  *   - Each trustedHeaders entry must name a header Request can actually read;
  *     an unknown name is REJECTED rather than ignored, because silently dropping
  *     a typo would leave an operator believing they trust a header they do not.
