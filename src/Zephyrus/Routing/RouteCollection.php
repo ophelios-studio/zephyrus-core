@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing;
 
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 
@@ -53,6 +54,30 @@ final class RouteCollection
 
         $lastIndex = count($collection->routes) - 1;
         $collection->routes[$lastIndex] = $collection->routes[$lastIndex]->withName($name);
+
+        return $collection;
+    }
+
+    /**
+     * Adds global middlewares the last added route skips, keeping the ones it already skips.
+     *
+     * @param array<int, string> $middlewares Global middleware classes or interfaces.
+     * @throws \LogicException When the collection is empty.
+     * @throws RouteMiddlewareException When a class is not a middleware or would skip a framework security
+     *                                  middleware.
+     */
+    public function withLastRouteExcludedMiddlewares(array $middlewares): self
+    {
+        if ($this->routes === []) {
+            throw new \LogicException('withoutMiddleware() must follow a route: add one before excluding a middleware.');
+        }
+
+        $collection = new self($this->trailingSlashTolerant);
+        $collection->routes = $this->routes;
+
+        $lastIndex = count($collection->routes) - 1;
+        $last = $collection->routes[$lastIndex];
+        $collection->routes[$lastIndex] = $last->withExcludedMiddlewares([...$last->excludedMiddlewares, ...$middlewares]);
 
         return $collection;
     }

@@ -16,8 +16,16 @@ use Zephyrus\Routing\Attribute\Post as PostAttribute;
 use Zephyrus\Routing\Attribute\Put as PutAttribute;
 use Zephyrus\Routing\Attribute\Root as RootAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
+use Zephyrus\Routing\Attribute\WithoutMiddleware as WithoutMiddlewareAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\RouteAttributeReader;
+use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
+use Zephyrus\Security\AuthGuardMiddleware;
+use Zephyrus\Security\CsrfMiddleware;
+use Zephyrus\Session\SessionMiddleware;
 
 // ---------------------------------------------------------------------------
 // Fixture controllers used only in this test file
@@ -118,6 +126,38 @@ class MiddlewareGroupAttributedController
     #[MiddlewareGroupAttribute('audit-group')]
     #[PostAttribute('/profile', middlewares: ['auth'])]
     public function updateProfile(): void {}
+}
+
+#[WithoutMiddlewareAttribute(SessionMiddleware::class)]
+class ExclusionParentController
+{
+}
+
+#[WithoutMiddlewareAttribute(AuthGuardMiddleware::class)]
+class ExclusionChildController extends ExclusionParentController
+{
+    #[GetAttribute('/landing')]
+    public function landing(): void {}
+
+    #[WithoutMiddlewareAttribute(ContentFilterTestMiddleware::class)]
+    #[WithoutMiddlewareAttribute(SessionMiddleware::class)]
+    #[GetAttribute('/feed')]
+    public function feed(): void {}
+}
+
+class SecurityExclusionController
+{
+    #[WithoutMiddlewareAttribute(CsrfMiddleware::class)]
+    #[PostAttribute('/webhook')]
+    public function receive(): void {}
+}
+
+final class ContentFilterTestMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        return $next($request);
+    }
 }
 
 // Root attribute fixtures
@@ -460,6 +500,42 @@ final class RouteAttributeReaderTest extends TestCase
 
         self::assertCount(1, $routes);
         self::assertSame('/trailing/test', $routes[0]->path);
+    }
+
+    public function testClassLevelExclusionsAreInheritedParentFirst(): void
+    {
+        $routes = (new RouteAttributeReader())->read(ExclusionChildController::class);
+        $landing = $this->findByHandler($routes, ExclusionChildController::class . '@landing');
+
+        self::assertNotNull($landing);
+        self::assertSame([SessionMiddleware::class, AuthGuardMiddleware::class], $landing->excludedMiddlewares);
+    }
+
+    public function testMethodLevelExclusionsAreMergedAfterTheClassLevelOnes(): void
+    {
+        $routes = (new RouteAttributeReader())->read(ExclusionChildController::class);
+        $feed = $this->findByHandler($routes, ExclusionChildController::class . '@feed');
+
+        self::assertNotNull($feed);
+        self::assertSame(
+            [SessionMiddleware::class, AuthGuardMiddleware::class, ContentFilterTestMiddleware::class],
+            $feed->excludedMiddlewares,
+        );
+    }
+
+    public function testRouteWithoutExclusionAttributeExcludesNothing(): void
+    {
+        $routes = (new RouteAttributeReader())->read(SimpleController::class);
+
+        self::assertSame([], $routes[0]->excludedMiddlewares);
+    }
+
+    public function testExcludingASecurityMiddlewareIsRefusedWhenAttributesAreRead(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessage('security.csrf.exceptions');
+
+        (new RouteAttributeReader())->read(SecurityExclusionController::class);
     }
 
     // -----------------------------------------------------------------------

@@ -8,10 +8,14 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
+use Zephyrus\Routing\Attribute\WithoutMiddleware as WithoutMiddlewareAttribute;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Router;
+use Zephyrus\Security\AuthGuardMiddleware;
+use Zephyrus\Security\CsrfMiddleware;
+use Zephyrus\Session\SessionMiddleware;
 
 // ---------------------------------------------------------------------------
 // Fixture controllers for Router::controller() tests
@@ -60,6 +64,13 @@ class MiddlewareGroupLayeredController
     #[MiddlewareGroupAttribute('audit-group')]
     #[RouteAttribute('/reports', 'POST', middlewares: ['auth'])]
     public function generate(): void {}
+}
+
+#[WithoutMiddlewareAttribute(SessionMiddleware::class)]
+class SessionlessAttributeController
+{
+    #[RouteAttribute('/landing', 'GET')]
+    public function landing(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -162,6 +173,101 @@ final class RouterTest extends TestCase
         $this->expectExceptionMessage('name("health.show") must follow a route: add one before naming it.');
 
         (new Router())->name('health.show');
+    }
+
+    public function testWithoutMiddlewareBeforeAnyRouteIsRefused(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('withoutMiddleware() must follow a route');
+
+        (new Router())->withoutMiddleware(SessionMiddleware::class);
+    }
+
+    public function testWithoutMiddlewareAppliesToTheMostRecentlyRegisteredRouteOnly(): void
+    {
+        $routes = (new Router())
+            ->get('/', 'HomeController@index')
+            ->withoutMiddleware(SessionMiddleware::class)
+            ->get('/account', 'AccountController@show')
+            ->routes()
+            ->all();
+
+        self::assertSame([SessionMiddleware::class], $routes[0]->excludedMiddlewares);
+        self::assertSame([], $routes[1]->excludedMiddlewares);
+    }
+
+    public function testWithoutMiddlewareCallsAccumulate(): void
+    {
+        $route = (new Router())
+            ->get('/', 'HomeController@index')
+            ->withoutMiddleware(SessionMiddleware::class)
+            ->withoutMiddleware(AuthGuardMiddleware::class, SessionMiddleware::class)
+            ->routes()
+            ->all()[0];
+
+        self::assertSame([SessionMiddleware::class, AuthGuardMiddleware::class], $route->excludedMiddlewares);
+    }
+
+    public function testWithoutMiddlewareRefusesAFrameworkSecurityMiddleware(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+        $this->expectExceptionMessage('security.csrf.exceptions');
+
+        (new Router())->post('/webhook', 'HookController@receive')->withoutMiddleware(CsrfMiddleware::class);
+    }
+
+    public function testWithoutMiddlewareRefusesAClassThatIsNotAMiddleware(): void
+    {
+        $this->expectException(RouteMiddlewareException::class);
+
+        (new Router())->get('/', 'HomeController@index')->withoutMiddleware('session');
+    }
+
+    public function testNameAfterWithoutMiddlewareKeepsTheExclusion(): void
+    {
+        $route = (new Router())
+            ->get('/', 'HomeController@index')
+            ->withoutMiddleware(SessionMiddleware::class)
+            ->name('home')
+            ->routes()
+            ->findByName('home');
+
+        self::assertNotNull($route);
+        self::assertSame([SessionMiddleware::class], $route->excludedMiddlewares);
+    }
+
+    public function testGroupKeepsTheExclusionsOfItsRoutes(): void
+    {
+        $routes = (new Router())
+            ->group('/docs', fn (Router $router): Router => $router
+                ->get('/intro', 'DocsController@intro')
+                ->withoutMiddleware(SessionMiddleware::class)
+                ->get('/account', 'DocsController@account'))
+            ->routes()
+            ->all();
+
+        self::assertSame('/docs/intro', $routes[0]->path);
+        self::assertSame([SessionMiddleware::class], $routes[0]->excludedMiddlewares);
+        self::assertSame([], $routes[1]->excludedMiddlewares);
+    }
+
+    public function testTrailingSlashToleranceChangeKeepsTheExclusions(): void
+    {
+        $route = (new Router())
+            ->get('/', 'HomeController@index')
+            ->withoutMiddleware(SessionMiddleware::class)
+            ->strictTrailingSlashes()
+            ->routes()
+            ->all()[0];
+
+        self::assertSame([SessionMiddleware::class], $route->excludedMiddlewares);
+    }
+
+    public function testControllerKeepsTheAttributeExclusions(): void
+    {
+        $route = (new Router())->controller(SessionlessAttributeController::class)->routes()->all()[0];
+
+        self::assertSame([SessionMiddleware::class], $route->excludedMiddlewares);
     }
 
     public function testNameAssignsNameToMostRecentlyRegisteredRoute(): void

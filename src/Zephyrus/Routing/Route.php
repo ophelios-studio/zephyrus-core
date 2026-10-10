@@ -4,7 +4,15 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
+use Zephyrus\Security\AllowedHostsMiddleware;
+use Zephyrus\Security\ContentSecurityPolicyMiddleware;
+use Zephyrus\Security\CsrfMiddleware;
+use Zephyrus\Security\ForceHttpsMiddleware;
+use Zephyrus\Security\MaxBodySizeMiddleware;
+use Zephyrus\Security\SecureHeadersMiddleware;
 
 final readonly class Route
 {
@@ -37,10 +45,30 @@ final readonly class Route
      */
     public const SAFE_SLUG = '[A-Za-z0-9_-]+';
 
+    /** Global middlewares a route may never skip; excluding one of them or a parent is refused. */
+    private const UNSKIPPABLE_MIDDLEWARES = [
+        ForceHttpsMiddleware::class,
+        AllowedHostsMiddleware::class,
+        CsrfMiddleware::class,
+        MaxBodySizeMiddleware::class,
+        SecureHeadersMiddleware::class,
+        ContentSecurityPolicyMiddleware::class,
+    ];
+
+    /**
+     * Global middleware classes or interfaces skipped when this route matches.
+     *
+     * @var list<class-string<MiddlewareInterface>>
+     */
+    public array $excludedMiddlewares;
+
     /**
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
      * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
+     *                                  security middleware.
      */
     public function __construct(
         public string $method,
@@ -49,8 +77,40 @@ final readonly class Route
         public array $constraints = [],
         public array $middlewares = [],
         public ?string $name = null,
+        array $excludedMiddlewares = [],
     ) {
         self::assertValidParameterNames($path);
+        $this->excludedMiddlewares = self::skippableMiddlewares($excludedMiddlewares, $method . ' ' . $path);
+    }
+
+    /**
+     * @param array<int, string> $middlewares
+     * @return list<class-string<MiddlewareInterface>>
+     * @throws RouteMiddlewareException
+     */
+    private static function skippableMiddlewares(array $middlewares, string $route): array
+    {
+        $skippable = [];
+
+        foreach ($middlewares as $middleware) {
+            if (!is_a($middleware, MiddlewareInterface::class, true)) {
+                throw RouteMiddlewareException::excludedNotAMiddleware($route, $middleware);
+            }
+
+            $middleware = (new \ReflectionClass($middleware))->getName();
+
+            foreach (self::UNSKIPPABLE_MIDDLEWARES as $security) {
+                if (is_a($security, $middleware, true)) {
+                    throw RouteMiddlewareException::excludedSecurityMiddleware($route, $middleware, $security);
+                }
+            }
+
+            if (!in_array($middleware, $skippable, true)) {
+                $skippable[] = $middleware;
+            }
+        }
+
+        return $skippable;
     }
 
     /**
@@ -110,8 +170,11 @@ final readonly class Route
      *
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
+     * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
      *
      * @throws RouteSignatureException When a placeholder name is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
+     *                                  security middleware.
      */
     public static function define(
         string $method,
@@ -120,6 +183,7 @@ final readonly class Route
         array $constraints = [],
         array $middlewares = [],
         ?string $name = null,
+        array $excludedMiddlewares = [],
     ): self {
         $normalizedPath = '/' . trim($path, '/');
 
@@ -130,6 +194,7 @@ final readonly class Route
             constraints: $constraints,
             middlewares: $middlewares,
             name: $name,
+            excludedMiddlewares: $excludedMiddlewares,
         );
     }
 
@@ -147,6 +212,27 @@ final readonly class Route
             constraints: $this->constraints,
             middlewares: $this->middlewares,
             name: $name,
+            excludedMiddlewares: $this->excludedMiddlewares,
+        );
+    }
+
+    /**
+     * Returns a copy that skips exactly the given global middlewares.
+     *
+     * @param array<int, string> $excludedMiddlewares
+     * @throws RouteMiddlewareException When a class is not a middleware or would skip a framework security
+     *                                  middleware.
+     */
+    public function withExcludedMiddlewares(array $excludedMiddlewares): self
+    {
+        return new self(
+            method: $this->method,
+            path: $this->path,
+            handler: $this->handler,
+            constraints: $this->constraints,
+            middlewares: $this->middlewares,
+            name: $this->name,
+            excludedMiddlewares: $excludedMiddlewares,
         );
     }
 }

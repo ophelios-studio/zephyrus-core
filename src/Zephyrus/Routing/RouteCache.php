@@ -6,6 +6,7 @@ namespace Zephyrus\Routing;
 
 use JsonException;
 use Zephyrus\Routing\Exception\RouteCacheException;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 
 /**
  * Persists the compiled route table as a JSON file and validates it on load.
@@ -18,6 +19,9 @@ use Zephyrus\Routing\Exception\RouteCacheException;
 final class RouteCache
 {
     private const METADATA_VERSION = 1;
+
+    /** Optional entry key: a missing key loads as an empty list. */
+    private const EXCLUDED_MIDDLEWARES_KEY = 'excluded_middlewares';
 
     private const REASON_MISSING_FILE = 'missing-file';
     private const REASON_INVALID_METADATA = 'invalid-metadata';
@@ -393,14 +397,20 @@ final class RouteCache
             $constraints = $entry['constraints'] ?? [];
             $middlewares = $entry['middlewares'] ?? [];
             $name = $entry['name'] ?? null;
+            $excludedMiddlewares = $entry[self::EXCLUDED_MIDDLEWARES_KEY] ?? [];
 
             if (!is_array($constraints) || !is_array($middlewares) || ($name !== null && !is_string($name))) {
                 throw new RouteCacheException('Route cache entry contains invalid optional fields');
             }
 
+            if (!is_array($excludedMiddlewares)) {
+                throw new RouteCacheException('Route cache entry contains invalid excluded middlewares list');
+            }
+
             $this->assertValidConstraints($constraints);
             $this->assertValidMiddlewares($middlewares);
             $this->assertValidRouteName($name);
+            $this->assertValidExcludedMiddlewares($excludedMiddlewares);
 
             try {
                 // Any invalid entry must surface as RouteCacheException.
@@ -411,8 +421,9 @@ final class RouteCache
                     constraints: $constraints,
                     middlewares: $middlewares,
                     name: $name,
+                    excludedMiddlewares: $excludedMiddlewares,
                 );
-            } catch (\Zephyrus\Routing\Exception\RouteSignatureException $exception) {
+            } catch (\Zephyrus\Routing\Exception\RouteSignatureException | RouteMiddlewareException $exception) {
                 throw new RouteCacheException($exception->getMessage(), previous: $exception);
             }
 
@@ -524,20 +535,31 @@ final class RouteCache
     }
 
     /**
+     * Builds the routes section. The excluded middlewares key is written only when non-empty, which keeps
+     * the hash of a route table without exclusions unchanged.
+     *
      * @param array<int, Route> $routes
-     * @return array<int, array{method: string, path: string, handler: string, constraints: array<string, string>, middlewares: array<int, string>, name: ?string}>
+     * @return array<int, array{method: string, path: string, handler: string, constraints: array<string, string>, middlewares: array<int, string>, name: ?string, excluded_middlewares?: list<string>}>
      */
     private function routesToPayload(array $routes): array
     {
         return array_map(
-            static fn (Route $route): array => [
-                'method' => $route->method,
-                'path' => $route->path,
-                'handler' => $route->handler,
-                'constraints' => $route->constraints,
-                'middlewares' => $route->middlewares,
-                'name' => $route->name,
-            ],
+            static function (Route $route): array {
+                $entry = [
+                    'method' => $route->method,
+                    'path' => $route->path,
+                    'handler' => $route->handler,
+                    'constraints' => $route->constraints,
+                    'middlewares' => $route->middlewares,
+                    'name' => $route->name,
+                ];
+
+                if ($route->excludedMiddlewares !== []) {
+                    $entry[self::EXCLUDED_MIDDLEWARES_KEY] = $route->excludedMiddlewares;
+                }
+
+                return $entry;
+            },
             $routes,
         );
     }
@@ -551,7 +573,7 @@ final class RouteCache
     }
 
     /**
-     * @param array<int, array{method: string, path: string, handler: string, constraints: array<string, string>, middlewares: array<int, string>, name: ?string}> $routesPayload
+     * @param array<int, array{method: string, path: string, handler: string, constraints: array<string, string>, middlewares: array<int, string>, name: ?string, excluded_middlewares?: list<string>}> $routesPayload
      * @return array{version: int, routes_hash: string, route_count: int, generated_at: int}
      */
     private function buildMetadata(array $routesPayload): array
@@ -659,9 +681,29 @@ final class RouteCache
      */
     private function assertValidMiddlewares(array $middlewares): void
     {
-        foreach ($middlewares as $middleware) {
-            if (!is_string($middleware)) {
-                throw new RouteCacheException('Route cache entry contains invalid middlewares list');
+        $this->assertAllStrings($middlewares, 'middlewares');
+    }
+
+    /**
+     * @param array<mixed> $middlewares
+     */
+    private function assertValidExcludedMiddlewares(array $middlewares): void
+    {
+        if (!array_is_list($middlewares)) {
+            throw new RouteCacheException('Route cache entry contains invalid excluded middlewares list');
+        }
+
+        $this->assertAllStrings($middlewares, 'excluded middlewares');
+    }
+
+    /**
+     * @param array<mixed> $values
+     */
+    private function assertAllStrings(array $values, string $label): void
+    {
+        foreach ($values as $value) {
+            if (!is_string($value)) {
+                throw new RouteCacheException(sprintf('Route cache entry contains invalid %s list', $label));
             }
         }
     }

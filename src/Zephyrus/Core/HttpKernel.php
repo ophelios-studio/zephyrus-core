@@ -37,14 +37,16 @@ use Zephyrus\Routing\RouteMatch;
  * 404 or 405, and they do not post-process the error response of a failing
  * handler.
  *
- * Global middlewares run on 404 and 405 too, so their side effects happen
- * there as well (a session starts, for instance). Their $next() returns the
- * error response instead of throwing, so transaction handling must inspect
- * $response->status and error reporting belongs in ExceptionEvent. A middleware
- * validating a request against a resource must pass through when
- * Request::ATTRIBUTE_UNMATCHED_ROUTE is set (see CsrfMiddleware). Middlewares
- * validating the connection, the envelope or the caller may answer before
- * routing, and middlewares that decorate responses must keep running.
+ * A matched route skips the global middlewares it excludes (#[WithoutMiddleware]
+ * or Router::withoutMiddleware()). Global middlewares run on every 404 and 405,
+ * so their side effects happen there as well (a session starts, for instance).
+ * Their $next() returns the error response instead of throwing, so transaction
+ * handling must inspect $response->status and error reporting belongs in
+ * ExceptionEvent. A middleware validating a request against a resource must
+ * pass through when Request::ATTRIBUTE_UNMATCHED_ROUTE is set (see
+ * CsrfMiddleware). Middlewares validating the connection, the envelope or the
+ * caller may answer before routing, and middlewares that decorate responses
+ * must keep running.
  */
 final readonly class HttpKernel
 {
@@ -89,7 +91,8 @@ final readonly class HttpKernel
     /**
      * Matches the route, then runs the global pipeline over the matched handler
      * or over the routing error. Matching happens before the pipeline, so global
-     * middlewares already see the route parameters.
+     * middlewares already see the route parameters, and a matched route can skip
+     * the ones it excludes.
      */
     private function resolveAndPipe(Request $request): Response
     {
@@ -101,6 +104,7 @@ final readonly class HttpKernel
             $unmatched = $request->withAttribute(Request::ATTRIBUTE_UNMATCHED_ROUTE, true);
 
             return $this->pipe(
+                $this->globalPipeline,
                 $unmatched,
                 fn (Request $piped): Response => $this->toErrorResponse(
                     $routingFailure,
@@ -111,6 +115,7 @@ final readonly class HttpKernel
         }
 
         return $this->pipe(
+            $this->globalPipeline->without($match->route->excludedMiddlewares),
             $request->withMatchedRoute($match),
             fn (Request $piped): Response => $this->dispatchMatchedRoute($match, $piped),
         );
@@ -123,10 +128,10 @@ final readonly class HttpKernel
      *
      * @param callable(Request): Response $destination
      */
-    private function pipe(Request $request, callable $destination): Response
+    private function pipe(MiddlewarePipeline $pipeline, Request $request, callable $destination): Response
     {
         try {
-            return $this->globalPipeline->handle($request, $destination);
+            return $pipeline->handle($request, $destination);
         } catch (KernelRethrowSignal $signal) {
             // Converting again would call the exception handler twice.
             throw $signal;

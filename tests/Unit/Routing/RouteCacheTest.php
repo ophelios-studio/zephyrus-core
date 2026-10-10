@@ -10,6 +10,9 @@ use Zephyrus\Routing\Exception\RouteCacheException;
 use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCache;
 use Zephyrus\Routing\RouteCollection;
+use Zephyrus\Security\AuthGuardMiddleware;
+use Zephyrus\Security\CsrfMiddleware;
+use Zephyrus\Session\SessionMiddleware;
 
 final class RouteCacheTest extends TestCase
 {
@@ -1372,6 +1375,133 @@ final class RouteCacheTest extends TestCase
         } finally {
             @rmdir($cacheDirectory);
         }
+    }
+
+    public function testSaveAndLoadRoundTripKeepsTheExcludedMiddlewares(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/', 'HomeController@index', excludedMiddlewares: [
+            SessionMiddleware::class,
+            AuthGuardMiddleware::class,
+        ]));
+        $routes->add(Route::define('GET', '/account', 'AccountController@show'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+        $loaded = $cache->load()->all();
+
+        self::assertSame([SessionMiddleware::class, AuthGuardMiddleware::class], $loaded[0]->excludedMiddlewares);
+        self::assertSame([], $loaded[1]->excludedMiddlewares);
+        self::assertTrue($cache->isFresh($routes));
+    }
+
+    public function testEntryWithoutExcludedMiddlewaresLoadsAsExcludingNothing(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/',
+            'handler' => 'HomeController@index',
+            'constraints' => [],
+            'middlewares' => ['auth'],
+            'name' => 'home',
+        ]];
+
+        file_put_contents($this->cacheFile, json_encode([
+            'meta' => $this->metadataFor($routes),
+            'routes' => $routes,
+        ], JSON_THROW_ON_ERROR));
+
+        $loaded = (new RouteCache($this->cacheFile))->load()->all();
+
+        self::assertSame([], $loaded[0]->excludedMiddlewares);
+        self::assertSame(['auth'], $loaded[0]->middlewares);
+    }
+
+    public function testFileWrittenBeforeExclusionsExistedStaysFreshForRoutesExcludingNothing(): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/',
+            'handler' => 'HomeController@index',
+            'constraints' => [],
+            'middlewares' => [],
+            'name' => null,
+        ]];
+
+        file_put_contents($this->cacheFile, json_encode([
+            'meta' => $this->metadataFor($routes),
+            'routes' => $routes,
+        ], JSON_THROW_ON_ERROR));
+
+        $current = new RouteCollection();
+        $current->add(Route::define('GET', '/', 'HomeController@index'));
+
+        self::assertTrue((new RouteCache($this->cacheFile))->isFresh($current));
+    }
+
+    public function testCacheStopsBeingFreshWhenAnExclusionIsAdded(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/', 'HomeController@index'));
+
+        $cache = new RouteCache($this->cacheFile);
+        $cache->save($routes);
+
+        $excluding = new RouteCollection();
+        $excluding->add(Route::define('GET', '/', 'HomeController@index', excludedMiddlewares: [SessionMiddleware::class]));
+
+        self::assertFalse($cache->isFresh($excluding));
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function malformedExcludedMiddlewares(): iterable
+    {
+        yield 'string instead of list' => [SessionMiddleware::class];
+        yield 'non-string entry' => [[SessionMiddleware::class, 7]];
+        yield 'nested list' => [[[SessionMiddleware::class]]];
+    }
+
+    #[DataProvider('malformedExcludedMiddlewares')]
+    public function testLoadRefusesMalformedExcludedMiddlewares(mixed $excluded): void
+    {
+        $routes = [[
+            'method' => 'GET',
+            'path' => '/',
+            'handler' => 'HomeController@index',
+            'excluded_middlewares' => $excluded,
+        ]];
+
+        file_put_contents($this->cacheFile, json_encode([
+            'meta' => $this->metadataFor($routes),
+            'routes' => $routes,
+        ], JSON_THROW_ON_ERROR));
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('excluded middlewares');
+
+        (new RouteCache($this->cacheFile))->load();
+    }
+
+    public function testLoadRefusesAnEntryExcludingASecurityMiddleware(): void
+    {
+        $routes = [[
+            'method' => 'POST',
+            'path' => '/webhook',
+            'handler' => 'HookController@receive',
+            'excluded_middlewares' => [CsrfMiddleware::class],
+        ]];
+
+        file_put_contents($this->cacheFile, json_encode([
+            'meta' => $this->metadataFor($routes),
+            'routes' => $routes,
+        ], JSON_THROW_ON_ERROR));
+
+        $this->expectException(RouteCacheException::class);
+        $this->expectExceptionMessage('security.csrf.exceptions');
+
+        (new RouteCache($this->cacheFile))->load();
     }
 
     /**

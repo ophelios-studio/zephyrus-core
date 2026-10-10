@@ -20,7 +20,9 @@ use Zephyrus\Routing\Attribute\Put as PutAttribute;
 use Zephyrus\Routing\Attribute\RequiresEnv as RequiresEnvAttribute;
 use Zephyrus\Routing\Attribute\Root as RootAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
+use Zephyrus\Routing\Attribute\WithoutMiddleware as WithoutMiddlewareAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 
 /**
@@ -40,6 +42,7 @@ final class RouteAttributeReader
      * @return list<Route>
      * @throws RouteAttributeException When the class cannot be reflected or two routes share a name.
      * @throws RouteSignatureException When a route placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When a #[WithoutMiddleware] names a class the route may not skip.
      */
     public function read(string $className): array
     {
@@ -58,6 +61,7 @@ final class RouteAttributeReader
         $rootPrefix = $this->resolveRootPrefix($reflection);
 
         $classMiddlewares = $this->readInheritedMiddlewares($reflection);
+        $classExclusions = $this->readInheritedExclusions($reflection);
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() !== $className) {
@@ -69,6 +73,10 @@ final class RouteAttributeReader
             }
 
             $handler = sprintf('%s@%s', $className, $method->getName());
+            $exclusions = [
+                ...$classExclusions,
+                ...$this->readExclusionAttributes($method->getAttributes(WithoutMiddlewareAttribute::class)),
+            ];
 
             foreach ($this->readMethodAttributes($method, $classMiddlewares) as $attr) {
                 $name = $attr['name'] !== '' ? $attr['name'] : null;
@@ -88,6 +96,7 @@ final class RouteAttributeReader
                     constraints: $attr['constraints'],
                     middlewares: $attr['middlewares'],
                     name: $name,
+                    excludedMiddlewares: $exclusions,
                 );
             }
         }
@@ -155,15 +164,8 @@ final class RouteAttributeReader
      */
     private function readInheritedMiddlewares(ReflectionClass $reflection): array
     {
-        $chain = [];
-        $current = $reflection;
-        while ($current !== false) {
-            $chain[] = $current;
-            $current = $current->getParentClass();
-        }
-
         $middlewares = [];
-        foreach (array_reverse($chain) as $class) {
+        foreach ($this->parentFirstChain($reflection) as $class) {
             array_push(
                 $middlewares,
                 ...$this->readMiddlewareAttributes($class->getAttributes(MiddlewareAttribute::class)),
@@ -172,6 +174,54 @@ final class RouteAttributeReader
         }
 
         return $middlewares;
+    }
+
+    /**
+     * Collects the #[WithoutMiddleware] classes of the class and its parents, parent-first.
+     *
+     * @param ReflectionClass<object> $reflection
+     * @return list<string>
+     */
+    private function readInheritedExclusions(ReflectionClass $reflection): array
+    {
+        $exclusions = [];
+        foreach ($this->parentFirstChain($reflection) as $class) {
+            array_push(
+                $exclusions,
+                ...$this->readExclusionAttributes($class->getAttributes(WithoutMiddlewareAttribute::class)),
+            );
+        }
+
+        return $exclusions;
+    }
+
+    /**
+     * @param ReflectionClass<object> $reflection
+     * @return list<ReflectionClass<object>>
+     */
+    private function parentFirstChain(ReflectionClass $reflection): array
+    {
+        $chain = [];
+        for ($current = $reflection; $current !== false; $current = $current->getParentClass()) {
+            $chain[] = $current;
+        }
+
+        return array_reverse($chain);
+    }
+
+    /**
+     * @param list<\ReflectionAttribute<WithoutMiddlewareAttribute>> $attributes
+     * @return list<string>
+     */
+    private function readExclusionAttributes(array $attributes): array
+    {
+        $exclusions = [];
+
+        foreach ($attributes as $attributeRef) {
+            $exclusions[] = $attributeRef->newInstance()->middleware;
+        }
+
+        return $exclusions;
     }
 
     /**

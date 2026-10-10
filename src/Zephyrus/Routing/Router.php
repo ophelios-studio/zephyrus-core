@@ -105,6 +105,26 @@ final class Router
     }
 
     /**
+     * Skips the given global middlewares on the most recently added route.
+     *
+     * Each class may be a parent class or an interface. Route middlewares are not affected, and a 404 or
+     * 405 still runs every global middleware (see the WithoutMiddleware attribute).
+     *
+     * @param class-string ...$middlewares Global middleware classes or interfaces.
+     * @throws \LogicException When no route has been added yet.
+     * @throws RouteMiddlewareException When a class is not a middleware or would skip a framework security
+     *                                  middleware.
+     */
+    public function withoutMiddleware(string ...$middlewares): self
+    {
+        return new self(
+            $this->routes->withLastRouteExcludedMiddlewares(array_values($middlewares)),
+            $this->attributeReader,
+            $this->middlewareGroups,
+        );
+    }
+
+    /**
      * Registers routes under a URL prefix, with shared middlewares and an optional name prefix.
      *
      * $namePrefix applies only to named routes; unnamed routes stay unnamed:
@@ -147,6 +167,10 @@ final class Router
                 middlewares: array_values(array_unique([...$middlewares, ...$route->middlewares])),
                 name: $routeName,
             );
+
+            if ($route->excludedMiddlewares !== []) {
+                $router = $router->withoutMiddleware(...$route->excludedMiddlewares);
+            }
         }
 
         return $router;
@@ -275,7 +299,8 @@ final class Router
      *
      * @throws RouteAttributeException When the class cannot be reflected or declares a duplicate route name.
      * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
-     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle, or a
+     *                                  #[WithoutMiddleware] names a class it may not skip.
      */
     public function controller(string $className): self
     {
@@ -292,6 +317,7 @@ final class Router
                     constraints: $route->constraints,
                     middlewares: $router->expandMiddlewares($route->middlewares),
                     name: $route->name,
+                    excludedMiddlewares: $route->excludedMiddlewares,
                 )),
                 $router->attributeReader,
                 $router->middlewareGroups,
@@ -313,7 +339,8 @@ final class Router
      *
      * @throws RouteAttributeException When a class cannot be reflected or declares a duplicate route name.
      * @throws RouteSignatureException When a path placeholder is malformed, duplicated or reserved.
-     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle, or a
+     *                                  #[WithoutMiddleware] names a class it may not skip.
      */
     public function discoverControllers(
         string $namespace,
