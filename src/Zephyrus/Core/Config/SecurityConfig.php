@@ -65,8 +65,6 @@ use Zephyrus\Security\CsrfConfig;
  */
 final readonly class SecurityConfig
 {
-    private const int SHOWN_VALUE_MAX_LENGTH = 64;
-
     /**
      * The spellings fromArray() reads each setting from, in the order it prefers
      * them: [section, key], where section 'values' is the top level.
@@ -216,7 +214,7 @@ final readonly class SecurityConfig
                 throw ConfigurationException::invalidValue(
                     'security',
                     "csrfExceptions[$i]",
-                    $pattern,
+                    self::shownValue($pattern),
                     'each entry must be a non-empty string',
                 );
             }
@@ -227,7 +225,7 @@ final readonly class SecurityConfig
                 ? AllowedHostsMiddleware::invalidEntryReason($host)
                 : 'each entry must be a host name string';
             if ($reason !== null) {
-                throw ConfigurationException::invalidValue('security', "allowedHosts[$i]", $host, $reason);
+                throw ConfigurationException::invalidValue('security', "allowedHosts[$i]", self::shownValue($host), $reason);
             }
         }
 
@@ -240,7 +238,7 @@ final readonly class SecurityConfig
                     $reason .= '; one entry per list item, a comma-separated value is not accepted';
                 }
 
-                throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", $proxy, $reason);
+                throw ConfigurationException::invalidValue('security', "trustedProxies[$i]", self::shownValue($proxy), $reason);
             }
         }
 
@@ -250,7 +248,7 @@ final readonly class SecurityConfig
                 throw ConfigurationException::invalidValue(
                     'security',
                     "trustedHeaders[$i]",
-                    $header,
+                    self::shownValue($header),
                     'each entry must be a non-empty string',
                 );
             }
@@ -260,7 +258,7 @@ final readonly class SecurityConfig
                 throw ConfigurationException::invalidValue(
                     'security',
                     "trustedHeaders[$i]",
-                    $header,
+                    self::shownValue($header),
                     'unknown forwarding header, supported names are '
                         . implode(', ', Request::TRUSTED_HEADERS_SUPPORTED),
                 );
@@ -364,18 +362,20 @@ final readonly class SecurityConfig
     private static function rawValueForMessage(mixed $value): string
     {
         return match (true) {
-            is_string($value) => '"' . self::shownString($value) . '"',
+            is_string($value) => '"' . IpRange::shownEntry($value) . '"',
             is_bool($value) => $value ? 'true' : 'false',
             is_scalar($value) => (string) $value,
             default => get_debug_type($value),
         };
     }
 
-    /** Cuts a written string to the shown length, with invalid UTF-8 replaced and control characters escaped. */
-    private static function shownString(string $value): string
+    /** A list entry as it may appear in a message: strings bounded and escaped, other non-scalars by type. */
+    private static function shownValue(mixed $value): mixed
     {
-        $valid = mb_scrub($value, 'UTF-8');
-
-        return addcslashes(mb_strcut($valid, 0, self::SHOWN_VALUE_MAX_LENGTH, 'UTF-8'), "\\\0..\37\177");
+        return match (true) {
+            is_string($value) => IpRange::shownEntry($value),
+            is_scalar($value), $value === null => $value,
+            default => get_debug_type($value),
+        };
     }
 }

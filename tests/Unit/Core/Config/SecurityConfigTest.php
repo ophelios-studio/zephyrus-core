@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
+use Zephyrus\Http\IpRange;
 use Zephyrus\Http\Request;
 
 final class SecurityConfigTest extends TestCase
@@ -241,7 +242,7 @@ final class SecurityConfigTest extends TestCase
     public function testThrowsForMalformedTrustedProxyEntry(string $entry): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'trustedProxies[0]' has invalid value '$entry'");
+        $this->expectExceptionMessage("field 'trustedProxies[0]' has invalid value '" . IpRange::shownEntry($entry) . "'");
 
         SecurityConfig::fromArray(['trustedProxies' => [$entry]]);
     }
@@ -537,6 +538,29 @@ final class SecurityConfigTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function refusedListEntryCases(): iterable
+    {
+        yield 'huge trusted proxy is cut' => ['trustedProxies', str_repeat('9', 5 * 1024 * 1024), str_repeat('9', 64) . '...(5242880 bytes)'];
+        yield 'huge allowed host is cut' => ['allowedHosts', str_repeat('h', 5 * 1024 * 1024), str_repeat('h', 64) . '...(5242880 bytes)'];
+        yield 'trusted proxy line feed is escaped' => ['trustedProxies', "10.0.0.1\n10.0.0.2", '10.0.0.1\n10.0.0.2'];
+        yield 'allowed host control byte is escaped' => ['allowedHosts', "a\x7fb", 'a\177b'];
+    }
+
+    #[DataProvider('refusedListEntryCases')]
+    public function testRefusedListEntryIsBoundedAndEscapedInTheMessage(string $setting, string $entry, string $shown): void
+    {
+        try {
+            SecurityConfig::fromArray([$setting => [$entry]]);
+            self::fail('The entry must be refused.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString("'" . $shown . "'", $e->getMessage());
+            self::assertLessThan(1024, strlen($e->getMessage()));
+        }
+    }
+
     public function testAutoHtmlRefusalTellsTheOperatorToRemoveTheLine(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -716,7 +740,7 @@ final class SecurityConfigTest extends TestCase
     public function testMalformedAllowedHostEntryFailsAtBootWithTheFix(string $entry, string $fix): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("field 'allowedHosts[0]' has invalid value '$entry'");
+        $this->expectExceptionMessage("field 'allowedHosts[0]' has invalid value '" . IpRange::shownEntry($entry) . "'");
         $this->expectExceptionMessage($fix);
 
         SecurityConfig::fromArray(['allowedHosts' => [$entry]]);
