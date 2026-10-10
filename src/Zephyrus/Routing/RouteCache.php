@@ -176,7 +176,7 @@ final class RouteCache
 
         $state = $this->diagnose($routes, $maxAgeSeconds, $now);
         if (!$state['fresh']) {
-            throw $this->refuse($state['problem']);
+            throw $this->refuse($state['problem'] ?? $state['reason']);
         }
     }
 
