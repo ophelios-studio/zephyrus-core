@@ -260,7 +260,7 @@ final class SecurityConfigTest extends TestCase
     public function testIpv4MappedTrustedProxyAtSlash96WithHostBitsIsRefused(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage("has invalid value '::ffff:10.0.0.0/96': the bits after the prefix");
+        $this->expectExceptionMessage("has invalid value '::ffff:10.0.0.0/96': ::ffff:10.0.0.0/96 covers every IPv4 address; write ::ffff:10.0.0.0/128 for one IPv6 peer or 10.0.0.0/32 for one IPv4 peer");
 
         SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/96']]);
     }

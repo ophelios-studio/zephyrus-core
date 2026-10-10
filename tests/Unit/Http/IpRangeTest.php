@@ -115,9 +115,32 @@ final class IpRangeTest extends TestCase
     public function testInvalidEntryReasonRefusesEmbeddedIpv4WithBitsAfterThePrefix(string $range): void
     {
         self::assertFalse(IpRange::isValid($range));
-        self::assertStringContainsString('must be zero', IpRange::invalidEntryReason($range) ?? '');
+        $reason = IpRange::invalidEntryReason($range) ?? '';
+        self::assertStringContainsString(' covers ', $reason);
+        self::assertStringNotContainsString(':0.0.0.0/96', $reason);
         self::assertFalse(IpRange::contains($range, '::1'));
         self::assertFalse(IpRange::contains($range, '::ffff:10.1.2.3'));
+    }
+
+    #[DataProvider('embeddedIpv4HostBitsAdvice')]
+    public function testInvalidEntryReasonNamesTheIpv4RangeForEmbeddedIpv4WithHostBits(string $range, string $advice): void
+    {
+        self::assertSame($advice, IpRange::invalidEntryReason($range));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function embeddedIpv4HostBitsAdvice(): iterable
+    {
+        yield 'ipv4 mapped at /96' => [
+            '::ffff:10.0.0.0/96',
+            '::ffff:10.0.0.0/96 covers every IPv4 address; write ::ffff:10.0.0.0/128 for one IPv6 peer or 10.0.0.0/32 for one IPv4 peer',
+        ];
+        yield 'ipv4 mapped at /127 with the last bit set' => [
+            '::ffff:10.0.0.1/127',
+            '::ffff:10.0.0.1/127 covers ::ffff:10.0.0.0/127; write 10.0.0.0/31 (IPv4 form) or ::ffff:10.0.0.0/127',
+        ];
     }
 
     /**
@@ -256,10 +279,8 @@ final class IpRangeTest extends TestCase
         yield 'ipv4 octet typo that widens a /8' => ['10.1.0.0/8', '10.0.0.0/8'];
         yield 'ipv4 digit typo that widens a /3' => ['10.0.0.5/3', '0.0.0.0/3'];
         yield 'ipv4 last bit after a /31' => ['192.168.1.1/31', '192.168.1.0/31'];
-        yield 'ipv4 address with a zero prefix' => ['10.0.0.5/0', '0.0.0.0/0'];
         yield 'ipv6 address inside a /32' => ['2001:db8::1/32', '2001:db8::/32'];
         yield 'ipv6 block inside a /16' => ['2001:db8:1::/16', '2001::/16'];
-        yield 'ipv6 address with a zero prefix' => ['::1/0', '::/0'];
         yield 'ipv6 last bit after a /127' => ['2001:db8::1/127', '2001:db8::/127'];
     }
 
@@ -276,6 +297,39 @@ final class IpRangeTest extends TestCase
         self::assertSame(
             '10.0.0.5/3 covers 0.0.0.0/3; write 10.0.0.5/32 or 0.0.0.0/3',
             IpRange::invalidEntryReason('10.0.0.5/3'),
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> The entry, then the exact reason.
+     */
+    public static function rangesCoveringEveryPeerWithHostBits(): iterable
+    {
+        yield 'ipv4 zero prefix suggests the single host only' => [
+            '10.0.0.1/0',
+            '10.0.0.1/0 covers every IPv4 address; write 10.0.0.1/32 for one IPv4 peer',
+        ];
+        yield 'ipv6 zero prefix suggests the single host only' => [
+            '::1/0',
+            '::1/0 covers every IPv4 peer on a dual-stack socket; write ::1/128 for one IPv6 peer',
+        ];
+        yield 'ipv6 prefix containing the mapped block suggests the single host only' => [
+            '::1/64',
+            '::1/64 covers every IPv4 peer on a dual-stack socket; write ::1/128 for one IPv6 peer',
+        ];
+    }
+
+    #[DataProvider('rangesCoveringEveryPeerWithHostBits')]
+    public function testTheReasonNeverSuggestsARangeCoveringEveryPeer(string $range, string $reason): void
+    {
+        self::assertSame($reason, IpRange::invalidEntryReason($range));
+    }
+
+    public function testTheReasonKeepsTheCoveredRangeWhenItDoesNotCoverEveryPeer(): void
+    {
+        self::assertSame(
+            '10.0.0.5/8 covers 10.0.0.0/8; write 10.0.0.5/32 or 10.0.0.0/8',
+            IpRange::invalidEntryReason('10.0.0.5/8'),
         );
     }
 
