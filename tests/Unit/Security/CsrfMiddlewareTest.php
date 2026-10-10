@@ -611,10 +611,12 @@ final class CsrfMiddlewareTest extends TestCase
 
     // ── refusal callback ──────────────────────────────────────────────────────
 
-    public function testMissingTokenReachesFailureCallbackAsTokenMissing(): void
+    /**
+     * @param list<CsrfFailure> $seen Receives the reason of each refusal, in order.
+     */
+    private function recordingMiddleware(array &$seen): CsrfMiddleware
     {
-        $seen    = [];
-        $mw      = new CsrfMiddleware(
+        return new CsrfMiddleware(
             $this->makeManager(),
             CsrfConfig::defaults(),
             function (Request $r, CsrfFailure $failure) use (&$seen): Response {
@@ -623,6 +625,12 @@ final class CsrfMiddlewareTest extends TestCase
                 return Response::text('custom', 418);
             },
         );
+    }
+
+    public function testMissingTokenReachesFailureCallbackAsTokenMissing(): void
+    {
+        $seen    = [];
+        $mw      = $this->recordingMiddleware($seen);
         $request = new Request('POST', 'https://example.com/submit');
 
         $mw->process($request, fn (Request $r): Response => Response::text('never'));
@@ -633,15 +641,7 @@ final class CsrfMiddlewareTest extends TestCase
     public function testEmptyTokenFieldCountsAsTokenMissing(): void
     {
         $seen    = [];
-        $mw      = new CsrfMiddleware(
-            $this->makeManager(),
-            CsrfConfig::defaults(),
-            function (Request $r, CsrfFailure $failure) use (&$seen): Response {
-                $seen[] = $failure;
-
-                return Response::text('custom', 418);
-            },
-        );
+        $mw      = $this->recordingMiddleware($seen);
         $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => '']);
 
         $mw->process($request, fn (Request $r): Response => Response::text('never'));
@@ -652,15 +652,7 @@ final class CsrfMiddlewareTest extends TestCase
     public function testRejectedTokenReachesFailureCallbackAsTokenInvalid(): void
     {
         $seen    = [];
-        $mw      = new CsrfMiddleware(
-            $this->makeManager(),
-            CsrfConfig::defaults(),
-            function (Request $r, CsrfFailure $failure) use (&$seen): Response {
-                $seen[] = $failure;
-
-                return Response::text('custom', 418);
-            },
-        );
+        $mw      = $this->recordingMiddleware($seen);
         $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => 'forged']);
 
         $mw->process($request, fn (Request $r): Response => Response::text('never'));
@@ -691,21 +683,13 @@ final class CsrfMiddlewareTest extends TestCase
 
     public function testFailureCallbackIsNotCalledForAValidToken(): void
     {
-        $called  = false;
-        $mw      = new CsrfMiddleware(
-            $this->makeManager(),
-            CsrfConfig::defaults(),
-            function (Request $r, CsrfFailure $failure) use (&$called): Response {
-                $called = true;
-
-                return Response::text('custom', 418);
-            },
-        );
+        $seen    = [];
+        $mw      = $this->recordingMiddleware($seen);
         $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => self::VALID_TOKEN]);
 
         $response = $mw->process($request, fn (Request $r): Response => Response::text('ok'));
 
-        self::assertFalse($called);
+        self::assertSame([], $seen);
         self::assertSame(200, $response->status);
     }
 
