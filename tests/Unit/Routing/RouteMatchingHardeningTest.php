@@ -200,7 +200,7 @@ final class RouteMatchingHardeningTest extends TestCase
     public function testStaticRouteCountAgreesWithTheMatcher(): void
     {
         $collection = new RouteCollection();
-        $collection->add(Route::define('GET', '/files/x{y}z', 'FileController@show'));
+        $collection->add(Route::define('GET', '/files/x{y', 'FileController@show'));
         $collection->add(Route::define('GET', '/files/{name}', 'FileController@show'));
         $collection->add(Route::define('GET', '/files', 'FileController@index'));
 
@@ -301,6 +301,33 @@ final class RouteMatchingHardeningTest extends TestCase
         Route::define('GET', $path, 'C@show');
     }
 
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function partialSegmentPlaceholderProvider(): array
+    {
+        return [
+            'suffix' => ['/files/report-{year}.pdf'],
+            'prefix only' => ['/files/x{year}'],
+            'suffix only' => ['/files/{year}.pdf'],
+            'between segments text' => ['/a/b{c}d/e'],
+        ];
+    }
+
+    #[DataProvider('partialSegmentPlaceholderProvider')]
+    public function testAPlaceholderThatDoesNotFillAWholeSegmentIsRefusedAtRegistration(string $path): void
+    {
+        try {
+            Route::define('GET', $path, 'C@show');
+            self::fail('A partial segment placeholder must not register.');
+        } catch (RouteSignatureException $e) {
+            self::assertSame(
+                sprintf('Invalid route path "%s": a placeholder must fill a whole segment', $path),
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testFrameworkAttributeNameIsRefusedByTheNamePattern(): void
     {
         try {
@@ -317,8 +344,8 @@ final class RouteMatchingHardeningTest extends TestCase
 
         self::assertSame('/users/{id}/posts/{postId}', $route->path);
         self::assertSame('/x/{_draft}', Route::define('GET', '/x/{_draft}', 'C@show')->path);
-        // A brace inside a larger segment is a literal.
-        self::assertSame('/x/a{b}c', Route::define('GET', '/x/a{b}c', 'C@show')->path);
+        // A brace that closes no placeholder is a literal.
+        self::assertSame('/x/a{b', Route::define('GET', '/x/a{b', 'C@show')->path);
     }
 
     public function testAPoisonedRouteCacheFailsAsARouteCacheError(): void

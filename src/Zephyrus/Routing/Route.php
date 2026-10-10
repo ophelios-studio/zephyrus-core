@@ -122,9 +122,7 @@ final readonly class Route
     }
 
     /**
-     * Validates every whole-segment placeholder in a route path.
-     *
-     * A segment such as "x{y}z" is a literal, as in RouteCollection::isParameterSegment().
+     * Validates every placeholder in a route path: each must fill a whole segment, with a valid, unique name.
      *
      * @throws RouteSignatureException
      */
@@ -134,6 +132,13 @@ final readonly class Route
 
         foreach (explode('/', trim($path, '/')) as $segment) {
             if (strlen($segment) <= 2 || !str_starts_with($segment, '{') || !str_ends_with($segment, '}')) {
+                if (preg_match('/\{[^{}]+\}/', $segment) === 1) {
+                    throw new RouteSignatureException(sprintf(
+                        'Invalid route path "%s": a placeholder must fill a whole segment',
+                        $path,
+                    ));
+                }
+
                 continue;
             }
 
