@@ -257,11 +257,19 @@ final class SecurityConfigTest extends TestCase
         SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/8']]);
     }
 
-    public function testIpv4MappedTrustedProxyAtSlash96IsAccepted(): void
+    public function testIpv4MappedTrustedProxyAtSlash96WithHostBitsIsRefused(): void
     {
-        $config = SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/96']]);
+        $this->expectException(ConfigurationException::class);
+        $this->expectExceptionMessage("has invalid value '::ffff:10.0.0.0/96': the bits after the prefix");
 
-        self::assertSame(['::ffff:10.0.0.0/96'], $config->trustedProxies);
+        SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/96']]);
+    }
+
+    public function testIpv4MappedTrustedProxyAtSlash104IsAccepted(): void
+    {
+        $config = SecurityConfig::fromArray(['trustedProxies' => ['::ffff:10.0.0.0/104']]);
+
+        self::assertSame(['::ffff:10.0.0.0/104'], $config->trustedProxies);
     }
 
     public function testTrustedProxiesStringIsSplitOnCommas(): void

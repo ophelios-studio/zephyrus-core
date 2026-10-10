@@ -16,6 +16,8 @@ final class IpRange
 
     private const string EMBEDDED_REFUSAL = 'an IPv6 range shorter than /96 that embeds an IPv4 address covers far more than the IPv4 range it names, use the IPv4 form instead, such as 10.0.0.0/8';
 
+    private const string HOST_BITS_REFUSAL = 'the bits after the prefix of an IPv6 range that embeds an IPv4 address must be zero, such as ::ffff:10.0.0.0/104 for peers seen in mapped form, or use the IPv4 form such as 10.0.0.0/8';
+
     /**
      * Whether the value is an IP address or a CIDR range this class can match against.
      */
@@ -88,11 +90,7 @@ final class IpRange
             return 'not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32';
         }
 
-        if (!self::isShortEmbeddedIpv4($entry, $parsed[0], $parsed[1])) {
-            return null;
-        }
-
-        return self::isIpv4Mapped($parsed[0]) ? self::MAPPED_REFUSAL : self::EMBEDDED_REFUSAL;
+        return self::embeddedIpv4Refusal($entry, $parsed[0], $parsed[1]);
     }
 
     /**
@@ -101,11 +99,29 @@ final class IpRange
     private static function parse(string $range): ?array
     {
         $parsed = self::split($range);
-        if ($parsed === null || self::isShortEmbeddedIpv4($range, $parsed[0], $parsed[1])) {
+        if ($parsed === null || self::embeddedIpv4Refusal($range, $parsed[0], $parsed[1]) !== null) {
             return null;
         }
 
         return $parsed;
+    }
+
+    /**
+     * The refusal for an IPv6 range whose address embeds an IPv4 address, or null when
+     * it is safe. Below /96 the range masks the IPv4 part away, so it matches far more
+     * than it names. From /96 on, any bit after the prefix must be zero.
+     */
+    private static function embeddedIpv4Refusal(string $range, string $binary, int $prefix): ?string
+    {
+        if (!self::embedsIpv4($range, $binary)) {
+            return null;
+        }
+
+        if ($prefix < 96) {
+            return self::isIpv4Mapped($binary) ? self::MAPPED_REFUSAL : self::EMBEDDED_REFUSAL;
+        }
+
+        return self::hasBitsAfterPrefix($binary, $prefix) ? self::HOST_BITS_REFUSAL : null;
     }
 
     /**
@@ -144,21 +160,33 @@ final class IpRange
     }
 
     /**
-     * A range below /96 whose address embeds an IPv4 address, in dotted or hex form.
-     * Only an IPv6 literal can contain both a dot and a colon.
+     * Whether the address is IPv4-mapped, or written with a dotted quad inside an IPv6 literal.
      */
-    private static function isShortEmbeddedIpv4(string $range, string $binary, int $prefix): bool
+    private static function embedsIpv4(string $range, string $binary): bool
     {
-        if ($prefix >= 96) {
-            return false;
-        }
-
         return self::isIpv4Mapped($binary) || (str_contains($range, '.') && str_contains($range, ':'));
     }
 
     private static function isIpv4Mapped(string $binary): bool
     {
         return strlen($binary) === 16 && substr($binary, 0, 12) === str_repeat("\0", 10) . "\xff\xff";
+    }
+
+    /**
+     * Whether any bit after the first $prefix bits of the binary address is set.
+     */
+    private static function hasBitsAfterPrefix(string $binary, int $prefix): bool
+    {
+        if ($prefix >= strlen($binary) * 8) {
+            return false;
+        }
+
+        $byte = intdiv($prefix, 8);
+        if ((ord($binary[$byte]) & (0xff >> ($prefix % 8))) !== 0) {
+            return true;
+        }
+
+        return ltrim(substr($binary, $byte + 1), "\0") !== '';
     }
 
     /**

@@ -17,9 +17,9 @@ final class IpRangeTest extends TestCase
     {
         yield 'ipv4 cidr' => ['10.0.0.0/8'];
         yield 'ipv4 zero prefix' => ['0.0.0.0/0'];
-        yield 'ipv4 compatible range at /96' => ['::10.0.0.0/96'];
-        yield 'nat64 range at /96' => ['64:ff9b::10.0.0.0/96'];
+        yield 'zero quad at /96 in mapped form' => ['::ffff:0.0.0.0/96'];
         yield 'mapped range at /104' => ['::ffff:10.0.0.0/104'];
+        yield 'hex form that reads as ipv4 at /8' => ['::a00:0/8'];
         yield 'ipv4 full prefix' => ['10.0.0.0/32'];
         yield 'ipv4 bare address' => ['10.0.0.1'];
         yield 'ipv4 three digit prefix' => ['10.0.0.0/008'];
@@ -29,7 +29,6 @@ final class IpRangeTest extends TestCase
         yield 'ipv6 bare address' => ['::1'];
         yield 'ipv6 uppercase bare address' => ['2001:DB8::1'];
         yield 'ipv6 expanded bare address' => ['0:0:0:0:0:0:0:1'];
-        yield 'ipv4 mapped range at /96' => ['::ffff:10.0.0.0/96'];
         yield 'ipv4 mapped range at /120' => ['::ffff:10.0.0.0/120'];
         yield 'ipv4 mapped full prefix' => ['::ffff:10.0.0.1/128'];
         yield 'ipv4 mapped bare address' => ['::ffff:10.0.0.1'];
@@ -101,6 +100,27 @@ final class IpRangeTest extends TestCase
     public function testInvalidEntryReasonNamesTheMappedFormForMappedRanges(): void
     {
         self::assertStringContainsString('::ffff:10.0.0.0/104', IpRange::invalidEntryReason('::ffff:10.0.0.0/8') ?? '');
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function embeddedIpv4RangesWithHostBits(): iterable
+    {
+        yield 'ipv4 compatible at /96' => ['::10.0.0.0/96'];
+        yield 'nat64 at /96' => ['64:ff9b::10.0.0.0/96'];
+        yield 'ipv4 mapped at /96' => ['::ffff:10.0.0.0/96'];
+        yield 'ipv4 mapped at /96 in hex' => ['::ffff:a00:0/96'];
+        yield 'ipv4 mapped at /127 with the last bit set' => ['::ffff:10.0.0.1/127'];
+    }
+
+    #[DataProvider('embeddedIpv4RangesWithHostBits')]
+    public function testInvalidEntryReasonRefusesEmbeddedIpv4WithBitsAfterThePrefix(string $range): void
+    {
+        self::assertFalse(IpRange::isValid($range));
+        self::assertStringContainsString('must be zero', IpRange::invalidEntryReason($range) ?? '');
+        self::assertFalse(IpRange::contains($range, '::1'));
+        self::assertFalse(IpRange::contains($range, '::ffff:10.1.2.3'));
     }
 
     /**
@@ -180,7 +200,10 @@ final class IpRangeTest extends TestCase
         yield 'ipv4 mapped short range does not cover loopback' => ['::ffff:10.0.0.0/8', '::1', false];
         yield 'ipv4 mapped short range does not cover mapped peer' => ['::ffff:10.0.0.0/8', '::ffff:10.1.2.3', false];
         yield 'ipv4 mapped short range does not cover ipv4 peer' => ['::ffff:0.0.0.0/0', '10.0.0.1', false];
-        yield 'ipv4 mapped range at /96 matches mapped peer' => ['::ffff:10.0.0.0/96', '::ffff:10.1.2.3', true];
+        yield 'ipv4 mapped range at /104 matches mapped peer' => ['::ffff:10.0.0.0/104', '::ffff:10.1.2.3', true];
+        yield 'ipv4 mapped zero quad at /96 matches mapped peer' => ['::ffff:0.0.0.0/96', '::ffff:10.1.2.3', true];
+        yield 'ipv4 mapped range at /96 with host bits is refused' => ['::ffff:10.0.0.0/96', '::ffff:10.1.2.3', false];
+        yield 'ipv4 compatible range at /96 with host bits is refused' => ['::10.0.0.0/96', '::1', false];
         yield 'ipv4 mapped full prefix matches itself' => ['::ffff:10.0.0.1/128', '::ffff:10.0.0.1', true];
     }
 
