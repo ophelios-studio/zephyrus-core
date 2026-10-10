@@ -6,13 +6,15 @@ namespace Zephyrus\Formatting;
 
 use DateTimeInterface;
 use IntlDateFormatter;
+use Locale;
 use NumberFormatter;
 
 /**
  * Formatting built on ext-intl: numbers, money, dates, ordinals and spelled-out numbers.
  *
  * money(), decimal(), percent(), ordinal(), spellOut(), date(), time() and datetime() use the locale given to
- * the constructor. timeago(), duration(), filesize() and list() output English whatever the locale.
+ * the constructor. timeago(), duration(), filesize() and list() are written in French for a French locale
+ * (language fr) and in English for any other language.
  *
  * Usage:
  *
@@ -45,6 +47,24 @@ final class Formatter
         'money', 'decimal', 'percent', 'ordinal', 'spellOut', 'date', 'time', 'datetime',
         'timeago', 'duration', 'filesize', 'list', 'truncate',
     ];
+
+    private const NBSP = "\u{a0}";
+
+    /** @var array<string, array{string, string}> Singular and plural French labels per timeago() unit. */
+    private const FRENCH_TIME_UNITS = [
+        'second' => ['seconde', 'secondes'],
+        'minute' => ['minute', 'minutes'],
+        'hour' => ['heure', 'heures'],
+        'day' => ['jour', 'jours'],
+        'month' => ['mois', 'mois'],
+        'year' => ['an', 'ans'],
+    ];
+
+    /** @var list<string> */
+    private const ENGLISH_FILESIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+
+    /** @var list<string> */
+    private const FRENCH_FILESIZE_UNITS = ['o', 'ko', 'Mo', 'Go', 'To', 'Po'];
 
     /**
      * @param string      $locale                 ICU locale identifier (e.g. 'en', 'en_US', 'fr_CA').
@@ -260,7 +280,8 @@ final class Formatter
     }
 
     /**
-     * Formats the distance to now in English ("2 hours ago", "in 3 days", "just now").
+     * Formats the distance to now ("2 hours ago", "in 3 days", "just now"). French for a French locale (language fr),
+     * English for any other language.
      *
      * @param mixed $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
      *
@@ -269,8 +290,7 @@ final class Formatter
     public function timeago(mixed $datetime): string
     {
         $timestamp = $this->toTimestamp($datetime);
-        $now = time();
-        $diff = $now - $timestamp;
+        $diff = time() - $timestamp;
         $absDiff = abs($diff);
         $isFuture = $diff < 0;
 
@@ -283,21 +303,26 @@ final class Formatter
             default => [(int) round($absDiff / 31536000), 'year'],
         };
 
-        $plural = $value !== 1 ? 's' : '';
+        $label = $this->timeUnit($unit, $value);
+
+        if ($this->isFrench()) {
+            if ($isFuture) {
+                return sprintf('dans %d %s', $value, $label);
+            }
+
+            return $value === 0 ? "à l'instant" : sprintf('il y a %d %s', $value, $label);
+        }
 
         if ($isFuture) {
-            return sprintf('in %d %s%s', $value, $unit, $plural);
+            return sprintf('in %d %s', $value, $label);
         }
 
-        if ($value === 0) {
-            return 'just now';
-        }
-
-        return sprintf('%d %s%s ago', $value, $unit, $plural);
+        return $value === 0 ? 'just now' : sprintf('%d %s ago', $value, $label);
     }
 
     /**
-     * Formats a duration in seconds in English ("2h 10m 30s", "45s", "1h 0m 5s"). Negative values get a leading "-".
+     * Formats a duration in seconds: "2h 10m 30s" in English, "2 h 10 min 30 s" in French (language fr), English for
+     * any other language. Negative values get a leading "-".
      */
     public function duration(int $seconds): string
     {
@@ -306,16 +331,20 @@ final class Formatter
         $minutes = (int) floor(($absSeconds % 3600) / 60);
         $secs = $absSeconds % 60;
 
+        [$hourUnit, $minuteUnit, $secondUnit, $separator] = $this->isFrench()
+            ? ['h', 'min', 's', self::NBSP]
+            : ['h', 'm', 's', ''];
+
         $parts = [];
         if ($hours > 0) {
-            $parts[] = $hours . 'h';
-            $parts[] = $minutes . 'm';
-            $parts[] = $secs . 's';
+            $parts[] = $hours . $separator . $hourUnit;
+            $parts[] = $minutes . $separator . $minuteUnit;
+            $parts[] = $secs . $separator . $secondUnit;
         } elseif ($minutes > 0) {
-            $parts[] = $minutes . 'm';
-            $parts[] = $secs . 's';
+            $parts[] = $minutes . $separator . $minuteUnit;
+            $parts[] = $secs . $separator . $secondUnit;
         } else {
-            $parts[] = $secs . 's';
+            $parts[] = $secs . $separator . $secondUnit;
         }
 
         $result = implode(' ', $parts);
@@ -323,12 +352,14 @@ final class Formatter
     }
 
     /**
-     * Formats a byte count in 1024-based English units ("1.5 MB", "320 KB"). Bytes are shown without decimals.
+     * Formats a byte count in 1024-based units: "1.5 MB" in English, "1,5 Mo" in French (language fr, decimal mark
+     * of the locale), English for any other language. Bytes are shown without decimals. No grouping separator.
      */
     public function filesize(int $bytes, int $precision = 1): string
     {
+        $isFrench = $this->isFrench();
+        $units = $isFrench ? self::FRENCH_FILESIZE_UNITS : self::ENGLISH_FILESIZE_UNITS;
         $absBytes = abs($bytes);
-        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
         $index = 0;
         $value = (float) $absBytes;
 
@@ -339,14 +370,16 @@ final class Formatter
 
         $formatted = $index === 0
             ? sprintf('%d', (int) $value)
-            : sprintf('%.' . $precision . 'f', $value);
+            : $this->plainNumber($value, $precision);
 
+        $separator = $isFrench ? self::NBSP : ' ';
         $prefix = $bytes < 0 ? '-' : '';
-        return $prefix . $formatted . ' ' . $units[$index];
+        return $prefix . $formatted . $separator . $units[$index];
     }
 
     /**
-     * Joins items with English "and" or "or" ("a, b, and c"), whatever the locale.
+     * Joins items with "and" or "or": "a, b, and c" in English, "a, b et c" in French (language fr, no serial comma),
+     * English for any other language.
      *
      * @param string[] $items List of items.
      * @param string   $type  'conjunction' (a, b, and c) or 'disjunction' (a, b, or c). Any other value is a conjunction.
@@ -361,14 +394,16 @@ final class Formatter
             return (string) reset($items);
         }
 
+        $isFrench = $this->isFrench();
+        $word = $type === 'disjunction' ? ($isFrench ? 'ou' : 'or') : ($isFrench ? 'et' : 'and');
+
         if (count($items) === 2) {
-            $joiner = $type === 'disjunction' ? ' or ' : ' and ';
-            return implode($joiner, $items);
+            return implode(' ' . $word . ' ', $items);
         }
 
         $last = array_pop($items);
-        $joiner = $type === 'disjunction' ? ', or ' : ', and ';
-        return implode(', ', $items) . $joiner . $last;
+        $serialComma = $isFrench ? '' : ',';
+        return implode(', ', $items) . $serialComma . ' ' . $word . ' ' . $last;
     }
 
     /**
@@ -538,6 +573,41 @@ final class Formatter
     private function localeSymbol(int $symbol): string
     {
         return (new NumberFormatter($this->locale, NumberFormatter::DECIMAL))->getSymbol($symbol);
+    }
+
+    private function isFrench(): bool
+    {
+        return Locale::getPrimaryLanguage($this->locale) === 'fr';
+    }
+
+    private function timeUnit(string $unit, int $value): string
+    {
+        if (!$this->isFrench()) {
+            return $value === 1 ? $unit : $unit . 's';
+        }
+
+        [$singular, $plural] = self::FRENCH_TIME_UNITS[$unit];
+        return $value <= 1 ? $singular : $plural;
+    }
+
+    /**
+     * Formats a number with the locale's decimal mark in French, a dot otherwise, and no grouping.
+     *
+     * @throws FormatterException When ICU cannot format the value.
+     */
+    private function plainNumber(float $value, int $precision): string
+    {
+        $fmt = new NumberFormatter($this->isFrench() ? $this->locale : 'en', NumberFormatter::DECIMAL);
+        $fmt->setAttribute(NumberFormatter::GROUPING_USED, 0);
+        $fmt->setAttribute(NumberFormatter::MIN_FRACTION_DIGITS, $precision);
+        $fmt->setAttribute(NumberFormatter::MAX_FRACTION_DIGITS, $precision);
+
+        $result = $fmt->format($value);
+        if ($result === false) {
+            throw FormatterException::formattingFailed('filesize', $fmt->getErrorMessage());
+        }
+
+        return $result;
     }
 
     /**
