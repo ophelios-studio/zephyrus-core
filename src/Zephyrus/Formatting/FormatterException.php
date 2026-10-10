@@ -37,6 +37,15 @@ final class FormatterException extends ZephyrusRuntimeException
         return new self(sprintf('Invalid currency code: it %s.', FormatterInput::CURRENCY_CODE_RULE));
     }
 
+    public static function currencyRequired(string $locale): self
+    {
+        return new self(sprintf(
+            'Currency required: locale %s has no native currency. '
+            . 'Pass a currency to money() or set a default currency.',
+            $locale,
+        ));
+    }
+
     /**
      * Raised by the global format() helper when App has no Formatter.
      */

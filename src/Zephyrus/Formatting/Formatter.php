@@ -145,21 +145,22 @@ final class Formatter
      * Formats a monetary amount.
      *
      * The currency is the explicit $currency, else the default currency, else the locale's native currency. An empty
-     * string counts as no currency. A locale without a region (en, fr) has no native currency and prints ¤; set
-     * $defaultCurrency.
+     * string counts as no currency. A locale without a region (en, fr) has no native currency, so pass a currency or
+     * set $defaultCurrency.
      *
      * @param float       $amount   The monetary value.
      * @param string|null $currency ISO 4217 code, three ASCII letters (e.g. 'USD', 'EUR'). Null or '' uses the default
      *                              currency.
      *
-     * @throws FormatterException When the currency is not three ASCII letters, or ICU cannot format the amount.
+     * @throws FormatterException When the currency is not three ASCII letters, when no currency applies because the
+     *                            locale has no native currency, or when ICU cannot format the amount.
      */
     public function money(float $amount, ?string $currency = null): string
     {
         $fmt = $this->groupedNumberFormatter(NumberFormatter::CURRENCY);
         $resolvedCurrency = self::currencyCode($currency)
             ?? $this->defaultCurrency
-            ?? ($fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE) ?: 'USD');
+            ?? $this->nativeCurrency($fmt);
 
         $result = $fmt->formatCurrency($amount, $resolvedCurrency);
 
@@ -608,6 +609,22 @@ final class Formatter
         }
 
         return $result;
+    }
+
+    /**
+     * The locale's native currency. ICU reports XXX for a locale without one, and an empty code is refused the same way.
+     *
+     * @throws FormatterException When the locale has no native currency.
+     */
+    private function nativeCurrency(NumberFormatter $fmt): string
+    {
+        $code = $fmt->getTextAttribute(NumberFormatter::CURRENCY_CODE);
+
+        if ($code === '' || $code === 'XXX') {
+            throw FormatterException::currencyRequired($this->locale);
+        }
+
+        return $code;
     }
 
     /**

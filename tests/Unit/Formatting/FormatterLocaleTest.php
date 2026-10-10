@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Formatting;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Formatting\Formatter;
+use Zephyrus\Formatting\FormatterException;
 
 final class FormatterLocaleTest extends TestCase
 {
@@ -133,5 +134,37 @@ final class FormatterLocaleTest extends TestCase
         self::assertSame('a and b', $fmt->list(['a', 'b']));
         self::assertSame('a, b, and c', $fmt->list(['a', 'b', 'c']));
         self::assertSame('a, b, or c', $fmt->list(['a', 'b', 'c'], 'disjunction'));
+    }
+
+    #[DataProvider('regionlessLocales')]
+    public function testMoneyWithoutCurrencyThrowsForALocaleWithoutANativeCurrency(string $locale): void
+    {
+        $this->expectException(FormatterException::class);
+        $this->expectExceptionMessageMatches('/Pass a currency to money\(\) or set a default currency/');
+
+        (new Formatter($locale))->money(19.99);
+    }
+
+    #[DataProvider('regionlessLocales')]
+    public function testMoneyWithEmptyCurrencyThrowsForALocaleWithoutANativeCurrency(string $locale): void
+    {
+        $this->expectException(FormatterException::class);
+
+        (new Formatter($locale))->money(19.99, '');
+    }
+
+    #[DataProvider('regionlessLocales')]
+    public function testMoneyUsesAnExplicitOrDefaultCurrencyForALocaleWithoutANativeCurrency(string $locale): void
+    {
+        self::assertStringContainsString('€', (new Formatter($locale))->money(19.99, 'EUR'));
+        self::assertStringContainsString('€', (new Formatter($locale, 'EUR'))->money(19.99));
+    }
+
+    /**
+     * @return list<array{string}>
+     */
+    public static function regionlessLocales(): array
+    {
+        return [['fr'], ['en']];
     }
 }
