@@ -53,8 +53,8 @@ if (!function_exists('config')) {
      * value from that section using dot-notation.
      *
      * Built-in sections: application, session, security, localization, database.
-     * Custom sections registered via Configuration::withSection() are also
-     * accessible.
+     * Custom sections are accessible when their factory is passed in the
+     * $sectionFactories argument of Configuration::fromArray() or fromYamlFile().
      *
      * @param string      $section  Section name (e.g. 'application', 'database', or custom).
      * @param string|null $property Dot-notation property within the section.
