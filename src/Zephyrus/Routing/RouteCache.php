@@ -661,7 +661,7 @@ final class RouteCache
         $duplicates = $collection->duplicateRouteNames();
         if ($duplicates !== []) {
             return sprintf(
-                'more than one route is named %s; give each route a unique name',
+                'duplicate route names %s; give each route a unique name',
                 implode(', ', array_map(static fn (int|string $name): string => self::encodeForMessage((string) $name), $duplicates)),
             );
         }
@@ -740,7 +740,7 @@ final class RouteCache
                 excludedMiddlewares: $excludedMiddlewares,
             );
         } catch (RouteSignatureException | RouteMiddlewareException $exception) {
-            return 'a route that is rejected: ' . $exception->getMessage();
+            return 'a route the router refuses: ' . self::encodeForMessage($exception->getMessage());
         }
     }
 
