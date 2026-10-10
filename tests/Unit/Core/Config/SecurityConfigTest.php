@@ -13,10 +13,6 @@ use Zephyrus\Http\Request;
 
 final class SecurityConfigTest extends TestCase
 {
-    // -------------------------------------------------------------------------
-    // Defaults
-    // -------------------------------------------------------------------------
-
     public function testBuildsWithDefaults(): void
     {
         $config = SecurityConfig::fromArray([]);
@@ -29,10 +25,6 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(2_097_152, $config->maxBodySize);
         self::assertNull($config->encryptionKey);
     }
-
-    // -------------------------------------------------------------------------
-    // camelCase keys
-    // -------------------------------------------------------------------------
 
     public function testAcceptsCamelCaseKeys(): void
     {
@@ -53,10 +45,6 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(1_048_576, $config->maxBodySize);
     }
 
-    // -------------------------------------------------------------------------
-    // snake_case key variants
-    // -------------------------------------------------------------------------
-
     public function testAcceptsSnakeCaseKeys(): void
     {
         $config = SecurityConfig::fromArray([
@@ -76,10 +64,6 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(512, $config->maxBodySize);
     }
 
-    // -------------------------------------------------------------------------
-    // camelCase takes precedence over snake_case when both are present
-    // -------------------------------------------------------------------------
-
     public function testCamelCaseTakesPrecedenceOverSnakeCase(): void
     {
         $config = SecurityConfig::fromArray([
@@ -96,20 +80,12 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(['#^/camel/#'], $config->csrfExceptions);
     }
 
-    // -------------------------------------------------------------------------
-    // maxBodySize zero = unlimited
-    // -------------------------------------------------------------------------
-
     public function testMaxBodySizeZeroIsUnlimited(): void
     {
         $config = SecurityConfig::fromArray(['maxBodySize' => 0]);
 
         self::assertSame(0, $config->maxBodySize);
     }
-
-    // -------------------------------------------------------------------------
-    // list index reindexing
-    // -------------------------------------------------------------------------
 
     public function testAllowedHostsAreReindexed(): void
     {
@@ -128,10 +104,6 @@ final class SecurityConfigTest extends TestCase
 
         self::assertSame(['#^/a$#', '#^/b$#'], $config->csrfExceptions);
     }
-
-    // -------------------------------------------------------------------------
-    // Validation failures
-    // -------------------------------------------------------------------------
 
     public function testThrowsForNegativeMaxBodySize(): void
     {
@@ -170,8 +142,6 @@ final class SecurityConfigTest extends TestCase
 
         SecurityConfig::fromArray(['csrfExceptions' => [123]]);
     }
-
-    // ── Trusted Proxies ──────────────────────────────────────────────
 
     public function testTrustedProxiesDefaultsToEmpty(): void
     {
@@ -342,8 +312,6 @@ final class SecurityConfigTest extends TestCase
         self::assertSame(['10.0.0.1', '10.0.0.2'], $config->trustedProxies);
     }
 
-    // -- Trusted Headers ---------------------------------------------
-
     public function testTrustedHeadersDefaultsToTheXForwardedFamily(): void
     {
         $config = SecurityConfig::fromArray([]);
@@ -384,8 +352,7 @@ final class SecurityConfigTest extends TestCase
 
     public function testTrustedHeadersMayBeExplicitlyEmpty(): void
     {
-        // An empty list is a real setting (read no forwarded header at all) and
-        // must not be mistaken for an absent key taking the default.
+        // An empty list is a real setting, not an absent key taking the default.
         $config = SecurityConfig::fromArray([
             'trustedHeaders' => [],
         ]);
@@ -404,8 +371,7 @@ final class SecurityConfigTest extends TestCase
 
     public function testThrowsForUnknownTrustedHeader(): void
     {
-        // A silently dropped typo would leave an operator believing they trust a
-        // header they do not.
+        // A typo is rejected, never silently dropped.
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage('trustedHeaders');
 
@@ -419,8 +385,6 @@ final class SecurityConfigTest extends TestCase
 
         SecurityConfig::fromArray(['trustedHeaders' => ['x-forwarded-for', '']]);
     }
-
-    // ── Nested CSRF section ──────────────────────────────────────────
 
     public function testNestedCsrfSectionTakesPrecedenceOverFlatKeys(): void
     {
@@ -650,8 +614,6 @@ final class SecurityConfigTest extends TestCase
         self::assertFalse($config->csrfAutoHtml);
         self::assertSame([], $config->csrfExceptions);
     }
-
-    // ── Encryption section ──────────────────────────────────────────
 
     public function testEncryptionKeyFromNestedSection(): void
     {

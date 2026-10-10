@@ -74,9 +74,8 @@ final class DebugIntegrationTest extends TestCase
     }
 
     /**
-     * Tracy writes dump() straight to STDOUT in CLI, past any output buffer,
-     * so the output can only be observed from a child process. The sentinel
-     * proves the child ran to the end, so a crash cannot pass as silence.
+     * Tracy writes dump() to STDOUT past output buffers, so a child process is observed.
+     * The sentinel proves the child ran to the end.
      */
     public function testDumpStaysSilentWhenDebugIsFalse(): void
     {
@@ -960,9 +959,7 @@ final class DebugIntegrationTest extends TestCase
     }
 
     /**
-     * A value that cannot appear in this file's source. Tracy's bluescreen
-     * prints the source line of every frame, so a literal secret in the test
-     * would show up in the page whether or not it was masked.
+     * A value that cannot appear in this file's source, since the bluescreen prints each frame's source line.
      */
     private static function marker(string $label): string
     {

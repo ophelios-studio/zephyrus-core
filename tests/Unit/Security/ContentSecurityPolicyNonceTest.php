@@ -23,16 +23,10 @@ use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
 
 /**
- * Opt-in per-request CSP nonce.
+ * Per-request CSP nonce, opt-in only.
  *
- * A single inline <script> otherwise forces a project to drop script-src
- * altogether, which removes the only directive that mitigates XSS. The nonce
- * keeps the inline block working while script-src stays strict.
- *
- * The nonce is strictly opt in because of a trap: under CSP Level 2 and later a
- * nonce makes browsers IGNORE 'unsafe-inline' in the same directive, so
- * injecting one automatically would stop every inline script in a project that
- * relies on 'unsafe-inline'.
+ * Under CSP Level 2 and later a nonce makes browsers ignore 'unsafe-inline' in the
+ * same directive, so enabling it by default would break inline scripts that rely on it.
  */
 final class ContentSecurityPolicyNonceTest extends TestCase
 {
@@ -61,11 +55,8 @@ final class ContentSecurityPolicyNonceTest extends TestCase
             ->build();
     }
 
-    // -- Non-breakage: default off ------------------------------------------
-
     /**
-     * The non-breakage proof. A consumer that does not opt in gets the exact
-     * header they got before nonce support existed, character for character.
+     * Without opt-in, the header is unchanged, character for character.
      */
     public function testDefaultEmitsAByteIdenticalHeaderAndNoNonce(): void
     {
@@ -94,8 +85,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
         self::assertArrayNotHasKey('content-security-policy', $response->headers);
     }
-
-    // -- Enabled -------------------------------------------------------------
 
     public function testNonceIsAddedOnlyToTheRequestedDirectives(): void
     {
@@ -145,9 +134,8 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     }
 
     /**
-     * The value a template reads through nonce() must be the value the header
-     * carries, otherwise the inline block is blocked. The controller stands in
-     * for the template: it renders nonce() into the body during $next.
+     * The value read through nonce() must match the header, or the inline block is blocked.
+     * The controller stands in for the template and renders nonce() during $next.
      */
     public function testNonceReachableFromATemplateMatchesTheHeader(): void
     {
@@ -160,8 +148,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         self::assertNotSame('', $rendered);
         self::assertStringContainsString("'nonce-" . $rendered . "'", $response->headers['content-security-policy']);
     }
-
-    // -- The 'unsafe-inline' trap --------------------------------------------
 
     public function testNonceDoesNotRewriteAPolicyContainingUnsafeInline(): void
     {
@@ -219,7 +205,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
         self::assertSame([], $warnings);
     }
-
 
     /**
      * @param callable(): void $run
@@ -341,8 +326,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         self::assertSame([], $warnings);
     }
 
-    // -- Misuse --------------------------------------------------------------
-
     public function testRawStringPolicyWithNonceDirectivesIsRejectedAtConstruction(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -351,13 +334,9 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         new ContentSecurityPolicyMiddleware("script-src 'self'", nonceDirectives: ['script-src']);
     }
 
-    // -- Interaction with SecureHeadersMiddleware ----------------------------
-
     /**
-     * Each middleware leaves a header that is already set alone, and the
-     * response unwinds from the innermost middleware (the one registered last)
-     * outwards. So the innermost writer wins: registering the nonce policy
-     * AFTER SecureHeadersMiddleware keeps the nonce even when csp is set.
+     * A header already set is left alone, so the innermost writer wins: register the nonce
+     * policy after SecureHeadersMiddleware to keep the nonce even when csp is set.
      */
     public function testNoncedPolicySurvivesWhenRegisteredAfterSecureHeaders(): void
     {
@@ -416,8 +395,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     }
 
     /**
-     * Runs the stack without KernelBuilder, which refuses this order at build
-     * time. The runtime warning stays for stacks the builder cannot inspect.
+     * KernelBuilder refuses this order, so the runtime warning covers stacks it cannot inspect.
      */
     private function handleOutsideBuilder(MiddlewareInterface $outer, MiddlewareInterface $inner): Response
     {
@@ -428,9 +406,8 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     }
 
     /**
-     * Registered before SecureHeadersMiddleware, this middleware is the outer
-     * one: SecureHeadersMiddleware's csp is already on the response when it
-     * runs, so the nonce policy is dropped on every request. Refused at build.
+     * Registered before SecureHeadersMiddleware, the nonce policy is dropped on every request.
+     * KernelBuilder refuses this order.
      */
     public function testBuildRefusesNoncedPolicyRegisteredBeforeSecureHeadersWithACsp(): void
     {

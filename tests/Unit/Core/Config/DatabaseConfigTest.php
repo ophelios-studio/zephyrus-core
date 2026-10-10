@@ -10,10 +10,6 @@ use Zephyrus\Core\Config\DatabaseConfig;
 
 final class DatabaseConfigTest extends TestCase
 {
-    // -------------------------------------------------------------------------
-    // Defaults
-    // -------------------------------------------------------------------------
-
     public function testBuildsWithDefaults(): void
     {
         $config = DatabaseConfig::fromArray([
@@ -27,10 +23,6 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('utf8',      $config->charset);
         self::assertSame('',          $config->password);
     }
-
-    // -------------------------------------------------------------------------
-    // Explicit values
-    // -------------------------------------------------------------------------
 
     public function testBuildsWithExplicitValues(): void
     {
@@ -50,10 +42,6 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('s3cr3t',      $config->password);
         self::assertSame('latin1',      $config->charset);
     }
-
-    // -------------------------------------------------------------------------
-    // Port boundary validation
-    // -------------------------------------------------------------------------
 
     public function testPortLowerBoundary(): void
     {
@@ -93,10 +81,6 @@ final class DatabaseConfigTest extends TestCase
         DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'port' => 65536]);
     }
 
-    // -------------------------------------------------------------------------
-    // Required field validation
-    // -------------------------------------------------------------------------
-
     public function testThrowsForMissingDatabase(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -127,10 +111,6 @@ final class DatabaseConfigTest extends TestCase
         DatabaseConfig::fromArray(['database' => 'db', 'username' => '']);
     }
 
-    // -------------------------------------------------------------------------
-    // Charset validation
-    // -------------------------------------------------------------------------
-
     public function testThrowsForInvalidCharset(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -144,14 +124,8 @@ final class DatabaseConfigTest extends TestCase
     }
 
     /**
-     * REGRESSION. charset is interpolated verbatim into
-     * `SET client_encoding TO '<charset>'` at connect time (Database::fromConfig),
-     * where a semicolon would try to open a second command. fromArray() validated
-     * it; the constructor did not, so an object built directly reached that string
-     * unchecked. Native prepares now refuse a second statement outright, which is
-     * the layer client-side emulation used to give away, but the check stays: that
-     * refusal is the driver's rather than ours. Guarded like sslMode and
-     * sslRootCert already are.
+     * The constructor validates charset as fromArray() does: it is interpolated
+     * into a SET statement at connect time.
      */
     public function testThrowsForCharsetSmuggledThroughTheConstructor(): void
     {
@@ -184,10 +158,6 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('utf8mb4', $config->charset);
     }
 
-    // -------------------------------------------------------------------------
-    // Driver validation
-    // -------------------------------------------------------------------------
-
     public function testThrowsForUnsupportedDriver(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -210,16 +180,9 @@ final class DatabaseConfigTest extends TestCase
         self::assertSame('pgsql', $config->driver);
     }
 
-    // -------------------------------------------------------------------------
-    // emulate_prepares: REMOVED, and rejected loudly rather than ignored
-    // -------------------------------------------------------------------------
-
     /**
-     * The setting used to turn PDO::ATTR_EMULATE_PREPARES on. It was removed
-     * because it is a security downgrade, and a file that still carries it must
-     * FAIL rather than boot: the operator who wrote the line believed something
-     * about their deployment that is no longer true, and a silently dropped key
-     * leaves that belief in place.
+     * The removed setting turned PDO::ATTR_EMULATE_PREPARES on, a security downgrade.
+     * A file still carrying it must fail rather than boot without it.
      */
     public function testFromArrayRejectsTheRemovedSnakeCaseEmulatePreparesKey(): void
     {
@@ -246,10 +209,7 @@ final class DatabaseConfigTest extends TestCase
     }
 
     /**
-     * Rejected even at false, which looks pedantic and is not. `false` was the
-     * safe value, so a file carrying it is a file whose author considered the
-     * question; leaving the key readable would keep documenting a knob that no
-     * longer exists, and the next person to flip it to true would get silence.
+     * Rejected even at false: the key no longer exists, so a stale file must fail too.
      */
     public function testFromArrayRejectsTheRemovedKeyEvenWhenSetToFalse(): void
     {
@@ -264,8 +224,7 @@ final class DatabaseConfigTest extends TestCase
     }
 
     /**
-     * The message has to be actionable on its own: an operator reading a boot
-     * failure gets the key, why it is gone, and what to type.
+     * The message names the key, why it was removed and what to write instead.
      */
     public function testTheRejectionNamesTheReasonAndTheRemedy(): void
     {
@@ -284,8 +243,7 @@ final class DatabaseConfigTest extends TestCase
     }
 
     /**
-     * The capability is gone from the value object too, not just from the file
-     * format: nothing downstream can read an emulation preference off a config.
+     * The property is gone from the value object too, not only from the file format.
      */
     public function testDatabaseConfigNoLongerCarriesAnEmulatePreparesProperty(): void
     {
@@ -294,10 +252,6 @@ final class DatabaseConfigTest extends TestCase
             'DatabaseConfig must not expose an emulatePrepares property.',
         );
     }
-
-    // -------------------------------------------------------------------------
-    // sslMode / sslRootCert (opt-in libpq TLS policy)
-    // -------------------------------------------------------------------------
 
     public function testSslModeDefaultsToNull(): void
     {
@@ -336,9 +290,7 @@ final class DatabaseConfigTest extends TestCase
 
     public function testSslModeIsTrimmedAndCaseFolded(): void
     {
-        // Environment variables arrive with stray whitespace and shouted
-        // spellings; libpq matches the value exactly, so normalise rather than
-        // hand it a string it would reject at connect time.
+        // libpq matches sslmode exactly, so the value is normalized before it reaches the DSN.
         $config = DatabaseConfig::fromArray([
             'database' => 'db',
             'username' => 'u',
@@ -350,8 +302,7 @@ final class DatabaseConfigTest extends TestCase
 
     public function testBlankSslModeCollapsesToNull(): void
     {
-        // A set-but-empty environment variable means "not configured", exactly
-        // like an absent one, and must leave the DSN untouched.
+        // A set-but-empty value counts as unset and must leave the DSN untouched.
         $config = DatabaseConfig::fromArray([
             'database' => 'db',
             'username' => 'u',
@@ -390,8 +341,7 @@ final class DatabaseConfigTest extends TestCase
 
     public function testThrowsForSslModeSmuggledThroughTheConstructor(): void
     {
-        // The value is interpolated into the DSN verbatim, so the guarantee has
-        // to hold for a direct caller too, not only for fromArray().
+        // The value goes into the DSN verbatim, so the constructor validates it too.
         $this->expectException(ConfigurationException::class);
         $this->expectExceptionMessage('sslmode');
 
@@ -432,9 +382,7 @@ final class DatabaseConfigTest extends TestCase
 
     public function testVerifyModeWithoutRootCertIsAccepted(): void
     {
-        // Deliberate: libpq falls back to ~/.postgresql/root.crt and reports a
-        // precise error when no anchor exists, so rejecting this here would
-        // refuse a configuration PostgreSQL itself accepts.
+        // Deliberate: libpq falls back to ~/.postgresql/root.crt and reports a missing anchor itself.
         $config = DatabaseConfig::fromArray([
             'database' => 'db',
             'username' => 'u',

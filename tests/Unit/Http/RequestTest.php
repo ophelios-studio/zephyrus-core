@@ -13,9 +13,7 @@ use Zephyrus\Upload\FileUpload;
 
 final class RequestTest extends TestCase
 {
-    // -------------------------------------------------------------------------
-    // fromArray — existing contract tests
-    // -------------------------------------------------------------------------
+    // fromArray: existing contract tests
 
     public function testFactoryNormalizesMethodAndHeaders(): void
     {
@@ -151,9 +149,7 @@ final class RequestTest extends TestCase
         self::assertNull($request->file('missing'));
     }
 
-    // -------------------------------------------------------------------------
     // isJson + isSecure helpers
-    // -------------------------------------------------------------------------
 
     public function testIsJsonReturnsTrueForJsonContentType(): void
     {
@@ -278,14 +274,11 @@ final class RequestTest extends TestCase
         self::assertSame('8.8.8.8', $request->clientIp());
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals - client IP behind trusted proxies (right to left walk)
-    // -------------------------------------------------------------------------
+    // fromGlobals: client IP behind trusted proxies (right to left walk)
 
     public function testFromGlobalsIgnoresForgedLeftmostForwardedForEntry(): void
     {
-        // The caller sent "X-Forwarded-For: 192.0.2.66" and the proxy appended
-        // the peer it actually saw. The forged leftmost entry must not win.
+        // The leftmost X-Forwarded-For entry is caller-controlled and must not win.
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'        => 'GET',
@@ -636,9 +629,7 @@ final class RequestTest extends TestCase
         self::assertSame('198.51.100.7', $request->clientIp());
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals - which forwarding headers may be read at all (trustedHeaders)
-    // -------------------------------------------------------------------------
+    // fromGlobals: which forwarding headers may be read at all (trustedHeaders)
 
     public function testTrustedHeadersDefaultIsTheXForwardedFamilyOnly(): void
     {
@@ -650,8 +641,7 @@ final class RequestTest extends TestCase
 
     public function testFromGlobalsIgnoresForgedForwardedHeaderWhenProxyManagesForwardedForOnly(): void
     {
-        // The proxy appends to X-Forwarded-For and never touches Forwarded, so a
-        // Forwarded header arriving here was written by the caller.
+        // The proxy never writes Forwarded, so a Forwarded header here came from the caller.
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'       => 'GET',
@@ -752,8 +742,7 @@ final class RequestTest extends TestCase
 
     public function testFromGlobalsDoesNotFallBackToAnUntrustedChainHeader(): void
     {
-        // Forwarded is allowlisted but yields no usable hop. X-Forwarded-For is
-        // NOT allowlisted, so it must not become the fallback.
+        // Forwarded yields no usable hop, and X-Forwarded-For is not allowlisted.
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'       => 'GET',
@@ -811,8 +800,7 @@ final class RequestTest extends TestCase
 
     public function testFromGlobalsIgnoresAnUnknownConfiguredHeaderName(): void
     {
-        // A name this class cannot read enables nothing, and building a Request
-        // never throws over it. SecurityConfig is where a typo is rejected.
+        // An unknown name enables nothing and never throws; SecurityConfig rejects typos.
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD'       => 'GET',
@@ -828,9 +816,7 @@ final class RequestTest extends TestCase
         self::assertSame('10.0.0.1', $request->clientIp());
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals - the same allowlist governs the URI
-    // -------------------------------------------------------------------------
+    // fromGlobals: the same allowlist governs the URI
 
     public function testFromGlobalsIgnoresForwardedHostAndProtoOutsideTheAllowlist(): void
     {
@@ -888,9 +874,7 @@ final class RequestTest extends TestCase
         self::assertSame('http://app.internal/x', $denied->uri()->full());
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — URI construction
-    // -------------------------------------------------------------------------
+    // fromGlobals: URI construction
 
     #[DataProvider('forwardedPortsThatAreNotPortNumbers')]
     public function testFromGlobalsIgnoresForwardedPortThatIsNotAPortNumber(string $port): void
@@ -1482,9 +1466,7 @@ final class RequestTest extends TestCase
         self::assertSame('GET', $request->method);
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — header extraction
-    // -------------------------------------------------------------------------
+    // fromGlobals: header extraction
 
     public function testFromGlobalsExtractsHttpPrefixedHeaders(): void
     {
@@ -1549,9 +1531,7 @@ final class RequestTest extends TestCase
         self::assertNull($request->headers()->get('content-type'));
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — body parsing
-    // -------------------------------------------------------------------------
+    // fromGlobals: body parsing
 
     #[DataProvider('unparsableJsonBodies')]
     public function testFromGlobalsFlagsJsonBodyThatIsNotAnObject(string $raw): void
@@ -1756,9 +1736,7 @@ final class RequestTest extends TestCase
         self::assertSame([], $request->body()->all());
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — method override
-    // -------------------------------------------------------------------------
+    // fromGlobals: method override
 
     public function testFromGlobalsMethodOverrideViaPostField(): void
     {
@@ -1855,9 +1833,7 @@ final class RequestTest extends TestCase
         self::assertSame('GET', $request->method);
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — cookies
-    // -------------------------------------------------------------------------
+    // fromGlobals: cookies
 
     public function testFromGlobalsCookiesAreAvailable(): void
     {
@@ -2079,9 +2055,7 @@ final class RequestTest extends TestCase
         self::assertSame('/tmp/a', $files[0]->tmpPath);
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — query string
-    // -------------------------------------------------------------------------
+    // fromGlobals: query string
 
     public function testFromGlobalsPopulatesQueryFromGetArray(): void
     {
@@ -2099,9 +2073,7 @@ final class RequestTest extends TestCase
         self::assertNull($request->query('missing'));
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — absolute REQUEST_URI (reverse proxy)
-    // -------------------------------------------------------------------------
+    // fromGlobals: absolute REQUEST_URI (reverse proxy)
 
     #[DataProvider('absoluteRequestTargetsWithMixedCaseScheme')]
     public function testFromGlobalsLowercasesTheSchemeOfAnAbsoluteRequestTarget(string $target, string $expected): void
@@ -2123,7 +2095,6 @@ final class RequestTest extends TestCase
         yield 'mixed HTTPS' => ['Https://real.example.com/x?y=1', 'https://real.example.com/x?y=1'];
     }
 
-
     public function testFromGlobalsPassesThroughAbsoluteRequestUri(): void
     {
         $request = Request::fromGlobals(
@@ -2137,9 +2108,7 @@ final class RequestTest extends TestCase
         self::assertSame('https://real.example.com/api/v1/users', $request->uri()->full());
     }
 
-    // -------------------------------------------------------------------------
-    // fromGlobals — delete / patch with JSON body
-    // -------------------------------------------------------------------------
+    // fromGlobals: delete / patch with JSON body
 
     public function testFromGlobalsDeleteWithJsonBodyIsParsed(): void
     {
@@ -2173,9 +2142,7 @@ final class RequestTest extends TestCase
         self::assertSame(4.5, $request->body()->get('score'));
     }
 
-    // -------------------------------------------------------------------------
     // getParameter / getParameters / getHeader convenience methods
-    // -------------------------------------------------------------------------
 
     public function testGetParameterPrefersBodyOverQuery(): void
     {

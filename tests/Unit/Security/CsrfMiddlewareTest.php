@@ -40,8 +40,6 @@ final class CsrfMiddlewareTest extends TestCase
         return new CsrfMiddleware($this->makeManager(), $config ?? CsrfConfig::defaults());
     }
 
-    // ── safe methods pass through without token ───────────────────────────────
-
     public function testGetPassesThroughWithoutToken(): void
     {
         $mw       = $this->makeMiddleware();
@@ -82,8 +80,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
-    // ── state-changing methods without token return 403 ──────────────────────
-
     public function testPostWithoutTokenReturnsForbidden(): void
     {
         $mw       = $this->makeMiddleware();
@@ -120,8 +116,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(403, $response->status);
     }
 
-    // ── valid token via request body ──────────────────────────────────────────
-
     public function testPostWithValidBodyTokenPasses(): void
     {
         $mw      = $this->makeMiddleware();
@@ -146,8 +140,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
-    // ── valid token via header ────────────────────────────────────────────────
-
     public function testPostWithValidHeaderTokenPasses(): void
     {
         $mw      = $this->makeMiddleware();
@@ -169,8 +161,6 @@ final class CsrfMiddlewareTest extends TestCase
 
         self::assertSame(204, $response->status);
     }
-
-    // ── wrong token returns 403 ───────────────────────────────────────────────
 
     public function testPostWithWrongBodyTokenReturnsForbidden(): void
     {
@@ -194,8 +184,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(403, $response->status);
     }
 
-    // ── body field takes precedence over header ───────────────────────────────
-
     public function testBodyFieldTakesPrecedenceOverHeader(): void
     {
         $mw      = $this->makeMiddleware();
@@ -205,13 +193,11 @@ final class CsrfMiddlewareTest extends TestCase
             body: ['_csrf_token' => self::VALID_TOKEN],  // body: valid
             headers:    ['x-csrf-token' => 'bad-header'],       // header: bad
         );
-        // Body wins → should pass
+        // The body token wins over the header.
         $response = $mw->process($request, fn (Request $r): Response => Response::text('ok'));
 
         self::assertSame(200, $response->status);
     }
-
-    // ── custom field / header names via CsrfConfig ───────────────────────────
 
     public function testCustomBodyFieldIsRespected(): void
     {
@@ -237,8 +223,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
-    // ── 403 response is JSON ──────────────────────────────────────────────────
-
     public function testForbiddenResponseIsJson(): void
     {
         $mw      = $this->makeMiddleware();
@@ -249,8 +233,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertStringContainsString('application/json', $response->headers['content-type'] ?? '');
         self::assertStringContainsString('error', $response->body);
     }
-
-    // ── inner handler not called on rejection ─────────────────────────────────
 
     public function testInnerHandlerNotCalledOnRejection(): void
     {
@@ -267,8 +249,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertFalse($called);
     }
 
-    // ── getToken() accessible from manager ───────────────────────────────────
-
     public function testManagerExposesToken(): void
     {
         $manager = $this->makeManager('my-test-token');
@@ -276,13 +256,11 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame('my-test-token', $manager->getToken());
     }
 
-    // ── path exclusions bypass CSRF validation ───────────────────────────────
-
     public function testExcludedPathBypassesTokenValidationOnPost(): void
     {
         $config  = new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#']);
         $mw      = new CsrfMiddleware($this->makeManager(), $config);
-        // No token supplied — but path is excluded → inner handler must be called.
+        // No token, but the path is excluded: the inner handler must run.
         $request = new Request('POST', 'https://example.com/webhooks/stripe');
         $inner   = Response::text('webhook-received');
 
@@ -306,7 +284,7 @@ final class CsrfMiddlewareTest extends TestCase
     {
         $config  = new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#']);
         $mw      = new CsrfMiddleware($this->makeManager(), $config);
-        // Path does NOT match the exclusion → 403 when no token.
+        // The path does not match the exclusion, so a missing token gets 403.
         $request = new Request('POST', 'https://example.com/submit');
 
         $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
@@ -335,7 +313,7 @@ final class CsrfMiddlewareTest extends TestCase
 
     public function testExclusionPatternsDoNotAffectSafeMethodsAlreadyAllowed(): void
     {
-        // GET is already safe; exclusion patterns are redundant but must not break anything.
+        // GET is already safe, so an exclusion must not change the outcome.
         $config  = new CsrfConfig(excludedPathPatterns: ['#^/webhooks/#']);
         $mw      = new CsrfMiddleware($this->makeManager(), $config);
         $request = new Request('GET', 'https://example.com/webhooks/stripe');
@@ -373,8 +351,6 @@ final class CsrfMiddlewareTest extends TestCase
 
         self::assertSame($html, $response->body);
     }
-
-    // ── CsrfConfig factory tests ──────────────────────────────────────────────
 
     public function testCsrfConfigDefaults(): void
     {
@@ -507,16 +483,8 @@ final class CsrfMiddlewareTest extends TestCase
         ]);
     }
 
-    // ── exclusion patterns must be anchored at both ends ─────────────────────
-
     /**
-     * The bypass this closes, reproduced against a real route:
-     *
-     *   exclusion #/webhooks/#   POST /account/webhooks/close   no token -> 200
-     *
-     * The pattern matches anywhere in the path, so any route carrying the
-     * segment anywhere is exempt, including one whose leading segment the
-     * caller chooses.
+     * An unanchored pattern exempts every path that contains it.
      */
     public function testAnUnanchoredExclusionPatternIsRefused(): void
     {
@@ -527,14 +495,7 @@ final class CsrfMiddlewareTest extends TestCase
     }
 
     /**
-     * The second bypass, which needs no unanchored pattern and no
-     * attacker-controlled segment:
-     *
-     *   exclusion #^/api/public#  POST /api/publicity/42/delete  no token -> 200
-     *
-     * The pattern is anchored and still stops in the middle of a path segment,
-     * so it exempts every sibling route sharing the prefix. That exact pattern
-     * shipped in the framework's own docblock.
+     * An anchored pattern that stops mid-segment still exempts sibling routes sharing the prefix.
      */
     public function testAnExclusionPatternThatStopsMidSegmentIsRefused(): void
     {
@@ -558,9 +519,7 @@ final class CsrfMiddlewareTest extends TestCase
     }
 
     /**
-     * Validated by the constructor, not only by fromArray(), because
-     * constructing the object with named arguments is the documented usage and
-     * is what the framework's own middleware wiring does.
+     * Validated by the constructor too, since named-argument construction bypasses fromArray().
      */
     public function testFromArrayAppliesTheSameRule(): void
     {
@@ -597,19 +556,15 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame(200, $response->status);
     }
 
-    // ── middleware defaults to CsrfConfig::defaults() when omitted ───────────
-
     public function testMiddlewareWithDefaultConfigConstructor(): void
     {
-        // When no CsrfConfig is passed, defaults apply; POST without token → 403.
+        // Without a CsrfConfig, the defaults apply and a token-less POST gets 403.
         $mw      = new CsrfMiddleware($this->makeManager());
         $request = new Request('POST', 'https://example.com/submit');
         $response = $mw->process($request, fn (Request $r): Response => Response::text('never'));
 
         self::assertSame(403, $response->status);
     }
-
-    // ── refusal callback ──────────────────────────────────────────────────────
 
     /**
      * @param list<CsrfFailure> $seen Receives the reason of each refusal, in order.
@@ -692,8 +647,6 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame([], $seen);
         self::assertSame(200, $response->status);
     }
-
-    // ── default refusal per client ────────────────────────────────────────────
 
     public function testDefaultRefusalIsJsonForAnApiClient(): void
     {

@@ -16,17 +16,9 @@ use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\RequestAttributeGuard;
 
 /**
- * Three routing defects, each reproduced against the real HttpKernel pipeline
- * because each one only exists once matching, the attribute merge and handler
- * resolution are wired together.
- *
- *  1. Request::path() was not the path the router dispatched on. The router
- *     rawurldecode()d every segment, so "/%61dmin/secret" reached
- *     "/admin/secret" while the guard inspecting path() saw "/%61dmin/secret".
- *  2. A matched route parameter satisfied a RequestAttributeGuard, so a URL
- *     segment supplied the value a guard authorised on.
- *  3. A route constraint validated the URL segment while the handler received
- *     whatever a middleware had since written into the attributes.
+ * Routing security invariants, run through the real HttpKernel pipeline: an encoded
+ * path cannot bypass a path guard, a route parameter cannot satisfy an attribute guard,
+ * and a route constraint governs the value the handler receives.
  */
 final class RoutingSecurityAuditTest extends TestCase
 {
@@ -52,13 +44,8 @@ final class RoutingSecurityAuditTest extends TestCase
         );
     }
 
-    // =====================================================================
-    // 1. The percent-encoded prefix bypass
-    // =====================================================================
-
     /**
-     * The guard is the literal pattern the docblock on Request::path() used to
-     * recommend, applied through a real global middleware.
+     * A path-prefix guard applied as global middleware.
      */
     private function guardedKernel(): HttpKernel
     {
@@ -86,9 +73,7 @@ final class RoutingSecurityAuditTest extends TestCase
     }
 
     /**
-     * Pre-fix, every one of these answered 200 "TOP SECRET DATA": the guard
-     * read the raw path, returned false, and the router decoded the segment and
-     * dispatched the protected route anyway.
+     * Encoded variants of a guarded prefix must be refused and never reach the handler.
      */
     #[DataProvider('encodedAdminTargetProvider')]
     public function testAPercentEncodedPrefixCannotReachAGuardedRoute(string $target): void
@@ -103,10 +88,8 @@ final class RoutingSecurityAuditTest extends TestCase
     {
         $kernel = $this->guardedKernel();
 
-        // Non-breakage: the guard still refuses the plain path.
         self::assertSame(401, $kernel->handle($this->get('/admin/secret'))->status);
 
-        // Non-breakage: an unguarded route is untouched.
         $page = $kernel->handle($this->get('/public/page'));
         self::assertSame(200, $page->status);
         self::assertSame('PAGE', trim($page->body));
@@ -114,9 +97,7 @@ final class RoutingSecurityAuditTest extends TestCase
 
     public function testAnEncodedParameterSegmentStillReachesTheHandlerDecoded(): void
     {
-        // Only LITERAL segments are compared raw. A placeholder is still
-        // decoded before its constraint is applied and before the handler sees
-        // it, which is the behaviour every application depends on.
+        // Only literal segments match the raw path; placeholders are decoded before the handler.
         $kernel = KernelBuilder::create()
             ->withRouter((new Router())->get('/tags/{name}', AuditController::class . '@tag'))
             ->build();
@@ -127,14 +108,9 @@ final class RoutingSecurityAuditTest extends TestCase
         self::assertSame('TAG:hello world', trim($response->body));
     }
 
-    // =====================================================================
-    // 2. A route parameter satisfying an attribute guard
-    // =====================================================================
-
     /**
-     * The exploitable ordering is the natural one: RolePublishingMiddleware
-     * only publishes "role" when a session exists, so an ANONYMOUS caller left
-     * the route parameter in place and a logged-in one overwrote it.
+     * RolePublishingMiddleware publishes "role" only with a session, so an anonymous
+     * caller keeps the route parameter.
      */
     private function roleGuardedKernel(): HttpKernel
     {
@@ -147,7 +123,6 @@ final class RoutingSecurityAuditTest extends TestCase
 
     public function testARouteParameterCannotSatisfyARequestAttributeGuard(): void
     {
-        // Pre-fix: 200 "CONFIDENTIAL REPORTS for role=admin", with no session.
         $response = $this->roleGuardedKernel()->handle($this->get('/reports/admin'));
 
         self::assertSame(401, $response->status);
@@ -156,8 +131,7 @@ final class RoutingSecurityAuditTest extends TestCase
 
     public function testAGenuinelyPublishedAttributeStillSatisfiesTheGuard(): void
     {
-        // Non-breakage: the guard must still AUTHORISE when the value comes
-        // from the middleware rather than from the URL.
+        // A value published by middleware still satisfies the guard.
         $kernel = KernelBuilder::create()
             ->withRouter((new Router())->get('/reports', AuditController::class . '@reportsPlain'))
             ->withMiddleware(new RolePublishingMiddleware())
@@ -177,17 +151,11 @@ final class RoutingSecurityAuditTest extends TestCase
             ->withMiddleware(new RolePublishingMiddleware())
             ->build();
 
-        // A logged-in caller: the middleware overwrites the attribute, and the
-        // name is STILL flagged as route-sourced. Fail-closed by design; see
-        // Request::$routeParameters.
+        // The name stays flagged as route-sourced after an overwrite (fail-closed, see Request::$routeParameters).
         $response = $kernel->handle($this->get('/reports/admin', ['X-Session-Role' => 'viewer']));
 
         self::assertSame('attribute=viewer route=admin isRouteParameter=yes', trim($response->body));
     }
-
-    // =====================================================================
-    // 3. A constraint that did not govern the handler argument
-    // =====================================================================
 
     public function testAConstrainedParameterCannotBeReplacedByAMiddleware(): void
     {
@@ -205,7 +173,6 @@ final class RoutingSecurityAuditTest extends TestCase
             ['X-Doc-Id' => '../../../etc/passwd'],
         ));
 
-        // Pre-fix: 200 "LOADING FILE: /var/docs/../../../etc/passwd.pdf".
         self::assertSame(200, $response->status);
         self::assertSame(
             'LOADING FILE: /var/docs/3f2504e0-4f89-41d3-9a0c-0305e82c3301.pdf',
@@ -215,8 +182,7 @@ final class RoutingSecurityAuditTest extends TestCase
 
     public function testAMiddlewareCanStillPublishAnAttributeThatIsNotARouteParameter(): void
     {
-        // Non-breakage: name-binding for a NON-placeholder attribute is exactly
-        // how a middleware feeds a handler, and it is untouched.
+        // A non-placeholder attribute still feeds the handler.
         $kernel = KernelBuilder::create()
             ->withRouter((new Router())->get('/tenant/report', AuditController::class . '@tenantReport'))
             ->withMiddleware(new HeaderAttributeOverrideMiddleware('X-Tenant', 'tenant'))
@@ -227,10 +193,6 @@ final class RoutingSecurityAuditTest extends TestCase
         self::assertSame('TENANT:acme', trim($response->body));
     }
 }
-
-// ===========================================================================
-// Fixtures
-// ===========================================================================
 
 final class AuditController
 {
@@ -280,7 +242,7 @@ final class AuditController
     }
 }
 
-/** The exact guard shape Request::path()'s docblock used to recommend. */
+/** Refuses requests whose path() starts with the prefix. */
 final class PathPrefixGuardMiddleware implements MiddlewareInterface
 {
     public function __construct(private readonly string $prefix)
@@ -298,7 +260,7 @@ final class PathPrefixGuardMiddleware implements MiddlewareInterface
     }
 }
 
-/** Publishes "role" ONLY when a session exists, which is what made it exploitable. */
+/** Publishes "role" only when a session exists. */
 final class RolePublishingMiddleware implements MiddlewareInterface
 {
     public function process(Request $request, callable $next): Response

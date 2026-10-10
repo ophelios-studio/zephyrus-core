@@ -32,14 +32,7 @@ final class ConfigurationExceptionTest extends TestCase
     }
 
     /**
-     * WHAT THIS USED TO PIN, AND WHY IT CHANGED.
-     *
-     * This asserted the full path '/etc/missing.yml' was present in
-     * getMessage(). Same ruling as invalidFormat() below: configuration loading
-     * runs at BOOT, before the kernel's error handling exists, so this message
-     * is among the likeliest in the framework to land raw in a log line or a
-     * bluescreen, and it disclosed the deployment's filesystem layout for
-     * nothing. The file NAME stays; the path moved to path().
+     * The message names the file, not its path: boot-time errors can reach logs and bluescreens.
      */
     public function testFileNotFoundKeepsTheServerPathOutOfTheMessage(): void
     {
@@ -52,8 +45,7 @@ final class ConfigurationExceptionTest extends TestCase
     }
 
     /**
-     * Previously asserted only the prefix, so the leak went unnoticed here.
-     * See testFileNotFoundKeepsTheServerPathOutOfTheMessage for the ruling.
+     * Same rule as the file-not-found case: the server path stays out of the message.
      */
     public function testLoadFailedKeepsTheServerPathOutOfTheMessage(): void
     {
@@ -78,20 +70,8 @@ final class ConfigurationExceptionTest extends TestCase
     }
 
     /**
-     * THE SPLIT THIS PINS. parseFailed() has two halves and they were ruled
-     * differently.
-     *
-     * OUR half interpolated the full path. That is us formatting a filesystem
-     * fact ourselves, so it is now a basename and the path lives on path().
-     *
-     * The PARSER's half is appended verbatim and is KEPT, the same category
-     * ruled KEEP for RenderException::renderFailed(): it is a preserved
-     * upstream diagnostic and it carries the line number a developer actually
-     * needs. Symfony's ParseException names the absolute file in SOME of its
-     * messages (a tab-indentation error does, a malformed-inline error does
-     * not), so this message can still disclose a path in practice on some
-     * inputs. That is a knowing trade, not an oversight, which is exactly why
-     * it is written down here and in the factory docblock.
+     * Our half names the file by basename. The parser's diagnostic is kept verbatim for its line
+     * number, and can still name the absolute path.
      */
     public function testParseFailedBasenamesOurHalfAndKeepsTheParserDiagnostic(): void
     {
@@ -106,8 +86,7 @@ final class ConfigurationExceptionTest extends TestCase
     }
 
     /**
-     * With no previous exception there is no inherited half at all, so the
-     * message this class builds on its own must be path-free.
+     * Without a previous exception, the message must be path-free on its own.
      */
     public function testParseFailedWithoutPreviousIsEntirelyPathFree(): void
     {
@@ -121,16 +100,7 @@ final class ConfigurationExceptionTest extends TestCase
     }
 
     /**
-     * WHAT THIS USED TO PIN, AND WHY IT CHANGED.
-     *
-     * This asserted that the path passed in was present in getMessage(), which
-     * with a real absolute path meant the message disclosed the deployment's
-     * filesystem layout. Configuration loading runs at BOOT, before the
-     * kernel's error handling exists, so this message is among the likeliest in
-     * the framework to land raw in a log line or a bluescreen.
-     *
-     * The file NAME stays, because that is the diagnostic. The path moved to
-     * path(), the same shape RenderException::templateNotFound() uses.
+     * The message names the file only (loading runs before error handling exists); the path is on path().
      */
     public function testInvalidFormatKeepsTheServerPathOutOfTheMessage(): void
     {
@@ -151,8 +121,7 @@ final class ConfigurationExceptionTest extends TestCase
     }
 
     /**
-     * The accessor is null for a factory that carries no path, so "no path
-     * recorded" stays distinguishable from "the path was empty".
+     * A factory without a path returns null, which is distinct from an empty path.
      */
     public function testPathIsNullForAFactoryThatCarriesNoPath(): void
     {

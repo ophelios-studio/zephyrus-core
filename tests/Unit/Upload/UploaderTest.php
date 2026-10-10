@@ -21,10 +21,6 @@ final class UploaderTest extends TestCase
         }
     }
 
-    // ------------------------------------------------------------------
-    // Helpers
-    // ------------------------------------------------------------------
-
     private function makeTempFile(string $contents = 'data'): string
     {
         $path = tempnam(sys_get_temp_dir(), 'zep-upload-');
@@ -96,10 +92,6 @@ final class UploaderTest extends TestCase
         return "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
     }
 
-    // ------------------------------------------------------------------
-    // Explicit target name
-    // ------------------------------------------------------------------
-
     public function test_store_moves_file_with_explicit_target_name(): void
     {
         $dest = $this->makeTempDir();
@@ -127,10 +119,6 @@ final class UploaderTest extends TestCase
 
         $this->removeDir($dest);
     }
-
-    // ------------------------------------------------------------------
-    // Auto-generated name
-    // ------------------------------------------------------------------
 
     public function test_store_generates_random_hex_name_when_target_absent(): void
     {
@@ -170,10 +158,6 @@ final class UploaderTest extends TestCase
 
         $this->removeDir($dest);
     }
-
-    // ------------------------------------------------------------------
-    // Sub-directory handling
-    // ------------------------------------------------------------------
 
     public function test_store_creates_subdirectory_under_destination_root(): void
     {
@@ -228,10 +212,6 @@ final class UploaderTest extends TestCase
         $this->removeDir($base);
     }
 
-    // ------------------------------------------------------------------
-    // Two unique calls produce distinct random names
-    // ------------------------------------------------------------------
-
     public function test_store_generates_unique_names_on_successive_calls(): void
     {
         $dest = $this->makeTempDir();
@@ -243,10 +223,6 @@ final class UploaderTest extends TestCase
 
         $this->removeDir($dest);
     }
-
-    // ------------------------------------------------------------------
-    // Validation failures
-    // ------------------------------------------------------------------
 
     public function test_store_throws_when_file_has_upload_error(): void
     {
@@ -326,10 +302,6 @@ final class UploaderTest extends TestCase
         $this->removeDir($dest);
     }
 
-    // ------------------------------------------------------------------
-    // Path traversal rejection — sub-directory
-    // ------------------------------------------------------------------
-
     public function test_store_rejects_double_dot_in_subdirectory(): void
     {
         $dest = $this->makeTempDir();
@@ -356,10 +328,6 @@ final class UploaderTest extends TestCase
             $this->removeDir($dest);
         }
     }
-
-    // ------------------------------------------------------------------
-    // Path traversal rejection — target name
-    // ------------------------------------------------------------------
 
     public function test_store_rejects_forward_slash_in_target_name(): void
     {
@@ -425,10 +393,6 @@ final class UploaderTest extends TestCase
             $this->removeDir($dest);
         }
     }
-
-    // ------------------------------------------------------------------
-    // The client tells the truth about nothing
-    // ------------------------------------------------------------------
 
     public function test_store_rejects_a_php_payload_announced_as_an_image(): void
     {
@@ -550,10 +514,6 @@ final class UploaderTest extends TestCase
         }
     }
 
-    // ------------------------------------------------------------------
-    // Moving is only ever a genuine upload
-    // ------------------------------------------------------------------
-
     public function test_store_refuses_an_arbitrary_source_path_and_leaves_it_in_place(): void
     {
         $dest = $this->makeTempDir();
@@ -572,10 +532,6 @@ final class UploaderTest extends TestCase
             $this->removeDir($dest);
         }
     }
-
-    // ------------------------------------------------------------------
-    // Destination safety
-    // ------------------------------------------------------------------
 
     public function test_store_refuses_to_replace_an_existing_file(): void
     {
@@ -646,10 +602,6 @@ final class UploaderTest extends TestCase
             $this->removeDir($outside);
         }
     }
-
-    // ------------------------------------------------------------------
-    // storeMany
-    // ------------------------------------------------------------------
 
     public function test_store_many_returns_empty_array_for_empty_input(): void
     {
