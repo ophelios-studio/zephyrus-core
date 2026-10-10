@@ -216,13 +216,7 @@ final class KernelBuilder
      */
     public function hasGlobalMiddleware(string $class): bool
     {
-        foreach ($this->globalMiddlewares as $middleware) {
-            if ($middleware instanceof $class) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->globalMiddlewaresOf($class) !== [];
     }
 
     /**
