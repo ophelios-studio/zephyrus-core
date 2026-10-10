@@ -43,7 +43,7 @@ final class App
     {
     }
 
-    public static function setConfiguration(Configuration $configuration): void
+    public static function setConfiguration(?Configuration $configuration): void
     {
         self::$configuration = $configuration;
     }

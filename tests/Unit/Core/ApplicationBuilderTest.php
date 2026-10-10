@@ -34,6 +34,18 @@ final class ApplicationBuilderTest extends TestCase
         self::assertInstanceOf(Application::class, $app);
     }
 
+    public function testBuildWithoutConfigurationClearsThePreviousApplicationsConfiguration(): void
+    {
+        ApplicationBuilder::create()
+            ->withConfigurationArray(['application' => ['debug' => true]])
+            ->build();
+        self::assertNotNull(App::getConfiguration());
+
+        ApplicationBuilder::create()->build();
+
+        self::assertNull(App::getConfiguration());
+    }
+
     public function testBuildRegistersTranslatorInAppRegistry(): void
     {
         $app = ApplicationBuilder::create()

@@ -691,9 +691,7 @@ final class ApplicationBuilder
             groupingSeparator: $localizationConfig?->groupingSeparator,
         );
 
-        if ($this->configuration !== null) {
-            App::setConfiguration($this->configuration);
-        }
+        App::setConfiguration($this->configuration);
         App::setTranslator($translator);
         App::setFormatter($formatter);
 
