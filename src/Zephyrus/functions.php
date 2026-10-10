@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 use Zephyrus\Core\App;
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\EnvironmentVariable;
 use Zephyrus\Formatting\FormatterException;
 
@@ -58,14 +59,9 @@ if (!function_exists('config')) {
             return $default;
         }
 
-        $configSection = match ($section) {
-            'application' => $configuration->application,
-            'session' => $configuration->session,
-            'security' => $configuration->security,
-            'localization' => $configuration->localization,
-            'database' => $configuration->database,
-            default => $configuration->section($section),
-        };
+        $configSection = in_array($section, Configuration::BUILT_IN_SECTIONS, true)
+            ? $configuration->{$section}
+            : $configuration->section($section);
         if ($configSection === null) {
             return $default;
         }

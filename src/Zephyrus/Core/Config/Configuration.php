@@ -23,7 +23,8 @@ namespace Zephyrus\Core\Config;
  */
 final readonly class Configuration
 {
-    private const BUILT_IN_SECTIONS = ['application', 'session', 'security', 'localization', 'database'];
+    /** Names of the sections read through the typed properties. */
+    public const BUILT_IN_SECTIONS = ['application', 'session', 'security', 'localization', 'database'];
 
     /**
      * @param array<string, ConfigSection> $customSections
