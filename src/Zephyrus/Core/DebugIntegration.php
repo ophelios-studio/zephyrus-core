@@ -7,6 +7,7 @@ namespace Zephyrus\Core;
 use ArrayIterator;
 use ArrayObject;
 use Closure;
+use InvalidArgumentException;
 use PHPMailer\PHPMailer\PHPMailer;
 use ReflectionFunction;
 use ReflectionMethod;
@@ -87,6 +88,7 @@ final class DebugIntegration
         'Zephyrus\Mailer\Mailer::$mail',
         'Zephyrus\Mailer\Mailer::$htmlBody',
         'Zephyrus\Mailer\Mailer::$textBody',
+        'Zephyrus\Core\ApplicationBuilder::$debugAllowedClients',
         'Exception::$trace',
         'Error::$trace',
         'Exception::$string',
@@ -110,25 +112,29 @@ final class DebugIntegration
      *
      * An application Closure or ConfigSection exporter in Dumper::$objectExporters
      * must be registered after this call, or it is replaced.
+     * The allowlist is validated by allowedClientList() before Tracy is touched.
      *
      * @param bool                    $debug          Whether the application is in debug mode.
      * @param string|null             $logDirectory   Directory for Tracy log files. Null uses Tracy's default.
      * @param string|null             $email          Email for error notifications.
      * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched
      *                                                against the `tracy-debug` cookie) permitted to
-     *                                                receive the Bluescreen. Null means loopback and
-     *                                                the cookie only. Never grant this to a range you
-     *                                                do not control: an entry here can read the
-     *                                                application's live secrets out of a stack trace.
+     *                                                receive the Bluescreen. Null means loopback clients only,
+     *                                                and only when no forwarded header is present. Never grant
+     *                                                this to a range you do not control: an entry here can read
+     *                                                the application's live secrets out of a stack trace.
      * @param string|null             $sessionName    The application's session cookie name, masked like SENSITIVE_KEYS.
+     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry that is not a string or holds whitespace or a comma.
      */
     public static function initialize(
         bool $debug,
         ?string $logDirectory = null,
         ?string $email = null,
-        string|array|null $allowedClients = null,
+        #[\SensitiveParameter] string|array|null $allowedClients = null,
         ?string $sessionName = null,
     ): void {
+        $clients = self::allowedClientList($allowedClients);
+
         if (!$debug) {
             Debugger::$productionMode = true;
 
@@ -138,15 +144,86 @@ final class DebugIntegration
         // Tracy re-detects only when productionMode is null: a debug-off boot set it.
         Debugger::$productionMode = null;
 
-        // Tracy reads a string or array passed in place of Detect as the allowlist
-        // for the same detection, so with or without one the client must still match.
+        // Tracy reads a list passed in place of Detect as the allowlist for the same
+        // detection, so with or without one the client must still match.
         Debugger::enable(
-            $allowedClients ?? Debugger::Detect,
+            $clients ?? Debugger::Detect,
             $logDirectory,
             $email,
         );
 
         self::hideFrameworkSecrets($sessionName);
+    }
+
+    /**
+     * Validates a debug client allowlist and returns its entries, or null when it names none.
+     *
+     * Checks each entry the way Tracy splits and compares them. Messages name the position, never the secret.
+     *
+     * @param string|array<mixed>|null $clients
+     * @return list<string>|null
+     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry that is not a string or holds whitespace or a comma.
+     * @internal Shared by ApplicationBuilder::withDebugClientAllowlist() and initialize().
+     */
+    public static function allowedClientList(#[\SensitiveParameter] string|array|null $clients): ?array
+    {
+        if ($clients === null) {
+            return null;
+        }
+
+        if (is_string($clients)) {
+            $entries = preg_split('#[,\s]+#', $clients, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            foreach ($entries as $index => $entry) {
+                self::assertAllowedClientEntry($index + 1, $entry);
+            }
+
+            return $entries === [] ? null : $entries;
+        }
+
+        $entries = [];
+        $position = 0;
+        foreach ($clients as $entry) {
+            ++$position;
+            if (!is_string($entry)) {
+                throw new InvalidArgumentException('Debug client allowlist entry ' . $position . ' is not a string.');
+            }
+            if (preg_match('#\A[,\s]*\z#', $entry) === 1) {
+                continue;
+            }
+            if (preg_match('#[,\s]#', $entry) === 1) {
+                throw new InvalidArgumentException(
+                    'Debug client allowlist entry ' . $position
+                    . ' holds whitespace or a comma: pass each address as its own array entry.',
+                );
+            }
+            self::assertAllowedClientEntry($position, $entry);
+            $entries[] = $entry;
+        }
+
+        return $entries === [] ? null : $entries;
+    }
+
+    /** @throws InvalidArgumentException */
+    private static function assertAllowedClientEntry(int $position, #[\SensitiveParameter] string $entry): void
+    {
+        $at = strpos($entry, '@');
+        if ($at === 0) {
+            throw new InvalidArgumentException(
+                'Debug client allowlist entry ' . $position . ' has an empty secret before "@": with no tracy-debug '
+                . 'cookie it would admit every client at that address. Set a secret, or list the bare address if that '
+                . 'is intended.',
+            );
+        }
+        if ($at !== false && $at === strlen($entry) - 1) {
+            throw new InvalidArgumentException('Debug client allowlist entry ' . $position . ' has no address after "@".');
+        }
+        $address = $at === false ? $entry : substr($entry, $at + 1);
+        if (str_contains($address, '/')) {
+            throw new InvalidArgumentException(
+                'Debug client allowlist entry ' . $position
+                . ' is a range: Tracy matches exact addresses only, so list each address.',
+            );
+        }
     }
 
     /**

@@ -63,8 +63,8 @@ final class ApplicationBuilder
 
     private bool $productionDebugAcknowledged = false;
 
-    /** @var string|string[]|null */
-    private string|array|null $debugAllowedClients = null;
+    /** @var list<string>|null */
+    private ?array $debugAllowedClients = null;
 
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
@@ -520,11 +520,12 @@ final class ApplicationBuilder
      * Behind Docker, loopback is not granted: use `secret@<gateway-ip>` and set the cookie `tracy-debug=<secret>`.
      *
      * @param string|string[]|null $clients
+     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry that is not a string or holds whitespace or a comma.
      */
-    public function withDebugClientAllowlist(string|array|null $clients): self
+    public function withDebugClientAllowlist(#[\SensitiveParameter] string|array|null $clients): self
     {
         $clone = clone $this;
-        $clone->debugAllowedClients = $clients;
+        $clone->debugAllowedClients = DebugIntegration::allowedClientList($clients);
 
         return $clone;
     }

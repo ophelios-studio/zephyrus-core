@@ -117,6 +117,7 @@ changes are listed first, each with the change to make in your code.
 
 - With `application.debug` off, or without a configuration, Tracy runs in production mode, and secrets, credentials, authorization headers and the session cookie are masked in debug views. An application scrubber assigned after boot replaces the framework's: compose it with `DebugIntegration::isSensitiveKey()`.
 - With `application.debug` on, the debugger is no longer shown to every client: only to loopback (not through a proxy) and to clients named by `withDebugClientAllowlist()`. Behind Docker the browser arrives from the bridge gateway: call `withDebugClientAllowlist('secret@<gateway-ip>')` and set the cookie `tracy-debug=<secret>`.
+- `withDebugClientAllowlist()` and `DebugIntegration::initialize()` throw an `InvalidArgumentException` on an allowlist entry with an empty secret or address (`@172.17.0.1`, `secret@`), a range in the address (`10.0.0.0/8`), or an array entry that is not a string or holds whitespace or a comma. Write each entry as an exact address or `secret@address` with a non-empty secret.
 - In the `production` and `staging` environments, `debug: true` is forced off with an error log line. Call `withProductionDebugAcknowledged()` on the builder if debug must stay on there.
 - The unused `Zephyrus\Core\Kernel` class is removed. Build the application with `ApplicationBuilder`.
 - The exception handler receives a non-null `Request`; a handler may type its parameter as `Request`, and may return `null` to fall back to the built-in response.
@@ -137,6 +138,7 @@ changes are listed first, each with the change to make in your code.
 - Secrets, credentials, mail recipients and bodies, driver messages, exception trace arguments and closure captures are masked in the debugger, dumps and the configuration export, and sensitive parameters are marked `#[\SensitiveParameter]`.
 - Database credentials and configuration secrets are kept out of stack traces and connection error messages.
 - Empty encryption keys and secrets that would fail open are refused.
+- A debug client allowlist entry with an empty secret no longer admits a client without the `tracy-debug` cookie, an empty allowlist no longer matches an empty client address, and the entries are masked in stack traces and dumps.
 - `Response::localRedirect()` and `Response::isLocalPath()` refuse protocol-relative and backslash targets, closing open redirects through user-supplied paths.
 - `symfony/yaml` is raised above the releases with parser denial-of-service advisories.
 

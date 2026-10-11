@@ -8,6 +8,8 @@ use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Tracy\Debugger;
+use Tracy\Dumper;
+use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\DebugIntegration;
 
 /**
@@ -119,6 +121,23 @@ final class DebugIntegrationExposureTest extends TestCase
         self::assertContains('encryptionKey', Debugger::getBlueScreen()->keysToHide);
         self::assertContains('smtpPassword', Debugger::$keysToHide);
         self::assertContains('encryptionKey', Debugger::$keysToHide);
+        self::assertContains('Zephyrus\Core\ApplicationBuilder::$debugAllowedClients', Debugger::getBlueScreen()->keysToHide);
+        self::assertContains('Zephyrus\Core\ApplicationBuilder::$debugAllowedClients', Debugger::$keysToHide);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTheDebugClientAllowlistIsMaskedInADumpOfTheBuilder(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+        DebugIntegration::initialize(debug: true);
+        $builder = ApplicationBuilder::create()->withDebugClientAllowlist('allowlistsecret123@172.17.0.1');
+
+        self::assertStringNotContainsString(
+            'allowlistsecret123',
+            Dumper::toText($builder, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]),
+        );
     }
 
     public function testDebugFalseStillInitializesNothing(): void
