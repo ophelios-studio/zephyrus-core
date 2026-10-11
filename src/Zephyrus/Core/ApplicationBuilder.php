@@ -20,6 +20,7 @@ use Zephyrus\Localization\JsonLocaleLoader;
 use Zephyrus\Localization\LocaleLoaderInterface;
 use Zephyrus\Localization\Translator;
 use Zephyrus\Rendering\RenderEngine;
+use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Router;
 use Zephyrus\Routing\RouteUrlGenerator;
 use Zephyrus\Security\AllowedHostsMiddleware;
@@ -835,6 +836,7 @@ final class ApplicationBuilder
      *
      * @throws ConfigurationException when a declared security setting is not wired, or an enforced
      *                                Content-Security-Policy middleware is shadowed by a SecureHeadersMiddleware csp.
+     * @throws RouteMiddlewareException when a route names a middleware that is not registered.
      */
     public function build(): Application
     {

@@ -49,6 +49,7 @@ changes are listed first, each with the change to make in your code.
 - `ContentSecurityPolicy` and the security header values throw at construction on a control character.
 - Headers set by a route or an inner response now win over `SecureHeadersMiddleware`, and a route's CSP replaces the configured one whole. Set a header in one place.
 - `KernelBuilder::build()` refuses a global `ContentSecurityPolicyMiddleware` with an enforced policy registered before a `SecureHeadersMiddleware` whose `csp` is set. Leave the `SecureHeadersMiddleware` `csp` empty, or register the CSP middleware after it.
+- `KernelBuilder::build()` refuses a route that names a middleware that is not registered, where the request used to fail with a 500 at runtime. The message lists each unknown name with its routes. Register each name with `registerMiddleware()` before `build()`, or define a group with `Router::middlewareGroup()` before the routes that name it.
 - `Cryptography` refuses an all-zero encryption key, and a `hash()` key that is empty or outside 16 to 64 bytes. Generate keys with `Cryptography::generateEncryptionKey()` and pass `null` for an unkeyed hash.
 - `Uploader` moves only a genuine upload (`is_uploaded_file()`) by default. In tests and command-line code, pass a `fileMover` closure to the constructor.
 

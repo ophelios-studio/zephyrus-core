@@ -5,15 +5,77 @@ declare(strict_types=1);
 namespace Zephyrus\Routing\Exception;
 
 use Throwable;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Security\CsrfMiddleware;
 
 final class RouteMiddlewareException extends ZephyrusRuntimeException
 {
+    private const int MAX_LISTED_ROUTES = 3;
+
     public static function unknownMiddleware(string $name): self
     {
         return new self(sprintf('Unknown route middleware: %s', $name));
+    }
+
+    /**
+     * @param list<array{name: string, method: string, path: string}> $unknown The unregistered names, in route order.
+     * @param list<string> $registered The registered route middleware names.
+     */
+    public static function unregisteredRouteMiddleware(array $unknown, array $registered): self
+    {
+        $groups = [];
+        foreach ($unknown as $entry) {
+            $groups[$entry['name']] ??= ['name' => $entry['name'], 'routes' => []];
+            $groups[$entry['name']]['routes'][] = sprintf(
+                '%s %s',
+                MessageValue::escapeControls($entry['method']),
+                MessageValue::escapeControls($entry['path']),
+            );
+        }
+
+        $entries = [];
+        foreach ($groups as $group) {
+            $entries[] = self::describeUnknownName($group['name'], $group['routes']);
+        }
+
+        $single = count($groups) === 1;
+        $lead = $single ? 'Route middleware is not registered' : 'Route middlewares are not registered';
+        $target = $single ? 'it' : 'each';
+        $names = $registered === []
+            ? 'no middleware is registered'
+            : sprintf('registered names: %s', MessageValue::quoteList($registered));
+
+        return new self(sprintf(
+            '%s: %s; %s. Register %s with registerMiddleware() before build(), or, for a group, '
+            . 'define it with Router::middlewareGroup() before the routes that name it.',
+            $lead,
+            implode(', ', $entries),
+            $names,
+            $target,
+        ));
+    }
+
+    /**
+     * @param list<string> $routes The "METHOD /path" of each route naming the middleware.
+     */
+    private static function describeUnknownName(string $name, array $routes): string
+    {
+        $quoted = MessageValue::quote($name);
+        $count = count($routes);
+
+        if ($count === 1) {
+            return sprintf('%s on %s', $quoted, $routes[0]);
+        }
+
+        return sprintf(
+            '%s on %d routes (%s%s)',
+            $quoted,
+            $count,
+            implode(', ', array_slice($routes, 0, self::MAX_LISTED_ROUTES)),
+            $count > self::MAX_LISTED_ROUTES ? ', ...' : '',
+        );
     }
 
     public static function resolutionFailed(string $name, Throwable $previous): self

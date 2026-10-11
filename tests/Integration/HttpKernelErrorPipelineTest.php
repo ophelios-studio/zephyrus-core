@@ -770,15 +770,20 @@ final class HttpKernelErrorPipelineTest extends TestCase
         self::assertSame('yes', $response->headers['x-global']);
     }
 
-    public function testUnknownNamedRouteMiddlewareYieldsADecorated500(): void
+    public function testFailingNamedRouteMiddlewareYieldsADecorated500(): void
     {
         $router = (new Router())
-            ->get('/broken', ErrorPipelinePingController::class . '@ping', middlewares: ['nope']);
+            ->get('/broken', ErrorPipelinePingController::class . '@ping', middlewares: ['failing']);
 
         $kernel = KernelBuilder::create()
             ->withRouter($router)
             ->withMiddleware(new ErrorPipelineHeaderMiddleware('X-Global', 'yes'))
-            ->registerMiddleware('other', new ErrorPipelineHeaderMiddleware('X-Other', 'yes'))
+            ->registerMiddleware('failing', new class implements MiddlewareInterface {
+                public function process(Request $request, callable $next): Response
+                {
+                    throw new RuntimeException('route middleware exploded');
+                }
+            })
             ->build();
 
         $response = $kernel->handle(Request::fromArray('GET', '/broken'));

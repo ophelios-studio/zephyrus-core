@@ -18,6 +18,7 @@ use Zephyrus\Rendering\RenderEngine;
 use Zephyrus\Rendering\RenderResponses;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\HandlerResolver;
+use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\RouteDispatcher;
 use Zephyrus\Routing\Router;
 use Zephyrus\Security\ContentSecurityPolicyMiddleware;
@@ -250,7 +251,9 @@ final class KernelBuilder
 
     /**
      * Assembles a fully wired HttpKernel. The builder is unchanged and can build again.
+     * A route naming a middleware that is not registered is refused before anything is built.
      *
+     * @throws RouteMiddlewareException When a route names a middleware that is not registered.
      * @throws ConfigurationException When an enforced ContentSecurityPolicyMiddleware is registered
      *   before a SecureHeadersMiddleware that sets a csp. The check covers GLOBAL middlewares only.
      */
@@ -258,7 +261,8 @@ final class KernelBuilder
     {
         $this->assertNoShadowedContentSecurityPolicy();
 
-        $router = $this->router ?? new Router();
+        $routes = ($this->router ?? new Router())->routes();
+        $this->assertRouteMiddlewaresAreRegistered($routes);
         $namedMiddlewares = $this->namedRouteMiddlewares;
 
         $globalPipeline = new MiddlewarePipeline($this->globalMiddlewares);
@@ -266,7 +270,7 @@ final class KernelBuilder
         $resolver = new HandlerResolver($this->renderEngineAwareFactory());
 
         $dispatcher = new RouteDispatcher(
-            routes: $router->routes(),
+            routes: $routes,
             // Global middlewares run in HttpKernel, not here, so they also wrap error responses.
             pipeline: new MiddlewarePipeline(),
             resolver: $resolver->resolve(...),
@@ -349,6 +353,25 @@ final class KernelBuilder
         }
 
         return false;
+    }
+
+    private function assertRouteMiddlewaresAreRegistered(RouteCollection $routes): void
+    {
+        $unknown = [];
+        foreach ($routes->all() as $route) {
+            foreach (array_unique($route->middlewares) as $name) {
+                if (!array_key_exists($name, $this->namedRouteMiddlewares)) {
+                    $unknown[] = ['name' => $name, 'method' => $route->method, 'path' => $route->path];
+                }
+            }
+        }
+
+        if ($unknown !== []) {
+            throw RouteMiddlewareException::unregisteredRouteMiddleware(
+                $unknown,
+                array_map(strval(...), array_keys($this->namedRouteMiddlewares)),
+            );
+        }
     }
 
     /**
