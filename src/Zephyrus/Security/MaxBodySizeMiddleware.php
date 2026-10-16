@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use Closure;
 use InvalidArgumentException;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -11,11 +12,13 @@ use Zephyrus\Http\Response;
 
 use function is_string;
 use function preg_match;
+use function str_contains;
 use function strlen;
+use function strtolower;
 use function trim;
 
 /**
- * Refuses, with a 413 JSON response, a request whose body exceeds a byte budget.
+ * Refuses a request whose body exceeds a byte budget with a 413: text/plain when Accept lists text/html, JSON otherwise.
  *
  * Opt-in by design: a registration driven by config would duplicate the copy an application
  * already adds. ApplicationBuilder::build() refuses to boot when security.maxBodySize is positive
@@ -34,11 +37,17 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
     /**
      * @param int $maxBytes Maximum accepted body size; 0 means unlimited,
      *                      matching SecurityConfig::$maxBodySize.
+     * @param string $message Sent verbatim: as plain text to a browser, or as the JSON "error" otherwise.
+     *                        Write it in your users' language.
+     * @param (Closure(Request, BodyTooLarge): ?Response)|null $onFailure Answers a refusal; returning null keeps the
+     *        default 413 response: text/plain when Accept lists text/html, JSON otherwise. It receives
+     *        attacker-controlled input: only answer the refusal, never replay the request or act on the account.
      * @throws InvalidArgumentException When $maxBytes is negative.
      */
     public function __construct(
         private readonly int $maxBytes,
         private readonly string $message = 'Request body too large.',
+        private readonly ?Closure $onFailure = null,
     ) {
         if ($maxBytes < 0) {
             throw new InvalidArgumentException('Maximum body size must be 0 (unlimited) or a positive byte count.');
@@ -58,18 +67,39 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
             return $next($request);
         }
 
-        $size = $this->bodySize($request);
+        $bytes = $this->bodyBytes($request);
 
-        if ($size !== null && $size > $this->maxBytes) {
-            return Response::json(['error' => $this->message], 413);
+        if ($bytes !== null && $bytes > $this->maxBytes) {
+            return $this->refuse($request, new BodyTooLarge($bytes, $this->maxBytes));
         }
 
         /** @var Response */
         return $next($request);
     }
 
+    /**
+     * Answers a refusal: the $onFailure response if it returns one, otherwise a 413 as text/plain when Accept
+     * lists text/html, or as JSON {"error": ...} for every other client.
+     */
+    private function refuse(Request $request, BodyTooLarge $refusal): Response
+    {
+        if ($this->onFailure !== null) {
+            $response = ($this->onFailure)($request, $refusal);
+
+            if ($response !== null) {
+                return $response;
+            }
+        }
+
+        if (str_contains(strtolower($request->headers()->get('Accept') ?? ''), 'text/html')) {
+            return Response::text($this->message, 413);
+        }
+
+        return Response::json(['error' => $this->message], 413);
+    }
+
     /** Null when there is neither a valid declared length nor a raw body. */
-    private function bodySize(Request $request): ?int
+    private function bodyBytes(Request $request): ?int
     {
         $declared = $request->headers()->get('content-length');
 

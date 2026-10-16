@@ -146,7 +146,7 @@ changes are listed first, each with the change to make in your code.
 
 - `security.headers` configuration section, `security.trustedHeaders`, `session.idle_timeout`, `localization.grouping_separator`, `database.columnCacheVersion`, and opt-in `database.sslMode` and `sslRootCert`.
 - `EnvironmentContract`, to refuse an unrecognised environment value at boot.
-- `MaxBodySizeMiddleware`, and the security wiring check with `withAcknowledgedSecurityKeys()` and `withoutSecurityWiringCheck()`.
+- `MaxBodySizeMiddleware`, and the security wiring check with `withAcknowledgedSecurityKeys()` and `withoutSecurityWiringCheck()`. A refused body is a 413 `text/plain` for a browser and JSON otherwise, or the application's own answer through the `onFailure` callback and `BodyTooLarge`.
 - `ApplicationBuilder::withDebugClientAllowlist()`, to name the clients that see the debugger, and `withProductionDebugAcknowledged()`, to keep debug on in `production` or `staging`.
 - Per-request CSP nonce and the `nonce()` helper; the `e()` escaping helper; the `route()` URL helper.
 - `CsrfConfig::fromSecurityConfig()`, the `CsrfMiddleware` `onFailure` callback and `CsrfFailure`.

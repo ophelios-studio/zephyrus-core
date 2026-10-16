@@ -359,6 +359,22 @@ $csrfMiddleware = new CsrfMiddleware(
 
 The callback receives attacker-controlled input: it should only answer the refusal, never replay the request or act on the account from it.
 
+`MaxBodySizeMiddleware` takes the same kind of callback, which receives a `BodyTooLarge` with `bytes` (the declared Content-Length, a client claim, or else the raw body length) and the limit. Returning `null` keeps the default 413: plain text for a browser, JSON otherwise.
+
+```php
+use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
+use Zephyrus\Security\BodyTooLarge;
+use Zephyrus\Security\MaxBodySizeMiddleware;
+
+$bodySizeMiddleware = new MaxBodySizeMiddleware(
+    $configuration->security->maxBodySize,
+    onFailure: static fn (Request $request, BodyTooLarge $refusal): ?Response => $request->path() === '/profile/photo'
+        ? Response::redirect('/profile/photo?too-large=1')
+        : null,
+);
+```
+
 ### Request
 
 The `Request` object is immutable and composed of typed sub-objects:
