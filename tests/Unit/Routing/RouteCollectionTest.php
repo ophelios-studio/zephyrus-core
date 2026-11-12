@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
 use Zephyrus\Routing\Exception\RoutePathRefusal;
@@ -266,10 +267,12 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/a', 'AController@show', name: 'users.show'));
         $collection->add(Route::define('GET', '/b', 'BController@show', name: 'users.show'));
 
-        $this->expectException(RouteSignatureException::class);
-        $this->expectExceptionMessage('Duplicate route names detected: users.show');
-
-        $collection->assertNoDuplicateRouteNames();
+        try {
+            $collection->assertNoDuplicateRouteNames();
+            self::fail('expected a refusal');
+        } catch (DuplicateRouteNameException $e) {
+            self::assertSame('Duplicate route names detected: users.show', $e->getMessage());
+        }
     }
 
     public function testAssertNoDuplicateRouteNamesSucceedsWhenNamesUnique(): void
@@ -321,10 +324,12 @@ final class RouteCollectionTest extends TestCase
         $collection->add(Route::define('GET', '/a', 'AController@show', name: 'dup'));
         $collection->add(Route::define('GET', '/b', 'BController@show', name: 'dup'));
 
-        $this->expectException(RouteSignatureException::class);
-        $this->expectExceptionMessage('Duplicate route names detected: dup');
-
-        $collection->namedRoutes();
+        try {
+            $collection->namedRoutes();
+            self::fail('expected a refusal');
+        } catch (DuplicateRouteNameException $e) {
+            self::assertSame('Duplicate route names detected: dup', $e->getMessage());
+        }
     }
 
     public function testRoutesByMethodFiltersCaseInsensitively(): void

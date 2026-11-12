@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing;
 
 use Zephyrus\Http\Uri;
+use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
@@ -341,6 +342,8 @@ final class RouteCollection
 
     /**
      * @return array<string, Route>
+     *
+     * @throws DuplicateRouteNameException When a route name is used by more than one route.
      */
     public function namedRoutes(): array
     {
@@ -436,17 +439,14 @@ final class RouteCollection
     }
 
     /**
-     * @throws RouteSignatureException When a route name is used by more than one route.
+     * @throws DuplicateRouteNameException When a route name is used by more than one route.
      */
     public function assertNoDuplicateRouteNames(): void
     {
         $duplicates = $this->duplicateRouteNames();
 
         if ($duplicates !== []) {
-            throw new RouteSignatureException(sprintf(
-                'Duplicate route names detected: %s',
-                implode(', ', $duplicates),
-            ));
+            throw DuplicateRouteNameException::forNames($duplicates);
         }
     }
 

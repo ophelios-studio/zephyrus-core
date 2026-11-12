@@ -8,6 +8,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use Zephyrus\Http\MiddlewareInterface;
+use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
@@ -598,6 +599,8 @@ final class Router
 
     /**
      * @return array<string, Route>
+     *
+     * @throws DuplicateRouteNameException When a route name is used by more than one route.
      */
     public function namedRoutes(): array
     {
@@ -620,6 +623,9 @@ final class Router
         return $this->routes->duplicateRouteNames();
     }
 
+    /**
+     * @throws DuplicateRouteNameException When a route name is used by more than one route.
+     */
     public function assertNoDuplicateRouteNames(): self
     {
         $this->routes->assertNoDuplicateRouteNames();

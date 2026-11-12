@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Routing;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 use Zephyrus\Routing\Route;
@@ -13,6 +14,20 @@ use Zephyrus\Routing\RouteUrlGenerator;
 
 final class RouteUrlGeneratorTest extends TestCase
 {
+    public function testAGeneratorRefusesACollectionWithTwoRoutesOfTheSameName(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/a', 'AController@show', name: 'same'));
+        $routes->add(Route::define('GET', '/b', 'BController@show', name: 'same'));
+
+        try {
+            new RouteUrlGenerator($routes);
+            self::fail('expected a refusal');
+        } catch (DuplicateRouteNameException $e) {
+            self::assertSame('Duplicate route names detected: same', $e->getMessage());
+        }
+    }
+
     public function testGenerateBuildsPathFromNamedRouteAndParameters(): void
     {
         $routes = new RouteCollection();

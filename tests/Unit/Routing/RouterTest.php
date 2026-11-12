@@ -9,9 +9,9 @@ use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
 use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Attribute\WithoutMiddleware as WithoutMiddlewareAttribute;
+use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
-use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Router;
 use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\CsrfMiddleware;
@@ -839,10 +839,12 @@ final class RouterTest extends TestCase
             ->get('/a', 'AController@show')->name('users.show')
             ->get('/b', 'BController@show')->name('users.show');
 
-        $this->expectException(RouteSignatureException::class);
-        $this->expectExceptionMessage('Duplicate route names detected: users.show');
-
-        $router->assertNoDuplicateRouteNames();
+        try {
+            $router->assertNoDuplicateRouteNames();
+            self::fail('expected a refusal');
+        } catch (DuplicateRouteNameException $e) {
+            self::assertSame('Duplicate route names detected: users.show', $e->getMessage());
+        }
     }
 
     public function testRouterNamedRoutesThrowsWhenDuplicatesExist(): void
@@ -851,10 +853,12 @@ final class RouterTest extends TestCase
             ->get('/a', 'AController@show')->name('users.show')
             ->get('/b', 'BController@show')->name('users.show');
 
-        $this->expectException(RouteSignatureException::class);
-        $this->expectExceptionMessage('Duplicate route names detected: users.show');
-
-        $router->namedRoutes();
+        try {
+            $router->namedRoutes();
+            self::fail('expected a refusal');
+        } catch (DuplicateRouteNameException $e) {
+            self::assertSame('Duplicate route names detected: users.show', $e->getMessage());
+        }
     }
 
     public function testRouterAssertNoDuplicateRouteNamesReturnsSelfWhenValid(): void

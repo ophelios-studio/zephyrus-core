@@ -5,16 +5,21 @@ declare(strict_types=1);
 namespace Zephyrus\Routing;
 
 use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Exception\RouteUrlGenerationException;
 
 final readonly class RouteUrlGenerator
 {
+    /**
+     * @throws DuplicateRouteNameException When a route name is used by more than one route.
+     */
     public function __construct(
         private RouteCollection $routes,
         private ?string $baseUrl = null,
         private ?RouteSignature $signature = null,
     ) {
+        $this->routes->assertNoDuplicateRouteNames();
     }
 
     /**
