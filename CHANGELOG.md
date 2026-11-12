@@ -8,7 +8,13 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-12
+
 ### Breaking changes
+
+#### Configuration
+
+- A key the `render:` or `mailer:` section does not accept throws `ConfigurationException` at boot, where it used to be ignored: the message names the key and the closest accepted one (`Configuration section 'mailer' field 'smtp.prot' is an unknown key: did you mean "smtp.port"?`), or lists the accepted keys. Fix or delete the key.
 
 #### Core
 
@@ -21,6 +27,19 @@ changes are listed first, each with the change to make in your code.
 #### Session
 
 - `DatabaseSessionHandler` refuses to write a resumed session whose row changed or was deleted since this request read it: the later of two concurrent requests loses its changes (PHP warning `Failed to write session data`, and a `Zephyrus:` line in the error log) instead of overwriting the first. To lower privileges (role, password), call `$session->regenerate()`.
+
+#### Routing
+
+- Two routes sharing a name (in two classes, or a repeated `Router::get()->name()`) make `build()` throw `DuplicateRouteNameException` (`Zephyrus\Routing\Exception`, a `ZephyrusRuntimeException`: `Duplicate route names detected: <names>`), where a duplicate between classes used to be accepted and `route()` took the first. `RouteCollection::assertNoDuplicateRouteNames()` throws it too, where it used to throw `RouteSignatureException`: a `catch (RouteSignatureException)` around that call no longer catches it. Rename one of the routes. Two attribute routes of one class sharing a name are still refused when the class is registered, with `RouteAttributeException`.
+
+### Changed
+
+- A pgsql connection built by `Database::fromConfig()` sends every query as an unnamed statement (`\Pdo\Pgsql::ATTR_DISABLE_PREPARES`, set after connecting): one round trip per query instead of three (prepare, execute, close), parameters still bound by the server and never emulated. `new Database($pdo)` is unchanged; `pdo()->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, false)` brings named statements back.
+
+### Fixed
+
+- The column type cache serves only statements whose first element, after blanks and comments (a block comment holding another is not skipped), is `(` or `SELECT`, `WITH`, `VALUES`, `TABLE`, `INSERT`, `UPDATE`, `DELETE` or `MERGE`; any other (`FETCH`, `EXECUTE`, `SHOW`, `CALL`) describes its columns on every call, at one to two round trips per column. A `FETCH` on a second cursor of the same width used to inherit the first cursor's converters, so its `jsonb` columns came back as strings.
+- `MailerConfig::toArray()` exports `smtp.port` as an integer, as `MailerConfig::$smtpPort` already read it, where a port given as a string (`!env` of a variable) was exported as that string.
 
 ## [0.14.1] - 2026-11-12
 
@@ -242,7 +261,8 @@ changes are listed first, each with the change to make in your code.
 
 Earlier releases have no notes.
 
-[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/ophelios-studio/zephyrus-core/releases/tag/v0.13.0
