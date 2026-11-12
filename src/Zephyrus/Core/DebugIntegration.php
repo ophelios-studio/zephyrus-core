@@ -90,6 +90,7 @@ final class DebugIntegration
         'Zephyrus\Mailer\Mailer::$htmlBody',
         'Zephyrus\Mailer\Mailer::$textBody',
         'Zephyrus\Core\ApplicationBuilder::$debugAllowedClients',
+        'Zephyrus\Http\Response::$cookies',
         'Exception::$trace',
         'Error::$trace',
         'Exception::$string',

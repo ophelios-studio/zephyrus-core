@@ -12,6 +12,7 @@ use Tracy\Debugger;
 use Tracy\Dumper;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\DebugIntegration;
+use Zephyrus\Http\Response;
 
 /**
  * The debugger must not render to a client that did not earn it.
@@ -272,6 +273,21 @@ final class DebugIntegrationExposureTest extends TestCase
         self::assertStringNotContainsString(
             'allowlistsecret123',
             Dumper::toText($builder, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]),
+        );
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTheSetCookieLinesAreMaskedInADumpOfAResponse(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+        DebugIntegration::initialize(debug: true);
+        $response = Response::text('ok')->withCookie('app_session', 'sessionid0123456789');
+
+        self::assertStringNotContainsString(
+            'sessionid0123456789',
+            Dumper::toText($response, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]),
         );
     }
 
