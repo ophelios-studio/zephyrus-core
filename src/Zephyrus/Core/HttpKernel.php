@@ -28,12 +28,14 @@ use Zephyrus\Routing\RouteMatch;
  * ResponseEvent listener. A header that must reach every response also belongs
  * at the web server or proxy.
  *
- * handle() throws only when a RequestEvent or ResponseEvent listener throws, or
- * when an exception handler rethrows the throwable it was given and unhandled
- * exceptions are rethrown (KernelBuilder::withUnhandledExceptionsRethrown(), for
- * a debugger). Otherwise a rethrown throwable is written to the error log and
- * answered with the generic 500. A failing route, handler or middleware, or a
- * broken exception handler, yields an error response instead.
+ * A throwable is unhandled when no handler or built-in mapping answers it,
+ * when its handler rethrows it, or when its handler fails with another one.
+ * handle() throws only when a RequestEvent or ResponseEvent listener throws,
+ * or when a throwable is unhandled and unhandled exceptions are rethrown
+ * (KernelBuilder::withUnhandledExceptionsRethrown(), for a debugger).
+ * Otherwise an unhandled throwable is written to the error log and answered
+ * with the generic 500 (a fixed text 500 when a handler failed, logged with
+ * the exception it was answering).
  *
  * Route middlewares wrap only the matched route's handler. They never run for a
  * 404 or 405, and they do not post-process the error response of a failing
@@ -164,25 +166,27 @@ final readonly class HttpKernel
 
     /**
      * Converts a throwable into an error response. If the exception handler
-     * itself throws, a fixed 500 is returned inside the pipeline, so global
-     * middlewares still decorate it.
+     * itself throws another throwable, that failure is unhandled in turn (see
+     * toHandlerFailureResponse()).
      */
     private function toErrorResponse(Throwable $exception, Request $request, string $source): Response
     {
         $this->fireExceptionEvent($exception, $request, $source);
 
         try {
-            return $this->exceptionResponder->toResponse($exception, $request);
+            $response = $this->exceptionResponder->toMappedResponse($exception, $request);
         } catch (Throwable $responderFailure) {
             // Identity, not instanceof: any other throwable is a failing handler.
-            if ($responderFailure === $exception) {
-                return $this->toUnhandledResponse($exception, $request);
+            if ($responderFailure !== $exception) {
+                $this->fireExceptionEvent($responderFailure, $request, ExceptionEvent::SOURCE_RESPONDER);
+
+                return $this->toHandlerFailureResponse($responderFailure, $exception);
             }
 
-            $this->fireExceptionEvent($responderFailure, $request, ExceptionEvent::SOURCE_RESPONDER);
-
-            return Response::text('Internal Server Error', 500);
+            $response = null;
         }
+
+        return $response ?? $this->toUnhandledResponse($exception, $request);
     }
 
     /**
@@ -195,18 +199,34 @@ final readonly class HttpKernel
             throw new KernelRethrowSignal($exception);
         }
 
-        self::logUnhandled($exception);
+        self::logError('unhandled exception, answered with a 500', $exception);
 
         return $this->exceptionResponder->internalErrorResponse($request);
     }
 
     /**
-     * Logs an unhandled throwable with its trace. It never throws, as it runs on the error path.
+     * Passes a failing exception handler's throwable on when unhandled exceptions are rethrown. Otherwise logs it with
+     * the exception it was answering and returns a fixed 500 inside the pipeline, without calling a handler again.
      */
-    private static function logUnhandled(Throwable $exception): void
+    private function toHandlerFailureResponse(Throwable $failure, Throwable $exception): Response
+    {
+        if ($this->rethrowUnhandled) {
+            throw new KernelRethrowSignal($failure);
+        }
+
+        self::logError('exception handler failed, answered with a 500', $failure);
+        self::logError('exception the failed handler was answering', $exception);
+
+        return Response::text('Internal Server Error', 500);
+    }
+
+    /**
+     * Logs a throwable with its trace. It never throws, as it runs on the error path.
+     */
+    private static function logError(string $what, Throwable $exception): void
     {
         try {
-            error_log('Zephyrus: unhandled exception, answered with a 500: ' . $exception);
+            error_log('Zephyrus: ' . $what . ': ' . $exception);
         } catch (Throwable) {
             // A throwing __toString() leaves nothing to report. Never rethrown.
         }

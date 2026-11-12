@@ -184,9 +184,11 @@ final class KernelBuilder
     }
 
     /**
-     * Lets an exception a handler rethrows leave HttpKernel::handle(), for a debugger installed as PHP's exception
-     * handler. Off by default: the exception is written to the error log and answered with the generic 500.
-     * ApplicationBuilder::build() turns it on only when the debugger renders errors for the current client.
+     * Lets an exception no handler or built-in mapping answers, one its handler rethrows, or the one a failing handler
+     * throws, leave HttpKernel::handle(), for a debugger installed as PHP's exception handler. Off by default: the
+     * exception is written to the error log and answered with a 500.
+     * With debug on, ApplicationBuilder::build() turns it on in the command line, or when the debugger renders errors
+     * to this boot's client. It never turns it off.
      */
     public function withUnhandledExceptionsRethrown(bool $rethrown = true): self
     {

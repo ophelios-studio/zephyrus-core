@@ -8,8 +8,8 @@ use Exception;
 use Throwable;
 
 /**
- * Internal marker for an exception that an application's exception handler
- * deliberately rethrew.
+ * Internal marker for an unhandled exception passed on to the caller of
+ * HttpKernel::handle().
  *
  * Rethrowing the bare exception would reach pipe()'s backstop and run the
  * exception handler a second time, so it travels in this wrapper instead.

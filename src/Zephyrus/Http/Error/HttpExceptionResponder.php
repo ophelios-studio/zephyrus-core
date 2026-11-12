@@ -57,6 +57,15 @@ class HttpExceptionResponder
 
     public function toResponse(Throwable $exception, ?Request $request = null): Response
     {
+        return $this->toMappedResponse($exception, $request) ?? $this->internalErrorResponse($request);
+    }
+
+    /**
+     * Converts the exception with a registered handler or a built-in mapping, or returns null when only the
+     * generic 500 applies.
+     */
+    public function toMappedResponse(Throwable $exception, ?Request $request = null): ?Response
+    {
         $customResponse = $this->resolveCustomHandler($exception, $request);
         if ($customResponse !== null) {
             return $customResponse;
@@ -80,7 +89,7 @@ class HttpExceptionResponder
             return $this->formatValidation($exception, $request);
         }
 
-        return $this->internalErrorResponse($request);
+        return null;
     }
 
     /**

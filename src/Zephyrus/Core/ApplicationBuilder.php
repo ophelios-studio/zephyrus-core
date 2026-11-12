@@ -66,6 +66,9 @@ final class ApplicationBuilder
     /** @var list<string>|null */
     private ?array $debugAllowedClients = null;
 
+    /** In the command line, there is no remote client to hide an exception from. */
+    private string $serverApi = PHP_SAPI;
+
     public function __construct(?KernelBuilder $kernelBuilder = null)
     {
         $this->kernelBuilder = $kernelBuilder ?? KernelBuilder::create();
@@ -832,8 +835,9 @@ final class ApplicationBuilder
      *
      * Unless debug is enabled for this boot, display_errors and display_startup_errors are turned off before
      * anything else runs. An error raised before build() (reading the configuration) is the php.ini's to hide.
-     * An exception a handler rethrows reaches the debugger only when it renders errors to the current client;
-     * otherwise it is written to the error log and answered with the generic 500.
+     * With debug on, an exception no handler answers, or one a handler rethrows, leaves Application::handle() in the
+     * command line, or for this boot's client when the debugger renders errors to it. Otherwise it is written to the
+     * error log and answered with the generic 500, unless the KernelBuilder already rethrows unhandled exceptions.
      *
      * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
      * unless withProductionDebugAcknowledged() is called. Refusing to boot instead would turn a diagnostic
@@ -905,7 +909,10 @@ final class ApplicationBuilder
         $router = $this->kernelBuilder->router();
         App::setUrlGenerator($router === null ? null : new RouteUrlGenerator($router->routes()));
 
-        $kernelBuilder = $this->kernelBuilder->withUnhandledExceptionsRethrown(DebugIntegration::rendersErrorsToTheClient());
+        $kernelBuilder = $this->kernelBuilder;
+        if ($this->isDebugEnabledForBoot() && ($this->serverApi === 'cli' || DebugIntegration::rendersErrorsToTheClient())) {
+            $kernelBuilder = $kernelBuilder->withUnhandledExceptionsRethrown();
+        }
 
         return new Application(
             kernel:           $kernelBuilder->build(),

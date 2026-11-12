@@ -48,6 +48,28 @@ final class HttpExceptionResponderTest extends TestCase
         self::assertSame('Internal Server Error', $response->body);
     }
 
+    public function testToMappedResponseLeavesAnUnknownExceptionUnanswered(): void
+    {
+        $responder = new HttpExceptionResponder();
+
+        self::assertNull($responder->toMappedResponse(new RuntimeException('boom')));
+    }
+
+    public function testToMappedResponseLeavesAnExceptionUnansweredWhenItsHandlerDeclines(): void
+    {
+        $responder = (new HttpExceptionResponder())
+            ->registerHandler(RuntimeException::class, static fn (): ?Response => null);
+
+        self::assertNull($responder->toMappedResponse(new RuntimeException('boom')));
+    }
+
+    public function testToMappedResponseKeepsTheBuiltInMappings(): void
+    {
+        $responder = new HttpExceptionResponder();
+
+        self::assertSame(404, $responder->toMappedResponse(new RouteNotFoundException('No route matched GET /x'))?->status);
+    }
+
     public function testFormatsErrorAsJsonWhenRequestAcceptsJson(): void
     {
         $responder = new HttpExceptionResponder();

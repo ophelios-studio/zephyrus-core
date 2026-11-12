@@ -8,6 +8,9 @@
       <directory>tests/Integration</directory>
     </testsuite>
   </testsuites>
+  <php>
+    <ini name="error_log" value="/dev/null"/>
+  </php>
   <source>
     <include>
       <directory>src/Zephyrus</directory>
