@@ -830,6 +830,9 @@ final class ApplicationBuilder
     /**
      * Assembles the application, replacing App's configuration with the builder's (null when none was given).
      *
+     * Unless debug is enabled for this boot, display_errors and display_startup_errors are turned off before
+     * anything else runs. An error raised before build() (reading the configuration) is the php.ini's to hide.
+     *
      * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
      * unless withProductionDebugAcknowledged() is called. Refusing to boot instead would turn a diagnostic
      * attempt into an outage. Even when acknowledged, DebugIntegration shows the debugger only to loopback,
@@ -841,7 +844,13 @@ final class ApplicationBuilder
      */
     public function build(): Application
     {
-        // Runs before any side effect (debugger, timezone, App statics).
+        // First, before anything can throw: without a php.ini, PHP prints errors into the response.
+        if (!$this->isDebugEnabledForBoot()) {
+            ini_set('display_errors', '0');
+            ini_set('display_startup_errors', '0');
+        }
+
+        // Runs before any other side effect (debugger, timezone, App statics).
         if ($this->configuration !== null) {
             $this->assertSecurityConfigurationIsWired($this->configuration->security);
         }
