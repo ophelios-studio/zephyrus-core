@@ -22,6 +22,8 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     private Database $database;
     private DatabaseSessionHandler $handler;
+    private string|false $previousErrorLog;
+    private string $errorLog;
 
     protected function setUp(): void
     {
@@ -29,6 +31,15 @@ final class DatabaseSessionHandlerTest extends TestCase
         $pdo->exec(self::SCHEMA);
         $this->database = new Database($pdo);
         $this->handler = new DatabaseSessionHandler($this->database, 'session');
+        $this->previousErrorLog = ini_get('error_log');
+        $this->errorLog = tempnam(sys_get_temp_dir(), 'zephyrus-session-log');
+        ini_set('error_log', $this->errorLog);
+    }
+
+    protected function tearDown(): void
+    {
+        ini_set('error_log', (string) $this->previousErrorLog);
+        unlink($this->errorLog);
     }
 
     public function testOpenReturnsTrue(): void
@@ -388,6 +399,101 @@ final class DatabaseSessionHandlerTest extends TestCase
 
         self::assertTrue($this->handler->write('43e880c2447ca10d3092d51d258c050c', 'payload'));
         self::assertSame(0, $this->database->count('SELECT COUNT(*) FROM session', []));
+    }
+
+    public function testAWriteBasedOnAReadThatAnotherRequestHasSinceOverwrittenIsRefused(): void
+    {
+        $this->insertLiveSession($this->database);
+        $concurrent = new DatabaseSessionHandler($this->database, 'session');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $concurrent->read('43e880c2447ca10d3092d51d258c050c');
+        $concurrent->write('43e880c2447ca10d3092d51d258c050c', 'retired|b:1;');
+
+        $written = $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;role|s:5:"admin";');
+
+        self::assertFalse($written);
+        self::assertSame('retired|b:1;', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    public function testARefusedWriteIsNamedInTheErrorLogWithoutTheIdOrTheContent(): void
+    {
+        $this->insertLiveSession($this->database);
+        $concurrent = new DatabaseSessionHandler($this->database, 'session');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $concurrent->read('43e880c2447ca10d3092d51d258c050c');
+        $concurrent->write('43e880c2447ca10d3092d51d258c050c', 'retired|b:1;');
+
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'secret|s:4:"mark";');
+
+        $logged = (string) file_get_contents($this->errorLog);
+        self::assertStringContainsString(
+            'Zephyrus: session write refused, the session changed or was deleted since this request read it',
+            $logged,
+        );
+        self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $logged);
+        self::assertStringNotContainsString('mark', $logged);
+    }
+
+    public function testAWriteThatGoesThroughLogsNothing(): void
+    {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'foo=bar');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'foo=baz');
+
+        self::assertSame('', (string) file_get_contents($this->errorLog));
+    }
+
+    public function testARowHoldingARawNulByteIsRewrittenEncodedSoLaterWritesAreCheckedAgain(): void
+    {
+        $this->database->pdo()->exec(
+            "INSERT INTO session (session_id, access, expire, data)
+             VALUES ('43e880c2447ca10d3092d51d258c050c', " . time() . ', ' . (time() + 1440) . ", 'a' || char(0) || 'b')",
+        );
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+
+        $written = $this->handler->write('43e880c2447ca10d3092d51d258c050c', "a\0b");
+
+        self::assertTrue($written);
+        self::assertSame('base64:' . base64_encode("a\0b"),$this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    public function testAWriteGoesThroughWhenAnotherRequestOnlyRefreshedTheTimestamps(): void
+    {
+        $this->insertLiveSession($this->database);
+        $concurrent = new DatabaseSessionHandler($this->database, 'session');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $concurrent->read('43e880c2447ca10d3092d51d258c050c');
+        $concurrent->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;');
+
+        $written = $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:2;');
+
+        self::assertTrue($written);
+        self::assertSame('user_id|i:2;', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    public function testASecondWriteOfTheSameRequestBuildsOnItsFirst(): void
+    {
+        $this->insertLiveSession($this->database);
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:2;');
+
+        $written = $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:3;');
+
+        self::assertTrue($written);
+        self::assertSame('user_id|i:3;', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
+    }
+
+    public function testAResumedSessionStoredAsBase64CanBeRewritten(): void
+    {
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+        $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'token|s:3:"' . "\xff\xfe\x80" . '";');
+        $this->handler->read('43e880c2447ca10d3092d51d258c050c');
+
+        $written = $this->handler->write('43e880c2447ca10d3092d51d258c050c', 'user_id|i:2;');
+
+        self::assertTrue($written);
+        self::assertSame('user_id|i:2;', $this->storedPayload('43e880c2447ca10d3092d51d258c050c'));
     }
 
     /**

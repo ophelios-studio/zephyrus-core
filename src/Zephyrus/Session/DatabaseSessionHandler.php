@@ -31,6 +31,9 @@ use Zephyrus\Data\DatabaseException;
  * Columns this handler does not write stay NULL: give them a default or drop them.
  * Payloads that are not valid UTF-8, contain a NUL byte or start with "base64:" are stored base64-encoded,
  * so a `data LIKE` search does not find them.
+ * A resumed session is written only while its data column still holds the bytes this handler last read or wrote:
+ * when two requests change one session, the second write is refused and returns false (logged, with a PHP warning).
+ * A change to another column, or a row that returned to those same bytes, is not detected.
  *
  * Register through SessionManager, which also sets the cookie flags:
  *
@@ -75,7 +78,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * Seconds a blocked read() waits for a contended session lock before going on without it.
      *
-     * Giving up at worst loses an update; an unbounded wait blocks every later request for that session.
+     * Giving up at worst refuses one of the two writes, whichever comes second; an unbounded wait blocks every later
+     * request for that session.
      */
     private const LOCK_WAIT_SECONDS = 5;
 
@@ -107,6 +111,13 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
      */
     private array $idStates = [];
 
+    /**
+     * The data column of each resumed id, as read() found it or write() last stored it.
+     *
+     * @var array<string, string>
+     */
+    private array $storedData = [];
+
     /** The id whose advisory lock this handler currently holds, if any. */
     private ?string $lockedId = null;
 
@@ -125,10 +136,11 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * @param Database|Closure(): Database $database
      * @param string $idPattern Accepted session id shape. Override only for ids generated in another format.
-     * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). With false,
-     *   concurrent requests of one session can overwrite each other's changes. Pass false only behind transaction
-     *   or statement pooling: the lock would stay on a server connection after the request and fill the shared
-     *   lock table until PostgreSQL runs out of shared memory.
+     * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). Without the
+     *   lock, of two concurrent requests that change one session, the second write is refused rather than
+     *   overwriting the first. Pass false only behind
+     *   transaction or statement pooling: the lock would stay on a server connection after the request and fill the
+     *   shared lock table until PostgreSQL runs out of shared memory.
      */
     public function __construct(
         private readonly Database|Closure $database,
@@ -273,7 +285,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         try {
             // Under a savepoint in the caller's transaction, so a failure leaves it able to run the unlock.
             $row = $this->database()->inTransaction() ? $this->database()->transaction($select) : $select();
-            $payload = $row === null ? null : $this->decodePayload($row->data);
+            $stored = $row === null ? null : $this->storedText($row->data);
         } catch (Throwable $failure) {
             // PHP does not call close() when read() throws out of session_start().
             $this->idStates[$id] = self::STATE_READ_FAILED;
@@ -282,7 +294,7 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             throw $failure;
         }
 
-        if ($payload === null) {
+        if ($stored === null) {
             // The lock is not kept for a new session, so requests admitted before a logout
             // may race to recreate this id.
             $this->idStates[$id] = self::STATE_CREATED;
@@ -292,8 +304,9 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         }
 
         $this->idStates[$id] = self::STATE_RESUMED;
+        $this->storedData[$id] = $stored;
 
-        return $payload;
+        return self::decodePayload($stored);
     }
 
     /**
@@ -307,8 +320,10 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * Persist the session payload.
      *
-     * The statement depends on what read() saw. A resumed session gets a bare UPDATE, so a row deleted in the
-     * meantime stays deleted. A created session gets one INSERT ... ON CONFLICT DO UPDATE, so two concurrent
+     * The statement depends on what read() saw. A resumed session gets an UPDATE that matches only while the data
+     * column still holds the bytes this handler last read or wrote, so a row another request deleted or changed
+     * in the meantime is left as it is and false is returned. A change to another column, or a row that returned
+     * to those same bytes, is not detected. A created session gets one INSERT ... ON CONFLICT DO UPDATE, so two concurrent
      * creators cannot collide. An empty created session is not stored. A session whose read() failed, or an id never
      * read, is not written.
      *
@@ -325,12 +340,22 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
             $expire = $access + $this->maxLifetime();
 
             if ($resumed) {
-                return $this->database()->execute(
+                // Only a row written before payload encoding can hold a raw NUL, which cannot be bound.
+                $unbindable = str_contains($this->storedData[$id], "\0");
+                $updated = $this->database()->execute(
                     "UPDATE {$this->table}
                         SET access = ?, expire = ?, data = ?
-                      WHERE {$this->idColumn} = ?",
-                    [$access, $expire, $stored, $id],
+                      WHERE {$this->idColumn} = ?" . ($unbindable ? '' : ' AND data = ?'),
+                    [$access, $expire, $stored, $id, ...($unbindable ? [] : [$this->storedData[$id]])],
                 );
+
+                if ($updated > 0) {
+                    $this->storedData[$id] = $stored;
+                } else {
+                    error_log('Zephyrus: session write refused, the session changed or was deleted since this request read it');
+                }
+
+                return $updated;
             }
 
             return $this->database()->execute(
@@ -358,12 +383,17 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * @throws SessionException when the data column holds something other than text.
      */
-    private function decodePayload(mixed $stored): string
+    private function storedText(mixed $data): string
     {
-        if (!is_string($stored)) {
-            throw SessionException::dataColumnNotText($this->table, get_debug_type($stored));
+        if (!is_string($data)) {
+            throw SessionException::dataColumnNotText($this->table, get_debug_type($data));
         }
 
+        return $data;
+    }
+
+    private static function decodePayload(string $stored): string
+    {
         if (!str_starts_with($stored, self::ENCODED_PAYLOAD_PREFIX)) {
             return $stored;
         }
@@ -478,7 +508,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
     /**
      * Take the advisory lock for the id, PostgreSQL only. Released by write(), updateTimestamp(), destroy() or close().
      *
-     * write() sends the whole payload, so a concurrent writer that finished later would restore a stale snapshot.
+     * write() refuses a payload based on a stale read, so without the lock the later of two concurrent writers loses
+     * its changes.
      * The lock is held by the connection rather than a transaction, so it survives the application's own
      * transactions, which a SELECT ... FOR UPDATE held across the request would not. Taken in read() because
      * open() is not told the id. Best-effort (see bestEffort() and waitForLock()); other drivers take no lock.

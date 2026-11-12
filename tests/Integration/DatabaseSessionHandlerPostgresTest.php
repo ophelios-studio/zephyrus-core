@@ -429,6 +429,56 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertSame('42s', $this->database->selectString("SELECT current_setting('lock_timeout')"));
     }
 
+    // ── A write based on a stale read ─────────────────────────────────────────
+
+    /** Waits out the real lock delay: this is the production sequence, end to end. */
+    public function testAHolderWritingAfterAReaderThatGaveUpOnTheLockIsRefused(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $holder = $this->handler($this->connect());
+        $holder->read($id);
+        $reader = $this->handler();
+        $reader->read($id);
+        $reader->write($id, 'retired|b:1;');
+
+        $written = $holder->write($id, 'user_id|i:1;role|s:5:"admin";');
+
+        self::assertFalse($written);
+        self::assertSame('retired|b:1;', $this->storedPayload($id));
+    }
+
+    public function testAReaderThatGaveUpOnTheLockCannotOverwriteWhatTheHolderWrote(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $holder = $this->handler($this->connect());
+        $holder->read($id);
+        $this->database->pdo()->exec("SET statement_timeout = '300ms'");
+        $reader = $this->handler();
+        $reader->read($id);
+        $this->database->pdo()->exec('SET statement_timeout = 0');
+        $holder->write($id, 'user_id|i:2;');
+
+        $written = $reader->write($id, 'retired|b:1;');
+
+        self::assertFalse($written);
+        self::assertSame('user_id|i:2;', $this->storedPayload($id));
+    }
+
+    public function testAResumedSessionHoldingAPayloadThatIsNotUtf8CanBeRewritten(): void
+    {
+        $id = bin2hex(random_bytes(16));
+        $writer = $this->handler();
+        $writer->read($id);
+        $writer->write($id, 'key|s:4:"' . "\xff\xfe\x80\x01" . '";');
+        $resumed = $this->handler();
+        $resumed->read($id);
+
+        $written = $resumed->write($id, 'user_id|i:2;');
+
+        self::assertTrue($written);
+        self::assertSame('user_id|i:2;', $this->storedPayload($id));
+    }
+
     // ── An unlock on the wrong connection ─────────────────────────────────────
 
     /**
