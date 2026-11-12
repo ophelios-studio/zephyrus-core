@@ -17,6 +17,7 @@ use Tracy\Dumper;
 use Tracy\Dumper\Describer;
 use Tracy\Dumper\Exposer;
 use Tracy\Dumper\Value;
+use Tracy\Logger;
 use Zephyrus\Core\Config\ConfigSection;
 
 /**
@@ -117,7 +118,8 @@ final class DebugIntegration
      * The allowlist is validated by allowedClientList() before Tracy is touched.
      *
      * @param bool                    $debug          Whether the application is in debug mode.
-     * @param string|null             $logDirectory   Directory for Tracy log files. Null uses Tracy's default.
+     * @param string|null             $logDirectory   Directory for Tracy log files. Null keeps Debugger::$logDirectory;
+     *                                                with no directory at all, Tracy logs to PHP's error log.
      * @param string|null             $email          Email for error notifications.
      * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched
      *                                                against the `tracy-debug` cookie) permitted to
@@ -150,6 +152,12 @@ final class DebugIntegration
             $logDirectory,
             $email,
         );
+
+        // Tracy's default logger cannot write without a directory, and would drop what it catches.
+        $logger = Debugger::getLogger();
+        if ($logger instanceof Logger && $logger::class === Logger::class && ($logger->directory ?? '') === '') {
+            Debugger::setLogger(new TracyErrorLogLogger());
+        }
 
         self::hideFrameworkSecrets($sessionName);
     }

@@ -10,18 +10,23 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use SensitiveParameterValue;
 use Tracy\Debugger;
 use Tracy\Dumper;
+use Tracy\ILogger;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Mailer\Mailer;
 use Zephyrus\Mailer\MailerConfig;
 use Zephyrus\Mailer\MailerException;
+use Zephyrus\Tests\Support\CapturedErrorLog;
 
 final class DebugIntegrationTest extends TestCase
 {
+    use CapturedErrorLog;
+
     #[RunInSeparateProcess]
     public function testInitializeWithDebugTrueEnablesTracyDevelopmentMode(): void
     {
@@ -50,6 +55,57 @@ final class DebugIntegrationTest extends TestCase
         } finally {
             @rmdir($logDir);
         }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutALogDirectoryTheDebuggerLogsToTheErrorLog(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+        $this->captureErrorLog();
+
+        try {
+            DebugIntegration::initialize(debug: true);
+            Debugger::log(new RuntimeException('cache warm-up failed'), ILogger::EXCEPTION);
+
+            self::assertStringContainsString(RuntimeException::class . ': cache warm-up failed', $this->capturedErrorLog());
+        } finally {
+            $this->releaseErrorLog();
+        }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithALogDirectoryTheDebuggerKeepsLoggingToIt(): void
+    {
+        $logDir = sys_get_temp_dir() . '/zephyrus-tracy-test-' . bin2hex(random_bytes(8));
+        mkdir($logDir, 0755, true);
+
+        try {
+            DebugIntegration::initialize(debug: true, logDirectory: $logDir);
+            Debugger::log('cache warm-up failed', ILogger::ERROR);
+
+            self::assertStringContainsString('cache warm-up failed', (string) file_get_contents($logDir . '/error.log'));
+        } finally {
+            @unlink($logDir . '/error.log');
+            @rmdir($logDir);
+        }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTheDebuggerKeepsALoggerTheApplicationSetBeforeInitializing(): void
+    {
+        $logger = new class implements ILogger {
+            public function log(mixed $value, string $level = self::INFO): void
+            {
+            }
+        };
+        Debugger::setLogger($logger);
+
+        DebugIntegration::initialize(debug: true);
+
+        self::assertSame($logger, Debugger::getLogger());
     }
 
     #[RunInSeparateProcess]
