@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Mailer;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Mailer\MailerConfig;
 
@@ -64,5 +65,100 @@ final class MailerConfigTest extends TestCase
 
         self::assertSame('custom-host', $config->smtpHost);
         self::assertSame(587, $config->smtpPort); // Default.
+    }
+
+    public function testAMisspelledSmtpKeyIsRefusedWithASuggestion(): void
+    {
+        try {
+            MailerConfig::fromArray(['smtp' => ['prot' => 25]]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'smtp.prot' is an unknown key: did you mean \"smtp.port\"?",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAMisspelledFromKeyIsRefusedWithASuggestion(): void
+    {
+        try {
+            MailerConfig::fromArray(['from' => ['adress' => 'a@example.com']]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'from.adress' is an unknown key: did you mean \"from.address\"?",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAMisspelledTopLevelKeyIsRefused(): void
+    {
+        try {
+            MailerConfig::fromArray(['smpt' => ['host' => 'mail.example.com']]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'smpt' is an unknown key: did you mean \"smtp\"?",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testARefusalNeverQuotesThePassword(): void
+    {
+        try {
+            MailerConfig::fromArray(['smtp' => ['pasword' => 'hunter2-secret', 'password' => 'hunter2-secret']]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'smtp.pasword' is an unknown key: did you mean \"smtp.password\"?",
+                $e->getMessage(),
+            );
+            self::assertStringNotContainsString('hunter2-secret', $e->getMessage());
+        }
+    }
+
+    public function testASmtpSectionThatIsNotAMappingIsRefusedWithoutQuotingIt(): void
+    {
+        try {
+            MailerConfig::fromArray(['smtp' => 'hunter2-secret']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'smtp' must be a mapping, such as { host: mail.example.com, port: 587 }.",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAPortReadFromAStringIsExportedAsAnInteger(): void
+    {
+        $config = MailerConfig::fromArray(['smtp' => ['port' => '1025']]);
+
+        self::assertSame(1025, $config->smtpPort);
+        self::assertSame(1025, $config->toArray()['smtp']['port']);
+    }
+
+    public function testANonIntegerPortIsStillRefused(): void
+    {
+        try {
+            MailerConfig::fromArray(['smtp' => ['port' => 'abc']]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                'Configuration section \'Zephyrus\\Mailer\\MailerConfig\' field \'smtp.port\' has invalid value "abc": is not an integer.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testASectionDerivedByAnApplicationStaysPermissive(): void
+    {
+        $section = new class(['smtp' => ['prot' => 25]]) extends ConfigSection {
+        };
+
+        self::assertSame(25, $section->get('smtp.prot'));
     }
 }

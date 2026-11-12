@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Rendering;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Rendering\LatteEngine;
 use Zephyrus\Rendering\PhpEngine;
@@ -127,5 +128,54 @@ final class RenderConfigTest extends TestCase
         $array = $config->toArray();
         self::assertSame('latte', $array['engine']);
         self::assertSame('/views', $array['directory']);
+    }
+
+    public function testAMisspelledKeyIsRefusedWithASuggestion(): void
+    {
+        try {
+            RenderConfig::fromArray(['engin' => 'php']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'render' field 'engin' is an unknown key: did you mean \"engine\"?",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAKeyWithNoNeighbourListsTheAcceptedKeys(): void
+    {
+        try {
+            RenderConfig::fromArray(['layout' => 'main']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'render' field 'layout' is an unknown key: "
+                . 'the accepted keys are engine, directory, cache, mode, extension.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testEveryDocumentedKeyIsAccepted(): void
+    {
+        $config = RenderConfig::fromArray([
+            'engine' => 'php',
+            'directory' => 'views',
+            'cache' => 'cache',
+            'mode' => 'never',
+            'extension' => '.phtml',
+        ]);
+
+        self::assertSame('.phtml', $config->extension);
+    }
+
+    public function testASectionDerivedByAnApplicationStaysPermissive(): void
+    {
+        $section = new class(['anything' => 1]) extends ConfigSection {
+        };
+
+        self::assertSame(1, $section->get('anything'));
+        self::assertSame(2, $section::fromArray(['other' => 2])->get('other'));
     }
 }

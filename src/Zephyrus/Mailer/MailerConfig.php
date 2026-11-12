@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Mailer;
 
+use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\Config\ConfigurationException;
 
@@ -36,6 +37,8 @@ use Zephyrus\Core\Config\ConfigurationException;
  * smtp.encryption is an allow-list. It is lowercased, trimmed and checked against
  * ENCRYPTIONS at configuration time: any other value would silently fall back to
  * opportunistic STARTTLS, which a network attacker can strip to send credentials in plaintext.
+ *
+ * Any key outside the list above is refused.
  */
 final class MailerConfig extends ConfigSection
 {
@@ -46,6 +49,17 @@ final class MailerConfig extends ConfigSection
      * @var list<string>
      */
     public const array ENCRYPTIONS = ['tls', 'ssl', ''];
+
+    /** Accepted keys per property; any other key is refused. */
+    private const array SPELLINGS = [
+        'smtpHost' => ['smtp.host'],
+        'smtpPort' => ['smtp.port'],
+        'smtpUsername' => ['smtp.username'],
+        'smtpPassword' => ['smtp.password'],
+        'smtpEncryption' => ['smtp.encryption'],
+        'fromAddress' => ['from.address'],
+        'fromName' => ['from.name'],
+    ];
 
     /**
      * Config keys whose value toArray() must redact.
@@ -64,13 +78,21 @@ final class MailerConfig extends ConfigSection
 
     /**
      * @param array<string, mixed> $values
-     * @throws ConfigurationException when a value has the wrong type or smtp.encryption is outside ENCRYPTIONS.
+     * @throws ConfigurationException when a key is unknown, a value has the wrong type or smtp.encryption is
+     *         outside ENCRYPTIONS.
      */
-    public static function fromArray(array $values): static
+    public static function fromArray(#[\SensitiveParameter] array $values): static
     {
+        ConfigKeys::read('mailer', $values, self::SPELLINGS, mappingExamples: [
+            'smtp' => '{ host: mail.example.com, port: 587 }',
+            'from' => '{ address: noreply@example.com }',
+        ]);
         $instance = new static($values);
         $instance->smtpHost = $instance->getString('smtp.host', 'localhost');
         $instance->smtpPort = $instance->getInt('smtp.port', 587);
+        if (isset($instance->values['smtp']['port'])) {
+            $instance->values['smtp']['port'] = $instance->smtpPort;
+        }
         $instance->smtpUsername = $instance->getString('smtp.username', '');
         $instance->smtpPassword = $instance->getString('smtp.password', '');
         $instance->smtpEncryption = self::normalizeEncryption(

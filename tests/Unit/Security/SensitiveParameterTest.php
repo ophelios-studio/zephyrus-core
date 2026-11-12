@@ -8,7 +8,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use SensitiveParameter;
+use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\DatabaseConfig;
+use Zephyrus\Mailer\MailerConfig;
 use Zephyrus\Routing\RouteSignature;
 use Zephyrus\Security\Cryptography;
 use Zephyrus\Security\CryptographyException;
@@ -54,6 +56,8 @@ final class SensitiveParameterTest extends TestCase
             [HeaderTokenGuard::class, '__construct', 'expectedToken'],
             [SessionCsrfTokenManager::class, 'isTokenValid', 'submitted'],
             [DatabaseConfig::class, '__construct', 'password'],
+            [MailerConfig::class, 'fromArray', 'values'],
+            [ConfigKeys::class, 'read', 'values'],
         ];
 
         $named = [];

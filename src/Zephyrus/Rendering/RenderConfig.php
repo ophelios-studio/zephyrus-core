@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Rendering;
 
+use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigSection;
+use Zephyrus\Core\Config\ConfigurationException;
 
 /**
  * Configuration section for the rendering engine.
@@ -17,17 +19,33 @@ use Zephyrus\Core\Config\ConfigSection;
  *     cache: cache/latte     # Latte cache directory
  *     mode: always           # 'always' or 'never'
  *     extension: .php        # file extension for PhpEngine
+ *
+ * Any other key is refused.
  */
 final class RenderConfig extends ConfigSection
 {
+    /** Accepted keys per property; any other key is refused. */
+    private const array SPELLINGS = [
+        'engine' => ['engine'],
+        'directory' => ['directory'],
+        'cache' => ['cache'],
+        'mode' => ['mode'],
+        'extension' => ['extension'],
+    ];
+
     public readonly string $engine;
     public readonly string $directory;
     public readonly string $cache;
     public readonly string $mode;
     public readonly string $extension;
 
+    /**
+     * @param array<string, mixed> $values
+     * @throws ConfigurationException when a key is unknown or a value has the wrong type.
+     */
     public static function fromArray(array $values): static
     {
+        ConfigKeys::read('render', $values, self::SPELLINGS);
         $instance = new static($values);
         $instance->engine = $instance->getString('engine', 'latte');
         $instance->directory = $instance->getString('directory', 'app/Views');
