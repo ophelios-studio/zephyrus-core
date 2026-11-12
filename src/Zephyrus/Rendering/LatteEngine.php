@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Rendering;
 
+use Closure;
 use Latte\Engine;
 use Latte\Extension;
 use Zephyrus\FileSystem\SafePath;
@@ -31,6 +32,12 @@ use Zephyrus\Formatting\Formatter;
 final class LatteEngine implements RenderEngine
 {
     public const string EXTENSION = '.latte';
+
+    private const array BUILT_IN_FILTERS = [
+        'money', 'date', 'datetime', 'time', 'filesize', 'percent',
+        'decimal', 'timeago', 'duration', 'list', 'ordinal', 'spellOut',
+        'truncate',
+    ];
 
     private Engine $latte;
     private string $directory;
@@ -86,21 +93,22 @@ final class LatteEngine implements RenderEngine
 
     /**
      * Register the built-in and custom Formatter methods as Latte filters.
+     *
+     * A Closure is called on every filter use, so a formatter replaced later is honoured. The custom
+     * filter names are read from the formatter it returns at registration time.
+     *
+     * @param Formatter|Closure(): Formatter $formatter
      */
-    public function registerFormatterFilters(Formatter $formatter): void
+    public function registerFormatterFilters(Formatter|Closure $formatter): void
     {
-        $builtInFilters = [
-            'money', 'date', 'datetime', 'time', 'filesize', 'percent',
-            'decimal', 'timeago', 'duration', 'list', 'ordinal', 'spellOut',
-            'truncate',
-        ];
+        $provider = $formatter instanceof Closure ? $formatter : static fn (): Formatter => $formatter;
 
-        foreach ($builtInFilters as $name) {
-            $this->latte->addFilter($name, $formatter->$name(...));
+        foreach (self::BUILT_IN_FILTERS as $name) {
+            $this->latte->addFilter($name, fn (mixed ...$args): mixed => $provider()->$name(...$args));
         }
 
-        foreach ($formatter->getCustomFormatterNames() as $name) {
-            $this->latte->addFilter($name, fn (mixed ...$args): string => $formatter->format($name, ...$args));
+        foreach ($provider()->getCustomFormatterNames() as $name) {
+            $this->latte->addFilter($name, fn (mixed ...$args): string => $provider()->format($name, ...$args));
         }
     }
 

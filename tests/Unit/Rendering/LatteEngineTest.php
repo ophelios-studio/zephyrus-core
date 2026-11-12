@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Rendering;
 
+use Latte\Loaders\StringLoader;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Formatting\Formatter;
 use Zephyrus\Rendering\LatteEngine;
 use Zephyrus\Rendering\RenderEngine;
 use Zephyrus\Rendering\RenderException;
@@ -213,6 +215,36 @@ final class LatteEngineTest extends TestCase
         } finally {
             $this->removeDirectory($tempCache);
         }
+    }
+
+    public function testFormatterFiltersFollowAFormatterProviderOnEveryUse(): void
+    {
+        $current = new Formatter('en_US');
+        $engine = new LatteEngine($this->viewsDir, $this->cacheDir);
+        $engine->registerFormatterFilters(static function () use (&$current): Formatter {
+            return $current;
+        });
+        $template = '{$amount|decimal}';
+        $engine->getLatteEngine()->setLoader(new StringLoader(['t' => $template]));
+
+        $first = $engine->getLatteEngine()->renderToString('t', ['amount' => 1234.5]);
+        $current = new Formatter('fr_FR');
+        $second = $engine->getLatteEngine()->renderToString('t', ['amount' => 1234.5]);
+
+        self::assertSame((new Formatter('en_US'))->decimal(1234.5), $first);
+        self::assertSame((new Formatter('fr_FR'))->decimal(1234.5), $second);
+        self::assertNotSame($first, $second);
+    }
+
+    public function testCustomFormatterFiltersFollowAFormatterProvider(): void
+    {
+        $withShout = new Formatter('en_US');
+        $withShout->register('shout', static fn (string $v): string => strtoupper($v));
+        $engine = new LatteEngine($this->viewsDir, $this->cacheDir);
+        $engine->registerFormatterFilters(static fn (): Formatter => $withShout);
+        $engine->getLatteEngine()->setLoader(new StringLoader(['t' => '{$v|shout}']));
+
+        self::assertSame('ABC', $engine->getLatteEngine()->renderToString('t', ['v' => 'abc']));
     }
 
     /** Recursively removes a directory and its contents. */
