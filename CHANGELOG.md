@@ -128,6 +128,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Security
 
+- `symfony/yaml` is required at `^7.4.23`, which fixes CVE-2026-123792: a YAML document could hold the parser for exponential or quadratic time. Run `composer update symfony/yaml`.
 - Configuration is never read from request-supplied server variables.
 - Sessions: strict mode is forced so a client-chosen id is never adopted, expiry is enforced, a destroyed session cannot be resurrected, concurrent writes are serialized, and a NUL byte can no longer truncate a stored payload.
 - CSRF path exemptions are anchored.
