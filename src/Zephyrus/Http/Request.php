@@ -44,9 +44,9 @@ final readonly class Request
     /**
      * Forwarding headers read by default once REMOTE_ADDR is a trusted proxy: the X-Forwarded-* family only.
      *
-     * A proxy overwrites the family it manages and passes other forwarding headers
-     * through, so reading one of those would trust a value the caller controls. Opt
-     * into Forwarded or a vendor header by name through $trustedHeaders.
+     * Each is safe only when the nearest proxy writes it on every request, see fromGlobals(). A proxy
+     * passes other forwarding headers through, so reading one of those would trust a value the caller
+     * controls. Opt into Forwarded or a vendor header by name through $trustedHeaders.
      */
     public const TRUSTED_HEADERS_DEFAULT = [
         'x-forwarded-for',
@@ -127,6 +127,13 @@ final readonly class Request
     /**
      * Build a Request from PHP superglobals. This is the primary entry point
      * for production use in public/index.php.
+     *
+     * The nearest proxy must write each header in $trustedHeaders on every request, by overwriting
+     * or appending; one that writes it only sometimes lets the caller choose the value. Apache's
+     * mod_proxy appends X-Forwarded-Host only when the request has a Host and never writes -Proto
+     * or -Port: add `RequestHeader unset X-Forwarded-Host early`, `RequestHeader set X-Forwarded-Proto
+     * expr=%{REQUEST_SCHEME}`, and in each vhost `RequestHeader set X-Forwarded-Port` with the port
+     * that vhost listens on (443 for TLS, 80 otherwise). List allowed_hosts in production.
      *
      * @param array<string, mixed>|null  $server
      * @param array<string, mixed>|null  $get
@@ -590,7 +597,8 @@ final readonly class Request
      *
      * Forwarded inputs are gated by $trustedHeaders, the same allowlist as the client
      * IP. An empty list means nothing is read forwarded. X-Forwarded-Host, -Proto and
-     * -Port keep their first value, so the proxy in front must overwrite them, not append.
+     * -Port keep their last entry, read as absent when empty; see fromGlobals() for what
+     * the nearest proxy must do.
      *
      * @param array<string, mixed> $server
      * @param list<string>         $trustedHeaders
@@ -621,22 +629,22 @@ final readonly class Request
 
         $forwardedScheme = self::httpScheme($forwarded['proto'] ?? null)
             ?? (in_array('x-forwarded-proto', $trustedHeaders, true)
-                ? self::httpScheme(self::firstForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null))
+                ? self::httpScheme(self::nearestForwardedValue($server['HTTP_X_FORWARDED_PROTO'] ?? null))
                 : null);
 
         $scheme = $forwardedScheme ?? ($https ? 'https' : 'http');
 
         $host = self::authorityHost($forwarded['host']
             ?? (in_array('x-forwarded-host', $trustedHeaders, true)
-                ? self::firstForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
+                ? self::nearestForwardedValue($server['HTTP_X_FORWARDED_HOST'] ?? null)
                 : null)
             ?? (string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? 'localhost'));
 
-        if (!str_contains($host, ':')) {
+        if (!self::hasPort($host)) {
             // SERVER_PORT is the hop to the proxy, so it is ignored when a forwarded scheme is present.
             $port = self::portNumber($forwarded['port'] ?? null)
                 ?? (in_array('x-forwarded-port', $trustedHeaders, true)
-                    ? self::portNumber(self::firstForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null))
+                    ? self::portNumber(self::nearestForwardedValue($server['HTTP_X_FORWARDED_PORT'] ?? null))
                     : null)
                 ?? ($forwardedScheme === null
                     ? self::portNumber(isset($server['SERVER_PORT']) ? (string) $server['SERVER_PORT'] : null)
@@ -648,6 +656,14 @@ final readonly class Request
         }
 
         return $scheme . '://' . $host . $requestUri;
+    }
+
+    /** Whether an authority carries a port: after the "]" of a bracketed IP literal, after the name otherwise. */
+    private static function hasPort(string $authority): bool
+    {
+        $closingBracket = strrpos($authority, ']');
+
+        return str_contains($closingBracket === false ? $authority : substr($authority, $closingBracket + 1), ':');
     }
 
     /**
@@ -985,16 +1001,20 @@ final readonly class Request
         return false;
     }
 
-    private static function firstForwardedValue(mixed $value): ?string
+    /**
+     * The last entry of an X-Forwarded-* value, lowercased: the value the nearest proxy wrote. Null when it is empty.
+     */
+    private static function nearestForwardedValue(mixed $value): ?string
     {
         if (!is_scalar($value)) {
             return null;
         }
 
-        $parts = explode(',', (string) $value);
-        $first = trim($parts[0] ?? '');
+        $value = (string) $value;
+        $lastComma = strrpos($value, ',');
+        $last = trim($lastComma === false ? $value : substr($value, $lastComma + 1));
 
-        return $first === '' ? null : strtolower($first);
+        return $last === '' ? null : strtolower($last);
     }
 
     /**

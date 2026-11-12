@@ -1091,6 +1091,69 @@ final class RequestTest extends TestCase
         self::assertTrue($request->uri()->isSecure());
     }
 
+    /**
+     * @param array<string, string> $forwarded
+     */
+    #[DataProvider('xForwardedHeadersAndTheirLastEntry')]
+    public function testFromGlobalsReadsOnlyTheLastEntryOfAnXForwardedHeader(array $forwarded, string $expected): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.example.test',
+                'REQUEST_URI'    => '/reset',
+                'REMOTE_ADDR'    => '10.0.0.5',
+            ] + $forwarded,
+            trustedProxies: ['10.0.0.0/8'],
+        );
+
+        self::assertSame($expected, $request->uri()->full());
+    }
+
+    /**
+     * An empty last entry reads as no header, so the Host header and the server port apply.
+     *
+     * @return iterable<string, array{array<string, string>, string}>
+     */
+    public static function xForwardedHeadersAndTheirLastEntry(): iterable
+    {
+        yield 'host' => [['HTTP_X_FORWARDED_HOST' => 'evil.example, app.example.test'], 'http://app.example.test/reset'];
+        yield 'proto' => [['HTTP_X_FORWARDED_PROTO' => 'https, http'], 'http://app.example.test/reset'];
+        yield 'port' => [['HTTP_X_FORWARDED_PORT' => '6666, 8443'], 'http://app.example.test:8443/reset'];
+        yield 'spaces around the last entry' => [['HTTP_X_FORWARDED_HOST' => 'evil.example,  App.Example.Test  '], 'http://app.example.test/reset'];
+        yield 'empty last entry after the client value' => [['HTTP_X_FORWARDED_HOST' => 'evil.example, '], 'http://app.example.test/reset'];
+        yield 'trailing comma' => [['HTTP_X_FORWARDED_HOST' => 'evil.example, proxy.example.test,'], 'http://app.example.test/reset'];
+        yield 'whitespace-only last entry' => [['HTTP_X_FORWARDED_HOST' => 'evil.example, proxy.example.test,  '], 'http://app.example.test/reset'];
+        yield 'empty entries only' => [['HTTP_X_FORWARDED_HOST' => ' , '], 'http://app.example.test/reset'];
+        yield 'empty last port entry' => [['HTTP_X_FORWARDED_PORT' => '6666, '], 'http://app.example.test/reset'];
+    }
+
+    /**
+     * @param array<string, string> $server
+     */
+    #[DataProvider('bracketedIpv6HostsWithoutAPort')]
+    public function testFromGlobalsAddsThePortToABracketedIpv6Host(array $server, string $expected): void
+    {
+        $request = Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/reset', 'REMOTE_ADDR' => '10.0.0.5'] + $server,
+            trustedProxies: ['10.0.0.0/8'],
+        );
+
+        self::assertSame($expected, $request->uri()->full());
+    }
+
+    /**
+     * @return iterable<string, array{array<string, string>, string}>
+     */
+    public static function bracketedIpv6HostsWithoutAPort(): iterable
+    {
+        yield 'forwarded host and port' => [
+            ['HTTP_HOST' => 'app.internal', 'HTTP_X_FORWARDED_HOST' => '[::1]', 'HTTP_X_FORWARDED_PORT' => '8080'],
+            'http://[::1]:8080/reset',
+        ];
+        yield 'Host header and server port' => [['HTTP_HOST' => '[::1]', 'SERVER_PORT' => '8080'], 'http://[::1]:8080/reset'];
+    }
+
     public function testFromGlobalsIgnoresForwardedProtoAndHostWhenNotTrusted(): void
     {
         $request = Request::fromGlobals(
