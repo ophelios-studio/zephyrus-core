@@ -413,6 +413,337 @@ final class ResponseTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // withCookie()
+    // -------------------------------------------------------------------------
+
+    public function testWithCookieIsSecureHttpOnlyLaxAndSiteWideByDefault(): void
+    {
+        $response = Response::noContent()->withCookie('theme', 'dark');
+
+        self::assertSame(
+            ['set-cookie: theme=dark; Path=/; Secure; HttpOnly; SameSite=Lax'],
+            $response->toHeaderLines(),
+        );
+    }
+
+    public function testEachCookieGetsItsOwnSetCookieLineAfterTheHeaders(): void
+    {
+        $response = Response::text('ok')
+            ->withCookie('theme', 'dark')
+            ->withHeader('Set-Cookie', 'legacy=1')
+            ->withCookie('lang', 'fr');
+
+        self::assertSame([
+            'content-type: text/plain; charset=utf-8',
+            'set-cookie: legacy=1',
+            'set-cookie: theme=dark; Path=/; Secure; HttpOnly; SameSite=Lax',
+            'set-cookie: lang=fr; Path=/; Secure; HttpOnly; SameSite=Lax',
+        ], $response->toHeaderLines());
+    }
+
+    public function testWithCookieReplacesAnEarlierCookieOfTheSameNameOnly(): void
+    {
+        $response = Response::noContent()
+            ->withCookie('theme', 'dark')
+            ->withCookie('themes', 'all')
+            ->withCookie('theme', 'light');
+
+        self::assertSame([
+            'themes=all; Path=/; Secure; HttpOnly; SameSite=Lax',
+            'theme=light; Path=/; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
+    public function testWithCookieKeepsTwoCookiesOfTheSameNameInDifferentDomains(): void
+    {
+        $response = Response::noContent()
+            ->withCookie('remember', '', maxAge: 0)
+            ->withCookie('remember', '', maxAge: 0, domain: 'example.com');
+
+        self::assertSame([
+            'remember=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax',
+            'remember=; Max-Age=0; Path=/; Domain=example.com; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
+    public function testWithCookieKeepsTwoCookiesOfTheSameNameOnDifferentPaths(): void
+    {
+        $response = Response::noContent()
+            ->withCookie('remember', 'a', path: '/old')
+            ->withCookie('remember', 'b');
+
+        self::assertSame([
+            'remember=a; Path=/old; Secure; HttpOnly; SameSite=Lax',
+            'remember=b; Path=/; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
+    public function testWithCookieReplacesACookieOfTheSameNameDomainAndPath(): void
+    {
+        $response = Response::noContent()
+            ->withCookie('remember', 'a', path: '/app', domain: 'example.com')
+            ->withCookie('remember', 'b', path: '/app', domain: 'example.com');
+
+        self::assertSame(['remember=b; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    #[DataProvider('domainSpellingsOfOneCookie')]
+    public function testWithCookieReplacesACookieWhoseDomainDiffersOnlyByCaseOrByALeadingDot(
+        string $first,
+        string $second,
+    ): void {
+        $response = Response::noContent()
+            ->withCookie('remember', 'a', domain: $first)
+            ->withCookie('remember', 'b', domain: $second);
+
+        self::assertSame(['remember=b; Path=/; Domain=example.com; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function domainSpellingsOfOneCookie(): array
+    {
+        return [
+            'leading dot, then bare' => ['.example.com', 'example.com'],
+            'mixed case, then lowercase' => ['Example.COM', 'example.com'],
+        ];
+    }
+
+    public function testSetCookieIsPresentWhenOnlyACookieWasAdded(): void
+    {
+        $response = Response::noContent()->withCookie('theme', 'dark');
+
+        self::assertTrue($response->hasHeader('set-cookie'));
+        self::assertTrue($response->hasHeader('Set-Cookie'));
+        self::assertNull($response->getHeader('Set-Cookie'));
+        self::assertFalse(Response::noContent()->hasHeader('Set-Cookie'));
+    }
+
+    public function testRemovingSetCookieAlsoRemovesTheCookies(): void
+    {
+        $response = Response::noContent()
+            ->withCookie('theme', 'dark')
+            ->withHeader('Set-Cookie', 'legacy=1')
+            ->withoutHeader('SET-COOKIE');
+
+        self::assertSame([], $response->cookies);
+        self::assertSame([], $response->toHeaderLines());
+        self::assertFalse($response->hasHeader('set-cookie'));
+    }
+
+    public function testRemovingAnotherHeaderKeepsTheCookies(): void
+    {
+        $response = Response::noContent()->withCookie('theme', 'dark')->withoutHeader('X-A');
+
+        self::assertCount(1, $response->cookies);
+    }
+
+    public function testTheConstructorRefusesCookiesGivenAsAMap(): void
+    {
+        try {
+            new Response('ok', 200, [], ['theme' => 'dark']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'Invalid cookies: expected a list of Set-Cookie values indexed from 0, as array_values() gives. '
+                . 'Use withCookie() to set a cookie by name.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testTheConstructorRefusesAListWithGapsInItsKeys(): void
+    {
+        try {
+            new Response('ok', 200, [], [0 => 'a=1', 2 => 'b=2']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                'Invalid cookies: expected a list of Set-Cookie values indexed from 0, as array_values() gives. '
+                . 'Use withCookie() to set a cookie by name.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testWithCookiePercentEncodesTheValueAsSetcookieDoes(): void
+    {
+        $response = Response::noContent()->withCookie('note', 'a b;c=d,é');
+
+        self::assertSame(['note=a%20b%3Bc%3Dd%2C%C3%A9; Path=/; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    public function testWithCookieWritesEveryAttributeItIsGiven(): void
+    {
+        $response = Response::noContent()->withCookie(
+            'pref',
+            'x',
+            maxAge: 3600,
+            path: '/app',
+            domain: 'example.com',
+            secure: false,
+            httpOnly: false,
+            sameSite: 'Strict',
+        );
+
+        self::assertSame(['pref=x; Max-Age=3600; Path=/app; Domain=example.com; SameSite=Strict'], $response->cookies);
+    }
+
+    public function testAMaxAgeOfZeroExpiresTheCookie(): void
+    {
+        $response = Response::noContent()->withCookie('theme', '', maxAge: 0);
+
+        self::assertSame(['theme=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    public function testAPrefixedCookieIsAcceptedWithTheAttributesItsPrefixRequires(): void
+    {
+        $response = Response::noContent()
+            ->withCookie('__Host-id', 'x', sameSite: 'None')
+            ->withCookie('__Secure-id', 'y', path: '/app', domain: 'example.com');
+
+        self::assertSame([
+            '__Host-id=x; Path=/; Secure; HttpOnly; SameSite=None',
+            '__Secure-id=y; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
+    public function testCookiesSurviveTheOtherMutatorsAndTheOriginalIsUnchanged(): void
+    {
+        $original = Response::noContent();
+
+        $response = $original->withCookie('theme', 'dark')
+            ->withHeader('X-A', '1')
+            ->withHeaders(['X-B' => '2'])
+            ->withoutHeader('X-A')
+            ->withStatus(201);
+
+        self::assertSame(['theme=dark; Path=/; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+        self::assertSame([], $original->cookies);
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    #[DataProvider('refusedCookies')]
+    public function testWithCookieRefusesACookieTheBrowserWouldMisreadOrDiscard(
+        string $name,
+        array $attributes,
+        string $message,
+    ): void {
+        try {
+            Response::noContent()->withCookie($name, 'v', ...$attributes);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame($message, $exception->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, array<string, mixed>, string}>
+     */
+    public static function refusedCookies(): iterable
+    {
+        yield 'empty name' => [
+            '',
+            [],
+            'Invalid cookie name "": a cookie name may only contain RFC 9110 token characters.',
+        ];
+        yield 'name with a separator' => [
+            'a=b',
+            [],
+            'Invalid cookie name "a=b": a cookie name may only contain RFC 9110 token characters.',
+        ];
+        yield 'name with a CRLF' => [
+            "a\r\nSet-Cookie: s",
+            [],
+            'Invalid cookie name "a\r\nSet-Cookie: s": a cookie name may only contain RFC 9110 token characters.',
+        ];
+        yield 'negative Max-Age' => [
+            'theme',
+            ['maxAge' => -1],
+            'Invalid Max-Age -1 for cookie "theme": use 0 to expire the cookie, or null for a browser-session cookie.',
+        ];
+        yield 'relative path' => [
+            'theme',
+            ['path' => 'app'],
+            'Invalid path "app" for cookie "theme": '
+            . 'it must start with "/" and contain only printable ASCII without space, "," or ";".',
+        ];
+        yield 'path with an attribute' => [
+            'theme',
+            ['path' => '/; Domain=example.com'],
+            'Invalid path "/; Domain=example.com" for cookie "theme": '
+            . 'it must start with "/" and contain only printable ASCII without space, "," or ";".',
+        ];
+        yield 'path with a control character' => [
+            'theme',
+            ['path' => "/a\tb"],
+            'Invalid path "/a\tb" for cookie "theme": '
+            . 'it must start with "/" and contain only printable ASCII without space, "," or ";".',
+        ];
+        yield 'path with a comma' => [
+            'theme',
+            ['path' => '/a,b'],
+            'Invalid path "/a,b" for cookie "theme": '
+            . 'it must start with "/" and contain only printable ASCII without space, "," or ";".',
+        ];
+        yield 'path with a space' => [
+            'theme',
+            ['path' => '/a b'],
+            'Invalid path "/a b" for cookie "theme": '
+            . 'it must start with "/" and contain only printable ASCII without space, "," or ";".',
+        ];
+        yield 'path with a non-ASCII character' => [
+            'theme',
+            ['path' => '/caf' . "\u{e9}"],
+            'Invalid path "/caf' . "\u{e9}" . '" for cookie "theme": '
+            . 'it must start with "/" and contain only printable ASCII without space, "," or ";".',
+        ];
+        yield 'empty domain' => [
+            'theme',
+            ['domain' => ''],
+            'Invalid domain "" for cookie "theme": use a host name such as example.com, or null for a host-only '
+            . 'cookie.',
+        ];
+        yield 'domain with an attribute' => [
+            'theme',
+            ['domain' => 'example.com; SameSite=None'],
+            'Invalid domain "example.com; SameSite=None" for cookie "theme": use a host name such as example.com, or '
+            . 'null for a host-only cookie.',
+        ];
+        yield 'SameSite in the wrong case' => [
+            'theme',
+            ['sameSite' => 'lax'],
+            'Invalid SameSite value "lax" for cookie "theme": use Strict, Lax or None.',
+        ];
+        yield 'SameSite=None without Secure' => [
+            'theme',
+            ['sameSite' => 'None', 'secure' => false],
+            'Cookie "theme" cannot use SameSite=None without Secure: browsers discard it.',
+        ];
+        yield '__Secure- prefix without Secure' => [
+            '__Secure-id',
+            ['secure' => false],
+            'Cookie "__Secure-id" uses the __Secure- prefix, which requires Secure.',
+        ];
+        yield '__Host- prefix without Secure' => [
+            '__Host-id',
+            ['secure' => false],
+            'Cookie "__Host-id" uses the __Host- prefix, which requires Secure, the path "/" and no domain.',
+        ];
+        yield '__Host- prefix on a sub-path' => [
+            '__Host-id',
+            ['path' => '/app'],
+            'Cookie "__Host-id" uses the __Host- prefix, which requires Secure, the path "/" and no domain.',
+        ];
+        yield '__Host- prefix in any case, with a domain' => [
+            '__host-id',
+            ['domain' => 'example.com'],
+            'Cookie "__host-id" uses the __Host- prefix, which requires Secure, the path "/" and no domain.',
+        ];
+    }
+
+    // -------------------------------------------------------------------------
     // send(): status code emission
     //
     // headers_list() is not visible under the CLI SAPI; headers are checked via toHeaderLines().
@@ -686,6 +1017,15 @@ final class ResponseTest extends TestCase
         $response = $value === null ? new Response() : new Response(headers: ['X-Test' => $value]);
 
         self::assertSame($expected, $response->hasNonBlankHeader('x-TEST'));
+    }
+
+    public function testHasNonBlankHeaderCountsASetCookieAddedByWithCookie(): void
+    {
+        $response = Response::noContent()->withCookie('theme', 'dark');
+
+        self::assertTrue($response->hasNonBlankHeader('set-cookie'));
+        self::assertTrue($response->hasNonBlankHeader('Set-Cookie'));
+        self::assertFalse(Response::noContent()->hasNonBlankHeader('Set-Cookie'));
     }
 
     // -------------------------------------------------------------------------

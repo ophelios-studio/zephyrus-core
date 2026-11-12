@@ -21,6 +21,13 @@ final readonly class Response
     /** RFC 9110 allows HTAB as the only control character in a field value. */
     private const HEADER_VALUE_FORBIDDEN_PATTERN = '/[\x00-\x08\x0A-\x1F\x7F]/';
 
+    /** A leading "/", then printable ASCII without space, "," or ";". */
+    private const COOKIE_PATH_PATTERN = '#^/[\x21-\x2B\x2D-\x3A\x3C-\x7E]*+$#D';
+
+    private const COOKIE_DOMAIN_PATTERN = '/^\.?[A-Za-z0-9-]++(?:\.[A-Za-z0-9-]++)*+$/D';
+
+    private const COOKIE_SAME_SITE_VALUES = ['Strict', 'Lax', 'None'];
+
     private const STATUS_PHRASES = [
         100 => 'Continue',
         101 => 'Switching Protocols',
@@ -58,15 +65,25 @@ final readonly class Response
     public array $headers;
 
     /**
-     * Header values are stored as given; use withHeader() for computed or request values.
+     * Header values and cookies are stored as given; use withHeader() and withCookie() for computed or request values.
      *
      * @param array<string, string> $headers
+     * @param array<array-key, string> $cookies A list of Set-Cookie values, each emitted on its own line after the headers.
+     *
+     * @throws InvalidArgumentException When $cookies is not a list: use withCookie() to name a cookie.
      */
     public function __construct(
         public string $body = '',
         public int $status = 200,
         array $headers = [],
+        public array $cookies = [],
     ) {
+        if (!array_is_list($cookies)) {
+            throw new InvalidArgumentException(
+                'Invalid cookies: expected a list of Set-Cookie values indexed from 0, as array_values() gives. '
+                . 'Use withCookie() to set a cookie by name.',
+            );
+        }
         $this->headers = array_change_key_case($headers);
     }
 
@@ -180,6 +197,7 @@ final readonly class Response
             body: $this->body,
             status: $this->status,
             headers: $headers,
+            cookies: $this->cookies,
         );
     }
 
@@ -219,7 +237,179 @@ final readonly class Response
             body: $this->body,
             status: $this->status,
             headers: $normalized,
+            cookies: $this->cookies,
         );
+    }
+
+    /**
+     * Returns a copy that sets a cookie on its own Set-Cookie line, replacing an earlier cookie of the same name, domain and path.
+     *
+     * Secure, HttpOnly, SameSite=Lax and the path "/" unless told otherwise; Secure is on even where the session
+     * setting is "auto", so pass $secure = false explicitly for plain-HTTP development. The value is percent-encoded as
+     * setcookie() does. A null $maxAge makes a browser-session cookie; 0 expires the cookie.
+     *
+     * @throws InvalidArgumentException When $name is not a token, or $maxAge, $path, $domain or $sameSite is invalid.
+     * @throws InvalidArgumentException When browsers would discard the cookie: SameSite=None, or a __Secure- or
+     *     __Host- name, without Secure; a __Host- name with a domain or a path other than "/".
+     */
+    public function withCookie(
+        string $name,
+        string $value,
+        ?int $maxAge = null,
+        string $path = '/',
+        ?string $domain = null,
+        bool $secure = true,
+        bool $httpOnly = true,
+        string $sameSite = 'Lax',
+    ): self {
+        self::assertValidCookieAttributes($name, $maxAge, $path, $domain, $sameSite);
+        self::assertBrowsersKeepCookie($name, $path, $domain, $secure, $sameSite);
+
+        $attributes = [$name . '=' . rawurlencode($value)];
+        if ($maxAge !== null) {
+            $attributes[] = 'Max-Age=' . $maxAge;
+        }
+        $attributes[] = 'Path=' . $path;
+        if ($domain !== null) {
+            $attributes[] = 'Domain=' . $domain;
+        }
+        if ($secure) {
+            $attributes[] = 'Secure';
+        }
+        if ($httpOnly) {
+            $attributes[] = 'HttpOnly';
+        }
+        $attributes[] = 'SameSite=' . $sameSite;
+
+        $cookies = array_values(array_filter(
+            $this->cookies,
+            static fn (string $cookie): bool => !self::isCookieScope($cookie, $name, $domain, $path),
+        ));
+        $cookies[] = implode('; ', $attributes);
+
+        return new self(
+            body: $this->body,
+            status: $this->status,
+            headers: $this->headers,
+            cookies: $cookies,
+        );
+    }
+
+    /** Whether a Set-Cookie line is the cookie browsers identify by this name, domain and path. */
+    private static function isCookieScope(string $line, string $name, ?string $domain, string $path): bool
+    {
+        $parts = explode('; ', $line);
+        if (!str_starts_with(array_shift($parts), $name . '=')) {
+            return false;
+        }
+
+        $lineDomain = null;
+        $linePath = null;
+        foreach ($parts as $part) {
+            if (str_starts_with($part, 'Domain=')) {
+                $lineDomain = substr($part, 7);
+            } elseif (str_starts_with($part, 'Path=')) {
+                $linePath = substr($part, 5);
+            }
+        }
+
+        return self::normalizeCookieDomain($lineDomain) === self::normalizeCookieDomain($domain)
+            && $linePath === $path;
+    }
+
+    /** Lowercases a cookie domain and drops one leading dot, as browsers compare domains. */
+    private static function normalizeCookieDomain(?string $domain): ?string
+    {
+        if ($domain === null) {
+            return null;
+        }
+
+        return strtolower(str_starts_with($domain, '.') ? substr($domain, 1) : $domain);
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     */
+    private static function assertValidCookieAttributes(
+        string $name,
+        ?int $maxAge,
+        string $path,
+        ?string $domain,
+        string $sameSite,
+    ): void {
+        if (preg_match(self::HEADER_NAME_PATTERN, $name) !== 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid cookie name %s: a cookie name may only contain RFC 9110 token characters.',
+                MessageValue::quote($name),
+            ));
+        }
+
+        if ($maxAge !== null && $maxAge < 0) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid Max-Age %d for cookie "%s": use 0 to expire the cookie, or null for a browser-session cookie.',
+                $maxAge,
+                $name,
+            ));
+        }
+
+        if (preg_match(self::COOKIE_PATH_PATTERN, $path) !== 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid path %s for cookie "%s": it must start with "/" and contain only printable ASCII without space, "," or ";".',
+                MessageValue::quote($path),
+                $name,
+            ));
+        }
+
+        if ($domain !== null && preg_match(self::COOKIE_DOMAIN_PATTERN, $domain) !== 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid domain %s for cookie "%s": use a host name such as example.com, or null for a host-only '
+                . 'cookie.',
+                MessageValue::quote($domain),
+                $name,
+            ));
+        }
+
+        if (!in_array($sameSite, self::COOKIE_SAME_SITE_VALUES, true)) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid SameSite value %s for cookie "%s": use Strict, Lax or None.',
+                MessageValue::quote($sameSite),
+                $name,
+            ));
+        }
+    }
+
+    /**
+     * Refuses the combinations browsers silently drop. Prefixes are matched case-insensitively, as browsers do.
+     *
+     * @throws InvalidArgumentException
+     */
+    private static function assertBrowsersKeepCookie(
+        string $name,
+        string $path,
+        ?string $domain,
+        bool $secure,
+        string $sameSite,
+    ): void {
+        if ($sameSite === 'None' && !$secure) {
+            throw new InvalidArgumentException(sprintf(
+                'Cookie "%s" cannot use SameSite=None without Secure: browsers discard it.',
+                $name,
+            ));
+        }
+
+        if (stripos($name, '__Host-') === 0 && (!$secure || $path !== '/' || $domain !== null)) {
+            throw new InvalidArgumentException(sprintf(
+                'Cookie "%s" uses the __Host- prefix, which requires Secure, the path "/" and no domain.',
+                $name,
+            ));
+        }
+
+        if (stripos($name, '__Secure-') === 0 && !$secure) {
+            throw new InvalidArgumentException(sprintf(
+                'Cookie "%s" uses the __Secure- prefix, which requires Secure.',
+                $name,
+            ));
+        }
     }
 
     /**
@@ -252,13 +442,19 @@ final readonly class Response
         }
     }
 
-    /** Whether a header is present, whatever its value. The name is matched case-insensitively. */
+    /**
+     * Whether a header is present, whatever its value. The name is matched case-insensitively.
+     * "Set-Cookie" is also present when withCookie() added a cookie.
+     */
     public function hasHeader(string $name): bool
     {
-        return $this->getHeader($name) !== null;
+        return $this->getHeader($name) !== null || ($this->cookies !== [] && strcasecmp($name, 'set-cookie') === 0);
     }
 
-    /** The stored value of a header, or null when it is absent. The name is matched case-insensitively. */
+    /**
+     * The stored value of a header, or null when it is absent. The name is matched case-insensitively.
+     * Cookies added by withCookie() are not headers: they are in $cookies.
+     */
     public function getHeader(string $name): ?string
     {
         foreach ($this->headers as $existing => $value) {
@@ -270,12 +466,17 @@ final readonly class Response
         return null;
     }
 
-    /** Whether a header is present with a non-blank value. A blank value counts as absent. */
+    /**
+     * Whether a header is present with a non-blank value. A blank value counts as absent.
+     * "Set-Cookie" is also present when withCookie() added a cookie.
+     */
     public function hasNonBlankHeader(string $name): bool
     {
-        return trim($this->getHeader($name) ?? '') !== '';
+        return ($this->cookies !== [] && strcasecmp($name, 'set-cookie') === 0)
+            || trim($this->getHeader($name) ?? '') !== '';
     }
 
+    /** Returns a copy without a header. Removing "Set-Cookie" also removes the cookies added by withCookie(). */
     public function withoutHeader(string $name): self
     {
         $headers = $this->headers;
@@ -285,6 +486,7 @@ final readonly class Response
             body: $this->body,
             status: $this->status,
             headers: $headers,
+            cookies: strcasecmp($name, 'set-cookie') === 0 ? [] : $this->cookies,
         );
     }
 
@@ -294,6 +496,7 @@ final readonly class Response
             body: $this->body,
             status: $status,
             headers: $this->headers,
+            cookies: $this->cookies,
         );
     }
 
@@ -310,15 +513,20 @@ final readonly class Response
     }
 
     /**
-     * The header lines send() emits, e.g. "X-Trace-Id: abc". Does not touch the SAPI.
+     * The header lines send() emits, e.g. "x-trace-id: abc", then one "set-cookie" line per cookie. Does not touch
+     * the SAPI.
      *
-     * @return string[]
+     * @return list<string>
      */
     public function toHeaderLines(): array
     {
         $lines = [];
         foreach ($this->headers as $name => $value) {
             $lines[] = sprintf('%s: %s', $name, $value);
+        }
+
+        foreach ($this->cookies as $cookie) {
+            $lines[] = 'set-cookie: ' . $cookie;
         }
 
         return $lines;
