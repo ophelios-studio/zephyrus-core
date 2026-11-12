@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Upload;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Upload\FileUpload;
 use Zephyrus\Upload\UploadException;
@@ -108,7 +109,7 @@ final class UploaderTest extends TestCase
     public function test_store_with_explicit_name_and_subdirectory_returns_relative_path(): void
     {
         $dest = $this->makeTempDir();
-        $file = $this->makeValidFile('photo.png', 'image/png');
+        $file = $this->makeValidFile('photo.png', 'image/png', $this->pngBytes());
 
         $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, 'images', 'avatar.png');
 
@@ -163,7 +164,7 @@ final class UploaderTest extends TestCase
     public function test_store_creates_nested_subdirectory(): void
     {
         $dest = $this->makeTempDir();
-        $file = $this->makeValidFile();
+        $file = $this->makeValidFile('small.jpg', 'image/jpeg', $this->jpegBytes());
 
         $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, 'images/thumbs', 'small.jpg');
 
@@ -186,12 +187,12 @@ final class UploaderTest extends TestCase
     {
         $base = $this->makeTempDir();
         $dest = $base . '/new-root';  // does not exist yet
-        $file = $this->makeValidFile('x.bin');
+        $file = $this->makeValidFile('x.txt');
 
-        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'x.bin');
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'x.txt');
 
-        self::assertSame('x.bin', $relative);
-        self::assertFileExists($dest . '/x.bin');
+        self::assertSame('x.txt', $relative);
+        self::assertFileExists($dest . '/x.txt');
     }
 
     public function test_store_generates_unique_names_on_successive_calls(): void
@@ -615,5 +616,156 @@ final class UploaderTest extends TestCase
         ))->store($file);
 
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.svg$#', $relative);
+    }
+
+    public function test_store_refuses_a_target_extension_the_detected_type_does_not_give(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('avatar.php', 'image/png', $this->makeTempFile($this->pngBytes() . "<?php echo 1;"), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, $file->originalName);
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload target extension "php" does not match the detected MIME type "image/png". Expected extension: png.',
+                $e->getMessage(),
+            );
+        } finally {
+            self::assertSame([], glob($dest . '/*') ?: []);
+        }
+    }
+
+    public function test_store_refuses_a_target_name_with_an_executable_inner_segment(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'shell.PHP.png');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload target name carries the executable extension "php" before its final extension.',
+                $e->getMessage(),
+            );
+        } finally {
+            self::assertSame([], glob($dest . '/*') ?: []);
+        }
+    }
+
+    public function test_store_accepts_a_harmless_inner_segment_in_a_target_name(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.pdf', 'application/pdf', $this->makeTempFile($this->pdfBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'report.v2.pdf');
+
+        self::assertSame('report.v2.pdf', $relative);
+    }
+
+    public function test_store_accepts_a_tar_gz_target_name_for_gzip_bytes(): void
+    {
+        $dest = $this->makeTempDir();
+        $gzip = (string) gzencode('data');
+        $file = new FileUpload('a.tar.gz', 'application/gzip', $this->makeTempFile($gzip), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'archive.tar.gz');
+
+        self::assertSame('archive.tar.gz', $relative);
+    }
+
+    public function test_store_refuses_a_target_extension_when_the_detected_type_has_no_known_extension(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('logo.svg', 'image/svg+xml', $this->makeTempFile(self::SVG_WITH_SCRIPT), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'logo.svg');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload target extension "svg" does not match the detected MIME type "image/svg+xml": '
+                . 'no extension is accepted for this type. Map it with $mimeExtensionMap to accept one.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function test_store_accepts_a_target_extension_given_by_the_detected_type_in_any_case(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'Avatar.PNG');
+
+        self::assertSame('Avatar.PNG', $relative);
+    }
+
+    public function test_store_keeps_a_target_name_without_extension_as_given(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'avatar');
+
+        self::assertSame('avatar', $relative);
+    }
+
+    /** Smallest byte sequence libmagic identifies as image/png. */
+    private function pngBytes(): string
+    {
+        return "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89";
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function aliasProvider(): array
+    {
+        return [
+            'jpeg on a jpeg' => ['photo.jpeg', "\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xFF\xD9"],
+            'jpe on a jpeg' => ['photo.jpe', "\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xFF\xD9"],
+            'tif on a tiff' => ['scan.tif', "II*\x00\x08\x00\x00\x00\x00\x00"],
+            'md on plain text' => ['notes.md', "# Title\n\nSome text\n"],
+        ];
+    }
+
+    #[DataProvider('aliasProvider')]
+    public function test_store_accepts_a_common_alias_of_the_detected_type_in_a_target_name(
+        string $targetName,
+        string $bytes,
+    ): void {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload($targetName, 'application/octet-stream', $this->makeTempFile($bytes), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, $targetName);
+
+        self::assertSame($targetName, $relative);
+    }
+
+    public function test_store_lists_every_accepted_extension_when_a_target_extension_is_refused(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.jpg', 'image/jpeg', $this->makeTempFile($this->jpegBytes()), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, 'photo.png');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload target extension "png" does not match the detected MIME type "image/jpeg". '
+                . 'Expected extensions: jpg, jpeg, jpe.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function test_store_gives_a_generated_name_the_mapped_extension_and_never_an_alias(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('photo.jpeg', 'image/jpeg', $this->makeTempFile($this->jpegBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.jpg$#', $relative);
     }
 }

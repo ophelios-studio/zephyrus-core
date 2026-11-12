@@ -19,8 +19,9 @@ use finfo;
  * - the extension allowlist is matched against every dotted segment of the name;
  * - the stored extension comes from the sniffed type, so a PHP payload announced
  *   as a JPEG never lands with a `.php` name;
- * - an explicit `$targetName` is subject to the same extension allowlist and may
- *   not be a dotfile.
+ * - the last extension of an explicit `$targetName` must be one the sniffed type
+ *   maps to or a common alias of it, no earlier segment may be an executable extension, the extension
+ *   allowlist applies in addition, and the name may not be a dotfile.
  *
  * `..` segments are refused, null bytes are stripped, and the destination must
  * stay under the root after `realpath()`. An existing file is replaced only with
@@ -74,6 +75,20 @@ final class Uploader
         'font/woff2' => 'woff2',
         'font/ttf' => 'ttf',
         'font/otf' => 'otf',
+    ];
+
+    /** Extensions a server may run through a handler mapping, refused as inner segments of a target name. */
+    private const array EXECUTABLE_EXTENSIONS = [
+        'php', 'php3', 'php4', 'php5', 'php6', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phar',
+        'cgi', 'pl', 'py', 'shtml',
+    ];
+
+    /** @var array<string, list<string>> Extra last extensions a target name may use for a sniffed type. */
+    private const array TARGET_NAME_ALIASES = [
+        'image/jpeg' => ['jpeg', 'jpe'],
+        'image/tiff' => ['tif'],
+        'text/plain' => ['md', 'csv'],
+        'text/markdown' => ['markdown'],
     ];
 
     /** @var array<string, string> Sniffed MIME type to stored extension. */
@@ -172,7 +187,7 @@ final class Uploader
         $absoluteDir = $this->assertContainedDirectory($absoluteDir);
 
         $name = $targetName !== null
-            ? $this->validateTargetName($targetName)
+            ? $this->validateTargetName($targetName, $sniffedMimeType)
             : $this->generateName($file, $sniffedMimeType);
 
         $absolutePath = $absoluteDir . DIRECTORY_SEPARATOR . $name;
@@ -257,6 +272,46 @@ final class Uploader
         foreach ($extensions as $extension) {
             if (!in_array($extension, $this->allowedExtensions, true)) {
                 throw UploadException::extensionNotAllowed($extension, $this->allowedExtensions);
+            }
+        }
+    }
+
+    /**
+     * The mapped extension of a sniffed type followed by its target-name aliases, empty when unmapped.
+     *
+     * @return list<string>
+     */
+    private function acceptedTargetExtensions(string $sniffedMimeType): array
+    {
+        $mapped = $this->mimeExtensions[$sniffedMimeType] ?? '';
+        if ($mapped === '') {
+            return [];
+        }
+
+        return array_values(array_unique([$mapped, ...(self::TARGET_NAME_ALIASES[$sniffedMimeType] ?? [])]));
+    }
+
+    /**
+     * The last extension of a target name must be one of the sniffed type, and no earlier segment
+     * may be an executable extension.
+     *
+     * @param list<string> $extensions
+     */
+    private function assertExtensionsMatchType(array $extensions, string $sniffedMimeType): void
+    {
+        if ($extensions === []) {
+            return;
+        }
+
+        $last = array_pop($extensions);
+        $accepted = $this->acceptedTargetExtensions($sniffedMimeType);
+        if (!in_array($last, $accepted, true)) {
+            throw UploadException::extensionMismatch($last, $sniffedMimeType, $accepted);
+        }
+
+        foreach ($extensions as $extension) {
+            if (in_array($extension, self::EXECUTABLE_EXTENSIONS, true)) {
+                throw UploadException::executableInnerExtension($extension);
             }
         }
     }
@@ -353,9 +408,9 @@ final class Uploader
 
     /**
      * Validates a caller-supplied target filename: a bare name, not a dot-alias or dotfile,
-     * that satisfies the extension allowlist.
+     * that satisfies the extension allowlist and ends with the extension of the sniffed type.
      */
-    private function validateTargetName(string $name): string
+    private function validateTargetName(string $name, string $sniffedMimeType): string
     {
         $name = trim(str_replace("\0", '', $name));
 
@@ -374,6 +429,8 @@ final class Uploader
         if ($this->allowedExtensions !== []) {
             $this->assertExtensionsAllowed(self::extensionSegments($name));
         }
+
+        $this->assertExtensionsMatchType(self::extensionSegments($name), $sniffedMimeType);
 
         return $name;
     }

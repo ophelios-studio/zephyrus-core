@@ -105,6 +105,37 @@ final class UploadException extends ZephyrusRuntimeException
     }
 
     /**
+     * @param list<string> $acceptedExtensions Empty when the type has no known extension.
+     */
+    public static function extensionMismatch(string $extension, string $mimeType, array $acceptedExtensions): self
+    {
+        if ($acceptedExtensions === []) {
+            return new self(sprintf(
+                'Upload target extension %s does not match the detected MIME type %s: '
+                . 'no extension is accepted for this type. Map it with $mimeExtensionMap to accept one.',
+                MessageValue::quote($extension),
+                MessageValue::quote($mimeType),
+            ));
+        }
+
+        return new self(sprintf(
+            'Upload target extension %s does not match the detected MIME type %s. Expected %s: %s.',
+            MessageValue::quote($extension),
+            MessageValue::quote($mimeType),
+            count($acceptedExtensions) === 1 ? 'extension' : 'extensions',
+            implode(', ', $acceptedExtensions),
+        ));
+    }
+
+    public static function executableInnerExtension(string $extension): self
+    {
+        return new self(sprintf(
+            'Upload target name carries the executable extension %s before its final extension.',
+            MessageValue::quote($extension),
+        ));
+    }
+
+    /**
      * @param string[] $allowedMimeTypes
      */
     public static function mimeTypeNotAllowed(string $mimeType, array $allowedMimeTypes): self
