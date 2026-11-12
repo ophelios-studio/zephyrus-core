@@ -20,8 +20,9 @@ use finfo;
  * - the stored extension comes from the sniffed type, so a PHP payload announced
  *   as a JPEG never lands with a `.php` name;
  * - the last extension of an explicit `$targetName` must be one the sniffed type
- *   maps to or a common alias of it, no earlier segment may be an executable extension, the extension
- *   allowlist applies in addition, and the name may not be a dotfile.
+ *   maps to or a common alias of it, no earlier segment may be an executable
+ *   extension, the extension allowlist applies in addition, and the name may not
+ *   be a dotfile, contain a colon or an ASCII control character, or end with a dot or a space.
  *
  * `..` segments are refused, null bytes are stripped, and the destination must
  * stay under the root after `realpath()`. An existing file is replaced only with
@@ -77,10 +78,10 @@ final class Uploader
         'font/otf' => 'otf',
     ];
 
-    /** Extensions a server may run through a handler mapping, refused as inner segments of a target name. */
+    /** A minimal, non-exhaustive list of extensions a server may run through a handler mapping. */
     private const array EXECUTABLE_EXTENSIONS = [
-        'php', 'php3', 'php4', 'php5', 'php6', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phar',
-        'cgi', 'pl', 'py', 'shtml',
+        'php', 'php3', 'php4', 'php5', 'php6', 'php7', 'php8', 'phtml', 'phtm', 'pht', 'phps', 'phar',
+        'cgi', 'fcgi', 'pl', 'py', 'shtml', 'shtm', 'stm', 'asp', 'aspx', 'jsp', 'jspx',
     ];
 
     /** @var array<string, list<string>> Extra last extensions a target name may use for a sniffed type. */
@@ -407,12 +408,19 @@ final class Uploader
     }
 
     /**
-     * Validates a caller-supplied target filename: a bare name, not a dot-alias or dotfile,
-     * that satisfies the extension allowlist and ends with the extension of the sniffed type.
+     * Validates a caller-supplied target filename: a bare name, not a dot-alias or dotfile, with no colon, ASCII
+     * control character or trailing dot or space, that satisfies the extension allowlist and ends with an
+     * extension of the sniffed type.
      */
     private function validateTargetName(string $name, string $sniffedMimeType): string
     {
-        $name = trim(str_replace("\0", '', $name));
+        $name = str_replace("\0", '', $name);
+
+        if (preg_match('/[\x00-\x1F\x7F:]|[. ]$/', $name) === 1) {
+            throw UploadException::invalidTargetName($name);
+        }
+
+        $name = trim($name);
 
         if ($name === '' || $name === '.' || $name === '..') {
             throw UploadException::invalidTargetName($name);

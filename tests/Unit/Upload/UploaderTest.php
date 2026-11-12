@@ -768,4 +768,49 @@ final class UploaderTest extends TestCase
 
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.jpg$#', $relative);
     }
+
+    /** @return array<string, array{string, string}> */
+    public static function refusedTargetNameProvider(): array
+    {
+        $invalid = static fn (string $shown): string => 'Invalid upload target filename: ' . $shown . '.';
+
+        return [
+            'trailing dot' => ["avatar.php.", $invalid('"avatar.php."')],
+            'trailing space' => ["avatar.php ", $invalid('"avatar.php "')],
+            'alternate data stream' => ["avatar.png::\$DATA", $invalid('"avatar.png::$DATA"')],
+            'colon before the extension' => ["avatar.php:.png", $invalid('"avatar.php:.png"')],
+            'tab inside' => ["avatar.php\t.png", $invalid('"avatar.php\\t.png"')],
+            'delete character' => ["avatar\x7f.png", $invalid('"avatar\u007f.png"')],
+            'executable inner segment in mixed case' => [
+                'avatar.PhP.png',
+                'Upload target name carries the executable extension "php" before its final extension.',
+            ],
+            'asp inner segment' => [
+                'avatar.aspx.png',
+                'Upload target name carries the executable extension "aspx" before its final extension.',
+            ],
+            'jsp inner segment' => [
+                'avatar.jsp.png',
+                'Upload target name carries the executable extension "jsp" before its final extension.',
+            ],
+            'dotfile' => ['.htaccess', $invalid('".htaccess"')],
+            'padded dotfile' => [' .user.ini', $invalid('".user.ini"')],
+        ];
+    }
+
+    #[DataProvider('refusedTargetNameProvider')]
+    public function test_store_refuses_a_hostile_target_name(string $targetName, string $message): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, $targetName);
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame($message, $e->getMessage());
+        } finally {
+            self::assertSame([], glob($dest . '/*') ?: []);
+        }
+    }
 }
