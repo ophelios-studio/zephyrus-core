@@ -40,7 +40,9 @@ namespace Zephyrus\Core\Config;
  * migration (for example the latest migration id), and change it after the migration has run and before
  * the release serves traffic. It helps when the PHP master survives a release and re-reads config.yml
  * (symlink deploys). A process restart already clears the cache. Processes still running
- * old code keep their cache until APCU_TTL (one hour) expires or flushSharedColumnMetadata() runs from a web request.
+ * old code keep their cache until APCU_TTL (one hour, under PHP-FPM with APCu) expires or
+ * flushSharedColumnMetadata() runs from a web request. Under PHP-FPM without APCu the cache lasts only the
+ * current request; in a long-running process (CLI, RoadRunner) until it restarts or is flushed in that process.
  */
 final readonly class DatabaseConfig
 {

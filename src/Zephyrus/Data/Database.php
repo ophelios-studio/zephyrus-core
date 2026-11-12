@@ -37,7 +37,9 @@ final class Database
      * connections take part. Backed by APCu across requests, see fetchColumnShapeFromApcu().
      *
      * Known limit: without a columnCacheVersion, a column that changes type while keeping its name and the
-     * column count stays undetected until its APCu entry expires (APCU_TTL) or flushSharedColumnMetadata() runs.
+     * column count stays undetected until its APCu entry expires (APCU_TTL, one hour, under PHP-FPM with APCu)
+     * or flushSharedColumnMetadata() runs. Under PHP-FPM without APCu it lasts only the current request; in a
+     * long-running process (CLI, RoadRunner) until it restarts or flushSharedColumnMetadata() runs in that process.
      * A columnCacheVersion that changes with each migration removes it for every process that reads the new
      * value, see the DatabaseConfig class docblock.
      *
@@ -175,6 +177,8 @@ final class Database
      *
      * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
      *        Optional factory for tests and advanced callers, receiving ($dsn, $username, $password, $options).
+     *        An ATTR_DISABLE_PREPARES option it sets is overwritten on pgsql: call
+     *        pdo()->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, false) afterwards to get named statements back.
      *
      * @throws DatabaseException on PDO connection failure.
      */
@@ -215,7 +219,7 @@ final class Database
             $pdo = $factory($dsn, $config->username, $config->password, $options);
 
             // Set after connecting: the key collides with other drivers' options. Server-side binding (PQexecParams)
-            // with an unnamed statement: no PREPARE and DEALLOCATE per query.
+            // with an unnamed statement: no named prepare and close per query.
             if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
                 $pdo->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, true);
             }
@@ -1122,7 +1126,7 @@ final class Database
      * Builds the column-name => converter map for columns whose native type has a converter.
      *
      * Per-instance memo first, then the process-wide shape cache, which skips getColumnMeta() on a hit while
-     * still rebuilding the callables from this instance's converters.
+     * still rebuilding the callables from this instance's converters. Statements outside the allow-list bypass both.
      *
      * @return array<string, callable(string): mixed> column name => converter
      */
@@ -1131,6 +1135,11 @@ final class Database
         // columnCount() is client side, zero round-trips. It is part of both keys, so adding or dropping
         // a SELECT * column self-invalidates.
         $columnCount = $stmt->columnCount();
+
+        if (!self::shapeFollowsText($sql)) {
+            return $this->convertersFor(self::describeColumns($stmt, $columnCount));
+        }
+
         $localKey = $sql . '|' . $columnCount;
 
         if (isset($this->columnTypeCache[$localKey])) {
@@ -1170,6 +1179,15 @@ final class Database
             }
         }
 
+        return $this->columnTypeCache[$localKey] = $this->convertersFor($shape);
+    }
+
+    /**
+     * @param array{count: int, types: array<string, string>} $shape
+     * @return array<string, callable(string): mixed> column name => converter
+     */
+    private function convertersFor(array $shape): array
+    {
         $map = [];
 
         foreach ($shape['types'] as $name => $nativeType) {
@@ -1181,7 +1199,19 @@ final class Database
             }
         }
 
-        return $this->columnTypeCache[$localKey] = $map;
+        return $map;
+    }
+
+    /**
+     * True only when the first element is a parenthesis or a SELECT-like or DML keyword, after blanks,
+     * line comments and block comments holding no nested comment: any other statement is described on every call.
+     */
+    private static function shapeFollowsText(string $sql): bool
+    {
+        return preg_match(
+            '~^(?:\s|--[^\r\n]*|/\*(?:[^*/]|\*(?!/)|/(?!\*))*+\*/)*+(?:\(|(?:select|with|values|table|insert|update|delete|merge)\b)~is',
+            $sql,
+        ) === 1;
     }
 
     /**
@@ -1226,9 +1256,9 @@ final class Database
     /**
      * Reads a shape back from APCu, or returns null when nothing trustworthy is stored.
      *
-     * This layer carries a shape across requests: PHP clears every static at request shutdown while the
-     * persistent PDO handle survives. Every failure returns null, meaning "resolve it again", never
-     * "no conversions": a silently skipped JSONB decode is worse than a slow query.
+     * This layer carries a shape across requests: APCu survives the request, the statics do not. Every
+     * failure returns null, meaning "resolve it again", never "no conversions": a silently skipped JSONB
+     * decode is worse than a slow query.
      *
      * @return array{count: int, types: array<string, string>}|null
      */

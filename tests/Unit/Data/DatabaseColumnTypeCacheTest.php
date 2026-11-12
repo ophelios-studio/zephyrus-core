@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Data;
 
 use PDO;
 use PDOStatement;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\Database;
 
@@ -157,6 +158,63 @@ final class DatabaseColumnTypeCacheTest extends TestCase
             SpyStatement::$metaCalls,
             'getColumnMeta() should not fire again for a cached query shape.',
         );
+    }
+
+    public function testAStatementOutsideTheAllowListIsDescribedOnEveryCall(): void
+    {
+        $sql = 'PRAGMA table_info(records)';
+
+        $this->db->select($sql);
+        $afterFirst = SpyStatement::$metaCalls;
+        $this->db->select($sql);
+
+        self::assertGreaterThan(0, $afterFirst);
+        self::assertSame($afterFirst * 2, SpyStatement::$metaCalls);
+    }
+
+    public function testAnInsertReturningKeepsItsCachedShapeAcrossSelectOneCalls(): void
+    {
+        $sql = 'INSERT INTO records (price) VALUES (\'1.00\') RETURNING id, price';
+
+        $this->db->selectOne($sql);
+        $afterFirst = SpyStatement::$metaCalls;
+        $this->db->selectOne($sql);
+
+        self::assertSame(2, $afterFirst);
+        self::assertSame($afterFirst, SpyStatement::$metaCalls);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function cachedLeadingForms(): iterable
+    {
+        yield 'leading newline and spaces' => ["\n    SELECT id, price FROM records"];
+        yield 'block comment and lowercase' => ['/* c */ select id, price from records'];
+        yield 'line comment' => ["-- c\nSELECT id, price FROM records"];
+    }
+
+    #[DataProvider('cachedLeadingForms')]
+    public function testAStatementLedByBlanksOrCommentsKeepsItsCachedShape(string $sql): void
+    {
+        $this->db->select($sql);
+        $afterFirst = SpyStatement::$metaCalls;
+        $this->db->select($sql);
+
+        self::assertSame(2, $afterFirst);
+        self::assertSame($afterFirst, SpyStatement::$metaCalls);
+    }
+
+    public function testAStatementLedByANestedBlockCommentIsDescribedOnEveryCall(): void
+    {
+        $sql = '/* a /* b */ SELECT id, price FROM records';
+
+        $this->db->select($sql);
+        $afterFirst = SpyStatement::$metaCalls;
+        $this->db->select($sql);
+
+        self::assertGreaterThan(0, $afterFirst);
+        self::assertSame($afterFirst * 2, SpyStatement::$metaCalls);
     }
 
     public function testSelectOneAlsoUsesTheCache(): void

@@ -67,6 +67,21 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertEquals($coldRow, $warmRow, 'A warm hit must produce the same row as a cold resolve.');
     }
 
+    public function testAStatementOutsideTheAllowListIsDescribedByEveryInstanceOnTheSameDsn(): void
+    {
+        $sql = 'PRAGMA table_info(records)';
+
+        $first = $this->makeDatabase('outside_allow_list', self::TWO_COLUMN_TABLE);
+        $first->select($sql);
+        $afterFirst = MetaSpyStatement::$calls;
+
+        $second = $this->makeDatabase('outside_allow_list', self::TWO_COLUMN_TABLE);
+        $second->select($sql);
+
+        self::assertGreaterThan(0, $afterFirst);
+        self::assertSame($afterFirst * 2, MetaSpyStatement::$calls);
+    }
+
     public function testWarmHitMatchesColdResolveAcrossBuiltinJsonAndNumericColumns(): void
     {
         MetaSpyStatement::$nativeTypeByName = [
