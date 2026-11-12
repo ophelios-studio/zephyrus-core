@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Data;
 
 use ArrayAccess;
+use ArrayObject;
 use Countable;
 use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
+use DateTimeZone;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -31,6 +33,12 @@ enum Priority: int
 {
     case Low = 1;
     case High = 2;
+}
+
+enum PureSuit
+{
+    case Hearts;
+    case Spades;
 }
 
 class SimpleEntity extends Entity
@@ -101,6 +109,46 @@ class DateEntity extends Entity
     public DateTimeInterface $interface;
     public DateTime $mutable;
     public ?DateTimeImmutable $deletedAt = null;
+}
+
+class ForeignClassEntity extends Entity
+{
+    public int $id;
+    public ArrayObject $bag;
+}
+
+class NullableUnionEntity extends Entity
+{
+    public int $id;
+    public int|string|null $mixed = null;
+}
+
+class MixedEntity extends Entity
+{
+    public int $id;
+    public mixed $payload;
+}
+
+class IterableEntity extends Entity
+{
+    public int $id;
+    public iterable $items;
+}
+
+class SelfReferencingEntity extends Entity
+{
+    public int $id;
+    public ?self $parent = null;
+}
+
+class ParentTypedEntity extends AddressEntity
+{
+    public ?parent $origin = null;
+}
+
+class PureEnumEntity extends Entity
+{
+    public PureSuit $suit;
 }
 
 class StdClassEntity extends Entity
@@ -264,29 +312,101 @@ final class EntityTest extends TestCase
         $this->assertSame('value', $entity->meta->key);
     }
 
-    public function testBuildSkipsUnionTypes(): void
+    public function testAValueForAUnionTypedPropertyIsRefusedAtBuild(): void
     {
         $row = new stdClass();
         $row->id = '1';
         $row->mixed = 'hello';
 
-        $entity = UnionTypeEntity::build($row);
-
-        $this->assertSame(1, $entity->id);
-        // The union property stays uninitialized; building must not fail.
+        try {
+            UnionTypeEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $mixed of ' . UnionTypeEntity::class . ': type string|int is not supported',
+                $e->getMessage()
+            );
+        }
     }
 
-    public function testBuildSkipsIntersectionTypes(): void
+    public function testAValueForAnIntersectionTypedPropertyIsRefusedAtBuild(): void
     {
         $row = new stdClass();
         $row->id = '1';
         $row->bag = 'hello';
 
-        $entity = IntersectionTypeEntity::build($row);
+        try {
+            IntersectionTypeEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $bag of ' . IntersectionTypeEntity::class
+                . ': type Countable&ArrayAccess is not supported',
+                $e->getMessage()
+            );
+        }
+    }
 
-        $this->assertSame(1, $entity->id);
-        // Intersection types are left uninitialized: ReflectionIntersectionType lacks isBuiltin() and getName().
-        $this->assertFalse((new ReflectionProperty($entity, 'bag'))->isInitialized($entity));
+    public function testAValueForAPropertyTypedByAForeignClassIsRefusedAtBuild(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->bag = 'hello';
+
+        try {
+            ForeignClassEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $bag of ' . ForeignClassEntity::class . ': type ArrayObject is not supported',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testANullForAUnionTypedPropertyIsStillAccepted(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->mixed = null;
+
+        self::assertNull(NullableUnionEntity::build($row)->mixed);
+    }
+
+    public function testDateStringsHydrateDateTimeProperties(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = '2030-02-01 10:30:00';
+        $row->interface = '2030-02-01 10:30:00';
+        $row->mutable = '2030-02-01 10:30:00';
+        $row->deletedAt = null;
+
+        $entity = DateEntity::build($row);
+
+        self::assertInstanceOf(DateTimeImmutable::class, $entity->immutable);
+        self::assertInstanceOf(DateTimeImmutable::class, $entity->interface);
+        self::assertInstanceOf(DateTime::class, $entity->mutable);
+        self::assertSame('2030-02-01 10:30:00', $entity->immutable->format('Y-m-d H:i:s'));
+        self::assertSame('2030-02-01 10:30:00', $entity->mutable->format('Y-m-d H:i:s'));
+        self::assertNull($entity->deletedAt);
+    }
+
+    public function testAnInvalidDateStringIsRefusedWithoutEchoingTheValue(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = 'jane.roe@example.com';
+
+        try {
+            DateEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Invalid value for date DateTimeImmutable on property $immutable',
+                $e->getMessage()
+            );
+        }
     }
 
     public function testBuildUntypedProperty(): void
@@ -496,6 +616,38 @@ final class EntityTest extends TestCase
         $this->assertSame('untouched', $entity->internal());
     }
 
+    public function testAPureEnumPropertyIsRefusedAtBuild(): void
+    {
+        $row = new stdClass();
+        $row->suit = 'Hearts';
+
+        try {
+            PureEnumEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $suit of ' . PureEnumEntity::class . ': type ' . PureSuit::class
+                . ' is not supported',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testAnIntBackedEnumGivenAStringIsRefusedLikeAnUnknownCase(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->role = 'admin';
+        $row->priority = '1';
+
+        try {
+            EnumEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame('Invalid value for enum ' . Priority::class . ' on property $priority', $e->getMessage());
+        }
+    }
+
     /**
      * The enum coercion error must not echo the raw database value, since messages reach logs and error pages.
      */
@@ -516,42 +668,6 @@ final class EntityTest extends TestCase
         }
     }
 
-    public function testDateStringsHydrateDateTimeProperties(): void
-    {
-        $row = new stdClass();
-        $row->id = '1';
-        $row->immutable = '2030-02-01 10:30:00';
-        $row->interface = '2030-02-01 10:30:00';
-        $row->mutable = '2030-02-01 10:30:00';
-        $row->deletedAt = null;
-
-        $entity = DateEntity::build($row);
-
-        self::assertInstanceOf(DateTimeImmutable::class, $entity->immutable);
-        self::assertInstanceOf(DateTimeImmutable::class, $entity->interface);
-        self::assertInstanceOf(DateTime::class, $entity->mutable);
-        self::assertSame('2030-02-01 10:30:00', $entity->immutable->format('Y-m-d H:i:s'));
-        self::assertSame('2030-02-01 10:30:00', $entity->mutable->format('Y-m-d H:i:s'));
-        self::assertNull($entity->deletedAt);
-    }
-
-    public function testAnInvalidDateStringIsRefusedWithoutEchoingTheValue(): void
-    {
-        $row = new stdClass();
-        $row->id = '1';
-        $row->immutable = 'jane.roe@example.com';
-
-        try {
-            DateEntity::build($row);
-            self::fail('expected a refusal');
-        } catch (InvalidArgumentException $e) {
-            self::assertSame(
-                'Invalid value for date DateTimeImmutable on property $immutable',
-                $e->getMessage()
-            );
-        }
-    }
-
     /**
      * @return array<string, array{mixed}>
      */
@@ -567,7 +683,67 @@ final class EntityTest extends TestCase
             'unix timestamp' => ['@0'],
             'integer' => [1900000000],
             'infinity' => ['infinity'],
+            'relative interval' => ['1 day'],
+            'zero interval' => ['0 seconds'],
+            'time only' => ['12:00'],
+            'year only' => ['2024'],
+            'date with a relative suffix' => ['2024-01-01 +1 year'],
+            'five digit year' => ['20245-03-15'],
+            'trailing NUL' => ["2024-01-01\0"],
+            'named timezone' => ['2024-01-01 Europe/Paris'],
+            'trailing newline' => ["2024-01-01\n"],
         ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function validDates(): array
+    {
+        return [
+            'fraction and offset with T' => ['2024-01-01T10:00:00.123456+00:00', '2024-01-01T10:00:00+00:00'],
+            'second-precision offset' => ['1850-01-01 00:00:00-05:17:32', '1850-01-01T05:17:32+00:00'],
+            'hour-only offset' => ['2030-02-01 10:30:00-05', '2030-02-01T15:30:00+00:00'],
+            'offset without colon' => ['2030-02-01 10:30:00+0530', '2030-02-01T05:00:00+00:00'],
+            'zulu' => ['2030-02-01T10:30:00Z', '2030-02-01T10:30:00+00:00'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function validDatesWithoutOffset(): array
+    {
+        return [
+            'date only' => ['2030-02-01', '2030-02-01 00:00:00.000000'],
+            'leading zero year' => ['0999-01-01', '0999-01-01 00:00:00.000000'],
+            'fraction without offset' => ['2024-01-01 10:00:00.5', '2024-01-01 10:00:00.500000'],
+        ];
+    }
+
+    #[DataProvider('validDates')]
+    public function testAnIsoDateStringIsHydrated(string $value, string $expectedUtc): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = $value;
+
+        $date = DateEntity::build($row)->immutable->setTimezone(new DateTimeZone('UTC'));
+
+        self::assertSame($expectedUtc, $date->format('c'));
+    }
+
+    #[DataProvider('validDatesWithoutOffset')]
+    public function testAnIsoDateStringWithoutOffsetIsReadInTheDefaultTimezone(string $value, string $expectedWallClock): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = $value;
+
+        $date = DateEntity::build($row)->immutable;
+
+        self::assertSame($expectedWallClock, $date->format('Y-m-d H:i:s.u'));
+        self::assertSame(date_default_timezone_get(), $date->getTimezone()->getName());
     }
 
     #[DataProvider('invalidDates')]
@@ -595,5 +771,98 @@ final class EntityTest extends TestCase
 
         self::assertSame('+02:00', $entity->immutable->format('P'));
         self::assertSame('2030-02-01T10:30:00+02:00', $entity->immutable->format('c'));
+    }
+
+    public function testAMixedPropertyReceivesTheValueUnchanged(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->payload = '42';
+
+        self::assertSame('42', MixedEntity::build($row)->payload);
+    }
+
+    public function testAnIterablePropertyIsRefusedAtBuild(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->items = [1, 2];
+
+        try {
+            IterableEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $items of ' . IterableEntity::class . ': type iterable is not supported',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testASelfTypedPropertyIsBuiltFromAStdClass(): void
+    {
+        $parent = new stdClass();
+        $parent->id = '1';
+        $row = new stdClass();
+        $row->id = '2';
+        $row->parent = $parent;
+
+        $entity = SelfReferencingEntity::build($row);
+
+        self::assertInstanceOf(SelfReferencingEntity::class, $entity->parent);
+        self::assertSame(1, $entity->parent->id);
+    }
+
+    public function testAParentTypedPropertyIsBuiltFromAStdClass(): void
+    {
+        $origin = new stdClass();
+        $origin->city = 'Springfield';
+        $row = new stdClass();
+        $row->city = 'Shelbyville';
+        $row->origin = $origin;
+
+        $entity = ParentTypedEntity::build($row);
+
+        self::assertSame(AddressEntity::class, $entity->origin::class);
+        self::assertSame('Springfield', $entity->origin->city);
+    }
+
+    public function testAnEntityPropertyGivenAScalarIsRefusedAtBuild(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->name = 'Alice';
+        $row->address = '{"city":"Montreal"}';
+
+        try {
+            NestedEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Invalid value for entity ' . AddressEntity::class . ' on property $address',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testTheRefusalNamesAnAnonymousEntityWithoutItsFilePath(): void
+    {
+        $entity = new class extends Entity {
+            public int|string $mixed;
+        };
+        $row = new stdClass();
+        $row->mixed = 'x';
+
+        try {
+            $entity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $mixed of ' . get_debug_type($entity) . ': type string|int is not supported',
+                $e->getMessage()
+            );
+            self::assertStringNotContainsString("\0", $e->getMessage());
+            self::assertStringNotContainsString('.php', $e->getMessage());
+        }
     }
 }

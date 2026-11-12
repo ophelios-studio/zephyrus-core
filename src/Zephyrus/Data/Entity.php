@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Data;
 
+use BackedEnum;
 use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -14,6 +15,7 @@ use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionProperty;
 use stdClass;
+use TypeError;
 use ValueError;
 
 /**
@@ -30,17 +32,26 @@ abstract class Entity implements JsonSerializable
      */
     private const RESERVED_PROPERTY = 'rawData';
 
+    /** Native types settype() converts to; `mixed` is assigned as is, any other native type is refused. */
+    private const COERCIBLE_BUILTINS = ['bool', 'int', 'float', 'string', 'array', 'object'];
+
+    /** A date as PostgreSQL renders it: optional time, fraction and UTC offset; no named zone, no relative format. */
+    private const ISO_DATE_PATTERN = '/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?'
+        . '(?:Z|[+-]\d{2}(?::?\d{2}(?::?\d{2})?)?)?$/D';
+
     private ?stdClass $rawData = null;
 
     /**
      * Hydrate an entity from a database row, coercing values to the declared property types.
      *
-     * Private and static properties, and union or intersection types, are not hydrated. A
-     * DateTimeImmutable, DateTimeInterface or DateTime property takes a string that starts with a
-     * digit and is a real date.
+     * Private and static properties are skipped. Hydrates bool, int, float, string, array, object
+     * and mixed, stdClass, backed enums, nested entities (from a stdClass) and date strings
+     * (DateTimeImmutable, DateTimeInterface, DateTime; an ISO `YYYY-MM-DD` string with optional time,
+     * fraction and UTC offset). A date that does not fit, a value that is not a case of its backed enum
+     * (wrong type included), a pure enum, a nested entity that is not a stdClass or any other type is refused;
+     * native types are converted by settype(), not validated.
      *
-     * @throws InvalidArgumentException When an enum or date value cannot be hydrated.
-     *
+     * @throws InvalidArgumentException When a value cannot be hydrated into its property.
      * @return static|null Returns null when $row is null.
      */
     public static function build(?stdClass $row): ?static
@@ -72,14 +83,16 @@ abstract class Entity implements JsonSerializable
 
             $reflectionType = $property->getType();
 
-            // Positive check on ReflectionNamedType: any future composite type is skipped too.
-            if ($reflectionType !== null && !$reflectionType instanceof ReflectionNamedType) {
+            if ($value === null) {
+                if ($reflectionType === null || $reflectionType instanceof ReflectionNamedType
+                    || $reflectionType->allowsNull()) {
+                    $instance->$name = null;
+                }
                 continue;
             }
 
-            if ($value === null) {
-                $instance->$name = null;
-                continue;
+            if ($reflectionType !== null && !$reflectionType instanceof ReflectionNamedType) {
+                throw self::unsupportedType($instance, $name, (string) $reflectionType);
             }
 
             if ($reflectionType === null) {
@@ -87,34 +100,56 @@ abstract class Entity implements JsonSerializable
                 continue;
             }
 
-            if ($reflectionType->isBuiltin()) {
-                settype($value, $reflectionType->getName());
-                $instance->$name = $value;
-            } else {
-                /** @var class-string $className */
-                $className = $reflectionType->getName();
-                $innerReflection = new ReflectionClass($className);
+            $typeName = $reflectionType->getName();
 
-                if ($className === 'stdClass' || $innerReflection->isSubclassOf(stdClass::class)) {
+            if ($reflectionType->isBuiltin()) {
+                if ($typeName === 'mixed') {
                     $instance->$name = $value;
-                } elseif ($innerReflection->isEnum()) {
-                    try {
-                        $instance->$name = $className::from($value);
-                    } catch (ValueError) {
-                        // The database value is not interpolated: the message reaches logs and error pages.
-                        throw new InvalidArgumentException(
-                            "Invalid value for enum {$className} on property \${$name}"
-                        );
-                    }
-                } elseif ($innerReflection->isSubclassOf(self::class)) {
-                    if ($value instanceof stdClass) {
-                        $instance->$name = $className::build($value);
-                    }
-                } elseif ($className === DateTimeImmutable::class || $className === DateTimeInterface::class) {
-                    $instance->$name = self::parseDate(DateTimeImmutable::class, $className, $name, $value);
-                } elseif ($className === DateTime::class) {
-                    $instance->$name = self::parseDate(DateTime::class, $className, $name, $value);
+                } elseif (in_array($typeName, self::COERCIBLE_BUILTINS, true)) {
+                    settype($value, $typeName);
+                    $instance->$name = $value;
+                } else {
+                    throw self::unsupportedType($instance, $name, $typeName);
                 }
+                continue;
+            }
+
+            /** @var class-string $className */
+            $className = match ($typeName) {
+                'self' => $property->getDeclaringClass()->getName(),
+                'parent' => ($property->getDeclaringClass()->getParentClass()
+                    ?: throw self::unsupportedType($instance, $name, $typeName))->getName(),
+                default => $typeName,
+            };
+            $innerReflection = new ReflectionClass($className);
+
+            if ($className === 'stdClass' || $innerReflection->isSubclassOf(stdClass::class)) {
+                $instance->$name = $value;
+            } elseif ($innerReflection->isEnum()) {
+                if (!$innerReflection->isSubclassOf(BackedEnum::class)) {
+                    throw self::unsupportedType($instance, $name, $className);
+                }
+                try {
+                    $instance->$name = $className::from($value);
+                } catch (ValueError | TypeError) {
+                    // The database value is not interpolated: the message reaches logs and error pages.
+                    throw new InvalidArgumentException(
+                        "Invalid value for enum {$className} on property \${$name}"
+                    );
+                }
+            } elseif ($innerReflection->isSubclassOf(self::class)) {
+                if (!$value instanceof stdClass) {
+                    throw new InvalidArgumentException(
+                        "Invalid value for entity {$className} on property \${$name}"
+                    );
+                }
+                $instance->$name = $className::build($value);
+            } elseif ($className === DateTimeImmutable::class || $className === DateTimeInterface::class) {
+                $instance->$name = self::parseDate(DateTimeImmutable::class, $className, $name, $value);
+            } elseif ($className === DateTime::class) {
+                $instance->$name = self::parseDate(DateTime::class, $className, $name, $value);
+            } else {
+                throw self::unsupportedType($instance, $name, $className);
             }
         }
 
@@ -126,8 +161,7 @@ abstract class Entity implements JsonSerializable
      */
     private static function parseDate(string $concrete, string $declared, string $name, mixed $value): DateTimeInterface
     {
-        // Rejects relative formats, '@timestamp' and an empty string (which would mean "now").
-        if (is_string($value) && $value !== '' && ctype_digit($value[0])) {
+        if (is_string($value) && preg_match(self::ISO_DATE_PATTERN, $value) === 1) {
             try {
                 $date = new $concrete($value);
                 $errors = DateTimeImmutable::getLastErrors();
@@ -140,6 +174,13 @@ abstract class Entity implements JsonSerializable
 
         // The database value is not interpolated: the message reaches logs and error pages.
         throw new InvalidArgumentException("Invalid value for date {$declared} on property \${$name}");
+    }
+
+    private static function unsupportedType(self $instance, string $name, string $type): InvalidArgumentException
+    {
+        return new InvalidArgumentException(
+            "Cannot hydrate property \${$name} of " . get_debug_type($instance) . ": type {$type} is not supported"
+        );
     }
 
     /**
