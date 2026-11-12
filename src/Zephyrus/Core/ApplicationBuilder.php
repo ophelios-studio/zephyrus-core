@@ -39,7 +39,7 @@ final class ApplicationBuilder
         . 'Debug output has been FORCED OFF for this boot: the debugger renders live configuration, '
         . 'stack-trace argument values and the process environment to whichever client triggers an error. '
         . 'If this is deliberate, call ApplicationBuilder::withProductionDebugAcknowledged(); '
-        . 'even then, only clients named by withDebugClientAllowlist() (or loopback) can see it.';
+        . 'even then, only clients named by withDebugClientAllowlist() (or loopback, without one) can see it.';
 
     private const array ACKNOWLEDGEABLE_SECURITY_KEYS = ['forceHttps', 'allowedHosts', 'csrf', 'maxBodySize', 'headers'];
 
@@ -519,6 +519,7 @@ final class ApplicationBuilder
      *
      * Each entry is an exact address, or `secret@address` matched against the `tracy-debug` cookie.
      * Tracy accepts no ranges. A bare gateway address admits anyone who can reach the published port.
+     * Only the listed clients are admitted: loopback too must be listed.
      *
      * Behind Docker, loopback is not granted: use `secret@<gateway-ip>` and set the cookie `tracy-debug=<secret>`.
      *
@@ -841,8 +842,8 @@ final class ApplicationBuilder
      *
      * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
      * unless withProductionDebugAcknowledged() is called. Refusing to boot instead would turn a diagnostic
-     * attempt into an outage. Even when acknowledged, DebugIntegration shows the debugger only to loopback,
-     * the `tracy-debug` cookie holder, or withDebugClientAllowlist() addresses.
+     * attempt into an outage. Even when acknowledged, DebugIntegration shows the debugger only to the
+     * withDebugClientAllowlist() entries or, without an allowlist, to loopback.
      *
      * @throws ConfigurationException when a declared security setting is not wired, or an enforced
      *                                Content-Security-Policy middleware is shadowed by a SecureHeadersMiddleware csp.

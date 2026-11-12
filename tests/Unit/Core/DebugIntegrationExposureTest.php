@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
@@ -79,6 +80,52 @@ final class DebugIntegrationExposureTest extends TestCase
         DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77']);
 
         self::assertFalse(Debugger::$productionMode);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function loopbackAddressProvider(): array
+    {
+        return [
+            'IPv4 loopback' => ['127.0.0.1'],
+            'IPv6 loopback' => ['::1'],
+        ];
+    }
+
+    #[DataProvider('loopbackAddressProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testLoopbackDoesNotGetTheDebuggerWhenTheAllowlistOmitsIt(string $loopback): void
+    {
+        $_SERVER['REMOTE_ADDR'] = $loopback;
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77', 'a-shared-secret@203.0.113.78']);
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testLoopbackGetsTheDebuggerWhenTheAllowlistNamesIt(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77', '127.0.0.1']);
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTheTracyDebugCookieDoesNotGrantAnAddressItIsNotPairedWith(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+
+        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret@203.0.113.77');
+
+        self::assertTrue(Debugger::$productionMode);
     }
 
     #[RunInSeparateProcess]

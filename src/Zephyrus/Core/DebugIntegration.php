@@ -23,14 +23,14 @@ use Zephyrus\Core\Config\ConfigSection;
  * Wires the Tracy debugger and decides which clients may see its rendered output.
  *
  * The Bluescreen shows stack trace arguments, $_SERVER, $_ENV and $_COOKIE, so it must never reach every client.
- * Tracy runs in Debugger::Detect mode: a client receives the Bluescreen only when it is
+ * A client receives the Bluescreen only when it is
  *
- *   - the loopback address, and the request did not arrive through a proxy, or
- *   - presenting the `tracy-debug` cookie whose value matches a `secret@ip` allowlist entry, or
- *   - listed in the allowlist passed as $allowedClients.
+ *   - listed by exact address in the allowlist passed as $allowedClients, or
+ *   - presenting the `tracy-debug` cookie whose value matches a `secret@address` allowlist entry, or
+ *   - with no allowlist, the loopback address, and the request did not arrive through a proxy (Tracy's detection).
  *
- * Every other client gets logs and notifications only. With debug on, the debugger stays enabled for every client, so
- * errors still reach the log directory and the notification email. Whether debug is enabled at all is decided by
+ * With debug on, the debugger stays enabled for every client, so PHP errors still reach the log directory and the
+ * notification email when initialize() is given them. Whether debug is enabled at all is decided by
  * ApplicationBuilder::build(). Debugger::enable() sets zend.exception_ignore_args=0 for the whole process, so every
  * trace, logged ones included, carries real argument values.
  *
@@ -119,7 +119,8 @@ final class DebugIntegration
      * @param string|null             $email          Email for error notifications.
      * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched
      *                                                against the `tracy-debug` cookie) permitted to
-     *                                                receive the Bluescreen. Null means loopback clients only,
+     *                                                receive the Bluescreen. A list admits loopback only when it
+     *                                                names it. Null means loopback clients only,
      *                                                and only when no forwarded header is present. Never grant
      *                                                this to a range you do not control: an entry here can read
      *                                                the application's live secrets out of a stack trace.
@@ -144,15 +145,38 @@ final class DebugIntegration
         // Tracy re-detects only when productionMode is null: a debug-off boot set it.
         Debugger::$productionMode = null;
 
-        // Tracy reads a list passed in place of Detect as the allowlist for the same
-        // detection, so with or without one the client must still match.
+        // Tracy's own detection would add loopback to a declared list.
         Debugger::enable(
-            $clients ?? Debugger::Detect,
+            $clients === null ? Debugger::Detect : self::modeForListedClients($clients),
             $logDirectory,
             $email,
         );
 
         self::hideFrameworkSecrets($sessionName);
+    }
+
+    /**
+     * Development only for an exact listed address, or a listed `secret@address` matching the `tracy-debug` cookie.
+     *
+     * @param list<string> $clients
+     */
+    private static function modeForListedClients(#[\SensitiveParameter] array $clients): bool
+    {
+        $address = $_SERVER['REMOTE_ADDR'] ?? null;
+        if (!is_string($address) || $address === '') {
+            return Debugger::Production;
+        }
+
+        $secret = $_COOKIE[Debugger::CookieSecret] ?? null;
+        $presented = is_string($secret) ? $secret . '@' . $address : null;
+
+        foreach ($clients as $entry) {
+            if ($entry === $address || ($presented !== null && hash_equals($entry, $presented))) {
+                return Debugger::Development;
+            }
+        }
+
+        return Debugger::Production;
     }
 
     /**
