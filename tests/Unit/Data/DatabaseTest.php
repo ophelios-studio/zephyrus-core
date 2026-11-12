@@ -115,6 +115,23 @@ final class DatabaseTest extends TestCase
         self::assertSame(false, end($spy->emulateSettings), 'the last word must be false');
     }
 
+    public function testThePgsqlOnlyOptionIsNeverSetOnAnotherDriver(): void
+    {
+        $spy = null;
+
+        Database::fromConfig(
+            DatabaseConfig::fromArray(['database' => 'zephyrus', 'username' => 'app']),
+            function () use (&$spy): PDO {
+                $spy = new AttributeSpyPdo('sqlite::memory:');
+
+                return $spy;
+            },
+        );
+
+        self::assertNotContains(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, $spy->attributeKeys);
+        self::assertContains(PDO::ATTR_EMULATE_PREPARES, $spy->attributeKeys);
+    }
+
     /** A pre-built PDO passed to the constructor is also forced onto native prepares. */
     public function testAnInjectedPdoIsForcedOntoNativePrepares(): void
     {
@@ -128,8 +145,7 @@ final class DatabaseTest extends TestCase
 
     public function testTrickyParametersStillRoundTripOnNativePrepares(): void
     {
-        // Integer LIMIT, typed WHERE and NULL bindings are the shapes a prepare-mode
-        // change moves most, so they run end to end through fromConfig().
+        // Integer LIMIT, typed WHERE and NULL bindings run end to end through fromConfig().
         $config = DatabaseConfig::fromArray([
             'database' => 'zephyrus',
             'username' => 'app',
@@ -1067,6 +1083,9 @@ final class AttributeSpyPdo extends PDO
     /** @var list<bool> ATTR_EMULATE_PREPARES values passed to setAttribute(), in order */
     public array $emulateSettings = [];
 
+    /** @var list<int> every attribute key passed to setAttribute(), in order */
+    public array $attributeKeys = [];
+
     /**
      * @param array<int, mixed>|null $options
      */
@@ -1079,6 +1098,8 @@ final class AttributeSpyPdo extends PDO
 
     public function setAttribute(int $attribute, mixed $value): bool
     {
+        $this->attributeKeys[] = $attribute;
+
         if ($attribute === PDO::ATTR_EMULATE_PREPARES) {
             $this->emulateSettings[] = (bool) $value;
 

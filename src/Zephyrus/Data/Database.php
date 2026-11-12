@@ -213,6 +213,12 @@ final class Database
 
         try {
             $pdo = $factory($dsn, $config->username, $config->password, $options);
+
+            // Set after connecting: the key collides with other drivers' options. Server-side binding (PQexecParams)
+            // with an unnamed statement: no PREPARE and DEALLOCATE per query.
+            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+                $pdo->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, true);
+            }
         } catch (\Throwable $e) {
             throw DatabaseException::connectionFailed($dsn, $e->getMessage());
         }
