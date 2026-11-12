@@ -579,4 +579,41 @@ final class UploaderTest extends TestCase
             $this->removeDir($dest);
         }
     }
+
+    private const string SVG_WITH_SCRIPT = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+
+    public function test_store_gives_no_extension_to_an_svg_by_default(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('avatar.png', 'image/png', $this->makeTempFile(self::SVG_WITH_SCRIPT), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}$#', $relative);
+    }
+
+    public function test_store_gives_no_extension_to_an_xml_document_by_default(): void
+    {
+        $dest = $this->makeTempDir();
+        $xhtml = '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><script>1</script></html>';
+        $file = new FileUpload('notes.xml', 'text/xml', $this->makeTempFile($xhtml), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}$#', $relative);
+    }
+
+    public function test_store_gives_an_svg_its_extension_when_the_application_maps_it(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('logo.svg', 'image/svg+xml', $this->makeTempFile(self::SVG_WITH_SCRIPT), 20);
+
+        $relative = (new Uploader(
+            $dest,
+            fileMover: $this->fileMover(),
+            mimeExtensionMap: ['image/svg+xml' => 'svg'],
+        ))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.svg$#', $relative);
+    }
 }

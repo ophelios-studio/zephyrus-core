@@ -34,7 +34,8 @@ final class Uploader
     /**
      * Sniffed MIME type to the extension the stored file receives.
      *
-     * Types dangerous to serve back (HTML, PHP, shell scripts) are absent on purpose.
+     * Types that run script when served back (HTML, SVG, XML, PHP, shell scripts) are absent
+     * on purpose. An application that accepts one maps it through `$mimeExtensionMap`.
      */
     private const array MIME_EXTENSIONS = [
         'image/jpeg' => 'jpg',
@@ -44,7 +45,6 @@ final class Uploader
         'image/avif' => 'avif',
         'image/bmp' => 'bmp',
         'image/tiff' => 'tiff',
-        'image/svg+xml' => 'svg',
         'image/x-icon' => 'ico',
         'image/vnd.microsoft.icon' => 'ico',
         'application/pdf' => 'pdf',
@@ -52,8 +52,6 @@ final class Uploader
         'text/csv' => 'csv',
         'text/markdown' => 'md',
         'application/json' => 'json',
-        'application/xml' => 'xml',
-        'text/xml' => 'xml',
         'application/zip' => 'zip',
         'application/gzip' => 'gz',
         'application/x-tar' => 'tar',
