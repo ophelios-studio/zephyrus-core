@@ -80,6 +80,14 @@ class HttpExceptionResponder
             return $this->formatValidation($exception, $request);
         }
 
+        return $this->internalErrorResponse($request);
+    }
+
+    /**
+     * The generic 500, in the format the request accepts. It never carries anything from the exception.
+     */
+    public function internalErrorResponse(?Request $request = null): Response
+    {
         return $this->format(
             payload: new HttpErrorPayload(500, 'Internal Server Error'),
             request: $request,

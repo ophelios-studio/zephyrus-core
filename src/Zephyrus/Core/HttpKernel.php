@@ -28,9 +28,11 @@ use Zephyrus\Routing\RouteMatch;
  * ResponseEvent listener. A header that must reach every response also belongs
  * at the web server or proxy.
  *
- * handle() throws only when an exception handler rethrows the same throwable
- * it was given (passed through, e.g. for a debugger), or when a RequestEvent or
- * ResponseEvent listener throws. A failing route, handler or middleware, or a
+ * handle() throws only when a RequestEvent or ResponseEvent listener throws, or
+ * when an exception handler rethrows the throwable it was given and unhandled
+ * exceptions are rethrown (KernelBuilder::withUnhandledExceptionsRethrown(), for
+ * a debugger). Otherwise a rethrown throwable is written to the error log and
+ * answered with the generic 500. A failing route, handler or middleware, or a
  * broken exception handler, yields an error response instead.
  *
  * Route middlewares wrap only the matched route's handler. They never run for a
@@ -56,12 +58,14 @@ final readonly class HttpKernel
      * @param MiddlewarePipeline|null $globalPipeline Middlewares wrapping routed responses and
      *   404/405/failing-handler error responses. Not RequestEvent short-circuits, the
      *   global-middleware backstop or ResponseEvent replacements (see class docblock).
+     * @param bool $rethrowUnhandled Lets an unhandled throwable leave handle(), for a debugger.
      */
     public function __construct(
         private RouteDispatcher $dispatcher,
         private HttpExceptionResponder $exceptionResponder,
         private ?EventDispatcher $events = null,
         ?MiddlewarePipeline $globalPipeline = null,
+        private bool $rethrowUnhandled = false,
     ) {
         $this->globalPipeline = $globalPipeline ?? new MiddlewarePipeline();
     }
@@ -170,15 +174,41 @@ final readonly class HttpKernel
         try {
             return $this->exceptionResponder->toResponse($exception, $request);
         } catch (Throwable $responderFailure) {
-            // The handler rethrew on purpose (e.g. for a debugger): pass it on.
             // Identity, not instanceof: any other throwable is a failing handler.
             if ($responderFailure === $exception) {
-                throw new KernelRethrowSignal($exception);
+                return $this->toUnhandledResponse($exception, $request);
             }
 
             $this->fireExceptionEvent($responderFailure, $request, ExceptionEvent::SOURCE_RESPONDER);
 
             return Response::text('Internal Server Error', 500);
+        }
+    }
+
+    /**
+     * Passes an unhandled throwable on when unhandled exceptions are rethrown. Otherwise logs it and returns the
+     * generic 500 inside the pipeline, so global middlewares still decorate it.
+     */
+    private function toUnhandledResponse(Throwable $exception, Request $request): Response
+    {
+        if ($this->rethrowUnhandled) {
+            throw new KernelRethrowSignal($exception);
+        }
+
+        self::logUnhandled($exception);
+
+        return $this->exceptionResponder->internalErrorResponse($request);
+    }
+
+    /**
+     * Logs an unhandled throwable with its trace. It never throws, as it runs on the error path.
+     */
+    private static function logUnhandled(Throwable $exception): void
+    {
+        try {
+            error_log('Zephyrus: unhandled exception, answered with a 500: ' . $exception);
+        } catch (Throwable) {
+            // A throwing __toString() leaves nothing to report. Never rethrown.
         }
     }
 

@@ -67,6 +67,8 @@ final class KernelBuilder
     /** @var array<class-string<Throwable>, callable(Throwable, Request): ?Response> */
     private array $exceptionHandlers = [];
 
+    private bool $unhandledExceptionsRethrown = false;
+
     public static function create(): self
     {
         return new self();
@@ -177,6 +179,19 @@ final class KernelBuilder
     {
         $clone = clone $this;
         $clone->exceptionHandlers[$exceptionClass] = $handler;
+
+        return $clone;
+    }
+
+    /**
+     * Lets an exception a handler rethrows leave HttpKernel::handle(), for a debugger installed as PHP's exception
+     * handler. Off by default: the exception is written to the error log and answered with the generic 500.
+     * ApplicationBuilder::build() turns it on only when the debugger renders errors for the current client.
+     */
+    public function withUnhandledExceptionsRethrown(bool $rethrown = true): self
+    {
+        $clone = clone $this;
+        $clone->unhandledExceptionsRethrown = $rethrown;
 
         return $clone;
     }
@@ -293,7 +308,13 @@ final class KernelBuilder
             );
         }
 
-        return new HttpKernel($dispatcher, $responder, $this->eventDispatcher, $globalPipeline);
+        return new HttpKernel(
+            $dispatcher,
+            $responder,
+            $this->eventDispatcher,
+            $globalPipeline,
+            $this->unhandledExceptionsRethrown,
+        );
     }
 
     /**

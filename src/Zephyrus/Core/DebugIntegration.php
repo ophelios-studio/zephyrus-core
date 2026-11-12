@@ -227,6 +227,14 @@ final class DebugIntegration
     }
 
     /**
+     * Whether Tracy renders errors to the current client, so an uncaught exception reaches its Bluescreen.
+     */
+    public static function rendersErrorsToTheClient(): bool
+    {
+        return Debugger::isEnabled() && Debugger::$productionMode === false;
+    }
+
+    /**
      * Keep dump() silent when no configuration decided debug mode.
      *
      * An application that enables Tracy by hand must do so before build(), or

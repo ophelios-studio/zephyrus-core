@@ -376,7 +376,8 @@ final class HttpKernelErrorPipelineTest extends TestCase
     }
 
     /**
-     * A handler that rethrows the same exception must let it through unchanged, so debuggers still render it.
+     * With unhandled exceptions rethrown, a handler that rethrows must let the exception through unchanged, so
+     * debuggers still render it.
      */
     public function testAnExceptionHandlerThatRethrowsTheOriginalPropagatesOutOfHandle(): void
     {
@@ -389,6 +390,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
                 RuntimeException::class,
                 static fn (\Throwable $e) => throw $e,
             )
+            ->withUnhandledExceptionsRethrown()
             ->build();
 
         $caught = null;
@@ -414,6 +416,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
                 RouteNotFoundException::class,
                 static fn (\Throwable $e) => throw $e,
             )
+            ->withUnhandledExceptionsRethrown()
             ->build();
 
         $this->expectException(RouteNotFoundException::class);
@@ -445,6 +448,7 @@ final class HttpKernelErrorPipelineTest extends TestCase
                     throw $e;
                 },
             )
+            ->withUnhandledExceptionsRethrown()
             ->build();
 
         try {

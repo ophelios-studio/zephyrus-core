@@ -832,6 +832,8 @@ final class ApplicationBuilder
      *
      * Unless debug is enabled for this boot, display_errors and display_startup_errors are turned off before
      * anything else runs. An error raised before build() (reading the configuration) is the php.ini's to hide.
+     * An exception a handler rethrows reaches the debugger only when it renders errors to the current client;
+     * otherwise it is written to the error log and answered with the generic 500.
      *
      * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
      * unless withProductionDebugAcknowledged() is called. Refusing to boot instead would turn a diagnostic
@@ -903,8 +905,10 @@ final class ApplicationBuilder
         $router = $this->kernelBuilder->router();
         App::setUrlGenerator($router === null ? null : new RouteUrlGenerator($router->routes()));
 
+        $kernelBuilder = $this->kernelBuilder->withUnhandledExceptionsRethrown(DebugIntegration::rendersErrorsToTheClient());
+
         return new Application(
-            kernel:           $this->kernelBuilder->build(),
+            kernel:           $kernelBuilder->build(),
             translator:       $translator,
             defaultLocale:    $this->defaultLocale,
             supportedLocales: $this->supportedLocales,
