@@ -8,6 +8,38 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-12
+
+### Security
+
+- `Uploader` no longer maps SVG and XML by default, as both can run script when served back: an application that accepts one must map it through `$mimeExtensionMap`.
+- An explicit upload target name must end with an extension of the detected type (its mapped extension, or an alias such as `jpeg` for `image/jpeg`) and carry no executable extension (`php`, `phtml`, `phar`, `cgi`, `asp`, `jsp` and others) before it, or `UploadException` is thrown: derive the extension from the detected type, or map the type.
+- An upload target name containing `:` or an ASCII control character, or ending with a dot or a space, is refused with `UploadException`: pass a clean name.
+- `KernelBuilder` used alone: an exception no handler answers, one its handler rethrows, or the one a failing handler throws, no longer leaves `handle()`: it is written to the error log and answered with a generic 500. Call `withUnhandledExceptionsRethrown()` to keep an unhandled exception leaving `handle()`; `ApplicationBuilder` does it for you when errors reach the output.
+- With debug on in the command line, an exception no handler answers now leaves `handle()` instead of the generic 500. With debug on in a web request, it leaves `handle()` only when the debugger admits the client, and is logged with a generic 500 otherwise.
+- `display_errors` and `display_startup_errors` are turned off at the start of `ApplicationBuilder::build()` unless errors reach this boot's output (debug on, and the command line or a client the debugger admits), so PHP no longer prints errors into a response when no `php.ini` hides them.
+- The debugger admits loopback only when no allowlist is declared. With `withDebugClientAllowlist()`, list loopback explicitly; behind a proxy on the same host, list `secret@127.0.0.1` and send the `tracy-debug` cookie, because a bare loopback entry no longer admits a request carrying `X-Forwarded-For`, `Forwarded` or `X-Real-IP`, and a loopback client carrying `X-Real-IP` is no longer admitted without an allowlist either.
+- The debugger masks the `Set-Cookie` lines of a response in dumps and stack traces.
+- `Request::fromGlobals()` reads the last entry of `X-Forwarded-Host`, `X-Forwarded-Proto` and `X-Forwarded-Port` (the value the nearest proxy wrote) instead of the first, which a client could set: the nearest proxy must write each of them on every request, by overwriting or appending.
+- Deleting a symbolic link through `File` or `Directory` removes only the link, and links inside a deleted tree are unlinked without touching their targets, where the target's content used to be deleted.
+- `File::copy()` gives a new file no wider mode than its source, the default permissions or the umask allow, where it used to be widened regardless of the umask.
+
+### Added
+
+- `Response::withCookie()`, which sets a cookie on its own `Set-Cookie` line with `Secure`, `HttpOnly`, `SameSite=Lax` and path `/` by default, and refuses a cookie browsers would discard. The cookies are held by the `Response` `cookies` constructor argument, a list of `Set-Cookie` values.
+- An `allowed_hosts` entry can pin a port (`example.com:8443`, `[2001:db8::1]:8080`, `*.example.com:443`): it then admits that port only, a URL without a port standing for its scheme's default, while an entry without a port still admits any port.
+- `KernelBuilder::withUnhandledExceptionsRethrown()`, to let an unhandled exception leave `HttpKernel::handle()` for a debugger.
+- `HttpExceptionResponder::toMappedResponse()`, which returns null when only the generic 500 applies, and `internalErrorResponse()`.
+- `LocaleTag::isWellFormed()`, the locale shape check shared by the resolvers and the catalog loader.
+- `LatteEngine::registerFormatterFilters()` accepts a closure returning the formatter, so the filters follow a formatter provider replaced later.
+
+### Fixed
+
+- A response `Set-Cookie` no longer replaces the cookies PHP already queued (the session cookie and `setcookie()` calls): each cookie line is added.
+- One CSP nonce is shared by every nonced policy of a request and `nonce()`, so the header and the page agree when several `ContentSecurityPolicyMiddleware` run.
+- A malformed locale is ignored when no allowlist is given, instead of being accepted as the request locale.
+- With no log directory, the debugger writes what it catches to the PHP error log instead of dropping it.
+
 ## [0.14.0] - 2026-11-11
 
 ### Breaking changes
@@ -196,6 +228,7 @@ changes are listed first, each with the change to make in your code.
 
 Earlier releases have no notes.
 
-[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/ophelios-studio/zephyrus-core/releases/tag/v0.13.0
