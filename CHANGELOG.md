@@ -50,8 +50,8 @@ changes are listed first, each with the change to make in your code.
 - Behind a trusted proxy only `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto` and `X-Forwarded-Port` are read by default; `Forwarded`, `X-Real-IP`, `CF-Connecting-IP` and `X-Client-IP` are read only when listed in `security.trustedHeaders`. List the header your proxy sets.
 - `ContentSecurityPolicy` and the security header values throw at construction on a control character.
 - Headers set by a route or an inner response now win over `SecureHeadersMiddleware`, and a route's CSP replaces the configured one whole. Set a header in one place.
-- `KernelBuilder::build()` refuses a global `ContentSecurityPolicyMiddleware` with an enforced policy registered before a `SecureHeadersMiddleware` whose `csp` is set. Leave the `SecureHeadersMiddleware` `csp` empty, or register the CSP middleware after it.
-- `KernelBuilder::build()` refuses a route that names a middleware that is not registered, where the request used to fail with a 500 at runtime. The message lists each unknown name with its routes. Register each name with `registerMiddleware()` before `build()`, or define a group with `Router::middlewareGroup()` before the routes that name it.
+- `ApplicationBuilder::build()` and `KernelBuilder::build()` refuse a global `ContentSecurityPolicyMiddleware` with an enforced policy registered before a `SecureHeadersMiddleware` whose `csp` is set. Leave the `SecureHeadersMiddleware` `csp` empty, or register the CSP middleware after it.
+- `ApplicationBuilder::build()` and `KernelBuilder::build()` refuse a route that names a middleware that is not registered, where the request used to fail with a 500 at runtime. The message lists each unknown name with its routes. Register each name with `registerMiddleware()` before `build()`, or define a group with `Router::middlewareGroup()` before the routes that name it.
 - `Cryptography` refuses an all-zero encryption key, and a `hash()` key that is empty or outside 16 to 64 bytes. Generate keys with `Cryptography::generateEncryptionKey()` and pass `null` for an unkeyed hash.
 - `Uploader` moves only a genuine upload (`is_uploaded_file()`) by default. In tests and command-line code, pass a `fileMover` closure to the constructor.
 
@@ -159,7 +159,7 @@ changes are listed first, each with the change to make in your code.
 - `IpRange`, the CIDR checker shared by every IP setting.
 - `RequestBody::isMalformed()` for a JSON body that cannot be decoded.
 - `Mailer::attachContent()` for in-memory attachments, and the `MailerFailure` enum.
-- `KernelBuilder::withRenderEngine()`, `namedMiddlewares()`, `hasGlobalMiddleware()` and `globalMiddlewaresOf()`.
+- `ApplicationBuilder::withRenderEngine()`, and on `KernelBuilder` `withRenderEngine()`, `namedMiddlewares()`, `hasGlobalMiddleware()` and `globalMiddlewaresOf()`.
 - `DatabaseSessionHandler` accepts a closure that resolves the database on first use.
 - `ConfigurationException::section()`, `field()`, `reason()`, `path()` and `messageWithoutValue()`.
 - The `Binary` query parameter value.
