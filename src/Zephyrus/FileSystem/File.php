@@ -12,8 +12,8 @@ namespace Zephyrus\FileSystem;
  *   $copy = $file->copy('/path/to/copy.txt');
  *
  * ## Permissions
- * A file created by this class is chmod'ed to {@see self::DEFAULT_PERMISSIONS},
- * whatever the process umask.
+ * A file created by this class gets {@see self::DEFAULT_PERMISSIONS} masked by the
+ * process umask: the mode is never wider than the umask allows.
  *
  * ## Symbolic links
  * create(), write() and copy() replace a symbolic link at the destination with a
@@ -22,7 +22,7 @@ namespace Zephyrus\FileSystem;
  */
 final class File extends FileSystemNode
 {
-    /** Mode applied to a file this class creates. */
+    /** Upper bound of the mode of a file this class creates (the umask can only narrow it). */
     public const int DEFAULT_PERMISSIONS = 0644;
 
     /**
@@ -163,6 +163,9 @@ final class File extends FileSystemNode
     /**
      * Copy the file to a new destination.
      *
+     * A new copy never has a wider mode than the source, {@see self::DEFAULT_PERMISSIONS}
+     * or the umask allow; an existing destination keeps its permissions.
+     *
      * @return File The new file at the destination path.
      * @throws FileSystemException if copying fails.
      */
@@ -185,7 +188,7 @@ final class File extends FileSystemNode
         }
 
         if (!$existed) {
-            self::applyDefaultPermissions($destination);
+            self::applyDefaultPermissions($destination, (int) fileperms($this->path));
         }
 
         return new self($destination);
@@ -271,9 +274,9 @@ final class File extends FileSystemNode
         }
     }
 
-    private static function applyDefaultPermissions(string $path): void
+    private static function applyDefaultPermissions(string $path, int $sourceMode = self::DEFAULT_PERMISSIONS): void
     {
-        if (!@chmod($path, self::DEFAULT_PERMISSIONS)) {
+        if (!@chmod($path, $sourceMode & self::DEFAULT_PERMISSIONS & ~umask())) {
             throw FileSystemException::operationFailed('set permissions on', $path);
         }
     }

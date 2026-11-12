@@ -290,7 +290,7 @@ final class FileTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // Permissions do not depend on the process umask
+    // Permissions never exceed what the process umask allows
     // ------------------------------------------------------------------
 
     public function testCreateAppliesRestrictivePermissionsUnderAPermissiveUmask(): void
@@ -316,6 +316,85 @@ final class FileTest extends TestCase
             (new File($path))->write('content');
 
             self::assertSame(0644, fileperms($path) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testCreateNeverWidensTheProcessUmask(): void
+    {
+        $previous = umask(0077);
+        $path = $this->tempDir . '/umask-private.txt';
+
+        try {
+            File::create($path, 'content');
+
+            self::assertSame(0600, fileperms($path) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testWriteNeverWidensTheProcessUmask(): void
+    {
+        $previous = umask(0027);
+        $path = $this->tempDir . '/umask-group.txt';
+
+        try {
+            (new File($path))->write('content');
+
+            self::assertSame(0640, fileperms($path) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testCopyNeverWidensTheProcessUmask(): void
+    {
+        $source = $this->tempDir . '/umask-source.txt';
+        file_put_contents($source, 'content');
+        $previous = umask(0077);
+        $destination = $this->tempDir . '/umask-copy.txt';
+
+        try {
+            (new File($source))->copy($destination);
+
+            self::assertSame(0600, fileperms($destination) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testCopyOfARestrictedSourceDoesNotWidenItsMode(): void
+    {
+        $source = $this->tempDir . '/restricted-source.txt';
+        $destination = $this->tempDir . '/restricted-copy.txt';
+        file_put_contents($source, 'content');
+        chmod($source, 0600);
+        $previous = umask(0022);
+
+        try {
+            (new File($source))->copy($destination);
+
+            self::assertSame(0600, fileperms($destination) & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function testCopyOverAnExistingFileLeavesItsPermissionsAlone(): void
+    {
+        $source = $this->tempDir . '/keep-source.txt';
+        $destination = $this->tempDir . '/keep-destination.txt';
+        file_put_contents($source, 'new');
+        file_put_contents($destination, 'old');
+        chmod($destination, 0640);
+        $previous = umask(0022);
+
+        try {
+            (new File($source))->copy($destination);
+
+            self::assertSame(0640, fileperms($destination) & 0777);
         } finally {
             umask($previous);
         }
@@ -378,6 +457,23 @@ final class FileTest extends TestCase
 
         self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
         self::assertFalse(is_link($link));
+    }
+
+    public function testCopyToAFileNameEndingInASlashKeepsTheSymlinkItRefuses(): void
+    {
+        $source = $this->tempDir . '/slash-source.txt';
+        $target = $this->tempDir . '/slash-target.txt';
+        $link = $this->tempDir . '/slash-link.txt';
+        file_put_contents($source, 'content');
+        file_put_contents($target, 'SERVER SIDE SECRET');
+        symlink($target, $link);
+
+        try {
+            (new File($source))->copy($link . '/');
+            self::fail('expected a refusal');
+        } catch (FileSystemException) {
+            self::assertTrue(is_link($link));
+        }
     }
 
     private function cleanDir(string $dir): void
