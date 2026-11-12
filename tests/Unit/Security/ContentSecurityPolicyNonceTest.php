@@ -149,6 +149,35 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         self::assertStringContainsString("'nonce-" . $rendered . "'", $response->headers['content-security-policy']);
     }
 
+    public function testTwoNoncedPoliciesInOneRequestNameTheSameNonceAsTheTemplate(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), reportOnly: true, nonceDirectives: ['script-src']))
+            ->build();
+
+        $response = $kernel->handle(Request::fromArray('GET', '/p'));
+        $source = "'nonce-" . $response->body . "'";
+
+        self::assertStringContainsString($source, $response->headers['content-security-policy']);
+        self::assertStringContainsString($source, $response->headers['content-security-policy-report-only']);
+    }
+
+    public function testASecondRequestThroughTwoNoncedPoliciesGetsAFreshNonce(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']))
+            ->withMiddleware(new ContentSecurityPolicyMiddleware($this->policy(), reportOnly: true, nonceDirectives: ['script-src']))
+            ->build();
+
+        $first = $kernel->handle(Request::fromArray('GET', '/p'))->body;
+        $second = $kernel->handle(Request::fromArray('GET', '/p'))->body;
+
+        self::assertNotSame($first, $second);
+    }
+
     public function testNonceDoesNotRewriteAPolicyContainingUnsafeInline(): void
     {
         $policy = ContentSecurityPolicy::create()

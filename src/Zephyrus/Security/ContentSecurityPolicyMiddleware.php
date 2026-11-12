@@ -17,14 +17,15 @@ use Zephyrus\Http\Response;
  * blank. Report-only mode uses Content-Security-Policy-Report-Only.
  *
  * Nonces are opt-in per directive. A nonce is 16 CSPRNG bytes, base64 encoded, regenerated for
- * every request and never reused across requests. The policy is rebuilt per request from the
- * immutable template, so the header always carries that request's nonce.
+ * every request and never reused across requests. The first nonced middleware of a request mints
+ * it, the others and nonce() reuse it. The policy is rebuilt per request from the immutable
+ * template, so the header always carries that request's nonce.
  *
  *   $policy = ContentSecurityPolicy::create()
  *       ->withDirective('default-src', "'self'")
  *       ->withDirective('script-src', "'self'");
  *
- *   $kernel = KernelBuilder::create()
+ *   $kernel = ApplicationBuilder::create()
  *       ->withMiddleware(new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']))
  *       ->build();
  *
@@ -40,6 +41,9 @@ use Zephyrus\Http\Response;
  */
 final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterface
 {
+    /** Request attribute carrying the nonce shared by every nonced CSP middleware of the request. */
+    private const string NONCE_ATTRIBUTE = 'zephyrus.csp_nonce';
+
     private string $policy;
 
     private ?ContentSecurityPolicy $nonceTemplate;
@@ -112,8 +116,12 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         }
 
         // Minted before the handler, so nonce() in the template matches the header.
-        App::resetNonce();
-        $nonce = App::nonce();
+        $nonce = $request->attribute(self::NONCE_ATTRIBUTE);
+        if (!is_string($nonce)) {
+            App::resetNonce();
+            $nonce = App::nonce();
+            $request = $request->withAttribute(self::NONCE_ATTRIBUTE, $nonce);
+        }
 
         $policy = $this->nonceTemplate;
         foreach ($this->nonceDirectives as $directive) {

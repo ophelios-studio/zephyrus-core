@@ -24,7 +24,7 @@ use Zephyrus\Http\Response;
  *       'csp'                      => "default-src 'self'",
  *   ]);
  *
- *   $kernel = KernelBuilder::create()
+ *   $kernel = ApplicationBuilder::create()
  *       ->withMiddleware(new SecureHeadersMiddleware($config))
  *       ->build();
  *   // or, from a loaded configuration: new SecureHeadersMiddleware($configuration->security->headers)
