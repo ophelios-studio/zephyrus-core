@@ -8,6 +8,20 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Breaking changes
+
+#### Core
+
+- Without an allowlist, the debugger admits a loopback client only under PHP's built-in server (`php -S`), where it used to admit one under every server API; under FPM, CGI or Apache it admits no one, because a proxy on the same host that adds no forwarding header makes every client look like loopback. Declare `withDebugClientAllowlist(['127.0.0.1'])` for a browser on the same machine, or `secret@127.0.0.1` and the `tracy-debug` cookie behind a proxy on the same host.
+
+#### Data
+
+- `Entity::build()` hydrates an ISO date string (`YYYY-MM-DD`, with optional time, fraction and UTC offset) into a `DateTimeImmutable`, `DateTimeInterface` or `DateTime` property, and throws `InvalidArgumentException` for a value it cannot hydrate, where it used to skip the property silently (a nested entity given something other than a `stdClass`, a union or intersection type, any other class type) or fail with a `TypeError` (a value of the wrong type for its backed enum) or an `Error` (a pure enum). A date string that does not fit is refused too. Give such a property a type `Entity` hydrates, or assign it after `build()`.
+
+#### Session
+
+- `DatabaseSessionHandler` refuses to write a resumed session whose row changed or was deleted since this request read it: the later of two concurrent requests loses its changes (PHP warning `Failed to write session data`, and a `Zephyrus:` line in the error log) instead of overwriting the first. To lower privileges (role, password), call `$session->regenerate()`.
+
 ## [0.14.1] - 2026-11-12
 
 ### Security
