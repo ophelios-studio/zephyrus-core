@@ -225,6 +225,27 @@ final class SapiEmitterTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // Header calls (header() recorded in a separate process)
+    // -------------------------------------------------------------------------
+
+    #[RunInSeparateProcess]
+    public function testEmitAddsASetCookieLineWithoutReplacingTheCookiesPhpAlreadyQueued(): void
+    {
+        require __DIR__ . '/Fixtures/header_recorder.php';
+        $response = Response::text('ok')->withHeader('Set-Cookie', 'theme=dark');
+
+        ob_start();
+        (new SapiEmitter())->emit($response);
+        ob_end_clean();
+
+        self::assertSame([
+            ['HTTP/1.1 200 OK', true],
+            ['content-type: text/plain; charset=utf-8', true],
+            ['set-cookie: theme=dark', false],
+        ], $GLOBALS['recordedHeaders']);
+    }
+
+    // -------------------------------------------------------------------------
     // Header lines (pure; no SAPI interaction required)
     // -------------------------------------------------------------------------
 

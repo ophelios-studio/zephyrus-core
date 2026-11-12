@@ -324,16 +324,9 @@ final readonly class Response
         return $lines;
     }
 
-    /** Emits the status line, headers and body to the SAPI. Headers are skipped when already sent. */
+    /** Emits the status line, headers and body to the SAPI through a default {@see SapiEmitter}. */
     public function send(): void
     {
-        if (!headers_sent()) {
-            header($this->toStatusLine(), true, $this->status);
-            foreach ($this->toHeaderLines() as $line) {
-                header($line);
-            }
-        }
-
-        echo $this->body;
+        (new SapiEmitter())->emit($this);
     }
 }

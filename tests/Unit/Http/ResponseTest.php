@@ -480,6 +480,22 @@ final class ResponseTest extends TestCase
         self::assertSame(['allow: GET, POST'], $response->toHeaderLines());
     }
 
+    #[RunInSeparateProcess]
+    public function testSendAddsASetCookieLineWithoutReplacingTheCookiesPhpAlreadyQueued(): void
+    {
+        require __DIR__ . '/Fixtures/header_recorder.php';
+        $response = Response::noContent()->withHeader('Set-Cookie', 'theme=dark');
+
+        ob_start();
+        $response->send();
+        ob_end_clean();
+
+        self::assertSame([
+            ['HTTP/1.1 204 No Content', true],
+            ['set-cookie: theme=dark', false],
+        ], $GLOBALS['recordedHeaders']);
+    }
+
     /**
      * A request target must stay on this site: anything a browser could read as
      * another origin, or a header break, falls back.
