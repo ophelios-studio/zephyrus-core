@@ -519,7 +519,8 @@ final class ApplicationBuilder
      *
      * Each entry is an exact address, or `secret@address` matched against the `tracy-debug` cookie.
      * Tracy accepts no ranges. A bare gateway address admits anyone who can reach the published port.
-     * Only the listed clients are admitted: loopback too must be listed.
+     * Only the listed clients are admitted: loopback too must be listed, and behind a local proxy (a request carrying
+     * a forwarding header) only as `secret@127.0.0.1`.
      *
      * Behind Docker, loopback is not granted: use `secret@<gateway-ip>` and set the cookie `tracy-debug=<secret>`.
      *

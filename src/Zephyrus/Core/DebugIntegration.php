@@ -25,7 +25,8 @@ use Zephyrus\Core\Config\ConfigSection;
  * The Bluescreen shows stack trace arguments, $_SERVER, $_ENV and $_COOKIE, so it must never reach every client.
  * A client receives the Bluescreen only when it is
  *
- *   - listed by exact address in the allowlist passed as $allowedClients, or
+ *   - listed by exact address in the allowlist passed as $allowedClients (a loopback address only when the request
+ *     carries no forwarding header), or
  *   - presenting the `tracy-debug` cookie whose value matches a `secret@address` allowlist entry, or
  *   - with no allowlist, the loopback address, and the request did not arrive through a proxy (Tracy's detection).
  *
@@ -120,7 +121,8 @@ final class DebugIntegration
      * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched
      *                                                against the `tracy-debug` cookie) permitted to
      *                                                receive the Bluescreen. A list admits loopback only when it
-     *                                                names it. Null means loopback clients only,
+     *                                                names it, and a bare loopback entry only when no forwarded
+     *                                                header is present. Null means loopback clients only,
      *                                                and only when no forwarded header is present. Never grant
      *                                                this to a range you do not control: an entry here can read
      *                                                the application's live secrets out of a stack trace.
@@ -153,18 +155,28 @@ final class DebugIntegration
 
     /**
      * Whether this boot's client gets the rendered debugger output: a client the allowlist names or, with no
-     * allowlist, a loopback client Tracy detects.
+     * allowlist, a loopback client Tracy detects that carries no X-Real-IP header.
      *
      * @param list<string>|null $clients An allowlist returned by allowedClientList().
      * @internal Shared by ApplicationBuilder::build() and initialize().
      */
     public static function admitsClient(#[\SensitiveParameter] ?array $clients): bool
     {
-        return $clients === null ? Debugger::detectDebugMode() : self::isListedClient($clients);
+        if ($clients !== null) {
+            return self::isListedClient($clients);
+        }
+
+        $address = $_SERVER['REMOTE_ADDR'] ?? null;
+        if (is_string($address) && self::isLoopback($address) && isset($_SERVER['HTTP_X_REAL_IP'])) {
+            return false;
+        }
+
+        return Debugger::detectDebugMode();
     }
 
     /**
      * Whether the client is listed by exact address, or by a `secret@address` entry matching the `tracy-debug` cookie.
+     * A bare loopback entry does not admit a request carrying X-Forwarded-For, Forwarded or X-Real-IP.
      *
      * @param list<string> $clients
      */
@@ -177,14 +189,31 @@ final class DebugIntegration
 
         $secret = $_COOKIE[Debugger::CookieSecret] ?? null;
         $presented = is_string($secret) ? $secret . '@' . $address : null;
+        $bareAddressAdmits = !self::isLoopback($address)
+            || (!isset($_SERVER['HTTP_X_FORWARDED_FOR']) && !isset($_SERVER['HTTP_FORWARDED']) && !isset($_SERVER['HTTP_X_REAL_IP']));
 
         foreach ($clients as $entry) {
-            if ($entry === $address || ($presented !== null && hash_equals($entry, $presented))) {
+            if (($bareAddressAdmits && $entry === $address) || ($presented !== null && hash_equals($entry, $presented))) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /** Whether the address is in 127.0.0.0/8, is ::1, or is an IPv4-mapped 127.0.0.0/8 address. */
+    private static function isLoopback(string $address): bool
+    {
+        $packed = filter_var($address, FILTER_VALIDATE_IP) === false ? false : inet_pton($address);
+        if ($packed === false) {
+            return false;
+        }
+
+        if (strlen($packed) === 16 && str_starts_with($packed, str_repeat("\0", 10) . "\xff\xff")) {
+            $packed = substr($packed, 12);
+        }
+
+        return strlen($packed) === 4 ? $packed[0] === "\x7f" : $packed === str_repeat("\0", 15) . "\x01";
     }
 
     /**

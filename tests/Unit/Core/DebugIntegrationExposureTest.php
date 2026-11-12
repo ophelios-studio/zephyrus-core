@@ -116,6 +116,94 @@ final class DebugIntegrationExposureTest extends TestCase
         self::assertFalse(Debugger::$productionMode);
     }
 
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function proxiedLoopbackProvider(): array
+    {
+        return [
+            'IPv4 loopback with X-Forwarded-For' => ['127.0.0.1', 'HTTP_X_FORWARDED_FOR'],
+            'IPv6 loopback with Forwarded'       => ['::1', 'HTTP_FORWARDED'],
+            'another 127/8 address'              => ['127.0.0.2', 'HTTP_X_FORWARDED_FOR'],
+            'IPv4-mapped loopback'               => ['::ffff:127.0.0.1', 'HTTP_FORWARDED'],
+        ];
+    }
+
+    #[DataProvider('proxiedLoopbackProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testABareLoopbackEntryDoesNotAdmitARequestCarryingAForwardingHeader(string $loopback, string $header): void
+    {
+        $_SERVER['REMOTE_ADDR'] = $loopback;
+        $_SERVER[$header] = '198.51.100.20';
+
+        DebugIntegration::initialize(debug: true, allowedClients: [$loopback]);
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testASecretLoopbackEntryAdmitsARequestCarryingAForwardingHeader(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.20';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['a-shared-secret@127.0.0.1']);
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testABareLoopbackEntryDoesNotAdmitARequestCarryingXRealIp(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_X_REAL_IP'] = '198.51.100.20';
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['127.0.0.1']);
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testASecretLoopbackEntryAdmitsARequestCarryingXRealIp(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_X_REAL_IP'] = '198.51.100.20';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['a-shared-secret@127.0.0.1']);
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutAnAllowlistLoopbackCarryingXRealIpDoesNotGetTheDebugger(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_X_REAL_IP'] = '198.51.100.20';
+
+        DebugIntegration::initialize(debug: true);
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testABareNonLoopbackEntryAdmitsARequestCarryingAForwardingHeader(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.20';
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77']);
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function testTheTracyDebugCookieDoesNotGrantAnAddressItIsNotPairedWith(): void
