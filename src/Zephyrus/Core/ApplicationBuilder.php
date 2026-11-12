@@ -535,6 +535,15 @@ final class ApplicationBuilder
     }
 
     /**
+     * Whether errors of this boot reach its output: debug on, and the command line or a client the debugger admits.
+     */
+    private function exposesErrorsForBoot(): bool
+    {
+        return $this->isDebugEnabledForBoot()
+            && ($this->serverApi === 'cli' || DebugIntegration::admitsClient($this->debugAllowedClients));
+    }
+
+    /**
      * Returns the debug flag build() acts on, without enabling Tracy, which is global and irreversible per process.
      */
     public function isDebugEnabledForBoot(): bool
@@ -834,10 +843,10 @@ final class ApplicationBuilder
     /**
      * Assembles the application, replacing App's configuration with the builder's (null when none was given).
      *
-     * Unless debug is enabled for this boot, display_errors and display_startup_errors are turned off before
-     * anything else runs. An error raised before build() (reading the configuration) is the php.ini's to hide.
-     * With debug on, an exception no handler answers, or one a handler rethrows, leaves Application::handle() in the
-     * command line, or for this boot's client when the debugger renders errors to it. Otherwise it is written to the
+     * Errors reach this boot's output only with debug on, in the command line or for a client the debugger admits.
+     * Otherwise display_errors and display_startup_errors are turned off before anything else runs; an error raised
+     * before build() (reading the configuration) is the php.ini's to hide. When errors reach the output, an exception
+     * no handler answers, or one a handler rethrows, leaves Application::handle(). Otherwise it is written to the
      * error log and answered with the generic 500, unless the KernelBuilder already rethrows unhandled exceptions.
      *
      * In a production-like environment, application.debug is forced off (with a PRODUCTION_DEBUG_REFUSED log line)
@@ -851,8 +860,10 @@ final class ApplicationBuilder
      */
     public function build(): Application
     {
+        $errorsExposed = $this->exposesErrorsForBoot();
+
         // First, before anything can throw: without a php.ini, PHP prints errors into the response.
-        if (!$this->isDebugEnabledForBoot()) {
+        if (!$errorsExposed) {
             ini_set('display_errors', '0');
             ini_set('display_startup_errors', '0');
         }
@@ -911,7 +922,7 @@ final class ApplicationBuilder
         App::setUrlGenerator($router === null ? null : new RouteUrlGenerator($router->routes()));
 
         $kernelBuilder = $this->kernelBuilder;
-        if ($this->isDebugEnabledForBoot() && ($this->serverApi === 'cli' || DebugIntegration::rendersErrorsToTheClient())) {
+        if ($errorsExposed) {
             $kernelBuilder = $kernelBuilder->withUnhandledExceptionsRethrown();
         }
 

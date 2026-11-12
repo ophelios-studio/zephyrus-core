@@ -142,12 +142,8 @@ final class DebugIntegration
             return;
         }
 
-        // Tracy re-detects only when productionMode is null: a debug-off boot set it.
-        Debugger::$productionMode = null;
-
-        // Tracy's own detection would add loopback to a declared list.
         Debugger::enable(
-            $clients === null ? Debugger::Detect : self::modeForListedClients($clients),
+            self::admitsClient($clients) ? Debugger::Development : Debugger::Production,
             $logDirectory,
             $email,
         );
@@ -156,15 +152,27 @@ final class DebugIntegration
     }
 
     /**
-     * Development only for an exact listed address, or a listed `secret@address` matching the `tracy-debug` cookie.
+     * Whether this boot's client gets the rendered debugger output: a client the allowlist names or, with no
+     * allowlist, a loopback client Tracy detects.
+     *
+     * @param list<string>|null $clients An allowlist returned by allowedClientList().
+     * @internal Shared by ApplicationBuilder::build() and initialize().
+     */
+    public static function admitsClient(#[\SensitiveParameter] ?array $clients): bool
+    {
+        return $clients === null ? Debugger::detectDebugMode() : self::isListedClient($clients);
+    }
+
+    /**
+     * Whether the client is listed by exact address, or by a `secret@address` entry matching the `tracy-debug` cookie.
      *
      * @param list<string> $clients
      */
-    private static function modeForListedClients(#[\SensitiveParameter] array $clients): bool
+    private static function isListedClient(#[\SensitiveParameter] array $clients): bool
     {
         $address = $_SERVER['REMOTE_ADDR'] ?? null;
         if (!is_string($address) || $address === '') {
-            return Debugger::Production;
+            return false;
         }
 
         $secret = $_COOKIE[Debugger::CookieSecret] ?? null;
@@ -172,11 +180,11 @@ final class DebugIntegration
 
         foreach ($clients as $entry) {
             if ($entry === $address || ($presented !== null && hash_equals($entry, $presented))) {
-                return Debugger::Development;
+                return true;
             }
         }
 
-        return Debugger::Production;
+        return false;
     }
 
     /**
@@ -248,14 +256,6 @@ final class DebugIntegration
                 . ' is a range: Tracy matches exact addresses only, so list each address.',
             );
         }
-    }
-
-    /**
-     * Whether Tracy renders errors to the current client, so an uncaught exception reaches its Bluescreen.
-     */
-    public static function rendersErrorsToTheClient(): bool
-    {
-        return Debugger::isEnabled() && Debugger::$productionMode === false;
     }
 
     /**

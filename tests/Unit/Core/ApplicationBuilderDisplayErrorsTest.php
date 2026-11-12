@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use Zephyrus\Core\App;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
@@ -29,6 +30,7 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
     {
         ini_set('display_errors', $this->displayErrors);
         ini_set('display_startup_errors', $this->displayStartupErrors);
+        unset($_SERVER['REMOTE_ADDR'], $_COOKIE['tracy-debug']);
         App::reset();
     }
 
@@ -51,11 +53,7 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
     {
         $builder = self::builderRefusedByTheSecurityWiringCheck($application);
 
-        try {
-            $builder->build();
-            self::fail('expected the security wiring refusal');
-        } catch (ConfigurationException) {
-        }
+        self::buildUntilRefused($builder);
 
         self::assertSame(['0', '0'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
     }
@@ -67,17 +65,53 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
         self::assertSame(['0', '0'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
     }
 
-    public function testADebugBootLeavesDisplayErrorsToTheDebugger(): void
+    public function testADebugBootInTheCommandLineLeavesDisplayErrorsOn(): void
     {
         $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true]);
 
+        self::buildUntilRefused($builder);
+
+        self::assertSame(['1', '1'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    }
+
+    public function testADebugBootLeavesDisplayErrorsOnForAClientTheAllowlistAdmits(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+        $_COOKIE['tracy-debug'] = 's3cr3t';
+        $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true])
+            ->withDebugClientAllowlist('s3cr3t@203.0.113.9');
+
+        self::buildUntilRefused(self::servedOverHttp($builder));
+
+        self::assertSame(['1', '1'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    }
+
+    public function testADebugBootTurnsDisplayErrorsOffForAClientTheAllowlistOmits(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+        $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true])
+            ->withDebugClientAllowlist('s3cr3t@203.0.113.9');
+
+        self::buildUntilRefused(self::servedOverHttp($builder));
+
+        self::assertSame(['0', '0'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    }
+
+    private static function buildUntilRefused(ApplicationBuilder $builder): void
+    {
         try {
             $builder->build();
             self::fail('expected the security wiring refusal');
         } catch (ConfigurationException) {
         }
+    }
 
-        self::assertSame(['1', '1'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    /** Builds as a web server SAPI would, where only a client the debugger admits sees errors. */
+    private static function servedOverHttp(ApplicationBuilder $builder): ApplicationBuilder
+    {
+        (new ReflectionProperty(ApplicationBuilder::class, 'serverApi'))->setValue($builder, 'fpm-fcgi');
+
+        return $builder;
     }
 
     /**
