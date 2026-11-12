@@ -29,7 +29,8 @@ use Zephyrus\Core\Config\ConfigSection;
  *   - listed by exact address in the allowlist passed as $allowedClients (a loopback address only when the request
  *     carries no forwarding header), or
  *   - presenting the `tracy-debug` cookie whose value matches a `secret@address` allowlist entry, or
- *   - with no allowlist, the loopback address, and the request did not arrive through a proxy (Tracy's detection).
+ *   - with no allowlist, the loopback address under PHP's built-in server (`cli-server`) only, and the request did
+ *     not arrive through a proxy (Tracy's detection).
  *
  * With debug on, the debugger stays enabled for every client, so PHP errors still reach the log directory and the
  * notification email when initialize() is given them. Whether debug is enabled at all is decided by
@@ -121,16 +122,18 @@ final class DebugIntegration
      * @param string|null             $logDirectory   Directory for Tracy log files. Null keeps Debugger::$logDirectory;
      *                                                with no directory at all, Tracy logs to PHP's error log.
      * @param string|null             $email          Email for error notifications.
-     * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched
-     *                                                against the `tracy-debug` cookie) permitted to
-     *                                                receive the Bluescreen. A list admits loopback only when it
-     *                                                names it, and a bare loopback entry only when no forwarded
-     *                                                header is present. Null means loopback clients only,
-     *                                                and only when no forwarded header is present. Never grant
-     *                                                this to a range you do not control: an entry here can read
-     *                                                the application's live secrets out of a stack trace.
+     * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched against the
+     *                                                `tracy-debug` cookie) permitted to receive the Bluescreen. A
+     *                                                list admits loopback only when it names it, and a bare loopback
+     *                                                entry only when no forwarded header is present. Null admits
+     *                                                loopback clients only under PHP's built-in server
+     *                                                (`cli-server`), and only when no forwarded header is present.
+     *                                                Never grant this to a range you do not control: an entry here
+     *                                                can read the application's live secrets out of a stack trace.
      * @param string|null             $sessionName    The application's session cookie name, masked like SENSITIVE_KEYS.
-     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry that is not a string or holds whitespace or a comma.
+     * @param string                  $serverApi      The SAPI name; without an allowlist, only `cli-server` admits one.
+     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry
+     *                                   that is not a string or holds whitespace or a comma.
      */
     public static function initialize(
         bool $debug,
@@ -138,6 +141,7 @@ final class DebugIntegration
         ?string $email = null,
         #[\SensitiveParameter] string|array|null $allowedClients = null,
         ?string $sessionName = null,
+        string $serverApi = PHP_SAPI,
     ): void {
         $clients = self::allowedClientList($allowedClients);
 
@@ -148,7 +152,7 @@ final class DebugIntegration
         }
 
         Debugger::enable(
-            self::admitsClient($clients) ? Debugger::Development : Debugger::Production,
+            self::admitsClient($clients, $serverApi) ? Debugger::Development : Debugger::Production,
             $logDirectory,
             $email,
         );
@@ -164,15 +168,21 @@ final class DebugIntegration
 
     /**
      * Whether this boot's client gets the rendered debugger output: a client the allowlist names or, with no
-     * allowlist, a loopback client Tracy detects that carries no X-Real-IP header.
+     * allowlist, a loopback client Tracy detects that carries no X-Real-IP header, and only under PHP's built-in
+     * server.
      *
      * @param list<string>|null $clients An allowlist returned by allowedClientList().
+     * @param string            $serverApi The SAPI name; without an allowlist, only `cli-server` admits one.
      * @internal Shared by ApplicationBuilder::build() and initialize().
      */
-    public static function admitsClient(#[\SensitiveParameter] ?array $clients): bool
+    public static function admitsClient(#[\SensitiveParameter] ?array $clients, string $serverApi = PHP_SAPI): bool
     {
         if ($clients !== null) {
             return self::isListedClient($clients);
+        }
+
+        if ($serverApi !== 'cli-server') {
+            return false;
         }
 
         $address = $_SERVER['REMOTE_ADDR'] ?? null;

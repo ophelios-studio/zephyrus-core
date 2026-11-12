@@ -34,7 +34,7 @@ final class DebugIntegrationTest extends TestCase
             $this->markTestSkipped('Tracy not installed.');
         }
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertTrue(Debugger::isEnabled());
     }
@@ -50,7 +50,7 @@ final class DebugIntegrationTest extends TestCase
         mkdir($logDir, 0755, true);
 
         try {
-            DebugIntegration::initialize(debug: true, logDirectory: $logDir);
+            DebugIntegration::initialize(debug: true, serverApi: 'cli-server', logDirectory: $logDir);
             self::assertTrue(Debugger::isEnabled());
         } finally {
             @rmdir($logDir);
@@ -65,7 +65,7 @@ final class DebugIntegrationTest extends TestCase
         $this->captureErrorLog();
 
         try {
-            DebugIntegration::initialize(debug: true);
+            DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
             Debugger::log(new RuntimeException('cache warm-up failed'), ILogger::EXCEPTION);
 
             self::assertStringContainsString(RuntimeException::class . ': cache warm-up failed', $this->capturedErrorLog());
@@ -82,7 +82,7 @@ final class DebugIntegrationTest extends TestCase
         mkdir($logDir, 0755, true);
 
         try {
-            DebugIntegration::initialize(debug: true, logDirectory: $logDir);
+            DebugIntegration::initialize(debug: true, serverApi: 'cli-server', logDirectory: $logDir);
             Debugger::log('cache warm-up failed', ILogger::ERROR);
 
             self::assertStringContainsString('cache warm-up failed', (string) file_get_contents($logDir . '/error.log'));
@@ -103,7 +103,7 @@ final class DebugIntegrationTest extends TestCase
         };
         Debugger::setLogger($logger);
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertSame($logger, Debugger::getLogger());
     }
@@ -124,7 +124,7 @@ final class DebugIntegrationTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
 
         DebugIntegration::initialize(debug: false);
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertFalse(Debugger::$productionMode, 'Tracy must re-detect the client once productionMode was set by a debug-off boot.');
     }
@@ -151,7 +151,7 @@ final class DebugIntegrationTest extends TestCase
 
         $stdout = $this->runChildProcess(
             '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
-            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, serverApi: 'cli-server');"
             . ' Tracy\\Debugger::dump([' . var_export($key, true) . ' => ' . var_export($secret, true) . ', "username" => "visible-user"]);'
             . " echo 'SENTINEL';",
         );
@@ -167,7 +167,7 @@ final class DebugIntegrationTest extends TestCase
 
         $stdout = $this->runChildProcess(
             '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
-            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, sessionName: 'app_session');"
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, serverApi: 'cli-server', sessionName: 'app_session');"
             . ' $_COOKIE = ["app_session" => ' . var_export($secret, true) . ', "username" => "visible-user"];'
             . ' Tracy\\Debugger::dump($_COOKIE);'
             . " echo 'SENTINEL';",
@@ -183,7 +183,7 @@ final class DebugIntegrationTest extends TestCase
 
         $stdout = $this->runChildProcess(
             '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
-            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, serverApi: 'cli-server');"
             . ' Tracy\\Debugger::dump(new Zephyrus\\Http\\RequestBody([], ' . var_export($raw, true) . '));'
             . " echo 'SENTINEL';",
         );
@@ -211,7 +211,7 @@ final class DebugIntegrationTest extends TestCase
 
         $stdout = $this->runChildProcess(
             '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
-            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, serverApi: 'cli-server');"
             . ' $request = Zephyrus\\Http\\Request::fromArray("GET", "/", headers: ['
             . var_export($name, true) . ' => ' . var_export($secret, true) . ', "X-Visible" => "visible-header"]);'
             . ' Tracy\\Debugger::dump($request);'
@@ -226,7 +226,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testIsSensitiveKeyHonoursTheApplicationSessionName(): void
     {
-        DebugIntegration::initialize(debug: true, sessionName: 'app_session');
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server', sessionName: 'app_session');
 
         self::assertTrue(DebugIntegration::isSensitiveKey('APP_SESSION'));
         self::assertFalse(DebugIntegration::isSensitiveKey('app_session_other'));
@@ -302,7 +302,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testBlueScreenMasksTheDatabaseDriverMessage(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $email = 'jane-' . self::marker('email') . '@example.com';
         $driverMessage = 'SQLSTATE[23505]: DETAIL: Key (email)=(' . $email . ') already exists.';
 
@@ -323,7 +323,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testBlueScreenMasksTheMailerTransportMessage(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $email = 'jane-' . self::marker('email') . '@example.com';
 
         $exception = MailerException::sendFailed('550 ' . $email . ' mailbox unavailable');
@@ -355,7 +355,7 @@ final class DebugIntegrationTest extends TestCase
     public function testBlueScreenMasksASecretPassedAsATraceArgument(string $case): void
     {
         ini_set('zend.exception_ignore_args', '0');
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
 
         try {
@@ -379,7 +379,7 @@ final class DebugIntegrationTest extends TestCase
     {
         ini_set('zend.exception_ignore_args', '0');
         ini_set('zend.exception_string_param_max_len', '15');
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = 'tok-' . bin2hex(random_bytes(4));
 
         try {
@@ -435,7 +435,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksTheContentsOfAnArrayIterator(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
         $user = self::marker('user');
         $iterator = new $class(['password' => $secret, 'username' => $user]);
@@ -457,7 +457,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testBlueScreenMasksTheContentsOfAnArrayIteratorArgument(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
         $user = self::marker('user');
 
@@ -475,7 +475,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testBlueScreenMasksMailerRecipientsAndBodies(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $recipient = self::marker('recipient') . '@example.com';
         $token = self::marker('reset-token');
         $text = self::marker('text-body');
@@ -498,7 +498,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpShowsOnlyTheSafeSettingsOfAPhpMailer(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $recipient = self::marker('recipient') . '@example.com';
         $token = self::marker('reset-token');
         $text = self::marker('text-body');
@@ -524,7 +524,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testBlueScreenShowsOnlyTheSafeSettingsOfAPhpMailer(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $recipient = self::marker('recipient') . '@example.com';
         $token = self::marker('reset-token');
         $mailer = new Mailer(MailerConfig::fromArray(['smtp' => ['host' => 'smtp.example.test']]));
@@ -545,7 +545,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksThePrivateAndProtectedPropertiesOfAnObjectInAnArrayIterator(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
         $token = self::marker('token');
         $user = self::marker('user');
@@ -565,7 +565,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksTheTraceOfAnExceptionInAnArrayIterator(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
         $message = self::marker('message');
         $iterator = new \ArrayIterator(self::exceptionCarrying($message, $secret));
@@ -583,7 +583,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksTheRawBodyOfARequestBodyInAnArrayIterator(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
         $user = self::marker('user');
         $iterator = new \ArrayIterator(new \Zephyrus\Http\RequestBody(['username' => $user], "password=$secret"));
@@ -601,7 +601,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksThePrivateAndProtectedPropertiesOfAnObjectInAnArrayObject(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $secret = self::marker('password');
         $token = self::marker('token');
         $user = self::marker('user');
@@ -634,7 +634,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksAProtectedPropertyTheApplicationListsInAWrappedObject(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         Debugger::$keysToHide[] = ApiVault::class . '::$apiValue';
         $secret = self::marker('api-value');
         $user = self::marker('user');
@@ -657,7 +657,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksAPrivatePropertyTheApplicationListsInAWrappedObject(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         Debugger::$keysToHide[] = ApiVault::class . '::$signingValue';
         $secret = self::marker('signing');
         $user = self::marker('user');
@@ -680,7 +680,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksAProtectedPropertyListedInAnObjectNestedInAWrapper(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         Debugger::$keysToHide[] = ApiVault::class . '::$apiValue';
         $secret = self::marker('api-value');
         $user = self::marker('user');
@@ -703,7 +703,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpShowsOnlyTheSafeSettingsOfAPhpMailerInAWrapper(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $recipient = self::marker('recipient') . '@example.com';
         $token = self::marker('reset-token');
         $mailer = new Mailer(MailerConfig::fromArray(['smtp' => ['host' => 'smtp.example.test']]));
@@ -724,7 +724,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpTerminatesWhenAWrappedObjectReferencesItsWrapper(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $holder = new \stdClass();
         $container = new \ArrayObject($holder);
         $holder->container = $container;
@@ -740,7 +740,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpTerminatesWhenTwoWrappersWrapEachOther(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $first = new \stdClass();
         $second = new \stdClass();
         $firstContainer = new \ArrayObject($first);
@@ -782,7 +782,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testDumpMasksAProtectedPropertyOfAWrapperWithOverriddenSerialize(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         Debugger::$keysToHide[] = ApiVault::class . '::$apiValue';
         $secret = self::marker('api-value');
         $user = self::marker('user');
@@ -805,7 +805,7 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testBlueScreenRendersAWrapperWithOverriddenSerialize(string $class): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         Debugger::getBlueScreen()->keysToHide[] = ApiVault::class . '::$apiValue';
         $secret = self::marker('api-value');
         $user = self::marker('user');
@@ -897,7 +897,7 @@ final class DebugIntegrationTest extends TestCase
 
         $stdout = $this->runChildProcess(
             '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
-            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, serverApi: 'cli-server');"
             . ' $section = new class(["api" => ["signing" => ' . var_export($secret, true) . ', "host" => "visible-host"]]) extends Zephyrus\\Core\\Config\\ConfigSection { protected array $secretKeys = ["api.signing"]; };'
             . ' Tracy\\Debugger::dump($section);'
             . " echo 'SENTINEL';",
@@ -932,7 +932,7 @@ final class DebugIntegrationTest extends TestCase
 
         $stdout = $this->runChildProcess(
             '$_SERVER["REMOTE_ADDR"] = "127.0.0.1";'
-            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true);"
+            . " Zephyrus\\Core\\DebugIntegration::initialize(debug: true, serverApi: 'cli-server');"
             . ' $section = new class(["password" => ' . var_export($password, true)
             . ', "token" => ' . var_export($token, true)
             . ', "apiKey" => ' . var_export($apiKey, true)
@@ -982,10 +982,10 @@ final class DebugIntegrationTest extends TestCase
     #[PreserveGlobalState(false)]
     public function testRepeatedInitializeDoesNotStackScrubbers(): void
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         $first = Debugger::getBlueScreen()->scrubber;
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertSame($first, Debugger::getBlueScreen()->scrubber);
     }
@@ -1055,7 +1055,7 @@ final class DebugIntegrationTest extends TestCase
     {
         $secrets = self::capturedSecrets();
         $count = random_int(100_000_000, 999_999_999);
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         $html = Dumper::toHtml(self::capturingClosures($secrets, $count), [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
         $text = Dumper::toText(self::capturingClosures($secrets, $count));
@@ -1071,7 +1071,7 @@ final class DebugIntegrationTest extends TestCase
     public function testDumpMasksACapturedVariableTheApplicationAddedToKeysToHide(): void
     {
         $handle = self::marker('handle');
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
         Debugger::$keysToHide[] = 'stripeHandle';
 
         $stripeHandle = $handle;
@@ -1103,7 +1103,7 @@ final class DebugIntegrationTest extends TestCase
     {
         $passwordMinLength = random_int(100_000_000, 999_999_999);
         $token = random_int(100_000_000, 999_999_999);
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         $text = Dumper::toText(static fn (): array => [$passwordMinLength, $token]);
 
@@ -1116,7 +1116,7 @@ final class DebugIntegrationTest extends TestCase
     public function testACapturedSensitiveParameterValueUnderASensitiveNameShowsItsInnerType(): void
     {
         $password = new SensitiveParameterValue(self::marker('password'));
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         $text = Dumper::toText(static fn (): SensitiveParameterValue => $password);
 
@@ -1128,7 +1128,7 @@ final class DebugIntegrationTest extends TestCase
     public function testCapturedClosuresAreMaskedAtEveryDepth(): void
     {
         $password = self::marker('password');
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         $inner = static function () use ($password): string {
             return $password;
@@ -1152,7 +1152,7 @@ final class DebugIntegrationTest extends TestCase
                 return fn (): string => $this->value;
             }
         };
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         $text = Dumper::toText($holder->reader());
 
@@ -1233,7 +1233,7 @@ final class DebugIntegrationTest extends TestCase
      */
     private function renderBlueScreenWithArgument(array $config): string
     {
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         try {
             $this->throwWithConfig($config);

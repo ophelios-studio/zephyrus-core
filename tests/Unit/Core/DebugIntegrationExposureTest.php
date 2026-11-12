@@ -35,7 +35,7 @@ final class DebugIntegrationExposureTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertTrue(
             Debugger::$productionMode,
@@ -53,7 +53,7 @@ final class DebugIntegrationExposureTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '198.51.100.9';
         $_SERVER['HTTP_X_FORWARDED_FOR'] = '203.0.113.77';
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertTrue(Debugger::$productionMode);
     }
@@ -64,7 +64,7 @@ final class DebugIntegrationExposureTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertFalse(
             Debugger::$productionMode,
@@ -79,6 +79,63 @@ final class DebugIntegrationExposureTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
 
         DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77']);
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function nonBuiltInServerApiProvider(): array
+    {
+        return [
+            'FastCGI process manager' => ['fpm-fcgi'],
+            'Apache module'           => ['apache2handler'],
+            'command line'            => ['cli'],
+        ];
+    }
+
+    #[DataProvider('nonBuiltInServerApiProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutAnAllowlistLoopbackDoesNotGetTheDebuggerOutsideTheBuiltInServer(string $serverApi): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+        DebugIntegration::initialize(debug: true, serverApi: $serverApi);
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutAnAllowlistLoopbackGetsTheDebuggerUnderTheBuiltInServer(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutAnAllowlistARemoteClientDoesNotGetTheDebuggerUnderTheBuiltInServer(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testALoopbackAllowlistGetsTheDebuggerUnderAWebServerApi(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+
+        DebugIntegration::initialize(debug: true, allowedClients: ['127.0.0.1'], serverApi: 'fpm-fcgi');
 
         self::assertFalse(Debugger::$productionMode);
     }
@@ -188,7 +245,31 @@ final class DebugIntegrationExposureTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['HTTP_X_REAL_IP'] = '198.51.100.20';
 
-        DebugIntegration::initialize(debug: true);
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutAnAllowlistLoopbackCarryingXForwardedForDoesNotGetTheDebugger(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.20';
+
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testWithoutAnAllowlistLoopbackCarryingForwardedDoesNotGetTheDebugger(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $_SERVER['HTTP_FORWARDED'] = 'for=198.51.100.20';
+
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
         self::assertTrue(Debugger::$productionMode);
     }

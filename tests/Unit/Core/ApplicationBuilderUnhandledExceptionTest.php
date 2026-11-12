@@ -54,7 +54,7 @@ final class ApplicationBuilderUnhandledExceptionTest extends TestCase
     public function testADebugBootPassesARethrownExceptionToTheDebuggerRenderingForTheClient(): void
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-        $application = self::servedOverHttp(self::rethrowingBuilder(debug: true))->build();
+        $application = self::servedOverHttp(self::rethrowingBuilder(debug: true), 'cli-server')->build();
 
         $thrown = self::thrownBy($application);
 
@@ -66,7 +66,7 @@ final class ApplicationBuilderUnhandledExceptionTest extends TestCase
     public function testADebugBootPassesAnExceptionNoHandlerAnswersToTheDebuggerRenderingForTheClient(): void
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-        $application = self::servedOverHttp(self::builder(debug: true))->build();
+        $application = self::servedOverHttp(self::builder(debug: true), 'cli-server')->build();
 
         $thrown = self::thrownBy($application);
 
@@ -78,6 +78,19 @@ final class ApplicationBuilderUnhandledExceptionTest extends TestCase
     public function testADebugBootAnswersARethrownExceptionForAClientTheDebuggerDoesNotRenderFor(): void
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+        $application = self::servedOverHttp(self::rethrowingBuilder(debug: true))->build();
+
+        $response = $application->handle(Request::fromArray('GET', '/boom'));
+
+        self::assertSame(500, $response->status);
+        self::assertStringContainsString(RuntimeException::class . ': ' . UnhandledExceptionController::MESSAGE, $this->capturedErrorLog());
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testADebugBootWithoutAnAllowlistAnswersARethrownExceptionForLoopbackUnderAWebServerApi(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $application = self::servedOverHttp(self::rethrowingBuilder(debug: true))->build();
 
         $response = $application->handle(Request::fromArray('GET', '/boom'));
@@ -133,9 +146,9 @@ final class ApplicationBuilderUnhandledExceptionTest extends TestCase
     }
 
     /** Builds as a web server SAPI would, where only a client the debugger admits gets the exception. */
-    private static function servedOverHttp(ApplicationBuilder $builder): ApplicationBuilder
+    private static function servedOverHttp(ApplicationBuilder $builder, string $serverApi = 'fpm-fcgi'): ApplicationBuilder
     {
-        (new ReflectionProperty(ApplicationBuilder::class, 'serverApi'))->setValue($builder, 'fpm-fcgi');
+        (new ReflectionProperty(ApplicationBuilder::class, 'serverApi'))->setValue($builder, $serverApi);
 
         return $builder;
     }

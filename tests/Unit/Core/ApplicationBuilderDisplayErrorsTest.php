@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
+use Tracy\Debugger;
 use Zephyrus\Core\App;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
@@ -97,6 +100,77 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
         self::assertSame(['0', '0'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
     }
 
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function webServerApiProvider(): array
+    {
+        return [
+            'FastCGI process manager' => ['fpm-fcgi'],
+            'Apache module'           => ['apache2handler'],
+        ];
+    }
+
+    #[DataProvider('webServerApiProvider')]
+    public function testADebugBootWithoutAnAllowlistTurnsDisplayErrorsOffForLoopbackUnderAWebServerApi(string $serverApi): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true]);
+
+        self::buildUntilRefused(self::servedOverHttp($builder, $serverApi));
+
+        self::assertSame(['0', '0'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    }
+
+    public function testADebugBootWithoutAnAllowlistLeavesDisplayErrorsOnForLoopbackUnderTheBuiltInServer(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true]);
+
+        self::buildUntilRefused(self::servedOverHttp($builder, 'cli-server'));
+
+        self::assertSame(['1', '1'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    }
+
+    public function testADebugBootLeavesDisplayErrorsOnForALoopbackAllowlistUnderAWebServerApi(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true])
+            ->withDebugClientAllowlist(['127.0.0.1']);
+
+        self::buildUntilRefused(self::servedOverHttp($builder));
+
+        self::assertSame(['1', '1'], [ini_get('display_errors'), ini_get('display_startup_errors')]);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testABuildHandsTheDebuggerProductionModeToLoopbackUnderAWebServerApi(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $builder = ApplicationBuilder::fromConfiguration(Configuration::fromArray([
+            'application' => ['environment' => 'development', 'debug' => true],
+        ]));
+
+        self::servedOverHttp($builder, 'fpm-fcgi')->build();
+
+        self::assertTrue(Debugger::$productionMode);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testABuildLeavesTheDebuggerRenderingForLoopbackUnderTheBuiltInServer(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+        $builder = ApplicationBuilder::fromConfiguration(Configuration::fromArray([
+            'application' => ['environment' => 'development', 'debug' => true],
+        ]));
+
+        self::servedOverHttp($builder, 'cli-server')->build();
+
+        self::assertFalse(Debugger::$productionMode);
+    }
+
     private static function buildUntilRefused(ApplicationBuilder $builder): void
     {
         try {
@@ -107,9 +181,9 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
     }
 
     /** Builds as a web server SAPI would, where only a client the debugger admits sees errors. */
-    private static function servedOverHttp(ApplicationBuilder $builder): ApplicationBuilder
+    private static function servedOverHttp(ApplicationBuilder $builder, string $serverApi = 'fpm-fcgi'): ApplicationBuilder
     {
-        (new ReflectionProperty(ApplicationBuilder::class, 'serverApi'))->setValue($builder, 'fpm-fcgi');
+        (new ReflectionProperty(ApplicationBuilder::class, 'serverApi'))->setValue($builder, $serverApi);
 
         return $builder;
     }
