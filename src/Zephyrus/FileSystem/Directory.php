@@ -129,13 +129,23 @@ final class Directory extends FileSystemNode
      * Delete the directory.
      *
      * A recursive delete throws on the first entry it cannot remove, so a
-     * partial purge is never reported as a success.
+     * partial purge is never reported as a success. A symbolic link is never
+     * followed: when this path is a link (live or dangling), only the link is removed,
+     * and links met inside the tree are removed without touching their targets.
      *
      * @param bool $recursive If true, delete all contents first.
      * @throws FileSystemException if any file or directory could not be removed.
      */
     public function delete(bool $recursive = false): void
     {
+        if (self::isSymlink($this->path)) {
+            $link = self::withoutTrailingSegments($this->path);
+            if (!@unlink($link)) {
+                throw FileSystemException::operationFailed('delete symbolic link', $link);
+            }
+            return;
+        }
+
         if (!$this->exists()) {
             return;
         }

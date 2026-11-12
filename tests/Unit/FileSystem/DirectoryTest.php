@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\FileSystem;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\FileSystem\Directory;
 use Zephyrus\FileSystem\File;
@@ -295,6 +296,67 @@ final class DirectoryTest extends TestCase
 
         self::assertDirectoryDoesNotExist($root);
         self::assertFileExists($outside . '/precious.txt', 'The link target must be left alone.');
+    }
+
+    public function testDeleteRecursiveOnASymlinkRemovesTheLinkAndKeepsItsTarget(): void
+    {
+        $outside = $this->tempDir . '/linked-target';
+        $link = $this->tempDir . '/linked-root';
+        mkdir($outside . '/sub', 0755, true);
+        file_put_contents($outside . '/keep.txt', 'KEEP ME');
+        file_put_contents($outside . '/sub/deep.txt', 'KEEP ME TOO');
+        symlink($outside, $link);
+
+        (new Directory($link))->delete(recursive: true);
+
+        self::assertFalse(is_link($link));
+        self::assertFileExists($outside . '/keep.txt');
+        self::assertFileExists($outside . '/sub/deep.txt');
+    }
+
+    /** @return array<string, array{string}> */
+    public static function trailingSuffixProvider(): array
+    {
+        return ['trailing slash' => ['/'], 'trailing dot segment' => ['/.'], 'doubled slash' => ['//']];
+    }
+
+    #[DataProvider('trailingSuffixProvider')]
+    public function testDeleteRecursiveOnASymlinkWrittenWithATrailingSuffixKeepsItsTarget(string $suffix): void
+    {
+        $outside = $this->tempDir . '/suffix-target';
+        $link = $this->tempDir . '/suffix-link';
+        mkdir($outside, 0755, true);
+        file_put_contents($outside . '/keep.txt', 'KEEP ME');
+        symlink($outside, $link);
+
+        (new Directory($link . $suffix))->delete(recursive: true);
+
+        self::assertFalse(is_link($link));
+        self::assertFileExists($outside . '/keep.txt');
+    }
+
+    public function testDeleteOnASymlinkToADirectoryRemovesOnlyTheLink(): void
+    {
+        $outside = $this->tempDir . '/plain-target';
+        $link = $this->tempDir . '/plain-link';
+        mkdir($outside, 0755, true);
+        file_put_contents($outside . '/keep.txt', 'KEEP ME');
+        symlink($outside, $link);
+
+        (new Directory($link))->delete();
+
+        self::assertFalse(is_link($link));
+        self::assertFileExists($outside . '/keep.txt');
+    }
+
+    public function testDeleteRemovesADanglingSymlink(): void
+    {
+        $link = $this->tempDir . '/dangling-link';
+        symlink($this->tempDir . '/nowhere', $link);
+
+        (new Directory($link))->delete();
+
+        self::assertFalse(is_link($link));
     }
 
     public function testDeleteRecursiveStillRemovesAWritableTree(): void

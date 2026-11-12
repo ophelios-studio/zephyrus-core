@@ -89,6 +89,21 @@ abstract class FileSystemNode
     }
 
     /**
+     * Check whether `$path` is a symbolic link, ignoring trailing "/" and "/." segments
+     * (which would make the system resolve the link first).
+     */
+    protected static function isSymlink(string $path): bool
+    {
+        return is_link(self::withoutTrailingSegments($path));
+    }
+
+    protected static function withoutTrailingSegments(string $path): string
+    {
+        $trimmed = preg_replace('~(?:/\.?)+$~', '', $path) ?? $path;
+        return $trimmed === '' ? '/' : $trimmed;
+    }
+
+    /**
      * @throws FileSystemException if the path does not exist.
      */
     protected function assertExists(): void
