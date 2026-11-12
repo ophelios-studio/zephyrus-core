@@ -19,7 +19,7 @@ Install the core library:
 composer require zephyrus-framework/core
 ```
 
-This README follows the `dev` branch. Until the next release, install it with `composer require zephyrus-framework/core:dev-dev`.
+Before 1.0 a minor version may break the API: read the [changelog](CHANGELOG.md) before moving to the next one.
 
 ---
 

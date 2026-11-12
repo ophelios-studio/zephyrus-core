@@ -8,6 +8,8 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-11
+
 ### Breaking changes
 
 #### Requirements
@@ -193,5 +195,6 @@ changes are listed first, each with the change to make in your code.
 
 Earlier releases have no notes.
 
-[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/ophelios-studio/zephyrus-core/releases/tag/v0.13.0
