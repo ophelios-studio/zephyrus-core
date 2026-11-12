@@ -15,7 +15,7 @@ use Zephyrus\Security\CsrfTokenManagerInterface;
  * person is still signed in to tell the last two apart.
  *
  *   $csrfManager = new SessionCsrfTokenManager($sessionManager);
- *   $kernel = KernelBuilder::create()
+ *   $app = ApplicationBuilder::create()
  *       ->withMiddleware(new CsrfMiddleware($csrfManager))
  *       ->build();
  */

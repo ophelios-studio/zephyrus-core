@@ -13,7 +13,7 @@ use Zephyrus\Http\Response;
 /**
  * Starts the PHP session and injects the SessionManager into the request attribute 'session'.
  *
- *   $kernel = KernelBuilder::create()
+ *   $app = ApplicationBuilder::create()
  *       ->withMiddleware(new SessionMiddleware($config->session))
  *       ->build();
  *

@@ -31,7 +31,7 @@ use function strtolower;
  * Usage:
  *
  *   $csrf = new SessionCsrfTokenManager($session);
- *   $kernel = KernelBuilder::create()
+ *   $app = ApplicationBuilder::create()
  *       ->withMiddleware(new CsrfMiddleware($csrf, CsrfConfig::fromSecurityConfig($configuration->security)))
  *       ->build();
  *

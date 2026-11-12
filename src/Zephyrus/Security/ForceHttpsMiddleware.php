@@ -17,11 +17,12 @@ use Zephyrus\Http\Uri;
  *
  * Usage:
  *
- *   $kernel = KernelBuilder::create()
+ *   $app = ApplicationBuilder::create()
  *       ->withMiddleware(new ForceHttpsMiddleware())
  *       ->build();
  *
- * Register it before authentication and CSRF middleware.
+ * Register it after AllowedHostsMiddleware, since the redirect target reuses the request's Host,
+ * and before authentication and CSRF middleware.
  */
 final class ForceHttpsMiddleware implements MiddlewareInterface
 {

@@ -25,7 +25,7 @@ use Zephyrus\Http\Response;
  *       ->withDirective('default-src', "'self'")
  *       ->withDirective('script-src', "'self'");
  *
- *   $kernel = ApplicationBuilder::create()
+ *   $app = ApplicationBuilder::create()
  *       ->withMiddleware(new ContentSecurityPolicyMiddleware($policy, nonceDirectives: ['script-src']))
  *       ->build();
  *
