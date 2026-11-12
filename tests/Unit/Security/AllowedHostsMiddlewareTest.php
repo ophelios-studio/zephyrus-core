@@ -164,6 +164,61 @@ final class AllowedHostsMiddlewareTest extends TestCase
         self::assertSame([], (new AllowedHostsMiddleware([]))->allowedHosts());
     }
 
+    public function testEntriesPinnedToAPortAreExposedWithTheirPort(): void
+    {
+        $mw = new AllowedHostsMiddleware(['App.Example.TEST.:8443', '[2001:DB8::1]:8080', '*.Example.com:443']);
+
+        self::assertSame(['app.example.test:8443', '[2001:db8::1]:8080', '*.example.com:443'], $mw->allowedHosts());
+    }
+
+    /**
+     * @return iterable<string, array{string, string, bool}>
+     */
+    public static function portPinnedCases(): iterable
+    {
+        yield 'https without a port counts as 443' => ['app.example.test:443', 'https://app.example.test/x', true];
+        yield 'explicit pinned port' => ['app.example.test:443', 'https://app.example.test:443/x', true];
+        yield 'another port' => ['app.example.test:443', 'https://app.example.test:6666/x', false];
+        yield 'http without a port counts as 80' => ['app.example.test:443', 'http://app.example.test/x', false];
+        yield 'http pinned to 80' => ['app.example.test:80', 'http://app.example.test/x', true];
+        yield 'non-default pinned port' => ['app.example.test:8443', 'https://app.example.test:8443/x', true];
+        yield 'non-default pinned port, request on the default' => ['app.example.test:8443', 'https://app.example.test/x', false];
+        yield 'IPv6 literal on its pinned port' => ['[::1]:8080', 'http://[::1]:8080/x', true];
+        yield 'IPv6 literal on the default port' => ['[::1]:8080', 'http://[::1]/x', false];
+        yield 'wildcard on its pinned port, two labels deep' => ['*.example.com:443', 'https://a.b.example.com/x', true];
+        yield 'wildcard on another port' => ['*.example.com:443', 'https://api.example.com:8443/x', false];
+        yield 'entry without a port admits any port' => ['app.example.test', 'https://app.example.test:6666/x', true];
+    }
+
+    #[DataProvider('portPinnedCases')]
+    public function testAnEntryPinnedToAPortAdmitsThatPortOnly(string $entry, string $url, bool $expected): void
+    {
+        $mw = new AllowedHostsMiddleware([$entry]);
+
+        $response = $mw->process(new Request('GET', $url), static fn (Request $r): Response => Response::text('ok'));
+
+        self::assertSame($expected, $response->status === 200);
+    }
+
+    public function testTheSameHostMayBePinnedToSeveralPorts(): void
+    {
+        $mw = new AllowedHostsMiddleware(['app.example.test:443', 'app.example.test:8443']);
+        $pass = static fn (Request $r): Response => Response::text('ok');
+
+        self::assertSame(200, $mw->process(new Request('GET', 'https://app.example.test:8443/x'), $pass)->status);
+        self::assertSame(200, $mw->process(new Request('GET', 'https://app.example.test/x'), $pass)->status);
+        self::assertSame(400, $mw->process(new Request('GET', 'https://app.example.test:9443/x'), $pass)->status);
+    }
+
+    public function testAllowsMatchesAPinnedEntryOnlyWhenTheHostNamesThatPort(): void
+    {
+        $mw = new AllowedHostsMiddleware(['app.example.test:443']);
+
+        self::assertTrue($mw->allows('app.example.test:443'));
+        self::assertFalse($mw->allows('app.example.test:8443'));
+        self::assertFalse($mw->allows('app.example.test'));
+    }
+
     /**
      * Raw Host values with the expected verdict. Each one is judged by allows()
      * directly, and by process() on a request whose URL carries that value, so
@@ -300,26 +355,46 @@ final class AllowedHostsMiddlewareTest extends TestCase
     public static function entriesWithADedicatedReason(): iterable
     {
         yield 'comma-separated list' => ['a.example.com,b.example.com', 'use list items, not a comma inside one item'];
-        yield 'leading space' => [' example.com', 'remove the spaces'];
-        yield 'trailing space' => ['example.com ', 'remove the spaces'];
-        yield 'host with port' => ['example.com:8080', 'ports are not matched: list "example.com" only'];
-        yield 'wildcard with port' => ['*.example.com:443', 'ports are not matched: list "*.example.com" only'];
-        yield 'bracketed IPv6 with port' => ['[2001:db8::1]:8080', 'ports are not matched: list "[2001:db8::1]" only'];
+        yield 'leading space' => [' example.com', 'remove the spaces around the host name'];
+        yield 'trailing space' => ['example.com ', 'remove the spaces around the host name'];
+        yield 'port zero' => ['example.com:0', 'the port must be a number from 1 to 65535 without a leading zero'];
+        yield 'port above the range' => ['example.com:65536', 'the port must be a number from 1 to 65535 without a leading zero'];
+        yield 'port with a leading zero' => ['[2001:db8::1]:08080', 'the port must be a number from 1 to 65535 without a leading zero'];
+        yield 'port above five digits' => ['*.example.com:123456', 'the port must be a number from 1 to 65535 without a leading zero'];
     }
 
     #[DataProvider('entriesWithADedicatedReason')]
     public function testInvalidEntryReasonNamesTheFixForCommaPaddingAndPorts(string $entry, string $reason): void
     {
-        self::assertStringContainsString($reason, (string) AllowedHostsMiddleware::invalidEntryReason($entry));
+        self::assertSame($reason, AllowedHostsMiddleware::invalidEntryReason($entry));
     }
 
     #[DataProvider('entriesWithADedicatedReason')]
     public function testConstructorRefusesEntriesWithADedicatedReason(string $entry, string $reason): void
     {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage($reason);
+        try {
+            new AllowedHostsMiddleware([$entry]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame('Allowed host "' . $entry . '": ' . $reason . '.', $e->getMessage());
+        }
+    }
 
-        new AllowedHostsMiddleware([$entry]);
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function entriesPinnedToAPort(): iterable
+    {
+        yield 'host name' => ['example.com:8080'];
+        yield 'wildcard' => ['*.example.com:443'];
+        yield 'bracketed IPv6 literal' => ['[2001:db8::1]:8080'];
+        yield 'IPv4 literal at the upper bound' => ['203.0.113.7:65535'];
+    }
+
+    #[DataProvider('entriesPinnedToAPort')]
+    public function testAnEntryMayCarryAPort(string $entry): void
+    {
+        self::assertNull(AllowedHostsMiddleware::invalidEntryReason($entry));
     }
 
     /**

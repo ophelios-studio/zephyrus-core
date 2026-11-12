@@ -45,7 +45,8 @@ use Zephyrus\Security\SecureHeadersConfig;
  *
  * Validation:
  *   - maxBodySize: 0 or greater, an integer or a string of at most 18 digits.
- *   - allowedHosts: each entry a non-empty host name without a scheme, such as example.com.
+ *   - allowedHosts: each entry a non-empty host name without a scheme, such as example.com, and an
+ *     optional port from 1 to 65535 that the entry then admits alone, such as example.com:8443.
  *     allowedHosts and trustedProxies also accept one comma-separated string (typically from !env).
  *     A string naming nothing is an empty
  *     trustedProxies, but is REJECTED for allowedHosts, where an empty list allows every host.

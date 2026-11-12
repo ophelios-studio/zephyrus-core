@@ -21,23 +21,32 @@ use function substr_count;
 /**
  * Refuses, with a 400, a request whose host is not in the allowlist.
  *
- * The host judged is the one the request URL spells, see Uri::authority(), and the request port
- * is ignored. Each entry is either:
+ * The host judged is the one the request URL spells, see Uri::authority(). Each entry is either:
  * - exact: "example.com", "2001:db8::1" or "[2001:db8::1]" for an IPv6 literal
- * - wildcard: "*.example.com", matching subdomains only, never the bare domain
+ * - wildcard: "*.example.com", matching subdomains at any depth, never the bare domain
  *
- * Entries with a scheme, a port, a comma, surrounding spaces, non-ASCII characters, a lone "*"
- * or a wildcard IP literal are refused at construction. An empty allowlist accepts every host.
+ * An entry may pin a port ("example.com:8443", "[2001:db8::1]:8080", "*.example.com:443"): it then
+ * admits that port only, a URL without a port standing for its scheme's default (80 or 443). An
+ * entry without a port admits any port. Pin the port in production when the application builds
+ * absolute URLs from the request. When ForceHttpsMiddleware runs after this one, also list the
+ * host on port 80, which then only reaches the redirect: ["example.com:443", "example.com:80"].
+ * An IPv6 literal pins a port only in brackets: "::1:8080" is an address, admitted on any port.
  *
- * allows() applies the same rules for callers that decide a host outside a request.
+ * Entries with a scheme, a port outside 1-65535, a comma, surrounding spaces, non-ASCII characters,
+ * a lone "*" or a wildcard IP literal are refused at construction. An empty allowlist accepts every host.
+ *
+ * allows() applies the same rules to a host outside a request.
  */
 final class AllowedHostsMiddleware implements MiddlewareInterface
 {
     /** The only port a host may carry: one to five digits, nothing else. */
     private const PORT_PATTERN = '/^\d{1,5}$/D';
 
-    /** An entry carrying a port, which the matcher would drop: "host:port" or "[v6]:port". */
-    private const ENTRY_PORT_PATTERN = '/^(\[[^\]]*\]|[^:\[\]]+):\d{1,5}$/D';
+    /** An entry pinned to a port: "host:port", "[v6]:port" or "*.host:port". */
+    private const ENTRY_PORT_PATTERN = '/^(\[[^\]]*\]|[^:\[\]]+):(\d+)$/D';
+
+    /** The port a URL without one stands for. */
+    private const DEFAULT_PORTS = ['http' => 80, 'https' => 443];
 
     /** One label of letters, digits, hyphens and underscores (Docker service names); none can split an authority. */
     private const LABEL_PATTERN = '/^(?!-)[a-z0-9_-]{1,63}(?<!-)$/D';
@@ -47,8 +56,8 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
     /** A scheme before "://", which an entry must not carry. */
     private const SCHEME_PATTERN = '#^[a-zA-Z][a-zA-Z0-9+.\-]*://#';
 
-    /** @var list<string> */
-    private array $allowedHosts;
+    /** @var list<array{string, ?int}> The normalised host and pinned port of each entry. */
+    private array $entries = [];
 
     /**
      * @param list<string> $allowedHosts
@@ -56,11 +65,10 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
      */
     public function __construct(array $allowedHosts)
     {
-        $normalized = [];
         foreach ($allowedHosts as $entry) {
             $reason = self::invalidEntryReason($entry);
-            $host = self::normalizeEntry($entry);
-            if ($reason !== null || $host === null) {
+            $parsed = self::parseEntry($entry);
+            if ($reason !== null || $parsed === null) {
                 throw new InvalidArgumentException(sprintf(
                     'Allowed host %s: %s.',
                     MessageValue::quote($entry),
@@ -68,10 +76,8 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
                 ));
             }
 
-            $normalized[] = $host;
+            $this->entries[] = $parsed;
         }
-
-        $this->allowedHosts = $normalized;
     }
 
     /** Why a configured entry is unusable, or null. Shared with boot-time config validation. */
@@ -99,15 +105,16 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
 
         if (preg_match(self::ENTRY_PORT_PATTERN, $entry, $portMatch) === 1
             && self::invalidEntryReason($portMatch[1]) === null
+            && self::portNumber($portMatch[2]) === null
         ) {
-            return sprintf('ports are not matched: list "%s" only', $portMatch[1]);
+            return 'the port must be a number from 1 to 65535 without a leading zero';
         }
 
         if (preg_match('/[^\x00-\x7F]/', $entry) === 1) {
             return 'use the punycode form of an internationalised name, such as xn--bcher-kva.example';
         }
 
-        if (self::normalizeEntry($entry) === null) {
+        if (self::parseEntry($entry) === null) {
             return 'must be a host name, an IP literal, or a wildcard over a host name such as *.example.com';
         }
 
@@ -115,23 +122,34 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
     }
 
     /**
-     * The allowlist in its normalised form: lowercased, trailing dot and IPv6 brackets removed.
+     * The allowlist in its normalised form: lowercased, trailing dot removed, IPv6 brackets removed
+     * unless the entry pins a port, as in "[2001:db8::1]:8080".
      *
      * @return list<string>
      */
     public function allowedHosts(): array
     {
-        return $this->allowedHosts;
+        $hosts = [];
+        foreach ($this->entries as [$host, $port]) {
+            $hosts[] = match (true) {
+                $port === null => $host,
+                self::isIpv6($host) => '[' . $host . ']:' . $port,
+                default => $host . ':' . $port,
+            };
+        }
+
+        return $hosts;
     }
 
     public function process(Request $request, callable $next): Response
     {
-        if ($this->allowedHosts === []) {
+        if ($this->entries === []) {
             /** @var Response */
             return $next($request);
         }
 
-        if (!$this->allows($request->uri()->authority())) {
+        $uri = $request->uri();
+        if (!$this->admits($uri->authority(), self::DEFAULT_PORTS[$uri->scheme()] ?? null)) {
             return Response::json(['error' => 'Invalid Host header.'], 400);
         }
 
@@ -139,16 +157,36 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return $next($request);
     }
 
-    /** Whether a raw host, as a client sends it, passes. An empty allowlist returns true for any input. */
+    /**
+     * Whether a host passes. An empty allowlist returns true for any input.
+     *
+     * A host without a port matches only the entries without one. To judge a URL, pass its host
+     * with the effective port, such as `$host . ':' . ($port ?? 443)` for https.
+     */
     public function allows(string $host): bool
     {
-        if ($this->allowedHosts === []) {
-            return true;
+        return $this->entries === [] || $this->admits($host, null);
+    }
+
+    /**
+     * @param int|null $defaultPort The port a host without one stands for; null matches it to unpinned entries only.
+     */
+    private function admits(string $host, ?int $defaultPort): bool
+    {
+        $parsed = self::parseHost(self::authorityOf($host));
+        if ($parsed === null) {
+            return false;
         }
 
-        $normalized = self::normalizeHost(self::authorityOf($host));
+        [$requestHost, $requestPort] = $parsed;
+        $requestPort ??= $defaultPort;
+        foreach ($this->entries as [$allowedHost, $allowedPort]) {
+            if (($allowedPort === null || $allowedPort === $requestPort) && self::matchesHost($allowedHost, $requestHost)) {
+                return true;
+            }
+        }
 
-        return $normalized !== null && $this->isAllowed($normalized);
+        return false;
     }
 
     /**
@@ -159,29 +197,41 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return substr($text, 0, strcspn($text, '/?#'));
     }
 
-    private function isAllowed(string $requestHost): bool
+    private static function matchesHost(string $allowedHost, string $requestHost): bool
     {
-        foreach ($this->allowedHosts as $allowedHost) {
-            if ($allowedHost === $requestHost) {
-                return true;
-            }
-
-            if (!str_starts_with($allowedHost, '*.')) {
-                continue;
-            }
-
-            $suffix = substr($allowedHost, 1);
-            if (!str_ends_with($requestHost, $suffix)) {
-                continue;
-            }
-
-            $prefix = substr($requestHost, 0, -strlen($suffix));
-            if ($prefix !== '') {
-                return true;
-            }
+        if ($allowedHost === $requestHost) {
+            return true;
         }
 
-        return false;
+        if (!str_starts_with($allowedHost, '*.')) {
+            return false;
+        }
+
+        $suffix = substr($allowedHost, 1);
+
+        return str_ends_with($requestHost, $suffix) && strlen($requestHost) > strlen($suffix);
+    }
+
+    /**
+     * The normalised host and pinned port of an entry, or null when it is unusable.
+     *
+     * @return array{string, ?int}|null
+     */
+    private static function parseEntry(string $entry): ?array
+    {
+        $port = null;
+        if (preg_match(self::ENTRY_PORT_PATTERN, $entry, $portMatch) === 1) {
+            $port = self::portNumber($portMatch[2]);
+            if ($port === null) {
+                return null;
+            }
+
+            $entry = $portMatch[1];
+        }
+
+        $host = self::normalizeEntry($entry);
+
+        return $host === null ? null : [$host, $port];
     }
 
     /** Operator entries may be bare IPv6 literals; a Host header must bracket them. */
@@ -194,11 +244,12 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         }
 
         $wildcard = str_starts_with($entry, '*.');
-        $host = self::normalizeHost($wildcard ? substr($entry, 2) : $entry);
-        if ($host === null) {
+        $parsed = self::parseHost($wildcard ? substr($entry, 2) : $entry);
+        if ($parsed === null || $parsed[1] !== null) {
             return null;
         }
 
+        $host = $parsed[0];
         if (!$wildcard) {
             return $host;
         }
@@ -206,11 +257,24 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
         return self::isIpLiteral($host) ? null : '*.' . $host;
     }
 
+    /** A port from 1 to 65535 written without a leading zero, or null. */
+    private static function portNumber(string $port): ?int
+    {
+        if (preg_match('/^[1-9][0-9]{0,4}$/D', $port) !== 1 || (int) $port > 65535) {
+            return null;
+        }
+
+        return (int) $port;
+    }
+
     /**
-     * Canonical host: lowercased, one trailing dot and any port removed, brackets removed from an
-     * IPv6 literal. Accepts a bracketed IPv6 literal, an IPv4 address or a DNS name; null for anything else.
+     * Canonical host and port: the host lowercased, one trailing dot removed, brackets removed from
+     * an IPv6 literal. Accepts a bracketed IPv6 literal, an IPv4 address or a DNS name, each with an
+     * optional port; null for anything else.
+     *
+     * @return array{string, ?int}|null
      */
-    private static function normalizeHost(string $host): ?string
+    private static function parseHost(string $host): ?array
     {
         $normalized = strtolower($host);
 
@@ -227,9 +291,10 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
                 return null;
             }
 
-            return $address;
+            return [$address, $hasValidPort ? (int) substr($suffix, 1) : null];
         }
 
+        $port = null;
         $parts = explode(':', $normalized, 3);
         if (count($parts) > 2) {
             return null;
@@ -241,17 +306,18 @@ final class AllowedHostsMiddleware implements MiddlewareInterface
             }
 
             $normalized = $parts[0];
+            $port = (int) $parts[1];
         }
 
         if (str_ends_with($normalized, '.')) {
             $normalized = substr($normalized, 0, -1);
         }
 
-        if (self::isIpv4($normalized)) {
-            return $normalized;
+        if (self::isIpv4($normalized) || self::isDnsName($normalized)) {
+            return [$normalized, $port];
         }
 
-        return self::isDnsName($normalized) ? $normalized : null;
+        return null;
     }
 
     private static function isDnsName(string $name): bool

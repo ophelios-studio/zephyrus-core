@@ -133,6 +133,42 @@ final class RequestHostAllowlistTest extends TestCase
 
         self::assertSame('http', $request->uri()->scheme());
     }
+
+    /** @return array<string, array{string, int}> */
+    public static function hostsBehindATlsProxyProvider(): array
+    {
+        return [
+            'host without a port' => ['allowed.com', 200],
+            'host on another port' => ['allowed.com:6666', 400],
+        ];
+    }
+
+    #[DataProvider('hostsBehindATlsProxyProvider')]
+    public function testAnEntryPinnedTo443AdmitsATlsProxyRequestOnTheDefaultPortOnly(string $host, int $status): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withRouter((new Router())->get('/p', HostAllowlistController::class . '@page'))
+            ->withMiddleware(new AllowedHostsMiddleware(['allowed.com:443']))
+            ->build();
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_URI' => '/p',
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST' => $host,
+                'SERVER_PORT' => '8080',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'REMOTE_ADDR' => '10.0.0.1',
+            ],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: '',
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame($status, $kernel->handle($request)->status);
+    }
 }
 
 // ===========================================================================

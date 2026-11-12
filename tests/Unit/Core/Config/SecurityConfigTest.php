@@ -885,12 +885,25 @@ final class SecurityConfigTest extends TestCase
         SecurityConfig::fromArray(['allowedHosts' => ['a.example.com,b.example.com']]);
     }
 
-    public function testAllowedHostWithAPortAsksForTheHostOnly(): void
+    public function testAllowedHostEntriesMayPinAPort(): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('ports are not matched: list "example.com" only');
+        $config = SecurityConfig::fromArray(['allowedHosts' => 'app.example.com:8443, [::1]:8080, *.example.com:443']);
 
-        SecurityConfig::fromArray(['allowedHosts' => ['example.com:8080']]);
+        self::assertSame(['app.example.com:8443', '[::1]:8080', '*.example.com:443'], $config->allowedHosts);
+    }
+
+    public function testAllowedHostWithAPortOutsideTheRangeFailsAtBoot(): void
+    {
+        try {
+            SecurityConfig::fromArray(['allowedHosts' => ['example.com:65536']]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'security' field 'allowedHosts[0]' has invalid value \"example.com:65536\": "
+                . 'the port must be a number from 1 to 65535 without a leading zero.',
+                $e->getMessage(),
+            );
+        }
     }
 
     #[DataProvider('malformedAllowedHostEntries')]
