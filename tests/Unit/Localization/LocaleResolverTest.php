@@ -210,4 +210,24 @@ final class LocaleResolverTest extends TestCase
             ['en', 'fr', 'de'],
         ));
     }
+
+    public function testAMalformedRequestedLocaleIsIgnoredWithoutAnAllowlist(): void
+    {
+        self::assertSame('en', $this->resolver->resolve('../../etc', null, 'en', []));
+    }
+
+    public function testAMalformedRequestedLocaleFallsThroughToTheHeaderWithoutAnAllowlist(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('../../etc', 'fr', 'en', []));
+    }
+
+    public function testAMalformedHeaderCandidateIsSkippedWithoutAnAllowlist(): void
+    {
+        self::assertSame('de', $this->resolver->resolve(null, 'a/b,de;q=0.5', 'en', []));
+    }
+
+    public function testAWellFormedRegionalLocaleStillPassesWithoutAnAllowlist(): void
+    {
+        self::assertSame('fr-CA', $this->resolver->resolve('fr_ca', null, 'en', []));
+    }
 }

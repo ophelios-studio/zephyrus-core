@@ -64,7 +64,10 @@ final class AcceptLanguageResolverTest extends TestCase
 
     public function testHeaderTagAtMaximumLengthIsKept(): void
     {
-        self::assertSame(str_repeat('a', 35), $this->resolver->resolve(str_repeat('a', 35)));
+        $tag = 'en-aaaaaaaa-bbbbbbbb-cccccccc-ddddd';
+
+        self::assertSame(35, strlen($tag));
+        self::assertSame($tag, $this->resolver->resolve($tag));
     }
 
     public function testRequestedLocaleLongerThanMaximumLengthIsIgnored(): void

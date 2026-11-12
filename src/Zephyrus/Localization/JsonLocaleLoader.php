@@ -17,17 +17,11 @@ use UnexpectedValueException;
  * A missing catalog yields an empty array.
  *
  * Path safety: the locale becomes part of a filesystem path, so load() checks it even when called directly.
- * The locale must match LOCALE_PATTERN (no separator, dot or NUL byte), and the resolved path must stay under
- * $basePath after symbolic links are collapsed. A locale failing either check yields an empty catalog.
+ * The locale must pass LocaleTag::isWellFormed() (no separator, dot or NUL byte), and the resolved path must stay
+ * under $basePath after symbolic links are collapsed. A locale failing either check yields an empty catalog.
  */
 final class JsonLocaleLoader implements LocaleLoaderInterface
 {
-    /**
-     * BCP-47-shaped tag: a 2-3 letter language, then alphanumeric subtags separated by "-" or "_".
-     * The underscore stays because catalog directories may be named like fr_CA (see localeCandidates()).
-     */
-    private const string LOCALE_PATTERN = '/^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$/D';
-
     public function __construct(
         private readonly string $basePath,
     ) {
@@ -72,7 +66,7 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
      */
     public static function isWellFormedLocale(string $locale): bool
     {
-        return preg_match(self::LOCALE_PATTERN, trim($locale, " \t")) === 1;
+        return LocaleTag::isWellFormed(trim($locale, " \t"));
     }
 
     /**

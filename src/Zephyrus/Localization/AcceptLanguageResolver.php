@@ -9,7 +9,8 @@ namespace Zephyrus\Localization;
  *
  * Order: $requestedLocale (normalized, then progressively shortened: zh-Hant-TW, zh-Hant, zh), the header
  * candidates by q-value (a '*' range selects $defaultLocale), then $defaultLocale, replaced by the first
- * supported locale when unsupported. An empty $supportedLocales accepts every normalized locale.
+ * supported locale when unsupported. An empty $supportedLocales accepts every requested or header locale
+ * passing LocaleTag::isWellFormed(); others are ignored.
  */
 final class AcceptLanguageResolver
 {
@@ -18,7 +19,7 @@ final class AcceptLanguageResolver
 
     /**
      * @param string   $acceptLanguageHeader Raw header value, may be empty.
-     * @param string[] $supportedLocales     Allowlist. Empty means "accept any".
+     * @param string[] $supportedLocales     Allowlist. Empty means "accept any well-formed locale".
      * @param string   $defaultLocale        Used when nothing matches. An empty value becomes 'en'.
      * @param string   $requestedLocale      Explicit override, may be empty. A '*' is ignored.
      */
@@ -46,7 +47,7 @@ final class AcceptLanguageResolver
         if ($requestedLocale !== '') {
             $normalized = $this->normalize($requestedLocale);
 
-            if ($normalized !== '' && $normalized !== '*') {
+            if ($this->isWellFormed($normalized)) {
                 $acceptedRequested = $this->resolveAcceptedLocale($normalized, $supportedLocales);
                 if ($acceptedRequested !== null) {
                     return $acceptedRequested;
@@ -59,7 +60,9 @@ final class AcceptLanguageResolver
                 return $defaultLocale;
             }
 
-            $acceptedCandidate = $this->resolveAcceptedLocale($candidate, $supportedLocales);
+            $acceptedCandidate = $this->isWellFormed($candidate)
+                ? $this->resolveAcceptedLocale($candidate, $supportedLocales)
+                : null;
             if ($acceptedCandidate !== null) {
                 return $acceptedCandidate;
             }
@@ -194,6 +197,11 @@ final class AcceptLanguageResolver
         }
 
         return implode('-', $normalized);
+    }
+
+    private function isWellFormed(string $locale): bool
+    {
+        return LocaleTag::isWellFormed($locale);
     }
 
     /**
