@@ -44,13 +44,13 @@ use Zephyrus\Routing\RouteMatch;
  * A matched route skips the global middlewares it excludes (#[WithoutMiddleware]
  * or Router::withoutMiddleware()). Global middlewares run on every 404 and 405,
  * so their side effects happen there as well (a session starts, for instance).
- * Their $next() returns the error response instead of throwing, so transaction
- * handling must inspect $response->status and error reporting belongs in
- * ExceptionEvent. A middleware validating a request against a resource must
- * pass through when Request::ATTRIBUTE_UNMATCHED_ROUTE is set (see
- * CsrfMiddleware). Middlewares validating the connection, the envelope or the
- * caller may answer before routing, and middlewares that decorate responses
- * must keep running.
+ * Their $next() returns the error response instead of throwing (unless an
+ * unhandled throwable is rethrown), so transaction handling must inspect
+ * $response->status and error reporting belongs in ExceptionEvent. A middleware
+ * validating a request against a resource must pass through when
+ * Request::ATTRIBUTE_UNMATCHED_ROUTE is set (see CsrfMiddleware). Middlewares
+ * validating the connection, the envelope or the caller may answer before
+ * routing, and middlewares that decorate responses must keep running.
  */
 final readonly class HttpKernel
 {
