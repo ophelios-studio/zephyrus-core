@@ -6,7 +6,11 @@ namespace Zephyrus\Tests\Unit\Data;
 
 use ArrayAccess;
 use Countable;
+use DateTime;
+use DateTimeImmutable;
+use DateTimeInterface;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use stdClass;
@@ -88,6 +92,15 @@ class IntersectionTypeEntity extends Entity
 {
     public int $id;
     public Countable&ArrayAccess $bag;
+}
+
+class DateEntity extends Entity
+{
+    public int $id;
+    public DateTimeImmutable $immutable;
+    public DateTimeInterface $interface;
+    public DateTime $mutable;
+    public ?DateTimeImmutable $deletedAt = null;
 }
 
 class StdClassEntity extends Entity
@@ -501,5 +514,86 @@ final class EntityTest extends TestCase
             $this->assertStringContainsString('role', $e->getMessage());
             $this->assertStringNotContainsString('jane.roe@example.com', $e->getMessage());
         }
+    }
+
+    public function testDateStringsHydrateDateTimeProperties(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = '2030-02-01 10:30:00';
+        $row->interface = '2030-02-01 10:30:00';
+        $row->mutable = '2030-02-01 10:30:00';
+        $row->deletedAt = null;
+
+        $entity = DateEntity::build($row);
+
+        self::assertInstanceOf(DateTimeImmutable::class, $entity->immutable);
+        self::assertInstanceOf(DateTimeImmutable::class, $entity->interface);
+        self::assertInstanceOf(DateTime::class, $entity->mutable);
+        self::assertSame('2030-02-01 10:30:00', $entity->immutable->format('Y-m-d H:i:s'));
+        self::assertSame('2030-02-01 10:30:00', $entity->mutable->format('Y-m-d H:i:s'));
+        self::assertNull($entity->deletedAt);
+    }
+
+    public function testAnInvalidDateStringIsRefusedWithoutEchoingTheValue(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = 'jane.roe@example.com';
+
+        try {
+            DateEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Invalid value for date DateTimeImmutable on property $immutable',
+                $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function invalidDates(): array
+    {
+        return [
+            'empty' => [''],
+            'blank' => ['   '],
+            'zero date' => ['0000-00-00'],
+            'impossible day' => ['2030-02-30'],
+            'relative word' => ['tomorrow'],
+            'relative offset' => ['+10 years'],
+            'unix timestamp' => ['@0'],
+            'integer' => [1900000000],
+            'infinity' => ['infinity'],
+        ];
+    }
+
+    #[DataProvider('invalidDates')]
+    public function testAnInvalidDateValueIsRefused(mixed $value): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = $value;
+
+        try {
+            DateEntity::build($row);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame('Invalid value for date DateTimeImmutable on property $immutable', $e->getMessage());
+        }
+    }
+
+    public function testADateWithAnOffsetKeepsItsOffset(): void
+    {
+        $row = new stdClass();
+        $row->id = '1';
+        $row->immutable = '2030-02-01 10:30:00+02:00';
+
+        $entity = DateEntity::build($row);
+
+        self::assertSame('+02:00', $entity->immutable->format('P'));
+        self::assertSame('2030-02-01T10:30:00+02:00', $entity->immutable->format('c'));
     }
 }

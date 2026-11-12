@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Zephyrus\Data;
 
+use DateTime;
+use DateTimeImmutable;
+use DateTimeInterface;
+use Exception;
 use InvalidArgumentException;
 use JsonSerializable;
 use ReflectionClass;
@@ -31,7 +35,11 @@ abstract class Entity implements JsonSerializable
     /**
      * Hydrate an entity from a database row, coercing values to the declared property types.
      *
-     * Private and static properties, and union or intersection types, are not hydrated.
+     * Private and static properties, and union or intersection types, are not hydrated. A
+     * DateTimeImmutable, DateTimeInterface or DateTime property takes a string that starts with a
+     * digit and is a real date.
+     *
+     * @throws InvalidArgumentException When an enum or date value cannot be hydrated.
      *
      * @return static|null Returns null when $row is null.
      */
@@ -102,11 +110,36 @@ abstract class Entity implements JsonSerializable
                     if ($value instanceof stdClass) {
                         $instance->$name = $className::build($value);
                     }
+                } elseif ($className === DateTimeImmutable::class || $className === DateTimeInterface::class) {
+                    $instance->$name = self::parseDate(DateTimeImmutable::class, $className, $name, $value);
+                } elseif ($className === DateTime::class) {
+                    $instance->$name = self::parseDate(DateTime::class, $className, $name, $value);
                 }
             }
         }
 
         return $instance;
+    }
+
+    /**
+     * @param class-string<DateTimeInterface> $concrete
+     */
+    private static function parseDate(string $concrete, string $declared, string $name, mixed $value): DateTimeInterface
+    {
+        // Rejects relative formats, '@timestamp' and an empty string (which would mean "now").
+        if (is_string($value) && $value !== '' && ctype_digit($value[0])) {
+            try {
+                $date = new $concrete($value);
+                $errors = DateTimeImmutable::getLastErrors();
+                if ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0)) {
+                    return $date;
+                }
+            } catch (Exception) {
+            }
+        }
+
+        // The database value is not interpolated: the message reaches logs and error pages.
+        throw new InvalidArgumentException("Invalid value for date {$declared} on property \${$name}");
     }
 
     /**
