@@ -22,7 +22,7 @@ final class FileWithoutPosixTest extends TestCase
         }
         PHP;
 
-    public function testAFileOfTheProcessInAStickyDirectoryIsWrittenWithoutThePosixExtension(): void
+    public function testAFileOfTheProcessInTheTemporaryDirectoryIsWrittenWithoutThePosixExtension(): void
     {
         $temporary = sys_get_temp_dir();
         $stat = stat($temporary);

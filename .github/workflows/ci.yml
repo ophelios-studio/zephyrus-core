@@ -94,6 +94,11 @@ jobs:
         if: ${{ !matrix.coverage }}
         run: php vendor/bin/phpunit
 
+      # The sticky directory refusal needs root, to give a file to another user.
+      - name: Run the shared directory tests as root
+        if: matrix.checks
+        run: sudo "$(command -v php)" vendor/bin/phpunit --filter 'StickyDirectory' --do-not-cache-result --fail-on-skipped
+
       - name: Upload coverage to Codecov
         if: success() && matrix.coverage
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
