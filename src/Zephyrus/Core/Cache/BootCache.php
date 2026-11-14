@@ -35,7 +35,7 @@ final readonly class BootCache
     /**
      * @param string $path Absolute path of the cache file.
      * @param string $baseDirectory Real path of the directory the cache must stay under.
-     * @param string $trustedSource Real path of the file whose owner is trusted alongside root.
+     * @param string $trustedSource Path of the file whose owner is trusted alongside root, a link being followed by fileowner().
      * @param (\Closure(string): (int|false))|null $ownerOf Reads the owner uid of a path, fileowner() by default.
      * @param (\Closure(): int)|null $processOwner Reads the uid of this process, AtomicFileWriter::processOwner()
      *                                            by default.
