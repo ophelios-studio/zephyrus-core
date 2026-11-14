@@ -339,11 +339,12 @@ final readonly class Configuration
     }
 
     /**
-     * Build a Configuration tree from one file: YAML by extension, otherwise a PHP file returning an array.
+     * Build a Configuration tree from one file: YAML (.yml, .yaml) or a PHP file (.php) returning an array.
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when the file is missing, is a YAML file that does not parse, fails to load,
-     *        or does not return an array, an !env tag is refused, or the configuration is refused by fromArray().
+     * @throws ConfigurationException when the file has another extension, is a PHP file given as a stream wrapper URL,
+     *        is missing, is a YAML file that does not parse, fails to load, or does not return an array, an !env tag is
+     *        refused, or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
@@ -354,20 +355,7 @@ final readonly class Configuration
             return self::fromYamlFile($path, $sectionFactories);
         }
 
-        if (!is_file($path)) {
-            throw ConfigurationException::fileNotFound($path);
-        }
-
-        try {
-            /** @var mixed $loaded */
-            $loaded = require $path;
-        } catch (\Throwable $exception) {
-            throw ConfigurationException::loadFailed($path, $exception);
-        }
-
-        if (!is_array($loaded)) {
-            throw ConfigurationException::invalidFormat($path);
-        }
+        $loaded = self::loadFileAsArray($path);
 
         return self::fromArray($loaded, $sectionFactories);
     }
@@ -380,8 +368,9 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when a path is not a non-empty string, a file is missing, is a YAML file
-     *        that does not parse, fails to load or does not return an array, an !env tag is refused,
+     * @throws ConfigurationException when a file has another extension than .yml, .yaml or .php,
+     *        or is a PHP file given as a stream wrapper URL, when a path is not a non-empty string, a file is missing,
+     *        is a YAML file that does not parse, fails to load or does not return an array, an !env tag is refused,
      *        or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
@@ -393,11 +382,13 @@ final readonly class Configuration
 
     /**
      * Build a Configuration tree from multiple files and ignore missing paths.
+     * A missing file is skipped; an existing file with another extension is refused.
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when a path is not a non-empty string, a present file is a YAML file
-     *        that does not parse, fails to load or does not return an array, an !env tag is refused,
+     * @throws ConfigurationException when a present file has another extension than .yml, .yaml or .php,
+     *        or is a PHP file given as a stream wrapper URL, when a path is not a non-empty string, a present file is
+     *        a YAML file that does not parse, fails to load or does not return an array, an !env tag is refused,
      *        or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
@@ -529,7 +520,7 @@ final readonly class Configuration
     }
 
     /**
-     * Load a single file as an array (detects YAML vs PHP by extension).
+     * Load a single file as an array (YAML or PHP by extension, any other extension refused).
      *
      * @return array<string, mixed>
      */
@@ -541,13 +532,22 @@ final readonly class Configuration
             return (new ConfigurationFile($path))->toArray();
         }
 
-        if (!is_file($path)) {
+        if ($extension !== 'php') {
+            throw ConfigurationException::invalidFormat($path, 'must be YAML (.yml, .yaml) or PHP (.php)');
+        }
+
+        if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
+            throw ConfigurationException::invalidFormat($path, 'must be a local path, not a stream wrapper URL');
+        }
+
+        $resolved = is_file($path) ? realpath($path) : false;
+        if ($resolved === false) {
             throw ConfigurationException::fileNotFound($path);
         }
 
         try {
             /** @var mixed $loaded */
-            $loaded = require $path;
+            $loaded = require $resolved;
         } catch (\Throwable $exception) {
             throw ConfigurationException::loadFailed($path, $exception);
         }

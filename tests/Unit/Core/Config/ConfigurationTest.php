@@ -258,6 +258,117 @@ final class ConfigurationTest extends TestCase
         }
     }
 
+    /**
+     * @return array<string, array{string, bool}>
+     */
+    public static function refusedExtensions(): array
+    {
+        return [
+            'json' => ['config.json', true],
+            'env' => ['.env', true],
+            'no extension' => ['config', true],
+            'trailing space' => ['config.yml ', false],
+        ];
+    }
+
+    #[DataProvider('refusedExtensions')]
+    public function testAFileWithAnotherExtensionIsRefusedAndNeverExecuted(string $name, bool $loadedByFromFiles): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-config-ext-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/' . $name;
+        $marker = $directory . '/marker';
+        file_put_contents($path, "<?php file_put_contents('" . $marker . "', 'ran'); return [];");
+        $expected = 'Configuration file ' . $name . ': must be YAML (.yml, .yaml) or PHP (.php)';
+
+        try {
+            $loaders = [fn () => Configuration::fromFile($path)];
+            if ($loadedByFromFiles) {
+                $loaders[] = fn () => Configuration::fromFiles([$path]);
+            }
+
+            foreach ($loaders as $load) {
+                try {
+                    $load();
+                    self::fail('expected a refusal');
+                } catch (ConfigurationException $e) {
+                    self::assertSame($expected, $e->getMessage());
+                }
+            }
+            self::assertFileDoesNotExist($marker);
+        } finally {
+            @unlink($path);
+            @unlink($marker);
+            @rmdir($directory);
+        }
+    }
+
+    public function testAPhpFileGivenAsAStreamWrapperUrlIsRefusedAndNeverExecuted(): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-config-wrapper-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.php';
+        $marker = $directory . '/marker';
+        file_put_contents($path, "<?php file_put_contents('" . $marker . "', 'ran'); return [];");
+        $url = 'file://' . $path;
+        $expected = 'Configuration file config.php: must be a local path, not a stream wrapper URL';
+
+        try {
+            $loaders = [
+                fn () => Configuration::fromFile($url),
+                fn () => Configuration::fromFiles([$url]),
+            ];
+
+            foreach ($loaders as $load) {
+                try {
+                    $load();
+                    self::fail('expected a refusal');
+                } catch (ConfigurationException $e) {
+                    self::assertSame($expected, $e->getMessage());
+                }
+            }
+            self::assertFileDoesNotExist($marker);
+        } finally {
+            @unlink($path);
+            @unlink($marker);
+            @rmdir($directory);
+        }
+    }
+
+    public function testARelativePhpFileIsLoadedFromTheCurrentDirectoryNotTheIncludePath(): void
+    {
+        $root = sys_get_temp_dir() . '/zephyrus-config-inc-' . bin2hex(random_bytes(8));
+        $files = [
+            $root . '/inc/sub/config.php' => ['localization' => ['locale' => 'es']],
+            $root . '/cwd/sub/config.php' => ['localization' => ['locale' => 'fr']],
+        ];
+        foreach ($files as $file => $payload) {
+            mkdir(dirname($file), 0777, true);
+            file_put_contents($file, "<?php\nreturn " . var_export($payload, true) . ";\n");
+        }
+
+        $previousDirectory = getcwd();
+        $previousIncludePath = get_include_path();
+
+        try {
+            chdir($root . '/cwd');
+            set_include_path($root . '/inc' . PATH_SEPARATOR . $previousIncludePath);
+
+            self::assertSame('fr', Configuration::fromFile('sub/config.php')->localization->locale);
+            self::assertSame('fr', Configuration::fromFiles(['sub/config.php'])->localization->locale);
+        } finally {
+            set_include_path($previousIncludePath);
+            chdir((string) $previousDirectory);
+            foreach (array_keys($files) as $file) {
+                @unlink($file);
+                @rmdir(dirname($file));
+            }
+            @rmdir($root . '/inc');
+            @rmdir($root . '/cwd');
+            @rmdir($root);
+        }
+    }
+
     public function testFromFileThrowsWhenFileMissing(): void
     {
         $this->expectException(ConfigurationException::class);
@@ -380,6 +491,40 @@ final class ConfigurationTest extends TestCase
         } finally {
             @unlink($path);
         }
+    }
+
+    public function testFromOptionalFilesRefusesAnExistingFileOfAnotherExtensionAndNeverExecutesIt(): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-config-optional-ext-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.json';
+        $marker = $directory . '/marker';
+        file_put_contents($path, "<?php file_put_contents('" . $marker . "', 'ran'); return [];");
+        $expected = 'Configuration file config.json: must be YAML (.yml, .yaml) or PHP (.php)';
+
+        try {
+            try {
+                Configuration::fromOptionalFiles([$path]);
+                self::fail('expected a refusal');
+            } catch (ConfigurationException $e) {
+                self::assertSame($expected, $e->getMessage());
+            }
+            self::assertFileDoesNotExist($marker);
+        } finally {
+            @unlink($path);
+            @unlink($marker);
+            @rmdir($directory);
+        }
+    }
+
+    public function testFromOptionalFilesSkipsAMissingFileOfAnotherExtension(): void
+    {
+        $missing = sys_get_temp_dir() . '/zephyrus-config-optional-absent-' . bin2hex(random_bytes(8)) . '/config.json';
+
+        self::assertSame(
+            Configuration::fromArray([])->toArray(),
+            Configuration::fromOptionalFiles([$missing])->toArray(),
+        );
     }
 
     public function testFromFilesRejectsNonStringPathEntries(): void
