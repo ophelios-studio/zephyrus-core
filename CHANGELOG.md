@@ -16,7 +16,9 @@ changes are listed first, each with the change to make in your code.
 
 ### Security
 
-- A YAML syntax error in `config.yml` no longer quotes the file. `v0.16.0` appended the parser's message to `ConfigurationException` and chained the parser's exception, and both can quote a value of the file (a malformed `password` line shows it in the message and in the excerpt), which then reached traces, error pages, logs and `cache:warm`. The message is now `Failed to parse configuration file [config.yml]: invalid YAML at line 3 (the parser's detail is withheld, since it can quote a secret from the file).` (without `at line N` when the parser gives no line), and `getPrevious()` returns null: code that read the line from the cause finds it in the message.
+- A YAML syntax error in `config.yml` no longer quotes the file. `v0.16.0` appended the parser's message to `ConfigurationException` and chained the parser's exception, and both can quote a value of the file (a malformed `password` line shows it in the message and in the excerpt), which then reached traces, error pages, logs and `cache:warm`. The message is now `Failed to parse configuration file [config.yml]: invalid YAML near line 3 (the parser's detail is withheld, since it can quote a secret from the file).` (without `near line N` when the parser gives no line), `getPrevious()` returns null, and the parser's exception is no longer an argument of any call made after the failure, so a trace that records arguments (Tracy does) holds neither it nor the file's text: code that read the line from the cause finds it in the message. `ConfigurationException::parseFailed()` takes the line (`?int`) instead of the exception.
+- A refused `!env` name is no longer quoted. `!env tag at "a": ...` names the tag's key and the reason (`the variable name is refused: names must not contain a NUL byte or "=".`), and the `InvalidArgumentException` of `EnvironmentVariable::read()` is no longer chained, since a value pasted where a name belongs (a base64 secret ends with `=`) would otherwise reach messages and traces.
+- A value a section getter refuses (`ConfigSection::getString()`, `getInt()`, ...) is hidden from the trace's argument list.
 
 ### Added
 
@@ -26,7 +28,7 @@ changes are listed first, each with the change to make in your code.
 ### Changed
 
 - The default connection factory of `Database::fromConfig()` builds with `PDO::connect()`, so the handle is a `Pdo\Pgsql`. A factory you pass keeps working; on PHP 8.5 one used with `persistent: true` should build with `PDO::connect()` too, or each acquisition emits a deprecation.
-- A dotted key written flat under a section whose first part is a mapping of that section (`smtp.host: h` under `mailer:`) is refused with `... is written flat: nest it under 'smtp', such as smtp: { host: ... }.`, where it listed the accepted keys or suggested a spelling.
+- A dotted key written flat under a section whose first part is a mapping of that section (`smtp.host: h` under `mailer:`) is refused with `... is written flat: nest it under 'smtp', such as smtp: { host: ... }.`, where it listed the accepted keys or suggested a spelling. The example shows the nested key written (or the closest one when it is misspelled) and is left out when that key is not a plain field name.
 
 ### Fixed
 
