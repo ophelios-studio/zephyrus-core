@@ -726,7 +726,7 @@ final class FileTest extends TestCase
         return [
             'write' => ['write', 'Failed to write to: "{path}"'],
             'append' => ['append', 'Failed to append to: "{path}"'],
-            'copy' => ['copy', 'Failed to copy: "{source} to {path}"'],
+            'copy' => ['copy', 'Failed to copy "{source}" to "{path}"'],
         ];
     }
 
@@ -804,6 +804,30 @@ final class FileTest extends TestCase
         }
 
         self::assertSame('content', (string) file_get_contents($path));
+    }
+
+    public function testAMoveThatCannotRenameNamesBothPathsQuoted(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root writes into a read-only directory.');
+        }
+        $source = $this->tempDir . '/move-source.txt';
+        $locked = $this->tempDir . '/locked';
+        $destination = $locked . '/dest.txt';
+        file_put_contents($source, 'content');
+        mkdir($locked, 0755);
+        chmod($locked, 0555);
+
+        try {
+            (new File($source))->move($destination);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Failed to move "' . $source . '" to "' . $destination . '"', $e->getMessage());
+        } finally {
+            chmod($locked, 0755);
+        }
+
+        self::assertSame('content', (string) file_get_contents($source));
     }
 
     /**

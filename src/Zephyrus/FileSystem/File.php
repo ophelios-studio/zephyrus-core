@@ -213,7 +213,7 @@ final class File extends FileSystemNode
 
                     return @stream_copy_to_stream($source, $handle) !== false;
                 },
-                self::failure('copy', $this->path . ' to ' . $destination),
+                self::transferFailure('copy', $this->path, $destination),
                 $sourceStat['mode'],
                 function (array $existing) use ($sourceStat, $destination): void {
                     if (self::isSameFile($sourceStat, $existing)) {
@@ -248,7 +248,7 @@ final class File extends FileSystemNode
         }
 
         if (!@rename($this->path, $destination)) {
-            throw FileSystemException::operationFailed('move', $this->path . ' to ' . $destination);
+            throw FileSystemException::transferFailed('move', $this->path, $destination);
         }
 
         return new self($destination);
@@ -326,6 +326,15 @@ final class File extends FileSystemNode
     {
         return static fn (?string $reason = null): FileSystemException
             => FileSystemException::operationFailed($operation, $path, reason: $reason);
+    }
+
+    /**
+     * @return \Closure(?string=): FileSystemException
+     */
+    private static function transferFailure(string $operation, string $source, string $destination): \Closure
+    {
+        return static fn (?string $reason = null): FileSystemException
+            => FileSystemException::transferFailed($operation, $source, $destination, $reason);
     }
 
     /**

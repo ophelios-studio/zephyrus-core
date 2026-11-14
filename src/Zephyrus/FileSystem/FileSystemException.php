@@ -49,6 +49,26 @@ final class FileSystemException extends ZephyrusRuntimeException
         );
     }
 
+    public static function transferFailed(
+        string $operation,
+        string $source,
+        string $destination,
+        ?string $reason = null,
+    ): self {
+        $message = sprintf(
+            'Failed to %s %s to %s',
+            $operation,
+            self::quotePath($source),
+            self::quotePath($destination),
+        );
+
+        return new self(
+            $reason === null
+                ? $message
+                : sprintf('%s (%s)', $message, MessageValue::quote($reason, self::MAX_REASON_BYTES)),
+        );
+    }
+
     public static function notAFileName(string $path): self
     {
         return new self(sprintf('Path does not end with a file name: %s', self::quotePath($path)));
@@ -81,12 +101,19 @@ final class FileSystemException extends ZephyrusRuntimeException
 
     public static function belongsToAnotherUserInSharedDirectory(string $path): self
     {
-        return new self(sprintf('Path belongs to another user in a shared directory, so it is not written: %s', self::quotePath($path)));
+        return new self(sprintf(
+            'Path belongs to another user in a shared directory, so it is not written: %s',
+            self::quotePath($path),
+        ));
     }
 
     public static function copyOntoItself(string $source, string $destination): self
     {
-        return new self(sprintf('Cannot copy a file onto itself: %s to %s', self::quotePath($source), self::quotePath($destination)));
+        return new self(sprintf(
+            'Cannot copy a file onto itself: %s to %s',
+            self::quotePath($source),
+            self::quotePath($destination),
+        ));
     }
 
     public static function alreadyExists(string $path): self

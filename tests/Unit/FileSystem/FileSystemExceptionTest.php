@@ -93,6 +93,18 @@ final class FileSystemExceptionTest extends TestCase
         self::assertSame('Failed to write to: "/p" ("boom\\nForged: line")', $exception->getMessage());
     }
 
+    public function testATransferFailedQuotesAndEscapesEachPath(): void
+    {
+        $exception = FileSystemException::transferFailed('copy', "/a\nb", '/c');
+        self::assertSame('Failed to copy "/a\nb" to "/c"', $exception->getMessage());
+    }
+
+    public function testATransferFailedWithAReasonQuotesItLast(): void
+    {
+        $exception = FileSystemException::transferFailed('copy', '/a', '/c', "x\ny");
+        self::assertSame('Failed to copy "/a" to "/c" ("x\ny")', $exception->getMessage());
+    }
+
     public function testBothPathsOfACopyOntoItselfAreQuoted(): void
     {
         $exception = FileSystemException::copyOntoItself('/a', '/b');
