@@ -43,6 +43,8 @@ final class File extends FileSystemNode
     private const int PERMISSION_BITS = 0o777;
     private const string TEMPORARY_PREFIX = '.zephyrus-';
 
+    private static ?int $createdFileOwner = null;
+
     /**
      * Create a new file with optional initial content.
      *
@@ -461,10 +463,30 @@ final class File extends FileSystemNode
         if (($directory['mode'] & self::STICKY_BIT) === 0 || $file['uid'] === $directory['uid']) {
             return;
         }
-        // Without ext-posix the effective user is unknown, so the file is taken as another user's.
-        if (!function_exists('posix_geteuid') || $file['uid'] !== posix_geteuid()) {
+        if ($file['uid'] !== self::effectiveUserId()) {
             throw FileSystemException::belongsToAnotherUserInSharedDirectory($path);
         }
+    }
+
+    /**
+     * The effective user id, null when it cannot be known. Without ext-posix it is the owner
+     * of a file just created, the id the kernel compares.
+     */
+    private static function effectiveUserId(): ?int
+    {
+        if (function_exists('posix_geteuid')) {
+            return posix_geteuid();
+        }
+        if (self::$createdFileOwner === null) {
+            $handle = @tmpfile();
+            $stat = $handle === false ? false : fstat($handle);
+            if ($handle !== false) {
+                fclose($handle);
+            }
+            self::$createdFileOwner = $stat === false ? null : $stat['uid'];
+        }
+
+        return self::$createdFileOwner;
     }
 
     /**
