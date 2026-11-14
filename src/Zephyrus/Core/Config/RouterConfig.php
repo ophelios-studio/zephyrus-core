@@ -15,9 +15,10 @@ use Zephyrus\Core\Cache\PathPrefix;
  * - controllers: PSR-4 namespace => directory of its controllers, discovered in this order. Required.
  * - middleware_groups (middlewareGroups): group name => middleware or group names, as Router::middlewareGroup().
  *   Default none.
- * - cache: the routes cache file, which must stay under the application root. Default var/zephyrus/routes.php.
+ * - cache: the routes cache file, a .php file under the application root. Default var/zephyrus/routes.php.
  *
  * A relative path is resolved against the application root (basePath), never against the current directory.
+ * The cache holds every route path, name and constraint in clear: never build a route from a secret.
  */
 final readonly class RouterConfig
 {
@@ -44,14 +45,23 @@ final readonly class RouterConfig
     }
 
     /**
-     * @param array<array-key, mixed> $values
-     * @throws ConfigurationException when a key is unknown, a value carries a tag, controllers is missing or empty,
-     *         a namespace or a path is not a non-empty string, or a middleware group is not a list of names.
+     * @param mixed $section The router: section as parsed, null when written empty.
+     * @throws ConfigurationException when the section is not a map, a value carries a tag, a key is unknown,
+     *         controllers is missing or empty, a namespace or a path is not a non-empty string, a middleware group is
+     *         not a list of names, or the cache is not a .php file.
      */
-    public static function fromArray(array $values): self
+    public static function fromArray(mixed $section): self
     {
-        self::refuseTags($values);
-        $keys = ConfigKeys::read(self::SECTION, $values, self::SPELLINGS);
+        self::refuseTags($section);
+        $section ??= [];
+        if (!is_array($section)) {
+            throw new ConfigurationException(sprintf(
+                "Configuration section '%s' must map controllers, middleware_groups and cache to their values.",
+                self::SECTION,
+            ));
+        }
+
+        $keys = ConfigKeys::read(self::SECTION, $section, self::SPELLINGS);
 
         return new self(
             self::controllersOf($keys->value('controllers')),
@@ -64,25 +74,29 @@ final readonly class RouterConfig
      * Refuse a tag anywhere in the section: cache:warm reads it without the environment.
      *
      * @internal Read by ConfigurationFile before it resolves !env.
-     * @throws ConfigurationException
+     * @throws ConfigurationException naming the field that holds the tag.
      */
-    public static function refuseTags(mixed $value, string $path = ''): void
+    public static function refuseTags(mixed $section): void
     {
-        if ($value instanceof TaggedValue) {
-            throw ConfigurationException::invalidType(
+        if ($section instanceof TaggedValue) {
+            throw new ConfigurationException(sprintf(
+                "Configuration section '%s' is written under the !%s tag, but %s reads this section without the "
+                . 'environment: write its values in the file.',
                 self::SECTION,
-                $path === '' ? self::SECTION : $path,
-                sprintf(
-                    'is written under the !%s tag, but %s reads this section without the environment: write the value itself',
-                    $value->getTag(),
-                    BootCache::WARM_COMMAND,
-                ),
-            );
+                $section->getTag(),
+                BootCache::WARM_COMMAND,
+            ));
         }
 
-        if (is_array($value)) {
-            foreach ($value as $key => $item) {
-                self::refuseTags($item, $path === '' ? (string) $key : $path . '.' . $key);
+        foreach (is_array($section) ? $section : [] as $field => $value) {
+            $tagged = self::firstTag($value);
+            if ($tagged !== null) {
+                throw ConfigurationException::invalidType(self::SECTION, (string) $field, sprintf(
+                    'holds a value under the !%s tag, but %s reads this section without the environment: write the '
+                    . 'value itself',
+                    $tagged->getTag(),
+                    BootCache::WARM_COMMAND,
+                ));
             }
         }
     }
@@ -102,9 +116,9 @@ final readonly class RouterConfig
             if (!is_dir($resolved)) {
                 throw ConfigurationException::invalidValue(
                     self::SECTION,
-                    'controllers.' . $namespace,
+                    'controllers',
                     $directory,
-                    sprintf('%s is not a directory', $resolved),
+                    sprintf('%s, the directory of %s, is not a directory', $resolved, $namespace),
                 );
             }
 
@@ -159,7 +173,7 @@ final readonly class RouterConfig
             throw ConfigurationException::missingRequired(self::SECTION, 'controllers');
         }
 
-        if (!is_array($value) || $value === []) {
+        if (!is_array($value) || array_is_list($value)) {
             throw ConfigurationException::invalidType(
                 self::SECTION,
                 'controllers',
@@ -182,8 +196,8 @@ final readonly class RouterConfig
             if (!is_string($directory) || trim($directory) === '') {
                 throw ConfigurationException::invalidType(
                     self::SECTION,
-                    'controllers.' . $trimmed,
-                    'must be the directory of that namespace',
+                    'controllers',
+                    sprintf('must map %s to the directory of that namespace', $trimmed),
                 );
             }
 
@@ -213,6 +227,14 @@ final readonly class RouterConfig
 
         $groups = [];
         foreach ($value as $name => $middlewares) {
+            if (!is_string($name)) {
+                throw ConfigurationException::invalidType(
+                    self::SECTION,
+                    $key,
+                    'must map each group name to a list of middleware names',
+                );
+            }
+
             if (!is_array($middlewares) || !array_is_list($middlewares)) {
                 throw ConfigurationException::invalidType(self::SECTION, $key . '.' . $name, 'must be a list of middleware names');
             }
@@ -227,7 +249,7 @@ final readonly class RouterConfig
                 }
             }
 
-            $groups[(string) $name] = $middlewares;
+            $groups[$name] = $middlewares;
         }
 
         return $groups;
@@ -246,7 +268,32 @@ final readonly class RouterConfig
             throw ConfigurationException::invalidType(self::SECTION, 'cache', 'must be the path of the routes cache file');
         }
 
+        if (!str_ends_with($value, '.php')) {
+            throw ConfigurationException::invalidValue(
+                self::SECTION,
+                'cache',
+                $value,
+                'the routes cache is PHP, so its file name must end in .php',
+            );
+        }
+
         return $value;
+    }
+
+    private static function firstTag(mixed $value): ?TaggedValue
+    {
+        if ($value instanceof TaggedValue) {
+            return $value;
+        }
+
+        foreach (is_array($value) ? $value : [] as $item) {
+            $tagged = self::firstTag($item);
+            if ($tagged !== null) {
+                return $tagged;
+            }
+        }
+
+        return null;
     }
 
     private static function resolve(string $path, string $basePath): string

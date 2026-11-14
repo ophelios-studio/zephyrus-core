@@ -113,7 +113,7 @@ final readonly class Configuration
                 : null,
             customSections: $customSections,
             router:         array_key_exists(RouterConfig::SECTION, $config)
-                ? RouterConfig::fromArray((array) $config[RouterConfig::SECTION])
+                ? RouterConfig::fromArray($config[RouterConfig::SECTION])
                 : null,
         );
     }

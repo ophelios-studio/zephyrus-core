@@ -71,9 +71,8 @@ final class ConfigurationRouterSectionTest extends TestCase
             self::fail('expected a refusal');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'router' field \"controllers.App\\\\Controllers\" is written under the !env tag, "
-                . 'but vendor/bin/zephyrus cache:warm reads this section without the environment: write the value '
-                . 'itself.',
+                "Configuration section 'router' field 'controllers' holds a value under the !env tag, but "
+                . 'vendor/bin/zephyrus cache:warm reads this section without the environment: write the value itself.',
                 $exception->getMessage(),
             );
         } finally {

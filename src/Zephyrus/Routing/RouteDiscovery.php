@@ -51,9 +51,9 @@ final readonly class RouteDiscovery
             if ($classes === []) {
                 throw ConfigurationException::invalidValue(
                     RouterConfig::SECTION,
-                    'controllers.' . $namespace,
+                    'controllers',
                     $this->config->controllers[$namespace],
-                    sprintf('%s holds no class of that namespace', $directory),
+                    sprintf('%s holds no class of the namespace %s', $directory, $namespace),
                 );
             }
 
