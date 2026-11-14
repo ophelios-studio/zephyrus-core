@@ -151,6 +151,30 @@ final class ConfigKeysTest extends TestCase
         );
     }
 
+    public function testADottedKeyWrittenFlatWithAMisspelledSuffixIsToldTheClosestNestedKey(): void
+    {
+        self::assertSame(
+            "Configuration section 'example' field 'csrf.enabeld' is written flat: nest it under 'csrf', such as csrf: { enabled: ... }.",
+            self::refusalOf(['csrf.enabeld' => false]),
+        );
+    }
+
+    public function testADottedKeyWrittenFlatWithAnUnrelatedSuffixGivesNoExample(): void
+    {
+        self::assertSame(
+            "Configuration section 'example' field 'csrf.zzzzzzzz' is written flat: nest it under 'csrf'.",
+            self::refusalOf(['csrf.zzzzzzzz' => false]),
+        );
+    }
+
+    public function testADottedKeyWhoseFirstPartIsNotAMappingKeepsTheUnknownKeyRefusal(): void
+    {
+        self::assertSame(
+            "Configuration section 'example' field 'foo.bar' is an unknown key: " . self::ACCEPTED,
+            self::refusalOf(['foo.bar' => 1]),
+        );
+    }
+
     public function testAMappingNameHoldingNullReadsAsAnEmptyMapping(): void
     {
         $keys = ConfigKeys::read('example', ['csrf' => null], self::SPELLINGS);

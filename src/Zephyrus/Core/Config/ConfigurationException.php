@@ -87,17 +87,20 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * A dotted key written flat where its first part is a mapping of the section.
+     * A dotted key written flat where its first part is a mapping of the section. The example key is shown only
+     * when it is a plain field name.
      */
-    public static function flatKey(string $section, string $field, string $mapping, string $nested): self
+    public static function flatKey(string $section, string $field, string $mapping, ?string $exampleKey = null): self
     {
+        $example = $exampleKey !== null && preg_match(self::PLAIN_FIELD_PATTERN, $exampleKey) === 1
+            ? sprintf(', such as %s: { %s: ... }', $mapping, $exampleKey)
+            : '';
         $exception = new self(sprintf(
-            "Configuration section '%s' field %s is written flat: nest it under %s, such as %s: { %s: ... }.",
+            "Configuration section '%s' field %s is written flat: nest it under %s%s.",
             $section,
             self::shownField($field),
             self::shownField($mapping),
-            $mapping,
-            $nested,
+            $example,
         ));
         $exception->section = $section;
         $exception->field = $field;

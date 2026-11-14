@@ -221,6 +221,27 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertSame('/srv/app/config/config.php', $e->path());
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function exampleKeysThatAreNotPlain(): iterable
+    {
+        yield 'escape sequence' => ["\x1b[2Khost"];
+        yield 'line break' => ["host\nx"];
+        yield 'too long' => [str_repeat('a', 200)];
+    }
+
+    #[DataProvider('exampleKeysThatAreNotPlain')]
+    public function testAFlatKeyExampleThatIsNotAPlainFieldNameIsLeftOut(string $exampleKey): void
+    {
+        $e = ConfigurationException::flatKey('mailer', 'smtp.host', 'smtp', $exampleKey);
+
+        self::assertSame(
+            "Configuration section 'mailer' field 'smtp.host' is written flat: nest it under 'smtp'.",
+            $e->getMessage(),
+        );
+    }
+
     public function testParseFailedNamesTheFileAndTheLineAndWithholdsTheParserDetail(): void
     {
         $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', 3);
