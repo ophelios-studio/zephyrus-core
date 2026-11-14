@@ -12,6 +12,7 @@ use SplFileInfo;
 use Zephyrus\Core\Cache\BootCache;
 use Zephyrus\Core\Cache\BootCacheException;
 use Zephyrus\Core\Cache\CacheRefusal;
+use Zephyrus\Core\Cache\PathPrefix;
 use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
@@ -238,7 +239,7 @@ final readonly class RouteCache implements WarmableCache
     private function isConfiguredHandler(string $handler): bool
     {
         foreach (array_keys($this->config->controllers) as $namespace) {
-            if (str_starts_with($handler, $namespace . '\\')) {
+            if (PathPrefix::isUnder($handler, $namespace, '\\')) {
                 return true;
             }
         }
@@ -324,10 +325,7 @@ final readonly class RouteCache implements WarmableCache
      */
     private function dependencies(array $routes): array
     {
-        $directories = array_map(
-            static fn (string $directory): string => rtrim($directory, '/') . '/',
-            array_values($this->config->controllerDirectories($this->basePath)),
-        );
+        $directories = $this->config->controllerDirectories($this->basePath);
 
         $files = [];
         foreach ($routes as $discovered) {
@@ -374,12 +372,12 @@ final readonly class RouteCache implements WarmableCache
     }
 
     /**
-     * @param list<string> $directories Each with a trailing slash.
+     * @param array<string, string> $directories
      */
     private static function isUnderAny(string $file, array $directories): bool
     {
         foreach ($directories as $directory) {
-            if (str_starts_with($file, $directory)) {
+            if (PathPrefix::isUnder($file, $directory)) {
                 return true;
             }
         }
@@ -389,7 +387,7 @@ final readonly class RouteCache implements WarmableCache
 
     private function relative(string $path): string
     {
-        return str_starts_with($path, $this->basePath . '/') ? substr($path, strlen($this->basePath) + 1) : $path;
+        return PathPrefix::isUnder($path, $this->basePath) ? substr($path, strlen($this->basePath) + 1) : $path;
     }
 
     private function absolute(string $path): string

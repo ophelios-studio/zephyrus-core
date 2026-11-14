@@ -9,9 +9,12 @@ final class CacheDirectory
 {
     public readonly string $path;
 
-    public function __construct()
+    /**
+     * @param string|null $path Where to create it, a fresh directory under the temporary directory by default.
+     */
+    public function __construct(?string $path = null)
     {
-        $path = sys_get_temp_dir() . '/zephyrus-cache-' . bin2hex(random_bytes(8));
+        $path ??= sys_get_temp_dir() . '/zephyrus-cache-' . bin2hex(random_bytes(8));
         mkdir($path);
         chmod($path, 0o755);
         $this->path = (string) realpath($path);

@@ -207,6 +207,11 @@ final class RouteCacheTest extends TestCase
                 "'Elsewhere",
                 $written,
             ),
+            'a handler in a sibling namespace whose name extends router.controllers' => str_replace(
+                "'" . substr(var_export(self::NAMESPACE . '\\', true), 1, -1),
+                "'" . substr(var_export(self::NAMESPACE . 'X\\', true), 1, -1),
+                $written,
+            ),
         });
 
         $routes = self::described($this->router('production')->routes());
@@ -229,6 +234,10 @@ final class RouteCacheTest extends TestCase
         ];
         yield 'a handler outside router.controllers' => [
             'a handler outside router.controllers',
+            'its route 0 has a handler outside router.controllers',
+        ];
+        yield 'a handler in a sibling namespace whose name extends router.controllers' => [
+            'a handler in a sibling namespace whose name extends router.controllers',
             'its route 0 has a handler outside router.controllers',
         ];
     }

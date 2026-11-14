@@ -26,7 +26,7 @@ final readonly class AtomicFileWriter
         string $baseDirectory,
         private \Closure $ownerOf,
     ) {
-        $this->baseDirectory = rtrim($baseDirectory, '/') ?: '/';
+        $this->baseDirectory = rtrim($baseDirectory, '/');
     }
 
     /**
@@ -76,13 +76,13 @@ final readonly class AtomicFileWriter
             $segments = $this->segmentsUnderBase($target);
             $file = array_pop($segments);
             foreach ($segments as $segment) {
-                $directory = self::join($directory, $segment);
+                $directory .= '/' . $segment;
                 if (is_link($directory)) {
                     throw new CacheRefusal(sprintf('%s is a symbolic link', $directory));
                 }
             }
 
-            $path = self::join($directory, $file);
+            $path = $directory . '/' . $file;
             if (!file_exists($path) && !is_link($path)) {
                 return false;
             }
@@ -108,7 +108,7 @@ final readonly class AtomicFileWriter
         $directory = $this->baseDirectory;
         $missing = [];
         foreach ($segments as $segment) {
-            $directory = self::join($directory, $segment);
+            $directory .= '/' . $segment;
             if ($missing === [] && (file_exists($directory) || is_link($directory))) {
                 $this->assertWritableDirectory($directory, $processOwner);
             } else {
@@ -116,7 +116,7 @@ final readonly class AtomicFileWriter
             }
         }
 
-        $path = self::join($directory, $file);
+        $path = $directory . '/' . $file;
         if (is_link($path)) {
             throw new CacheRefusal(sprintf('%s is a symbolic link', $path));
         }
@@ -145,22 +145,12 @@ final readonly class AtomicFileWriter
             throw new CacheRefusal('it is not an absolute path');
         }
 
-        $segments = [];
-        foreach (explode('/', $target) as $segment) {
-            if ($segment === '..') {
-                array_pop($segments);
-            } elseif ($segment !== '' && $segment !== '.') {
-                $segments[] = $segment;
-            }
-        }
-
-        $prefix = rtrim($this->baseDirectory, '/') . '/';
-        $normalized = '/' . implode('/', $segments);
-        if (!str_starts_with($normalized, $prefix) || $normalized === $prefix) {
+        $normalized = PathPrefix::withoutDotSegments($target);
+        if (!PathPrefix::isUnder($normalized, $this->baseDirectory)) {
             throw new CacheRefusal(sprintf('it is outside %s', $this->baseDirectory));
         }
 
-        return explode('/', substr($normalized, strlen($prefix)));
+        return explode('/', substr($normalized, strlen($this->baseDirectory) + 1));
     }
 
     private function assertWritableDirectory(string $directory, int $processOwner): void
@@ -225,10 +215,5 @@ final readonly class AtomicFileWriter
         }
 
         return null;
-    }
-
-    private static function join(string $directory, string $segment): string
-    {
-        return rtrim($directory, '/') . '/' . $segment;
     }
 }

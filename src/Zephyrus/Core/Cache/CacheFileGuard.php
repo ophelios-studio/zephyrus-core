@@ -14,18 +14,15 @@ final readonly class CacheFileGuard
 {
     public const int GROUP_OR_OTHERS_WRITE = 0o022;
 
-    private string $baseDirectory;
-
     /**
      * @param string $baseDirectory The real path of the directory the cache must stay under.
      * @param \Closure(string): (int|false) $ownerOf Reads the owner uid of a path.
      */
     public function __construct(
-        string $baseDirectory,
+        private string $baseDirectory,
         private string $trustedSource,
         private \Closure $ownerOf,
     ) {
-        $this->baseDirectory = rtrim($baseDirectory, '/') ?: '/';
     }
 
     /**
@@ -40,7 +37,7 @@ final readonly class CacheFileGuard
             throw new CacheRefusal('it does not resolve to an existing file');
         }
 
-        if (!str_starts_with($realPath, rtrim($this->baseDirectory, '/') . '/')) {
+        if (!PathPrefix::isUnder($realPath, $this->baseDirectory)) {
             throw new CacheRefusal(sprintf('it resolves outside %s', $this->baseDirectory));
         }
 
@@ -53,7 +50,7 @@ final readonly class CacheFileGuard
         }
 
         $trustedOwner = ($this->ownerOf)($this->trustedSource);
-        for ($current = $realPath; $current !== $this->baseDirectory; $current = dirname($current)) {
+        for ($current = $realPath; PathPrefix::isUnder($current, $this->baseDirectory); $current = dirname($current)) {
             $this->assertProtected($current, $trustedOwner);
         }
 

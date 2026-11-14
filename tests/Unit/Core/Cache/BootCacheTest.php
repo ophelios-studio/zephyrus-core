@@ -111,6 +111,20 @@ final class BootCacheTest extends TestCase
         $this->assertIgnoredWithoutIncluding($this->cache(), 'it resolves outside ' . $this->directory->path);
     }
 
+    public function testACacheLinkedIntoASiblingWhoseNameExtendsTheBaseDirectoryIsNeverIncluded(): void
+    {
+        $sibling = new CacheDirectory($this->directory->path . '-sibling');
+        $target = $sibling->file('planted.php', $this->markedContents());
+        $this->directory->directory('var/zephyrus');
+        symlink($target, $this->cachePath);
+
+        try {
+            $this->assertIgnoredWithoutIncluding($this->cache(), 'it resolves outside ' . $this->directory->path);
+        } finally {
+            $sibling->remove();
+        }
+    }
+
     /**
      * @return array<string, array{\Closure(string): string, string}>
      */

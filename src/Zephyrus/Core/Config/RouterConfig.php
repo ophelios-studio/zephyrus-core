@@ -6,6 +6,7 @@ namespace Zephyrus\Core\Config;
 
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Zephyrus\Core\Cache\BootCache;
+use Zephyrus\Core\Cache\PathPrefix;
 
 /**
  * The router: section, read by Router::fromConfiguration() and by vendor/bin/zephyrus cache:warm.
@@ -121,15 +122,13 @@ final readonly class RouterConfig
      */
     public function cachePath(string $basePath): string
     {
-        $root = rtrim($basePath, '/');
-        $path = self::withoutDotSegments(self::resolve($this->cache, $root));
-
-        if (!str_starts_with($path, $root . '/')) {
+        $path = PathPrefix::withoutDotSegments(self::resolve($this->cache, $basePath));
+        if (!PathPrefix::isUnder($path, $basePath)) {
             throw ConfigurationException::invalidValue(
                 self::SECTION,
                 'cache',
                 $this->cache,
-                sprintf('it resolves outside the application root %s', $root),
+                sprintf('it resolves outside the application root %s', $basePath),
             );
         }
 
@@ -252,26 +251,6 @@ final readonly class RouterConfig
 
     private static function resolve(string $path, string $basePath): string
     {
-        return str_starts_with($path, '/') ? $path : rtrim($basePath, '/') . '/' . $path;
-    }
-
-    private static function withoutDotSegments(string $path): string
-    {
-        $segments = [];
-        foreach (explode('/', $path) as $segment) {
-            if ($segment === '' || $segment === '.') {
-                continue;
-            }
-
-            if ($segment === '..') {
-                array_pop($segments);
-
-                continue;
-            }
-
-            $segments[] = $segment;
-        }
-
-        return '/' . implode('/', $segments);
+        return str_starts_with($path, '/') ? $path : $basePath . '/' . $path;
     }
 }

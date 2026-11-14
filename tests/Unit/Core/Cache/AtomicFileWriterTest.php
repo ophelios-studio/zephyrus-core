@@ -92,6 +92,21 @@ final class AtomicFileWriterTest extends TestCase
         self::assertFileDoesNotExist(dirname($this->directory->path) . '/escaped.php');
     }
 
+    public function testATargetInASiblingWhoseNameExtendsTheBaseDirectoryIsRefused(): void
+    {
+        $target = $this->directory->path . '-sibling/routes.php';
+
+        $this->assertRefused($target, 'it is outside ' . $this->directory->path);
+        self::assertDirectoryDoesNotExist($this->directory->path . '-sibling');
+    }
+
+    public function testABaseDirectoryWrittenWithATrailingSlashIsTheSameDirectory(): void
+    {
+        (new AtomicFileWriter($this->directory->path . '/', fileowner(...)))->write($this->target, 'cached');
+
+        self::assertSame(['var', 'var/zephyrus', 'var/zephyrus/routes.php'], $this->directory->entries());
+    }
+
     public function testAnAbsoluteTargetElsewhereIsRefused(): void
     {
         $target = $this->outside->path . '/routes.php';

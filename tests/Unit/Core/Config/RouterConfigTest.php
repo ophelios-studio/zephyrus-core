@@ -116,23 +116,30 @@ final class RouterConfigTest extends TestCase
         ];
     }
 
-    public function testACachePathLeavingTheApplicationRootIsRefused(): void
+    #[DataProvider('cachePathsOutsideTheRoot')]
+    public function testACachePathLeavingTheApplicationRootIsRefused(string $cache, string $shown): void
     {
-        $config = RouterConfig::fromArray([
-            'controllers' => ['App\Controllers' => 'app/Controllers'],
-            'cache' => 'var/../../routes.php',
-        ]);
+        $config = RouterConfig::fromArray(['controllers' => ['App\Controllers' => 'app/Controllers'], 'cache' => $cache]);
 
         try {
             $config->cachePath('/srv/app');
             self::fail('expected a refusal');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'router' field 'cache' has invalid value \"var/../../routes.php\": it resolves "
-                . 'outside the application root /srv/app.',
+                "Configuration section 'router' field 'cache' has invalid value " . $shown . ': it resolves outside the '
+                . 'application root /srv/app.',
                 $exception->getMessage(),
             );
         }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function cachePathsOutsideTheRoot(): iterable
+    {
+        yield 'dot-dot segments' => ['var/../../routes.php', '"var/../../routes.php"'];
+        yield 'a sibling whose name extends the root' => ['/srv/application/routes.php', '"/srv/application/routes.php"'];
     }
 
     public function testAMissingControllerDirectoryIsRefused(): void
