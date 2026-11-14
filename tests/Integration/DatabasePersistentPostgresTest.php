@@ -176,6 +176,13 @@ final class DatabasePersistentPostgresTest extends TestCase
         self::assertTrue($second->pdo()->getAttribute(PDO::ATTR_PERSISTENT));
     }
 
+    public function testTheDefaultFactoryBuildsADriverSpecificPgsqlHandle(): void
+    {
+        $db = Database::fromConfig($this->config);
+
+        self::assertInstanceOf(\Pdo\Pgsql::class, $db->pdo());
+    }
+
     private static function sqlStateOf(callable $statement): ?string
     {
         try {

@@ -238,7 +238,7 @@ final class Database
 
         // #[\SensitiveParameter] keeps the password out of the backtrace Tracy renders (zend.exception_ignore_args=0).
         $factory = $pdoFactory ?? static fn (string $dsn, string $username, #[\SensitiveParameter] string $password, array $options): PDO
-            => new PDO($dsn, $username, $password, $options);
+            => PDO::connect($dsn, $username, $password, $options);
 
         $pdo = self::acquire($factory, $dsn, $config);
 
