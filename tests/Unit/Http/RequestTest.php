@@ -2211,6 +2211,24 @@ final class RequestTest extends TestCase
         self::assertSame('http://app.example.com/x', $request->uri()->full());
     }
 
+    public function testFromGlobalsReadsNoForwardedSchemeForAnAbsoluteTargetWhenNoHeaderIsTrusted(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'app.example.com',
+                'HTTP_X_FORWARDED_PROTO' => 'https',
+                'HTTP_FORWARDED'         => 'proto=https;host=evil.test',
+                'REQUEST_URI'            => 'https://evil.test/x',
+                'REMOTE_ADDR'            => '10.0.0.1',
+            ],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: [],
+        );
+
+        self::assertSame('http://app.example.com/x', $request->uri()->full());
+    }
+
     /**
      * @param array<string, string> $server
      */
@@ -2253,6 +2271,7 @@ final class RequestTest extends TestCase
             ['HTTPS' => 'on', 'SERVER_PORT' => '443'],
             'https://app.example.test/x',
         ];
+        yield 'fragment is kept after the root path' => ['https://h#f', [], 'http://app.example.test/#f'];
     }
 
     // fromGlobals: delete / patch with JSON body
