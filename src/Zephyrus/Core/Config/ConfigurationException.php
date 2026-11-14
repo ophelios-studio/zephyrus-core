@@ -248,7 +248,7 @@ final class ConfigurationException extends ZephyrusException
         return self::withPath(sprintf(
             "Failed to parse configuration file [%s]: invalid YAML%s (the parser's detail is withheld, since it can quote a secret from the file).",
             basename($path),
-            $line !== null && $line >= 1 ? ' at line ' . $line : '',
+            $line !== null && $line >= 1 ? ' near line ' . $line : '',
         ), $path);
     }
 

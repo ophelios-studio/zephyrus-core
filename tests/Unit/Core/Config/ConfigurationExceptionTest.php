@@ -247,7 +247,7 @@ final class ConfigurationExceptionTest extends TestCase
         $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', 3);
 
         self::assertSame(
-            "Failed to parse configuration file [config.yml]: invalid YAML at line 3 (the parser's detail is withheld, since it can quote a secret from the file).",
+            "Failed to parse configuration file [config.yml]: invalid YAML near line 3 (the parser's detail is withheld, since it can quote a secret from the file).",
             $e->getMessage(),
         );
         self::assertNull($e->getPrevious());
