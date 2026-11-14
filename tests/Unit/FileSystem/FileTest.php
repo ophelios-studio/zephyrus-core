@@ -828,6 +828,9 @@ final class FileTest extends TestCase
             'write' => ['write', 'phar://{dir}/archive.phar/inner.txt'],
             'append' => ['append', 'data://text/plain;base64,AAAA'],
             'copy' => ['copy', 'file://{dir}/copied.txt'],
+            'uppercase scheme' => ['create', 'PHAR://{dir}/archive.phar/inner.txt'],
+            'dotted scheme' => ['create', 'compress.zlib://{dir}/x.gz'],
+            'plus and minus' => ['create', 'a+b-c://{dir}/x.txt'],
         ];
     }
 
@@ -882,12 +885,14 @@ final class FileTest extends TestCase
         try {
             File::create('c://n7/a.txt', 'drive');
             File::create('DATA:,x', 'upper');
+            File::create('sub/ab://x.txt', 'inside');
         } finally {
             chdir($previous);
         }
 
         self::assertSame('drive', (string) file_get_contents($this->tempDir . '/c:/n7/a.txt'));
         self::assertSame('upper', (string) file_get_contents($this->tempDir . '/DATA:,x'));
+        self::assertSame('inside', (string) file_get_contents($this->tempDir . '/sub/ab://x.txt'));
     }
 
     public function testADotFollowedByANewlineIsAFileName(): void
