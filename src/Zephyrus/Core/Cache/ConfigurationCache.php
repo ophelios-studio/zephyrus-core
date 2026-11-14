@@ -74,7 +74,7 @@ final readonly class ConfigurationCache implements WarmableCache
      * Parse the source; the closure writes the cache with the source's mode, minus every write bit, and its group.
      *
      * @return \Closure(): string
-     * @throws ConfigurationException when the source cannot be parsed.
+     * @throws ConfigurationException when the source cannot be parsed or is not a mapping.
      * @throws BootCacheException when the cache cannot be written safely.
      */
     public function prepare(): \Closure

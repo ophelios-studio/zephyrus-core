@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 use Zephyrus\Tests\Support\CapturedErrorLog;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
@@ -121,6 +122,21 @@ final class ConfigurationFileCacheTest extends TestCase
             ),
             $this->capturedErrorLog(),
         );
+    }
+
+    public function testAWarmingRefusesADocumentThatIsNotAMappingAndWritesNoCache(): void
+    {
+        $source = $this->directory->file('config.yml', "hello world\n");
+        $cache = ConfigurationCache::forSource($source);
+
+        try {
+            $cache->prepare();
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
+        }
+
+        self::assertFileDoesNotExist($cache->path());
     }
 
     private function configuration(): Configuration

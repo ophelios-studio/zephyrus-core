@@ -50,7 +50,7 @@ final class ConfigurationFile
      * Read the entire configuration or a specific top-level section.
      *
      * @return mixed The full config array, a specific section, or null if the section does not exist.
-     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
+     * @throws ConfigurationException when the file is missing, unparsable or not a mapping, or an !env tag is refused.
      */
     public function read(?string $section = null): mixed
     {
@@ -67,7 +67,7 @@ final class ConfigurationFile
      * Return the full parsed configuration as an array.
      *
      * @return array<string, mixed>
-     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
+     * @throws ConfigurationException when the file is missing, unparsable or not a mapping, or an !env tag is refused.
      */
     public function toArray(): array
     {
@@ -77,7 +77,7 @@ final class ConfigurationFile
     /**
      * Check whether a top-level section exists.
      *
-     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
+     * @throws ConfigurationException when the file is missing, unparsable or not a mapping, or an !env tag is refused.
      */
     public function hasSection(string $section): bool
     {
@@ -88,7 +88,7 @@ final class ConfigurationFile
      * Return all top-level section names.
      *
      * @return string[]
-     * @throws ConfigurationException when the file is missing or unparsable, or an !env tag is refused.
+     * @throws ConfigurationException when the file is missing, unparsable or not a mapping, or an !env tag is refused.
      */
     public function sections(): array
     {
@@ -96,11 +96,12 @@ final class ConfigurationFile
     }
 
     /**
-     * Parse a YAML file with its tags left unresolved. A file that does not parse to an array reads as empty.
+     * Parse a YAML file with its tags left unresolved. An empty file reads as empty; a document that is not a
+     * mapping is refused.
      *
      * @internal Shared with ConfigurationCache, which caches this result.
      * @return array<string, mixed>
-     * @throws ConfigurationException when the file cannot be read or does not parse.
+     * @throws ConfigurationException when the file cannot be read, does not parse or is not a mapping.
      */
     public static function parseYaml(string $path): array
     {
@@ -116,7 +117,14 @@ final class ConfigurationFile
             throw ConfigurationException::parseFailed($path, null);
         }
 
-        return is_array($parsed) ? $parsed : [];
+        if ($parsed === null) {
+            return [];
+        }
+        if (!is_array($parsed) || ($parsed !== [] && array_is_list($parsed))) {
+            throw ConfigurationException::invalidFormat($path, 'must be a mapping of sections');
+        }
+
+        return $parsed;
     }
 
     /**

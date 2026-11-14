@@ -279,6 +279,71 @@ final class ConfigurationFileTest extends TestCase
         }
     }
 
+    #[DataProvider('notAMappingDocuments')]
+    public function testADocumentThatIsNotAMappingIsRefusedByBothReaders(string $document): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.yml';
+        file_put_contents($path, $document);
+
+        try {
+            (new ConfigurationFile($path))->toArray();
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
+        }
+
+        try {
+            Configuration::fromYamlFile($path);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
+        } finally {
+            @unlink($path);
+            @rmdir($directory);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function notAMappingDocuments(): iterable
+    {
+        yield 'scalar' => ["hello world\n"];
+        yield 'integer' => ["42\n"];
+        yield 'quoted string' => ["\"x\"\n"];
+        yield 'list' => ["- a\n- b\n"];
+        yield 'top-level tag' => ["!env FOO\n"];
+    }
+
+    #[DataProvider('emptyDocuments')]
+    public function testAnEmptyOrCommentOnlyDocumentReadsAsAnEmptyConfiguration(string $document): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.yml';
+        file_put_contents($path, $document);
+
+        try {
+            self::assertSame([], (new ConfigurationFile($path))->toArray());
+        } finally {
+            @unlink($path);
+            @rmdir($directory);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function emptyDocuments(): iterable
+    {
+        yield 'empty file' => [''];
+        yield 'comment only' => ["# nothing\n"];
+        yield 'empty flow mapping' => ["{}\n"];
+        yield 'empty flow sequence' => ["[]\n"];
+    }
+
     public function testAnUnreadableFileIsReportedAsUnreadableNotAsInvalidYaml(): void
     {
         if (function_exists('posix_geteuid') && posix_geteuid() === 0) {

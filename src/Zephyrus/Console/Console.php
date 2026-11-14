@@ -172,7 +172,7 @@ final readonly class Console
     /**
      * The routes cache of a configuration file, read from its YAML with no tag resolved, or null without router:.
      *
-     * @throws ZephyrusException when the file does not parse or its router: section is refused.
+     * @throws ZephyrusException when the file does not parse or is not a mapping, or its router: section is refused.
      */
     private function routeCacheOf(string $source): ?RouteCache
     {
