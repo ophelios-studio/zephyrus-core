@@ -86,12 +86,9 @@ final readonly class Console
             $configurations[] = str_starts_with($path, '/') ? $path : $this->workingDirectory . '/' . $path;
         }
 
-        // Every file is read and checked before the first cache is written or removed; $configuration names the file
-        // being handled when a step throws.
-        $configuration = '';
         $steps = [];
-        try {
-            foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
+        foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
+            try {
                 $configurationCache = ConfigurationCache::forSource($configuration);
                 $routeCache = $this->routeCacheOf($configuration);
                 foreach ([$configurationCache, ...($routeCache === null ? [] : [$routeCache])] as $cache) {
@@ -104,15 +101,17 @@ final readonly class Console
                     $line = sprintf('No router: section in %s, so no routes cache was written', $configuration);
                     $steps[] = [$configuration, static fn (): string => $line];
                 }
+            } catch (ZephyrusException $exception) {
+                return $this->refused($command, $configuration, $exception);
             }
+        }
 
-            foreach ($steps as [$configuration, $step]) {
+        foreach ($steps as [$configuration, $step]) {
+            try {
                 $this->say($step());
+            } catch (ZephyrusException $exception) {
+                return $this->refused($command, $configuration, $exception);
             }
-        } catch (ZephyrusException $exception) {
-            fwrite($this->errorOutput, sprintf("%s failed for %s: %s\n", $command, $configuration, $exception->getMessage()));
-
-            return self::REFUSED;
         }
 
         return self::SUCCESS;
@@ -146,6 +145,13 @@ final readonly class Console
         return str_starts_with($argument, self::CONFIG_OPTION . '=')
             ? substr($argument, strlen(self::CONFIG_OPTION) + 1)
             : null;
+    }
+
+    private function refused(string $command, string $configuration, ZephyrusException $exception): int
+    {
+        fwrite($this->errorOutput, sprintf("%s failed for %s: %s\n", $command, $configuration, $exception->getMessage()));
+
+        return self::REFUSED;
     }
 
     private function say(string $line): void
