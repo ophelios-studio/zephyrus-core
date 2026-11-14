@@ -146,7 +146,7 @@ final class ConfigKeysTest extends TestCase
     public function testADottedTopLevelKeyIsNotReadAsANestedOne(): void
     {
         self::assertSame(
-            "Configuration section 'example' field 'csrf.enabled' is an unknown key: did you mean \"csrfEnabled\"?",
+            "Configuration section 'example' field 'csrf.enabled' is written flat: nest it under 'csrf', such as csrf: { enabled: ... }.",
             self::refusalOf(['csrf.enabled' => false]),
         );
     }

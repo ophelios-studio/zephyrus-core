@@ -88,6 +88,25 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
+     * A dotted key written flat where its first part is a mapping of the section.
+     */
+    public static function flatKey(string $section, string $field, string $mapping, string $nested): self
+    {
+        $exception = new self(sprintf(
+            "Configuration section '%s' field %s is written flat: nest it under %s, such as %s: { %s: ... }.",
+            $section,
+            self::shownField($field),
+            self::shownField($mapping),
+            $mapping,
+            $nested,
+        ));
+        $exception->section = $section;
+        $exception->field = $field;
+
+        return $exception;
+    }
+
+    /**
      * A top-level key that misspells a section, with the section's name and an optional sentence of advice.
      */
     public static function unknownSection(string $section, string $suggestion, string $advice = ''): self

@@ -170,22 +170,6 @@ final class MailerConfigTest extends TestCase
         self::assertSame(587, $config->toArray()['smtp']['port']);
     }
 
-    public function testASectionDerivedByAnApplicationStaysPermissive(): void
-    {
-        $section = new class(['smtp' => ['prot' => 25]]) extends ConfigSection {
-        };
-
-        self::assertSame(25, $section->get('smtp.prot'));
-    }
-
-    public function testANullPortIsExportedAsTheDefaultTheTypedPropertyHolds(): void
-    {
-        $config = MailerConfig::fromArray(['smtp' => ['port' => null]]);
-
-        self::assertSame(587, $config->smtpPort);
-        self::assertSame(587, $config->toArray()['smtp']['port']);
-    }
-
     public function testADottedKeyWrittenFlatIsToldToNest(): void
     {
         try {

@@ -162,6 +162,11 @@ final readonly class ConfigKeys
             }
 
             if (!isset($levels[''][$key])) {
+                [$mapping, $nested] = array_pad(explode('.', $key, 2), 2, null);
+                if ($nested !== null && in_array($mapping, $mappings, true)) {
+                    throw ConfigurationException::flatKey($section, $key, $mapping, $nested);
+                }
+
                 // A misspelled mapping name is compared with the section's own keys.
                 $suggestion = self::closest($key, [...array_keys($levels[''] ?? []), ...$mappings]);
                 throw ConfigurationException::unknownKey($section, $key, $suggestion, $listed);
