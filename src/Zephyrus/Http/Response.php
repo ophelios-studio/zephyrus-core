@@ -242,7 +242,8 @@ final readonly class Response
     }
 
     /**
-     * Returns a copy that sets a cookie on its own Set-Cookie line, replacing an earlier cookie of the same name, domain and path.
+     * Returns a copy that sets a cookie on its own Set-Cookie line, replacing an earlier cookie of the same name, domain and path
+     * (never a constructor line without Path=, which browsers scope to the request's directory).
      *
      * Secure, HttpOnly, SameSite=Lax and the path "/" unless told otherwise; Secure is on even where the session
      * setting is "auto", so pass $secure = false explicitly for plain-HTTP development. The value is percent-encoded as
@@ -476,7 +477,10 @@ final readonly class Response
             || trim($this->getHeader($name) ?? '') !== '';
     }
 
-    /** Returns a copy without a header. Removing "Set-Cookie" also removes the cookies added by withCookie(). */
+    /**
+     * Returns a copy without a header. Removing "Set-Cookie" removes the cookies of withCookie() and the constructor;
+     * those PHP queued itself (session_start(), setcookie()) are still sent.
+     */
     public function withoutHeader(string $name): self
     {
         $headers = $this->headers;
