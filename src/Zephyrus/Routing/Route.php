@@ -334,19 +334,19 @@ final readonly class Route
      */
     public static function restoreAll(array $fields): array
     {
-        $class = new \ReflectionClass(self::class);
-        $properties = array_map(
-            $class->getProperty(...),
-            ['method', 'path', 'handler', 'constraints', 'middlewares', 'name', 'excludedMiddlewares'],
-        );
+        $prototype = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
 
         $routes = [];
-        foreach ($fields as $values) {
-            $route = $class->newInstanceWithoutConstructor();
-            foreach ($properties as $index => $property) {
-                $property->setValue($route, $values[$index]);
-            }
-
+        foreach ($fields as [$method, $path, $handler, $constraints, $middlewares, $name, $excludedMiddlewares]) {
+            // Each readonly property of the uninitialized clone is assigned once, in the scope of Route.
+            $route = clone $prototype;
+            $route->method = $method; // @phpstan-ignore property.readOnlyAssignNotInConstructor
+            $route->path = $path; // @phpstan-ignore property.readOnlyAssignNotInConstructor
+            $route->handler = $handler; // @phpstan-ignore property.readOnlyAssignNotInConstructor
+            $route->constraints = $constraints; // @phpstan-ignore property.readOnlyAssignNotInConstructor
+            $route->middlewares = $middlewares; // @phpstan-ignore property.readOnlyAssignNotInConstructor
+            $route->name = $name; // @phpstan-ignore property.readOnlyAssignNotInConstructor
+            $route->excludedMiddlewares = $excludedMiddlewares; // @phpstan-ignore property.readOnlyAssignNotInConstructor
             $routes[] = $route;
         }
 

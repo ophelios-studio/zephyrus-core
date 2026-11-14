@@ -208,6 +208,7 @@ final readonly class RouteCache implements WarmableCache
             }
         }
 
+        $namespaces = array_keys($this->config->controllers);
         $active = [];
         foreach ($entries as $index => $entry) {
             if (!is_array($entry) || count($entry) !== self::ENTRY_SIZE || !array_is_list($entry)) {
@@ -216,18 +217,32 @@ final readonly class RouteCache implements WarmableCache
 
             [$method, $path, $handler, $constraints, $middlewares, $name, $excluded, $condition] = $entry;
             if (
-                !is_string($method) || !is_string($path) || !is_string($handler) || !self::isStringMap($constraints)
-                || !self::isStringList($middlewares) || ($name !== null && !is_string($name))
-                || !self::isStringList($excluded) || !is_int($condition) || !isset($met[$condition])
+                !is_string($method) || !is_string($path) || !is_string($handler) || !is_array($constraints)
+                || !is_array($middlewares) || !array_is_list($middlewares) || ($name !== null && !is_string($name))
+                || !is_array($excluded) || !array_is_list($excluded) || !is_int($condition) || !isset($met[$condition])
             ) {
                 throw self::malformedRoute($index);
             }
 
-            if (!$this->isConfiguredHandler($handler)) {
+            foreach ($constraints as $placeholder => $pattern) {
+                if (!is_string($placeholder) || !is_string($pattern)) {
+                    throw self::malformedRoute($index);
+                }
+            }
+
+            foreach ([...$middlewares, ...$excluded] as $middleware) {
+                if (!is_string($middleware)) {
+                    throw self::malformedRoute($index);
+                }
+            }
+
+            if (!self::isConfiguredHandler($handler, $namespaces)) {
                 throw new CacheRefusal(sprintf('its route %d has a handler outside router.controllers', $index));
             }
 
             if ($met[$condition]) {
+                /** @var array<string, string> $constraints */
+                /** @var list<string> $middlewares */
                 /** @var list<class-string<MiddlewareInterface>> $excluded */
                 $active[] = [$method, $path, $handler, $constraints, $middlewares, $name, $excluded];
             }
@@ -236,9 +251,12 @@ final readonly class RouteCache implements WarmableCache
         return Route::restoreAll($active);
     }
 
-    private function isConfiguredHandler(string $handler): bool
+    /**
+     * @param list<string> $namespaces
+     */
+    private static function isConfiguredHandler(string $handler, array $namespaces): bool
     {
-        foreach (array_keys($this->config->controllers) as $namespace) {
+        foreach ($namespaces as $namespace) {
             if (PathPrefix::isUnder($handler, $namespace, '\\')) {
                 return true;
             }
@@ -434,24 +452,6 @@ final readonly class RouteCache implements WarmableCache
 
         foreach ($value as $item) {
             if (!is_string($item)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @phpstan-assert-if-true array<string, string> $value
-     */
-    private static function isStringMap(mixed $value): bool
-    {
-        if (!is_array($value)) {
-            return false;
-        }
-
-        foreach ($value as $key => $item) {
-            if (!is_string($key) || !is_string($item)) {
                 return false;
             }
         }
