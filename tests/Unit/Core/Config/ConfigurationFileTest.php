@@ -10,6 +10,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
+use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 
 final class ConfigurationFileTest extends TestCase
 {
@@ -282,26 +283,25 @@ final class ConfigurationFileTest extends TestCase
     #[DataProvider('notAMappingDocuments')]
     public function testADocumentThatIsNotAMappingIsRefusedByBothReaders(string $document): void
     {
-        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
-        mkdir($directory);
-        $path = $directory . '/config.yml';
-        file_put_contents($path, $document);
+        $directory = new CacheDirectory();
+        $path = $directory->file('config.yml', $document);
 
         try {
-            (new ConfigurationFile($path))->toArray();
-            self::fail('expected a refusal');
-        } catch (ConfigurationException $e) {
-            self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
-        }
+            try {
+                (new ConfigurationFile($path))->toArray();
+                self::fail('expected a refusal');
+            } catch (ConfigurationException $e) {
+                self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
+            }
 
-        try {
-            Configuration::fromYamlFile($path);
-            self::fail('expected a refusal');
-        } catch (ConfigurationException $e) {
-            self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
+            try {
+                Configuration::fromYamlFile($path);
+                self::fail('expected a refusal');
+            } catch (ConfigurationException $e) {
+                self::assertSame('Configuration file config.yml: must be a mapping of sections', $e->getMessage());
+            }
         } finally {
-            @unlink($path);
-            @rmdir($directory);
+            $directory->remove();
         }
     }
 
@@ -320,16 +320,13 @@ final class ConfigurationFileTest extends TestCase
     #[DataProvider('emptyDocuments')]
     public function testAnEmptyOrCommentOnlyDocumentReadsAsAnEmptyConfiguration(string $document): void
     {
-        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
-        mkdir($directory);
-        $path = $directory . '/config.yml';
-        file_put_contents($path, $document);
+        $directory = new CacheDirectory();
+        $path = $directory->file('config.yml', $document);
 
         try {
             self::assertSame([], (new ConfigurationFile($path))->toArray());
         } finally {
-            @unlink($path);
-            @rmdir($directory);
+            $directory->remove();
         }
     }
 
