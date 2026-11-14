@@ -12,6 +12,7 @@ use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCache;
 use Zephyrus\Routing\Router;
 use Zephyrus\Tests\Support\CapturedErrorLog;
+use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 
 final class RouterFromConfigurationTest extends TestCase
 {
@@ -61,6 +62,28 @@ final class RouterFromConfigurationTest extends TestCase
         self::assertSame('', $this->capturedErrorLog());
     }
 
+    public function testProductionReadsTheCacheThroughAnApplicationRootThatIsASymbolicLink(): void
+    {
+        $cache = $this->cache();
+        $cache->warm();
+        file_put_contents(
+            $cache->path(),
+            str_replace("'/about'", "'/from-cache'", (string) file_get_contents($cache->path())),
+        );
+        $deployment = new CacheDirectory();
+        symlink($this->tree->root->path, $deployment->path . '/current');
+
+        try {
+            $router = Router::fromConfiguration($this->configuration('production'), $deployment->path . '/current');
+        } finally {
+            $deployment->remove();
+        }
+
+        $paths = array_map(static fn (Route $route): string => $route->path, array_values($router->routes()->all()));
+        self::assertSame(['/', '/from-cache'], $paths);
+        self::assertSame('', $this->capturedErrorLog());
+    }
+
     #[DataProvider('environmentsWithoutCache')]
     public function testDevelopmentAndTestingNeverOpenTheCache(string $environment): void
     {
@@ -97,6 +120,26 @@ final class RouterFromConfigurationTest extends TestCase
                 "Zephyrus: no routes cache at %s, so the controllers were discovered for this request. Run "
                 . "vendor/bin/zephyrus cache:warm to write it.\n",
                 $this->cache()->path(),
+            ),
+            $log,
+        );
+    }
+
+    public function testProductionWithoutAConfigYmlAtTheRootDiscoversTheRoutesAndSaysWhyNoCacheIsRead(): void
+    {
+        $this->cache()->warm();
+        unlink($this->tree->root->path . '/config.yml');
+
+        $paths = $this->paths('production');
+
+        $log = $this->capturedErrorLog();
+        self::assertSame(['/', '/about'], $paths);
+        self::assertSame(1, substr_count($log, "\n"), $log);
+        self::assertStringEndsWith(
+            sprintf(
+                'Zephyrus: the controllers were discovered for this request: router: is cached only from config.yml '
+                . "at the application root, and %s/config.yml does not exist.\n",
+                $this->tree->root->path,
             ),
             $log,
         );

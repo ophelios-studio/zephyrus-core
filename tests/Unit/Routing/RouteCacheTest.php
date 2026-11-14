@@ -242,6 +242,83 @@ final class RouteCacheTest extends TestCase
         ];
     }
 
+    /**
+     * @param \Closure(array<mixed>): array<mixed> $damage
+     */
+    #[DataProvider('malformedPayloads')]
+    public function testAMalformedPayloadFallsBackToDiscoveryWithOneLogLine(\Closure $damage, string $reason): void
+    {
+        $cache = $this->routeCache();
+        $cache->warm();
+        $cached = require $cache->path();
+        $cached['payload'] = $damage($cached['payload']);
+        file_put_contents($cache->path(), "<?php\n\nreturn " . var_export($cached, true) . ";\n");
+
+        $routes = self::described($this->router('production')->routes());
+
+        self::assertSame(self::described($this->discoveryRouter()->routes()), $routes);
+        $this->assertLoggedOnce($cache->path(), $reason);
+    }
+
+    /**
+     * @return iterable<string, array{\Closure(array<mixed>): array<mixed>, string}>
+     */
+    public static function malformedPayloads(): iterable
+    {
+        $noRoutes = 'it does not hold routes';
+        $pairs = 'its condition 0 is not a list of variable and value pairs';
+        $layout = 'its route 0 does not have the cached layout';
+        $stale = 'it is stale, its source changed after it was written';
+
+        yield 'no conditions' => [self::replacing(['conditions'], null), $noRoutes];
+        yield 'routes that are not an array' => [self::replacing(['routes'], 'routes'), $noRoutes];
+        yield 'routes that are not a list' => [self::replacing(['routes'], ['first' => []]), $noRoutes];
+        yield 'a condition that is not a list' => [self::replacing(['conditions', 0], ['mode' => ['MODE', 'web']]), $pairs];
+        yield 'a condition pair that is not an array' => [self::replacing(['conditions', 0], ['MODE']), $pairs];
+        yield 'a condition pair of three values' => [self::replacing(['conditions', 0], [['MODE', 'web', 'api']]), $pairs];
+        yield 'a condition variable that is not a string' => [self::replacing(['conditions', 0], [[1, 'web']]), $pairs];
+        yield 'a condition value that is not a string' => [self::replacing(['conditions', 0], [['MODE', 1]]), $pairs];
+        yield 'a condition on a variable that is never read' => [
+            self::replacing(['conditions', 0], [['HTTP_MODE', 'web']]),
+            'its condition 0 names a variable that is never read',
+        ];
+        yield 'a route that is not an array' => [self::replacing(['routes', 0], 'route'), $layout];
+        yield 'a route of seven fields' => [
+            static function (array $payload): array {
+                array_pop($payload['routes'][0]);
+
+                return $payload;
+            },
+            $layout,
+        ];
+        yield 'a route whose fields are not a list' => [
+            static function (array $payload): array {
+                $payload['routes'][0] = array_combine(range(1, 8), $payload['routes'][0]);
+
+                return $payload;
+            },
+            $layout,
+        ];
+        yield 'a method that is not a string' => [self::replacing(['routes', 0, 0], 1), $layout];
+        yield 'a path that is not a string' => [self::replacing(['routes', 0, 1], 1), $layout];
+        yield 'a handler that is not a string' => [self::replacing(['routes', 0, 2], 1), $layout];
+        yield 'constraints that are not an array' => [self::replacing(['routes', 0, 3], 'id'), $layout];
+        yield 'a constraint on an unnamed placeholder' => [self::replacing(['routes', 0, 3], ['\d+']), $layout];
+        yield 'a constraint that is not a string' => [self::replacing(['routes', 0, 3], ['id' => 1]), $layout];
+        yield 'middlewares that are not an array' => [self::replacing(['routes', 0, 4], 'session'), $layout];
+        yield 'middlewares that are not a list' => [self::replacing(['routes', 0, 4], ['first' => 'session']), $layout];
+        yield 'a middleware that is not a string' => [self::replacing(['routes', 0, 4], ['session', 1]), $layout];
+        yield 'a name that is not a string' => [self::replacing(['routes', 0, 5], 1), $layout];
+        yield 'exclusions that are not an array' => [self::replacing(['routes', 0, 6], 'csrf'), $layout];
+        yield 'exclusions that are not a list' => [self::replacing(['routes', 0, 6], ['first' => 'csrf']), $layout];
+        yield 'an exclusion that is not a string' => [self::replacing(['routes', 0, 6], [1]), $layout];
+        yield 'a condition index that is not an integer' => [self::replacing(['routes', 0, 7], '0'), $layout];
+        yield 'a condition index with no condition' => [self::replacing(['routes', 0, 7], 99), $layout];
+        yield 'no dependency list' => [self::replacing(['dependencies'], null), $stale];
+        yield 'dependencies that are not a list' => [self::replacing(['dependencies'], ['first' => 'lib/Base.php']), $stale];
+        yield 'a dependency that is not a string' => [self::replacing(['dependencies'], [1]), $stale];
+    }
+
     #[DataProvider('editsAfterTheWarm')]
     public function testACacheIsIgnoredOnceWhatItWasReadFromChanges(string $edit): void
     {
@@ -545,6 +622,23 @@ final class RouteCacheTest extends TestCase
         ];
 
         return [$tree, new RouteCache($this->treeConfig($tree), $tree->root->path, $tree->root->path . '/config.yml'), $files];
+    }
+
+    /**
+     * @param non-empty-list<int|string> $keys
+     * @return \Closure(array<mixed>): array<mixed>
+     */
+    private static function replacing(array $keys, mixed $value): \Closure
+    {
+        return static function (array $payload) use ($keys, $value): array {
+            $target = &$payload;
+            foreach ($keys as $key) {
+                $target = &$target[$key];
+            }
+            $target = $value;
+
+            return $payload;
+        };
     }
 
     private function treeConfig(ControllerTree $tree): RouterConfig
