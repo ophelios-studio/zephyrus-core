@@ -48,11 +48,12 @@ final class File extends FileSystemNode
     /**
      * Create a new file with optional initial content.
      *
-     * @throws FileSystemException if the path does not end with a file name, or creation fails.
+     * @throws FileSystemException if the path is a stream wrapper URL or does not end with a file
+     *         name, or creation fails.
      */
     public static function create(string $path, string $content = ''): self
     {
-        self::assertEndsWithAFileName($path);
+        self::assertWritablePath($path);
         $dir = dirname($path);
         if (!is_dir($dir)) {
             if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
@@ -85,11 +86,12 @@ final class File extends FileSystemNode
     /**
      * Overwrite the file with new content.
      *
-     * @throws FileSystemException if the path does not end with a file name, or writing fails.
+     * @throws FileSystemException if the path is a stream wrapper URL or does not end with a file
+     *         name, or writing fails.
      */
     public function write(string $content): void
     {
-        self::assertEndsWithAFileName($this->path);
+        self::assertWritablePath($this->path);
         self::replaceContent($this->path, self::contentWriter($content), self::failure('write to', $this->path));
     }
 
@@ -105,12 +107,12 @@ final class File extends FileSystemNode
      * without limit, so any process that can open the file (one readable by other users
      * included) can hold append() back.
      *
-     * @throws FileSystemException if the path does not end with a file name, is a symbolic
-     *         link, or appending fails.
+     * @throws FileSystemException if the path is a stream wrapper URL, does not end with a file
+     *         name, is a symbolic link, or appending fails.
      */
     public function append(string $content): void
     {
-        self::assertEndsWithAFileName($this->path);
+        self::assertWritablePath($this->path);
         self::appendContent($this->path, $content);
     }
 
@@ -175,11 +177,11 @@ final class File extends FileSystemNode
      *
      * @return File The new file at the destination path.
      * @throws FileSystemException if the source is not a readable regular file, the destination
-     *         does not end with a file name or is the source itself, or copying fails.
+     *         is a stream wrapper URL, does not end with a file name or is the source itself, or copying fails.
      */
     public function copy(string $destination): self
     {
-        self::assertEndsWithAFileName($destination);
+        self::assertWritablePath($destination);
         $this->assertExists();
         if (!is_file($this->path)) {
             throw FileSystemException::notARegularFile($this->path);
@@ -285,12 +287,16 @@ final class File extends FileSystemNode
     }
 
     /**
-     * A path whose last segment is empty, "." or ".." names a directory, never a file.
+     * A stream wrapper URL is never written, and a path whose last segment is empty, "." or
+     * ".." names a directory, never a file.
      *
      * @throws FileSystemException
      */
-    private static function assertEndsWithAFileName(string $path): void
+    private static function assertWritablePath(string $path): void
     {
+        if (preg_match('~^[a-z][a-z0-9+.-]*://~i', $path) === 1) {
+            throw FileSystemException::streamWrapperRefused($path);
+        }
         if (preg_match('~(?:^|/)\.{0,2}$~D', $path) === 1) {
             throw FileSystemException::notAFileName($path);
         }

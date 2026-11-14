@@ -41,6 +41,12 @@ final class FileSystemExceptionTest extends TestCase
         self::assertStringContainsString('/path/to/file', $exception->getMessage());
     }
 
+    public function testStreamWrapperRefused(): void
+    {
+        $exception = FileSystemException::streamWrapperRefused('phar:///a/b.phar/c');
+        self::assertSame('Path is a stream wrapper URL, which is not written: phar:///a/b.phar/c', $exception->getMessage());
+    }
+
     public function testOperationFailedWithPrevious(): void
     {
         $previous = new \RuntimeException('disk error');

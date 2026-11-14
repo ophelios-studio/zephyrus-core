@@ -39,6 +39,11 @@ final class FileSystemException extends ZephyrusRuntimeException
         return new self(sprintf('Path does not end with a file name: %s', $path));
     }
 
+    public static function streamWrapperRefused(string $path): self
+    {
+        return new self(sprintf('Path is a stream wrapper URL, which is not written: %s', $path));
+    }
+
     public static function symbolicLinkRefused(string $path): self
     {
         return new self(sprintf('Path is a symbolic link, which is not followed: %s', $path));

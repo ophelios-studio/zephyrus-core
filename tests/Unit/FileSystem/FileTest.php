@@ -796,6 +796,35 @@ final class FileTest extends TestCase
         self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function streamWrapperPaths(): array
+    {
+        return [
+            'create' => ['create', 'file://{dir}/created.txt'],
+            'write' => ['write', 'phar://{dir}/archive.phar/inner.txt'],
+            'append' => ['append', 'data://text/plain;base64,AAAA'],
+            'copy' => ['copy', 'file://{dir}/copied.txt'],
+        ];
+    }
+
+    #[DataProvider('streamWrapperPaths')]
+    public function testAStreamWrapperPathIsRefusedBeforeCreatingAnything(string $method, string $template): void
+    {
+        $path = str_replace('{dir}', $this->tempDir . '/missing', $template);
+
+        try {
+            $this->writeThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: ' . $path, $e->getMessage());
+        }
+
+        self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
+        self::assertSame(['write-through-source.txt'], array_values(array_diff((array) scandir($this->tempDir), ['.', '..'])));
+    }
+
     public function testADotFollowedByANewlineIsAFileName(): void
     {
         $path = $this->tempDir . "/.\n";
