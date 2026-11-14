@@ -19,12 +19,12 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
         yield 'separators only' => [' , '];
         yield 'empty array' => [[]];
         yield 'empty array entry' => [['']];
-        yield 'array entry of separators only' => [[' ', 's@1.1.1.1']];
-        yield 'secret with a slash and a base64 padding' => ['k9/Xq2+ab==@172.17.0.1'];
-        yield 'secret and address' => ['s3cret@172.17.0.1'];
+        yield 'array entry of separators only' => [[' ', 'first-secret-0000001@1.1.1.1']];
+        yield 'secret with a slash and a base64 padding' => ['k9/Xq2+abcdefgh1234==@172.17.0.1'];
+        yield 'secret and address' => ['long-test-secret-1@172.17.0.1'];
         yield 'bare address' => ['10.0.0.5'];
-        yield 'two entries split on a comma and a space' => ['a@1.1.1.1, b@2.2.2.2'];
-        yield 'array of a secret entry and a bare IPv6 address' => [['a@1.1.1.1', '::1']];
+        yield 'two entries split on a comma and a space' => ['first-secret-0000001@1.1.1.1, second-secret-000002@2.2.2.2'];
+        yield 'array of a secret entry and a bare IPv6 address' => [['first-secret-0000001@1.1.1.1', '::1']];
     }
 
     #[DataProvider('acceptedEntries')]
@@ -50,7 +50,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnEmptySecretInASplitStringAtItsPosition(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('a@1.1.1.1, @172.17.0.1');
+            ApplicationBuilder::create()->withDebugClientAllowlist('first-secret-0000001@1.1.1.1, @172.17.0.1');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -64,7 +64,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnEntryWithNoAddressAfterTheAt(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('s3cret@');
+            ApplicationBuilder::create()->withDebugClientAllowlist('long-test-secret-1@');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame('Debug client allowlist entry 1 has no address after "@".', $e->getMessage());
@@ -87,7 +87,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnArrayEntryHoldingWhitespaceOrAComma(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(['a@1.1.1.1', '10.0.0.5 ', '10.0.0.6']);
+            ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1', '10.0.0.5 ', '10.0.0.6']);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -100,7 +100,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnArrayEntryHoldingAComma(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(['a@1.1.1.1,b@2.2.2.2']);
+            ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1,second-secret-000002@2.2.2.2']);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -113,7 +113,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesANonStringArrayEntry(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(['a@1.1.1.1', 42]);
+            ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1', 42]);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame('Debug client allowlist entry 2 is not a string.', $e->getMessage());
@@ -122,7 +122,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
 
     public function testARefusalNeverPrintsTheSecret(): void
     {
-        foreach (['topsecret@', 'topsecret@10.0.0.0/8', '@topsecret'] as $entry) {
+        foreach (['topsecretlonger1@', 'topsecretlonger1@10.0.0.0/8', '@topsecret'] as $entry) {
             try {
                 ApplicationBuilder::create()->withDebugClientAllowlist($entry);
                 self::fail('expected a refusal');

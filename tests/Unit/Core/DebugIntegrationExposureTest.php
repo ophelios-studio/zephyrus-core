@@ -136,7 +136,7 @@ final class DebugIntegrationExposureTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = $loopback;
 
-        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77', 'a-shared-secret@203.0.113.78']);
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77', 'a-shared-secret-01@203.0.113.78']);
 
         self::assertTrue(Debugger::$productionMode);
     }
@@ -184,9 +184,9 @@ final class DebugIntegrationExposureTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.20';
-        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret-01';
 
-        DebugIntegration::initialize(debug: true, allowedClients: ['a-shared-secret@127.0.0.1']);
+        DebugIntegration::initialize(debug: true, allowedClients: ['a-shared-secret-01@127.0.0.1']);
 
         self::assertFalse(Debugger::$productionMode);
     }
@@ -209,9 +209,9 @@ final class DebugIntegrationExposureTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
         $_SERVER['HTTP_X_REAL_IP'] = '198.51.100.20';
-        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret-01';
 
-        DebugIntegration::initialize(debug: true, allowedClients: ['a-shared-secret@127.0.0.1']);
+        DebugIntegration::initialize(debug: true, allowedClients: ['a-shared-secret-01@127.0.0.1']);
 
         self::assertFalse(Debugger::$productionMode);
     }
@@ -258,9 +258,9 @@ final class DebugIntegrationExposureTest extends TestCase
     public function testTheTracyDebugCookieDoesNotGrantAnAddressItIsNotPairedWith(): void
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.99';
-        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret-01';
 
-        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret@203.0.113.77');
+        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret-01@203.0.113.77');
 
         self::assertTrue(Debugger::$productionMode);
     }
@@ -270,9 +270,9 @@ final class DebugIntegrationExposureTest extends TestCase
     public function testTheTracyDebugCookieGrantsAnOtherwiseRefusedClient(): void
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
-        $_COOKIE['tracy-debug'] = 'a-shared-secret';
+        $_COOKIE['tracy-debug'] = 'a-shared-secret-01';
 
-        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret@203.0.113.77');
+        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret-01@203.0.113.77');
 
         self::assertFalse(Debugger::$productionMode);
     }
@@ -284,7 +284,7 @@ final class DebugIntegrationExposureTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
         $_COOKIE['tracy-debug'] = 'guessed';
 
-        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret@203.0.113.77');
+        DebugIntegration::initialize(debug: true, allowedClients: 'a-shared-secret-01@203.0.113.77');
 
         self::assertTrue(Debugger::$productionMode);
     }

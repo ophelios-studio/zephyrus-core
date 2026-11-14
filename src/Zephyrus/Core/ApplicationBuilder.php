@@ -539,13 +539,15 @@ final class ApplicationBuilder
      * Each entry is an exact address, or `secret@address` matched against the `tracy-debug` cookie.
      * Tracy accepts no ranges. A bare gateway address admits anyone who can reach the published port.
      * Only the listed clients are admitted: loopback too must be listed, and behind a local proxy (a request carrying
-     * a forwarding header) only as `secret@127.0.0.1`. Without an allowlist, only loopback under PHP's built-in
+     * a forwarding header) only as `<secret>@127.0.0.1`. Without an allowlist, only loopback under PHP's built-in
      * server is admitted: under FPM, CGI or Apache, list `127.0.0.1` for a browser on the same machine.
      *
-     * Behind Docker, loopback is not granted: use `secret@<gateway-ip>` and set the cookie `tracy-debug=<secret>`.
+     * Behind Docker, loopback is not granted: use `<secret>@<gateway-ip>` and set the cookie `tracy-debug=<secret>`.
      *
      * @param string|string[]|null $clients
-     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry that is not a string or holds whitespace or a comma.
+     * @throws InvalidArgumentException on an empty secret, a secret shorter than 16 characters, an empty address,
+     *                                   a range in the address, or an array entry that is not a string or holds
+     *                                   whitespace or a comma.
      */
     public function withDebugClientAllowlist(#[\SensitiveParameter] string|array|null $clients): self
     {

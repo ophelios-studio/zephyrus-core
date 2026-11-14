@@ -31,19 +31,19 @@ final class DebugIntegrationAllowlistTest extends TestCase
 
     public function testAllowedClientListReturnsTheEntriesOfAStringInOrder(): void
     {
-        self::assertSame(['a@1.1.1.1', 'b@2.2.2.2'], DebugIntegration::allowedClientList('a@1.1.1.1, b@2.2.2.2'));
+        self::assertSame(['first-secret-0000001@1.1.1.1', 'second-secret-000002@2.2.2.2'], DebugIntegration::allowedClientList('first-secret-0000001@1.1.1.1, second-secret-000002@2.2.2.2'));
     }
 
     public function testAllowedClientListDropsAnArrayEntryMadeOfSeparators(): void
     {
-        self::assertSame(['s@1.1.1.1'], DebugIntegration::allowedClientList([' ', 's@1.1.1.1']));
+        self::assertSame(['short-secret-000001@1.1.1.1'], DebugIntegration::allowedClientList([' ', 'short-secret-000001@1.1.1.1']));
     }
 
     public function testAllowedClientListAcceptsASlashInTheSecret(): void
     {
         self::assertSame(
-            ['k9/Xq2+ab==@172.17.0.1'],
-            DebugIntegration::allowedClientList('k9/Xq2+ab==@172.17.0.1'),
+            ['k9/Xq2+abcdefgh1234==@172.17.0.1'],
+            DebugIntegration::allowedClientList('k9/Xq2+abcdefgh1234==@172.17.0.1'),
         );
     }
 
@@ -61,10 +61,43 @@ final class DebugIntegrationAllowlistTest extends TestCase
         }
     }
 
+    public function testAllowedClientListRefusesASecretShorterThanSixteenCharacters(): void
+    {
+        try {
+            DebugIntegration::allowedClientList(['203.0.113.1', 'fifteen-chars-5@10.0.0.5']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Debug client allowlist entry 2 has a secret shorter than 16 characters before "@": the tracy-debug '
+                . 'cookie is all that guards the debugger at that address. Use a longer random secret.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAllowedClientListAcceptsASecretOfExactlySixteenCharacters(): void
+    {
+        self::assertSame(['sixteen-chars-16@10.0.0.5'], DebugIntegration::allowedClientList('sixteen-chars-16@10.0.0.5'));
+    }
+
+    public function testInitializeRefusesASecretShorterThanSixteenCharacters(): void
+    {
+        try {
+            DebugIntegration::initialize(debug: true, allowedClients: 'secret@10.0.0.5');
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Debug client allowlist entry 1 has a secret shorter than 16 characters before "@": the tracy-debug '
+                . 'cookie is all that guards the debugger at that address. Use a longer random secret.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testAllowedClientListRefusesARangeBehindASecret(): void
     {
         try {
-            DebugIntegration::allowedClientList('s@10.0.0.0/8');
+            DebugIntegration::allowedClientList('long-test-secret-1@10.0.0.0/8');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(

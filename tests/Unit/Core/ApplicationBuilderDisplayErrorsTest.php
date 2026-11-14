@@ -80,9 +80,9 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
     public function testADebugBootLeavesDisplayErrorsOnForAClientTheAllowlistAdmits(): void
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
-        $_COOKIE['tracy-debug'] = 's3cr3t';
+        $_COOKIE['tracy-debug'] = 'long-test-secret-1';
         $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true])
-            ->withDebugClientAllowlist('s3cr3t@203.0.113.9');
+            ->withDebugClientAllowlist('long-test-secret-1@203.0.113.9');
 
         self::buildUntilRefused(self::servedOverHttp($builder));
 
@@ -93,7 +93,7 @@ final class ApplicationBuilderDisplayErrorsTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
         $builder = self::builderRefusedByTheSecurityWiringCheck(['environment' => 'development', 'debug' => true])
-            ->withDebugClientAllowlist('s3cr3t@203.0.113.9');
+            ->withDebugClientAllowlist('long-test-secret-1@203.0.113.9');
 
         self::buildUntilRefused(self::servedOverHttp($builder));
 

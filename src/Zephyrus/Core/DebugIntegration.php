@@ -39,10 +39,13 @@ use Zephyrus\Core\Config\ConfigSection;
  *
  * Usage (typically automatic via ApplicationBuilder):
  *
- *   DebugIntegration::initialize(debug: true, allowedClients: 'mysecret@203.0.113.4');
+ *   // $secret: 16+ random characters
+ *   DebugIntegration::initialize(debug: true, allowedClients: $secret . '@203.0.113.4');
  */
 final class DebugIntegration
 {
+    private const int MIN_SECRET_LENGTH = 16;
+
     /** The scrubber this class installed, so a repeated initialize() does not wrap it again. */
     private static ?Closure $frameworkScrubber = null;
 
@@ -125,18 +128,19 @@ final class DebugIntegration
      * @param string|null             $logDirectory   Directory for Tracy log files. Null keeps Debugger::$logDirectory;
      *                                                with no directory at all, Tracy logs to PHP's error log.
      * @param string|null             $email          Email for error notifications.
-     * @param string|string[]|null    $allowedClients Addresses (or `secret@address` entries matched against the
-     *                                                `tracy-debug` cookie) permitted to receive the Bluescreen. A
-     *                                                list admits loopback only when it names it, and a bare loopback
-     *                                                entry only when no forwarded header is present. Null admits
-     *                                                loopback clients only under PHP's built-in server
-     *                                                (`cli-server`), and only when no forwarded header is present.
-     *                                                Never grant this to a range you do not control: an entry here
-     *                                                can read the application's live secrets out of a stack trace.
+     * @param string|string[]|null    $allowedClients Addresses (or `<secret>@address` entries, the secret 16 characters
+     *                                                or more, matched against the `tracy-debug` cookie) permitted to
+     *                                                receive the Bluescreen. A list admits loopback only when it names
+     *                                                it, and a bare loopback entry only when no forwarded header is
+     *                                                present. Null admits loopback clients only under PHP's built-in
+     *                                                server (`cli-server`), and only when no forwarded header is
+     *                                                present. Never grant this to a range you do not control: an entry
+     *                                                here can read the application's live secrets out of a stack trace.
      * @param string|null             $sessionName    The application's session cookie name, masked like SENSITIVE_KEYS.
      * @param string                  $serverApi      The SAPI name; without an allowlist, only `cli-server` admits one.
-     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry
-     *                                   that is not a string or holds whitespace or a comma.
+     * @throws InvalidArgumentException on an empty secret, a secret shorter than 16 characters, an empty address,
+     *                                   a range in the address, or an array entry that is not a string or holds
+     *                                   whitespace or a comma.
      */
     public static function initialize(
         bool $debug,
@@ -193,15 +197,18 @@ final class DebugIntegration
         }
 
         $address = $_SERVER['REMOTE_ADDR'] ?? null;
-        $printable = is_string($address) && filter_var($address, FILTER_VALIDATE_IP) !== false ? $address : 'unknown';
-
-        if (self::carriesForwardingHeader()) {
-            return 'the debugger did not admit ' . $printable . ', which forwarded the request; add secret@'
-                . $printable . ' to withDebugClientAllowlist() and send the tracy-debug cookie';
+        if (!is_string($address) || filter_var($address, FILTER_VALIDATE_IP) === false) {
+            return 'the debugger did not admit this client: REMOTE_ADDR is missing or not an IP address';
         }
 
-        return 'the debugger did not admit ' . $printable . '; add it, or secret@' . $printable
-            . ', to withDebugClientAllowlist()';
+        if (self::carriesForwardingHeader()) {
+            return 'the debugger did not admit ' . $address . ', which forwarded the request; add <secret>@'
+                . $address . ' to withDebugClientAllowlist() and send <secret> as the tracy-debug cookie';
+        }
+
+        return 'the debugger did not admit ' . $address . '; add <secret>@' . $address
+            . ' to withDebugClientAllowlist() and send <secret> as the tracy-debug cookie, or add ' . $address
+            . ' alone if it is your own machine';
     }
 
     /**
@@ -288,7 +295,9 @@ final class DebugIntegration
      *
      * @param string|array<mixed>|null $clients
      * @return list<string>|null
-     * @throws InvalidArgumentException on an empty secret or address, a range in the address, or an array entry that is not a string or holds whitespace or a comma.
+     * @throws InvalidArgumentException on an empty secret, a secret shorter than 16 characters, an empty address,
+     *                                   a range in the address, or an array entry that is not a string or holds
+     *                                   whitespace or a comma.
      * @internal Shared by ApplicationBuilder::withDebugClientAllowlist() and initialize().
      */
     public static function allowedClientList(#[\SensitiveParameter] string|array|null $clients): ?array
@@ -338,6 +347,12 @@ final class DebugIntegration
                 'Debug client allowlist entry ' . $position . ' has an empty secret before "@": with no tracy-debug '
                 . 'cookie it would admit every client at that address. Set a secret, or list the bare address if that '
                 . 'is intended.',
+            );
+        }
+        if ($at !== false && $at < self::MIN_SECRET_LENGTH) {
+            throw new InvalidArgumentException(
+                'Debug client allowlist entry ' . $position . ' has a secret shorter than 16 characters before "@": '
+                . 'the tracy-debug cookie is all that guards the debugger at that address. Use a longer random secret.',
             );
         }
         if ($at !== false && $at === strlen($entry) - 1) {

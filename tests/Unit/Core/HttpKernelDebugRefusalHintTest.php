@@ -36,8 +36,9 @@ final class HttpKernelDebugRefusalHintTest extends TestCase
         [$written, $exception] = $this->failingRequest();
 
         self::assertStringContainsString(
-            self::LOG_PREFIX . ' (the debugger did not admit 203.0.113.9; add it, or secret@203.0.113.9, '
-            . 'to withDebugClientAllowlist()): ' . $exception,
+            self::LOG_PREFIX . ' (the debugger did not admit 203.0.113.9; add <secret>@203.0.113.9 to '
+            . 'withDebugClientAllowlist() and send <secret> as the tracy-debug cookie, or add 203.0.113.9 alone '
+            . 'if it is your own machine): ' . $exception,
             $written,
         );
     }
@@ -74,7 +75,7 @@ final class HttpKernelDebugRefusalHintTest extends TestCase
     #[DataProvider('invalidRemoteAddressProvider')]
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function testARemoteAddressThatIsNotAnIpIsReportedAsUnknown(string $address): void
+    public function testARemoteAddressThatIsNotAnIpGetsNoEntryToPaste(string $address): void
     {
         $_SERVER['REMOTE_ADDR'] = $address;
         DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77'], serverApi: 'fpm-fcgi');
@@ -82,8 +83,41 @@ final class HttpKernelDebugRefusalHintTest extends TestCase
         [$written, $exception] = $this->failingRequest();
 
         self::assertStringContainsString(
-            self::LOG_PREFIX . ' (the debugger did not admit unknown; add it, or secret@unknown, '
-            . 'to withDebugClientAllowlist()): ' . $exception,
+            self::LOG_PREFIX . ' (the debugger did not admit this client: REMOTE_ADDR is missing or not an '
+            . 'IP address): ' . $exception,
+            $written,
+        );
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testAMissingRemoteAddressGetsNoEntryToPaste(): void
+    {
+        unset($_SERVER['REMOTE_ADDR']);
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77'], serverApi: 'fpm-fcgi');
+
+        [$written, $exception] = $this->failingRequest();
+
+        self::assertStringContainsString(
+            self::LOG_PREFIX . ' (the debugger did not admit this client: REMOTE_ADDR is missing or not an '
+            . 'IP address): ' . $exception,
+            $written,
+        );
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testARelayedRequestWithoutAnAddressGetsNoEntryToPaste(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '1.2.3.4);forged:x';
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.1';
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77'], serverApi: 'fpm-fcgi');
+
+        [$written, $exception] = $this->failingRequest();
+
+        self::assertStringContainsString(
+            self::LOG_PREFIX . ' (the debugger did not admit this client: REMOTE_ADDR is missing or not an '
+            . 'IP address): ' . $exception,
             $written,
         );
     }
@@ -119,8 +153,8 @@ final class HttpKernelDebugRefusalHintTest extends TestCase
 
         self::assertStringContainsString(
             self::LOG_PREFIX . ' (the debugger did not admit ' . $address . ', which forwarded the request; '
-            . 'add secret@' . $address . ' to withDebugClientAllowlist() and send the tracy-debug cookie): '
-            . $exception,
+            . 'add <secret>@' . $address . ' to withDebugClientAllowlist() and send <secret> as the '
+            . 'tracy-debug cookie): ' . $exception,
             $written,
         );
     }
