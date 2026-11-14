@@ -15,7 +15,7 @@ use Zephyrus\Data\DatabaseException;
 
 final class DatabasePersistentConnectionTest extends TestCase
 {
-    public function testAPersistentConfigAsksTheFactoryForTheFrameworkPoolWithExceptions(): void
+    public function testAPersistentConfigAsksTheFactoryForThePoolOfItsOwnProcessWithExceptions(): void
     {
         $options = [];
 
@@ -30,7 +30,7 @@ final class DatabasePersistentConnectionTest extends TestCase
             return new ReusedSessionPdo();
         });
 
-        self::assertSame('zephyrus', $options[PDO::ATTR_PERSISTENT]);
+        self::assertSame(self::processPool(), $options[PDO::ATTR_PERSISTENT]);
         self::assertSame(PDO::ERRMODE_EXCEPTION, $options[PDO::ATTR_ERRMODE]);
     }
 
@@ -49,7 +49,7 @@ final class DatabasePersistentConnectionTest extends TestCase
         gc_collect_cycles();
         Database::fromConfig(self::config(persistent: true), $factory);
 
-        self::assertSame(['zephyrus', false, 'zephyrus'], $requested);
+        self::assertSame([self::processPool(), false, self::processPool()], $requested);
     }
 
     /**
@@ -74,7 +74,7 @@ final class DatabasePersistentConnectionTest extends TestCase
         $held = Database::fromConfig(self::config(persistent: true), $factory);
         Database::fromConfig(self::config(persistent: true, database: $database, username: $username), $factory);
 
-        self::assertSame(['zephyrus', 'zephyrus'], $requested);
+        self::assertSame([self::processPool(), self::processPool()], $requested);
     }
 
     public function testAReusedSessionIsRolledBackThenDiscardedBeforeAnyOtherStatement(): void
@@ -221,6 +221,11 @@ final class DatabasePersistentConnectionTest extends TestCase
                 $e->getMessage(),
             );
         }
+    }
+
+    private static function processPool(): string
+    {
+        return 'zephyrus:' . getmypid();
     }
 
     private static function config(bool $persistent, string $database = 'zephyrus', string $username = 'app'): DatabaseConfig

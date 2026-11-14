@@ -89,8 +89,11 @@ final class Database
      */
     private static ?\WeakMap $heldPersistentHandles = null;
 
-    /** Pool identifier passed as PDO::ATTR_PERSISTENT, so a foreign persistent handle that skips the reset is never shared. */
-    private const PERSISTENT_POOL_ID = 'zephyrus';
+    /**
+     * Pool identifier passed as PDO::ATTR_PERSISTENT, so a foreign persistent handle that skips the reset is never shared.
+     * The process id follows it: a forked child inherits the parent's pool but not its registry of held handles.
+     */
+    private const PERSISTENT_POOL_PREFIX = 'zephyrus:';
 
     /** Upper bound on the process-wide store; reaching it clears the store wholesale. */
     private const MAX_SHARED_COLUMN_SHAPES = 2048;
@@ -268,7 +271,7 @@ final class Database
             && !in_array($identity, iterator_to_array(self::heldPersistentHandles(), false), true);
 
         $options = [
-            PDO::ATTR_PERSISTENT => $persistent ? self::PERSISTENT_POOL_ID : false,
+            PDO::ATTR_PERSISTENT => $persistent ? self::PERSISTENT_POOL_PREFIX . getmypid() : false,
 
             // Not configurable: client-side emulation is a security downgrade. See the constructor.
             PDO::ATTR_EMULATE_PREPARES => false,
