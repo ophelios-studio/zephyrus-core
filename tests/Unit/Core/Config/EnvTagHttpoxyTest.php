@@ -58,13 +58,13 @@ final class EnvTagHttpoxyTest extends TestCase
         return (new ConfigurationFile($this->path))->toArray();
     }
 
-    public function testAnHttpPrefixedTagIsRefusedNamingTheKey(): void
+    public function testAnHttpPrefixedTagIsRefusedNamingTheKeyAndThePrefix(): void
     {
         // Exactly what a "Proxy: evil.test:8080" request header lands as.
         $_SERVER['HTTP_PROXY'] = 'http://evil.test:8080';
 
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('HTTP_PROXY');
+        $this->expectExceptionMessage('names starting with HTTP_ can be set per request');
 
         $this->resolve('HTTP_PROXY, none');
     }
@@ -83,7 +83,7 @@ final class EnvTagHttpoxyTest extends TestCase
         $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Basic c2VjcmV0';
 
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('REDIRECT_HTTP_AUTHORIZATION');
+        $this->expectExceptionMessage('names starting with REDIRECT_ can be set per request');
 
         $this->resolve('REDIRECT_HTTP_AUTHORIZATION');
     }
@@ -135,7 +135,7 @@ final class EnvTagHttpoxyTest extends TestCase
     public function testARefusedEnvTagNamesItsFullPathWhenTheLastSegmentIsAmbiguous(): void
     {
         $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('!env tag at "mailer.host": "HTTP_PROXY": ');
+        $this->expectExceptionMessage('!env tag at "mailer.host": the variable name is refused: ');
 
         $this->resolveYaml("database:\n  host: localhost\nmailer:\n  host: !env HTTP_PROXY\n");
     }

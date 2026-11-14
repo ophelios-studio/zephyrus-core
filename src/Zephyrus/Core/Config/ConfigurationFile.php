@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 use Zephyrus\Core\Cache\ConfigurationCache;
@@ -105,8 +106,10 @@ final class ConfigurationFile
     {
         try {
             $parsed = Yaml::parseFile($path, self::YAML_FLAGS);
-        } catch (\Throwable $e) {
-            throw ConfigurationException::parseFailed($path, $e);
+        } catch (ParseException $e) {
+            throw ConfigurationException::parseFailed($path, $e->getParsedLine());
+        } catch (\Throwable) {
+            throw ConfigurationException::parseFailed($path, null);
         }
 
         return is_array($parsed) ? $parsed : [];
@@ -197,13 +200,13 @@ final class ConfigurationFile
             );
         }
 
-        try {
-            return EnvironmentVariable::read($envKey) ?? $default;
-        } catch (\InvalidArgumentException $e) {
+        $refusal = EnvironmentVariable::refusalReason($envKey);
+        if ($refusal !== null) {
             throw new ConfigurationException(
-                sprintf('!env tag at %s: %s', MessageValue::quote($path), $e->getMessage()),
-                previous: $e,
+                sprintf('!env tag at %s: the variable name is refused: %s', MessageValue::quote($path), $refusal),
             );
         }
+
+        return EnvironmentVariable::read($envKey) ?? $default;
     }
 }

@@ -55,34 +55,9 @@ final class EnvironmentVariable
      */
     public static function read(string $name): ?string
     {
-        if (strpbrk($name, "\0=") !== false) {
-            throw new \InvalidArgumentException(sprintf(
-                '%s: names must not contain a NUL byte or "=".',
-                MessageValue::quote($name),
-            ));
-        }
-
-        $upper = strtoupper($name);
-
-        foreach (self::REFUSED_NAMES as $source => $names) {
-            if (in_array($upper, $names, true)) {
-                throw new \InvalidArgumentException(sprintf(
-                    '%s: can be set per request by %s, so it is never read as configuration; rename the variable.',
-                    MessageValue::quote($name),
-                    $source,
-                ));
-            }
-        }
-
-        foreach (self::REFUSED_PREFIXES as $prefix => $source) {
-            if (str_starts_with($upper, $prefix)) {
-                throw new \InvalidArgumentException(sprintf(
-                    '%s: names starting with %s can be set per request by %s, so they are never read as configuration; rename the variable.',
-                    MessageValue::quote($name),
-                    $prefix,
-                    $source,
-                ));
-            }
+        $reason = self::refusalReason($name);
+        if ($reason !== null) {
+            throw new \InvalidArgumentException(sprintf('%s: %s', MessageValue::quote($name), $reason));
         }
 
         if (array_key_exists($name, $_ENV)) {
@@ -95,5 +70,40 @@ final class EnvironmentVariable
         $fromProcess = getenv($name, local_only: true);
 
         return $fromProcess === false ? null : $fromProcess;
+    }
+
+    /**
+     * Why read() refuses a name, in words that never quote it, or null when the name is accepted.
+     *
+     * @internal
+     */
+    public static function refusalReason(string $name): ?string
+    {
+        if (strpbrk($name, "\0=") !== false) {
+            return 'names must not contain a NUL byte or "=".';
+        }
+
+        $upper = strtoupper($name);
+
+        foreach (self::REFUSED_NAMES as $source => $names) {
+            if (in_array($upper, $names, true)) {
+                return sprintf(
+                    'can be set per request by %s, so it is never read as configuration; rename the variable.',
+                    $source,
+                );
+            }
+        }
+
+        foreach (self::REFUSED_PREFIXES as $prefix => $source) {
+            if (str_starts_with($upper, $prefix)) {
+                return sprintf(
+                    'names starting with %s can be set per request by %s, so they are never read as configuration; rename the variable.',
+                    $prefix,
+                    $source,
+                );
+            }
+        }
+
+        return null;
     }
 }

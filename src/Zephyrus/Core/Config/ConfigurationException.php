@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-use Symfony\Component\Yaml\Exception\ParseException;
 use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
 
@@ -238,17 +237,15 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * A YAML syntax error, naming the line when the parser reports one. The parser's message and the exception
-     * itself are dropped: both can quote a secret from the file.
+     * A YAML syntax error, naming the line when the parser reports one (1 or more). It takes no exception: the
+     * parser's message and trace can quote a secret from the file, so none reaches a frame of this call.
      */
-    public static function parseFailed(string $path, ?\Throwable $previous = null): self
+    public static function parseFailed(string $path, ?int $line = null): self
     {
-        $line = $previous instanceof ParseException ? $previous->getParsedLine() : -1;
-
         return self::withPath(sprintf(
             "Failed to parse configuration file [%s]: invalid YAML%s (the parser's detail is withheld, since it can quote a secret from the file).",
             basename($path),
-            $line >= 1 ? ' at line ' . $line : '',
+            $line !== null && $line >= 1 ? ' at line ' . $line : '',
         ), $path);
     }
 
