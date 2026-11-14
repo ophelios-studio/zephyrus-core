@@ -143,7 +143,7 @@ final class ConfigurationFile
      * @param string|null $prefix Dotted path of $config, used to name the key in error messages.
      * @return array<string, mixed>
      */
-    private function processYamlTags(array $config, ?string $prefix = null): array
+    private function processYamlTags(#[\SensitiveParameter] array $config, ?string $prefix = null): array
     {
         foreach ($config as $key => $value) {
             $path = $prefix === null ? (string) $key : $prefix . '.' . $key;
@@ -165,7 +165,7 @@ final class ConfigurationFile
     /**
      * Resolve a single YAML custom tag.
      */
-    private function resolveTag(TaggedValue $tagged, string $path): mixed
+    private function resolveTag(#[\SensitiveParameter] TaggedValue $tagged, string $path): mixed
     {
         return match ($tagged->getTag()) {
             'env' => $this->resolveEnvTag($tagged->getValue(), $path),
@@ -178,7 +178,7 @@ final class ConfigurationFile
      * An empty name, a list or mapping value, and the names refused by {@see EnvironmentVariable::read()}
      * raise a ConfigurationException.
      */
-    private function resolveEnvTag(mixed $value, string $path): mixed
+    private function resolveEnvTag(#[\SensitiveParameter] mixed $value, string $path): mixed
     {
         if (is_array($value)) {
             throw new ConfigurationException(

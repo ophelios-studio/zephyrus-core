@@ -199,6 +199,12 @@ final class ConfigurationFileTest extends TestCase
             '!env tag at "a": the variable name is refused: can be set per request by the web server or PHP, '
             . 'so it is never read as configuration; rename the variable.',
         ];
+        yield 'secret default' => [
+            'HTTP_X, DefaultSecret9',
+            'DefaultSecret9',
+            '!env tag at "a": the variable name is refused: names starting with HTTP_ can be set per request by '
+            . 'the client request headers, so they are never read as configuration; rename the variable.',
+        ];
         yield 'request prefix' => [
             'http_s3cret',
             's3cret',
@@ -208,12 +214,16 @@ final class ConfigurationFileTest extends TestCase
     }
 
     #[DataProvider('refusedEnvNames')]
-    public function testARefusedEnvNameIsNeverQuotedOrChained(string $written, string $secret, string $message): void
+    public function testARefusedEnvNameIsNeverQuotedChainedOrLeftInTheLibraryFrames(string $written, string $secret, string $message): void
     {
         $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
         mkdir($directory);
         $path = $directory . '/config.yml';
-        file_put_contents($path, "a: !env $written\n");
+        file_put_contents($path, "services:\n  stripe:\n    sk: SiblingSecret9\na: !env $written\n");
+        $ignoreArgs = ini_get('zend.exception_ignore_args');
+        $maxLength = ini_get('zend.exception_string_param_max_len');
+        ini_set('zend.exception_ignore_args', '0');
+        ini_set('zend.exception_string_param_max_len', '1000000');
 
         try {
             (new ConfigurationFile($path))->toArray();
@@ -221,8 +231,49 @@ final class ConfigurationFileTest extends TestCase
         } catch (ConfigurationException $e) {
             self::assertSame($message, $e->getMessage());
             self::assertNull($e->getPrevious());
-            self::assertStringNotContainsStringIgnoringCase($secret, (string) $e);
+            self::assertStringNotContainsStringIgnoringCase($secret, $e->getMessage());
+            $libraryFrames = [];
+            foreach ($e->getTrace() as $frame) {
+                if (($frame['class'] ?? '') === self::class) {
+                    break;
+                }
+                $libraryFrames[] = $frame;
+            }
+            self::assertNotSame([], $libraryFrames);
+            self::assertStringNotContainsStringIgnoringCase($secret, print_r($libraryFrames, true));
+            self::assertStringNotContainsString('SiblingSecret9', print_r($libraryFrames, true));
         } finally {
+            ini_set('zend.exception_ignore_args', (string) $ignoreArgs);
+            ini_set('zend.exception_string_param_max_len', (string) $maxLength);
+            @unlink($path);
+            @rmdir($directory);
+        }
+    }
+
+    public function testARefusedRouterTagLeavesItsTextOutOfTheLibraryFrames(): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.yml';
+        file_put_contents($path, "router:\n  controllers: !env RouterSecret9\n");
+        $ignoreArgs = ini_get('zend.exception_ignore_args');
+        ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            (new ConfigurationFile($path))->toArray();
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            $libraryFrames = [];
+            foreach ($e->getTrace() as $frame) {
+                if (($frame['class'] ?? '') === self::class) {
+                    break;
+                }
+                $libraryFrames[] = $frame;
+            }
+            self::assertNotSame([], $libraryFrames);
+            self::assertStringNotContainsString('RouterSecret9', print_r($libraryFrames, true));
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $ignoreArgs);
             @unlink($path);
             @rmdir($directory);
         }

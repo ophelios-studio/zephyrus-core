@@ -76,7 +76,7 @@ final readonly class RouterConfig
      * @internal Read by ConfigurationFile before it resolves !env.
      * @throws ConfigurationException naming the field that holds the tag.
      */
-    public static function refuseTags(mixed $section): void
+    public static function refuseTags(#[\SensitiveParameter] mixed $section): void
     {
         if ($section instanceof TaggedValue) {
             throw new ConfigurationException(sprintf(
@@ -280,7 +280,7 @@ final readonly class RouterConfig
         return $value;
     }
 
-    private static function firstTag(mixed $value): ?TaggedValue
+    private static function firstTag(#[\SensitiveParameter] mixed $value): ?TaggedValue
     {
         if ($value instanceof TaggedValue) {
             return $value;
