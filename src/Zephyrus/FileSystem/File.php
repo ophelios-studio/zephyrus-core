@@ -29,7 +29,8 @@ namespace Zephyrus\FileSystem;
  *
  * ## Shared directories
  * An existing file in a sticky directory such as /tmp is refused when it belongs to neither
- * the directory owner nor the effective user, the Linux fs.protected_regular rule.
+ * the directory owner nor the effective user, the Linux fs.protected_regular rule, which
+ * applies here even where the system does not enforce it (fs.protected_regular off).
  */
 final class File extends FileSystemNode
 {
