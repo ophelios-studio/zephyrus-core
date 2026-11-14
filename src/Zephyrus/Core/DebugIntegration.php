@@ -193,7 +193,12 @@ final class DebugIntegration
         }
 
         $address = $_SERVER['REMOTE_ADDR'] ?? null;
-        $printable = is_string($address) && preg_match('/\A[\x21-\x7e]{1,45}\z/', $address) === 1 ? $address : 'unknown';
+        $printable = is_string($address) && filter_var($address, FILTER_VALIDATE_IP) !== false ? $address : 'unknown';
+
+        if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) || isset($_SERVER['HTTP_FORWARDED']) || isset($_SERVER['HTTP_X_REAL_IP'])) {
+            return 'the debugger did not admit ' . $printable . ', which forwarded the request; add secret@'
+                . $printable . ' to withDebugClientAllowlist() and send the tracy-debug cookie';
+        }
 
         return 'the debugger did not admit ' . $printable . '; add it, or secret@' . $printable
             . ', to withDebugClientAllowlist()';
@@ -348,6 +353,8 @@ final class DebugIntegration
      */
     public static function initializeWithoutConfiguration(): void
     {
+        self::$refusalHint = null;
+
         if (!Debugger::isEnabled()) {
             self::initialize(debug: false);
         }

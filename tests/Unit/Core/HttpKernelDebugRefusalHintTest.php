@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
@@ -57,11 +58,25 @@ final class HttpKernelDebugRefusalHintTest extends TestCase
         );
     }
 
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function invalidRemoteAddressProvider(): array
+    {
+        return [
+            'line break'          => ["203.0.113.9\n[forged]"],
+            'injected suffix'     => ['1.2.3.4);forged:x'],
+            'space'               => ['203.0.113.9 extra'],
+            'too long'            => [str_repeat('1', 46)],
+        ];
+    }
+
+    #[DataProvider('invalidRemoteAddressProvider')]
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function testAnUnprintableRemoteAddressIsReportedAsUnknown(): void
+    public function testARemoteAddressThatIsNotAnIpIsReportedAsUnknown(string $address): void
     {
-        $_SERVER['REMOTE_ADDR'] = "203.0.113.9\n[forged]";
+        $_SERVER['REMOTE_ADDR'] = $address;
         DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77'], serverApi: 'fpm-fcgi');
 
         [$written, $exception] = $this->failingRequest();
@@ -71,6 +86,56 @@ final class HttpKernelDebugRefusalHintTest extends TestCase
             . 'to withDebugClientAllowlist()): ' . $exception,
             $written,
         );
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: string, 3: string}>
+     */
+    public static function relayedRequestProvider(): array
+    {
+        $cases = [];
+        foreach (DebugIntegrationExposureTest::forwardingHeaderProvider() as $name => [$header, $value]) {
+            $cases[$name . ', client not listed'] = ['203.0.113.9', '203.0.113.77', $header, $value];
+            $cases[$name . ', loopback listed'] = ['127.0.0.1', '127.0.0.1', $header, $value];
+        }
+
+        return $cases;
+    }
+
+    #[DataProvider('relayedRequestProvider')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testARelayedRequestGetsTheSecretEntryHint(
+        string $address,
+        string $listed,
+        string $header,
+        string $value,
+    ): void {
+        $_SERVER['REMOTE_ADDR'] = $address;
+        $_SERVER[$header] = $value;
+        DebugIntegration::initialize(debug: true, allowedClients: [$listed], serverApi: 'fpm-fcgi');
+
+        [$written, $exception] = $this->failingRequest();
+
+        self::assertStringContainsString(
+            self::LOG_PREFIX . ' (the debugger did not admit ' . $address . ', which forwarded the request; '
+            . 'add secret@' . $address . ' to withDebugClientAllowlist() and send the tracy-debug cookie): '
+            . $exception,
+            $written,
+        );
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testInitializingWithoutConfigurationClearsTheHint(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+        DebugIntegration::initialize(debug: true, allowedClients: ['203.0.113.77'], serverApi: 'fpm-fcgi');
+        self::assertNotNull(DebugIntegration::refusalHint());
+
+        DebugIntegration::initializeWithoutConfiguration();
+
+        self::assertNull(DebugIntegration::refusalHint());
     }
 
     #[RunInSeparateProcess]
