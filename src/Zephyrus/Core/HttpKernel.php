@@ -199,7 +199,9 @@ final readonly class HttpKernel
             throw new KernelRethrowSignal($exception);
         }
 
-        self::logError('unhandled exception, answered with a 500', $exception);
+        $hint = DebugIntegration::refusalHint();
+        $reason = $hint === null ? '' : ' (' . $hint . ')';
+        self::logError('unhandled exception, answered with a 500' . $reason, $exception);
 
         return $this->exceptionResponder->internalErrorResponse($request);
     }

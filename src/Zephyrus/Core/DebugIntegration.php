@@ -49,6 +49,9 @@ final class DebugIntegration
     /** @var list<string> Application-specific exact names (the session cookie), set by initialize(). */
     private static array $applicationKeys = [];
 
+    /** Why the last initialize() left debug on but the client unadmitted; null otherwise. */
+    private static ?string $refusalHint = null;
+
     /** Exact key names masked on dump(), the debug bar and the Bluescreen. dump() has no default list of its own. */
     public const array SENSITIVE_KEYS = [
         'smtpPassword',
@@ -144,6 +147,7 @@ final class DebugIntegration
         string $serverApi = PHP_SAPI,
     ): void {
         $clients = self::allowedClientList($allowedClients);
+        self::$refusalHint = null;
 
         if (!$debug) {
             Debugger::$productionMode = true;
@@ -151,8 +155,13 @@ final class DebugIntegration
             return;
         }
 
+        $admitted = self::admitsClient($clients, $serverApi);
+        if (!$admitted) {
+            self::$refusalHint = self::describeRefusal($clients !== null);
+        }
+
         Debugger::enable(
-            self::admitsClient($clients, $serverApi) ? Debugger::Development : Debugger::Production,
+            $admitted ? Debugger::Development : Debugger::Production,
             $logDirectory,
             $email,
         );
@@ -164,6 +173,30 @@ final class DebugIntegration
         }
 
         self::hideFrameworkSecrets($sessionName);
+    }
+
+    /**
+     * Why debug is on but the client got the production page, or null when debug is off or the client is admitted.
+     *
+     * @internal Read by HttpKernel to explain a 500 in the error log.
+     */
+    public static function refusalHint(): ?string
+    {
+        return self::$refusalHint;
+    }
+
+    private static function describeRefusal(bool $hasAllowlist): string
+    {
+        if (!$hasAllowlist) {
+            return 'the debugger admits no client without an allowlist, except a direct loopback client under php -S; '
+                . 'see withDebugClientAllowlist()';
+        }
+
+        $address = $_SERVER['REMOTE_ADDR'] ?? null;
+        $printable = is_string($address) && preg_match('/\A[\x21-\x7e]{1,45}\z/', $address) === 1 ? $address : 'unknown';
+
+        return 'the debugger did not admit ' . $printable . '; add it, or secret@' . $printable
+            . ', to withDebugClientAllowlist()';
     }
 
     /**
