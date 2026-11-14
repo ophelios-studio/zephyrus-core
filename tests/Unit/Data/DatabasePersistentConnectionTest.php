@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Data;
 use PDO;
 use PDOException;
 use PDOStatement;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Data\Database;
@@ -49,6 +50,31 @@ final class DatabasePersistentConnectionTest extends TestCase
         Database::fromConfig(self::config(persistent: true), $factory);
 
         self::assertSame(['zephyrus', false, 'zephyrus'], $requested);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function otherDatabaseOrUser(): iterable
+    {
+        yield 'another user on the same database' => ['zephyrus', 'reporting'];
+        yield 'the same user on another database' => ['archive', 'app'];
+    }
+
+    #[DataProvider('otherDatabaseOrUser')]
+    public function testAHeldHandleKeepsOnlyItsOwnDatabaseAndUserOutOfThePool(string $database, string $username): void
+    {
+        $requested = [];
+        $factory = static function (string $dsn, string $user, string $password, array $options) use (&$requested): PDO {
+            $requested[] = $options[PDO::ATTR_PERSISTENT];
+
+            return $options[PDO::ATTR_PERSISTENT] === false ? new PDO('sqlite::memory:') : new ReusedSessionPdo();
+        };
+
+        $held = Database::fromConfig(self::config(persistent: true), $factory);
+        Database::fromConfig(self::config(persistent: true, database: $database, username: $username), $factory);
+
+        self::assertSame(['zephyrus', 'zephyrus'], $requested);
     }
 
     public function testAReusedSessionIsRolledBackThenDiscardedBeforeAnyOtherStatement(): void
@@ -197,9 +223,9 @@ final class DatabasePersistentConnectionTest extends TestCase
         }
     }
 
-    private static function config(bool $persistent): DatabaseConfig
+    private static function config(bool $persistent, string $database = 'zephyrus', string $username = 'app'): DatabaseConfig
     {
-        return DatabaseConfig::fromArray(['database' => 'zephyrus', 'username' => 'app', 'persistent' => $persistent]);
+        return DatabaseConfig::fromArray(['database' => $database, 'username' => $username, 'persistent' => $persistent]);
     }
 }
 
