@@ -106,6 +106,7 @@ final class ApplicationBuilder
 
     /**
      * Loads a root configuration file, with the real path of its directory as the application root (basePath).
+     * The file entries taking several files use the directory of the first one.
      *
      * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
      */
@@ -113,7 +114,7 @@ final class ApplicationBuilder
     {
         $configuration = Configuration::fromFile($path);
 
-        return self::create()->withConfiguration($configuration, (string) realpath(dirname($path)));
+        return self::create()->withConfiguration($configuration, self::rootOfFirst([$path]));
     }
 
     /**
@@ -149,7 +150,7 @@ final class ApplicationBuilder
      */
     public static function fromConfigurationFiles(array $paths): self
     {
-        return self::fromConfiguration(Configuration::fromFiles($paths));
+        return self::create()->withConfiguration(Configuration::fromFiles($paths), self::rootOfFirst($paths));
     }
 
     /**
@@ -159,7 +160,7 @@ final class ApplicationBuilder
      */
     public static function fromOptionalConfigurationFiles(array $paths): self
     {
-        return self::fromConfiguration(Configuration::fromOptionalFiles($paths));
+        return self::create()->withConfiguration(Configuration::fromOptionalFiles($paths), self::rootOfFirst($paths));
     }
 
     /**
@@ -425,35 +426,36 @@ final class ApplicationBuilder
     }
 
     /**
-     * Loads and applies a root configuration file.
+     * Loads and applies a root configuration file, with the real path of its directory as the application root.
      *
      * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
      */
     public function withConfigurationFile(string $path): self
     {
-        return $this->withConfiguration(Configuration::fromFile($path));
+        return $this->withConfiguration(Configuration::fromFile($path), self::rootOfFirst([$path]));
     }
 
     /**
-     * Loads, merges and applies configuration files.
+     * Loads, merges and applies configuration files, with the real path of the directory of the first one as the
+     * application root.
      *
      * @param string[] $paths
      * @throws ConfigurationException when a path is invalid or a file is missing, unreadable, invalid or holds an invalid value.
      */
     public function withConfigurationFiles(array $paths): self
     {
-        return $this->withConfiguration(Configuration::fromFiles($paths));
+        return $this->withConfiguration(Configuration::fromFiles($paths), self::rootOfFirst($paths));
     }
 
     /**
-     * Like withConfigurationFiles(), but missing files are skipped.
+     * Like withConfigurationFiles(), but missing files are skipped (the root stays the directory of the first path).
      *
      * @param string[] $paths
      * @throws ConfigurationException when a path is invalid or an existing file is unreadable, invalid or holds an invalid value.
      */
     public function withOptionalConfigurationFiles(array $paths): self
     {
-        return $this->withConfiguration(Configuration::fromOptionalFiles($paths));
+        return $this->withConfiguration(Configuration::fromOptionalFiles($paths), self::rootOfFirst($paths));
     }
 
     /**
@@ -482,6 +484,22 @@ final class ApplicationBuilder
         )));
 
         return $clone;
+    }
+
+    /**
+     * The real path of the directory of the first file, or null when there is none or it does not exist.
+     *
+     * @param string[] $paths
+     */
+    private static function rootOfFirst(array $paths): ?string
+    {
+        if ($paths === []) {
+            return null;
+        }
+
+        $root = realpath(dirname(reset($paths)));
+
+        return $root === false ? null : $root;
     }
 
     /**

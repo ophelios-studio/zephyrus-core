@@ -114,4 +114,80 @@ final class ApplicationBuilderRouterTest extends TestCase
             );
         }
     }
+
+    public function testWithConfigurationFileTakesItsDirectoryAsTheApplicationRoot(): void
+    {
+        $file = $this->routerFileWithControllersLink();
+
+        $application = ApplicationBuilder::create()->withConfigurationFile($file)->build();
+
+        self::assertSame('hello', $application->handle(Request::fromArray('GET', '/greeting'))->body);
+    }
+
+    public function testFromConfigurationFilesTakesTheDirectoryOfTheFirstFileAsTheApplicationRoot(): void
+    {
+        $first = $this->routerFileWithControllersLink();
+        mkdir($this->root->path . '/overrides');
+        $second = $this->root->file('overrides/local.yml', "application:\n  debug: false\n");
+
+        $application = ApplicationBuilder::fromConfigurationFiles([$first, $second])->build();
+
+        self::assertSame('hello', $application->handle(Request::fromArray('GET', '/greeting'))->body);
+    }
+
+    public function testOptionalConfigurationFilesTakeTheDirectoryOfTheFirstPathEvenWhenItIsMissing(): void
+    {
+        $existing = $this->routerFileWithControllersLink();
+        $missing = $this->root->path . '/absent.yml';
+
+        $application = ApplicationBuilder::buildFromOptionalConfigurationFiles([$missing, $existing]);
+
+        self::assertSame('hello', $application->handle(Request::fromArray('GET', '/greeting'))->body);
+    }
+
+    public function testARelativeLocalePathOfAFileEntryIsResolvedAgainstTheDirectoryOfTheFile(): void
+    {
+        symlink((string) realpath(__DIR__ . '/../../Fixtures/locales'), $this->root->path . '/lang');
+        $file = $this->root->file(
+            'config.yml',
+            "application:\n  environment: development\n  debug: false\n"
+            . "localization:\n  locale: en\n  supported_locales: [en, fr]\n  locale_path: lang\n",
+        );
+
+        $application = ApplicationBuilder::create()->withConfigurationFile($file)->build();
+
+        self::assertSame('Bonjour', $application->transFromRequest(
+            'messages.plain',
+            request: Request::fromArray('GET', '/', headers: ['accept-language' => 'fr-CA,fr;q=0.9,en;q=0.8']),
+        ));
+    }
+
+    public function testAFileEntryWhoseFirstDirectoryIsMissingStillRefusesTheRouterSection(): void
+    {
+        $existing = $this->routerFileWithControllersLink();
+
+        try {
+            ApplicationBuilder::fromOptionalConfigurationFiles([$this->root->path . '/nowhere/config.yml', $existing])
+                ->build();
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                'Configuration declares router.controllers, but the builder received no basePath to resolve its paths '
+                . 'against: build it with ApplicationBuilder::create()->withConfiguration($configuration, basePath: '
+                . '<application root>).',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    private function routerFileWithControllersLink(): string
+    {
+        symlink((string) realpath(__DIR__ . '/../../Fixtures/ConfiguredControllers'), $this->root->path . '/controllers');
+
+        return $this->root->file(
+            'config.yml',
+            "application:\n  environment: development\n  debug: false\nrouter:\n  controllers:\n"
+            . "    Zephyrus\\Tests\\Fixtures\\ConfiguredControllers: controllers\n",
+        );
+    }
 }
