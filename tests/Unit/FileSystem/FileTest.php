@@ -547,21 +547,75 @@ final class FileTest extends TestCase
         }
     }
 
-    public function testCopyToAFileNameEndingInASlashKeepsTheSymlinkItRefuses(): void
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function writingMethods(): array
     {
-        $source = $this->tempDir . '/slash-source.txt';
+        return [
+            'create' => ['create'],
+            'write' => ['write'],
+            'append' => ['append'],
+            'copy' => ['copy'],
+        ];
+    }
+
+    #[DataProvider('writingMethods')]
+    public function testALinkNameEndingInASlashIsRefusedAsAFileName(string $method): void
+    {
         $target = $this->tempDir . '/slash-target.txt';
         $link = $this->tempDir . '/slash-link.txt';
-        file_put_contents($source, 'content');
         file_put_contents($target, 'SERVER SIDE SECRET');
         symlink($target, $link);
 
         try {
-            (new File($source))->copy($link . '/');
+            $this->writeThrough($method, $link . '/');
             self::fail('expected a refusal');
-        } catch (FileSystemException) {
-            self::assertTrue(is_link($link));
+        } catch (FileSystemException $e) {
+            self::assertSame('Path does not end with a file name: ' . $link . '/', $e->getMessage());
         }
+
+        self::assertTrue(is_link($link));
+        self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function directorySegments(): array
+    {
+        return [
+            'dot segment' => ['/.'],
+            'dot-dot segment' => ['/..'],
+        ];
+    }
+
+    #[DataProvider('directorySegments')]
+    public function testAPathEndingInADotSegmentIsRefusedBeforeCreatingAnyDirectory(string $segment): void
+    {
+        $path = $this->tempDir . '/missing/parent' . $segment;
+
+        try {
+            File::create($path, 'content');
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path does not end with a file name: ' . $path, $e->getMessage());
+        }
+
+        self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
+    }
+
+    private function writeThrough(string $method, string $path): void
+    {
+        $source = $this->tempDir . '/write-through-source.txt';
+        file_put_contents($source, 'attacker content');
+
+        match ($method) {
+            'create' => File::create($path, 'attacker content'),
+            'write' => (new File($path))->write('attacker content'),
+            'append' => (new File($path))->append('attacker content'),
+            'copy' => (new File($source))->copy($path),
+        };
     }
 
     /**

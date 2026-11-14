@@ -32,10 +32,11 @@ final class File extends FileSystemNode
     /**
      * Create a new file with optional initial content.
      *
-     * @throws FileSystemException if creation fails.
+     * @throws FileSystemException if the path does not end with a file name, or creation fails.
      */
     public static function create(string $path, string $content = ''): self
     {
+        self::assertEndsWithAFileName($path);
         $dir = dirname($path);
         if (!is_dir($dir)) {
             if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
@@ -68,20 +69,23 @@ final class File extends FileSystemNode
     /**
      * Overwrite the file with new content.
      *
-     * @throws FileSystemException if writing fails.
+     * @throws FileSystemException if the path does not end with a file name, or writing fails.
      */
     public function write(string $content): void
     {
+        self::assertEndsWithAFileName($this->path);
         self::putContent($this->path, $content, 'write to');
     }
 
     /**
      * Append content to the file, creating it when absent.
      *
-     * @throws FileSystemException if the path is a symbolic link, or appending fails.
+     * @throws FileSystemException if the path does not end with a file name, is a symbolic
+     *         link, or appending fails.
      */
     public function append(string $content): void
     {
+        self::assertEndsWithAFileName($this->path);
         self::putContent($this->path, $content, 'append to', append: true);
     }
 
@@ -145,10 +149,11 @@ final class File extends FileSystemNode
      * or the umask allow; an existing destination keeps its permissions.
      *
      * @return File The new file at the destination path.
-     * @throws FileSystemException if copying fails.
+     * @throws FileSystemException if the destination does not end with a file name, or copying fails.
      */
     public function copy(string $destination): self
     {
+        self::assertEndsWithAFileName($destination);
         $this->assertExists();
 
         $dir = dirname($destination);
@@ -251,6 +256,18 @@ final class File extends FileSystemNode
         }
 
         return $lines;
+    }
+
+    /**
+     * A path whose last segment is empty, "." or ".." names a directory, never a file.
+     *
+     * @throws FileSystemException
+     */
+    private static function assertEndsWithAFileName(string $path): void
+    {
+        if (preg_match('~(?:^|/)\.{0,2}$~', $path) === 1) {
+            throw FileSystemException::notAFileName($path);
+        }
     }
 
     /**
