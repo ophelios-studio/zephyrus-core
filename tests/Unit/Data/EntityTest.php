@@ -174,6 +174,28 @@ class PrivatePropertyEntity extends Entity
     }
 }
 
+class ConstructorReadonlyEntity extends Entity
+{
+    public function __construct(public readonly int $id = 0)
+    {
+    }
+}
+
+class PrivateSetEntity extends Entity
+{
+    public private(set) int $id = 0;
+}
+
+class UninitializedReadonlyEntity extends Entity
+{
+    public readonly int $id;
+}
+
+class ProtectedSetEntity extends Entity
+{
+    public protected(set) int $id = 0;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -327,6 +349,41 @@ final class EntityTest extends TestCase
                 $e->getMessage()
             );
         }
+    }
+
+    public function testAReadonlyPropertyTheConstructorAlreadySetIsRefusedAtBuild(): void
+    {
+        try {
+            ConstructorReadonlyEntity::build((object) ['id' => 5]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $id of ' . ConstructorReadonlyEntity::class
+                . ': it is readonly and its constructor already set it. '
+                . 'Leave it unset in the constructor, or drop readonly.',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testAPrivateSetPropertyIsRefusedAtBuild(): void
+    {
+        try {
+            PrivateSetEntity::build((object) ['id' => 5]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $id of ' . PrivateSetEntity::class
+                . ': its private(set) visibility keeps Entity from writing it. Use protected(set) instead.',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testAnUninitializedReadonlyAndAProtectedSetPropertyAreHydrated(): void
+    {
+        self::assertSame(5, UninitializedReadonlyEntity::build((object) ['id' => 5])->id);
+        self::assertSame(5, ProtectedSetEntity::build((object) ['id' => 5])->id);
     }
 
     public function testAValueForAnIntersectionTypedPropertyIsRefusedAtBuild(): void

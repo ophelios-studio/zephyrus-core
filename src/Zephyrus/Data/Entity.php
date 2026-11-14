@@ -44,12 +44,12 @@ abstract class Entity implements JsonSerializable
     /**
      * Hydrate an entity from a database row, coercing values to the declared property types.
      *
-     * Private and static properties are skipped. Hydrates bool, int, float, string, array, object
-     * and mixed, stdClass, backed enums, nested entities (from a stdClass) and date strings
-     * (DateTimeImmutable, DateTimeInterface, DateTime; an ISO `YYYY-MM-DD` string with optional time,
-     * fraction and UTC offset). A date that does not fit, a value that is not a case of its backed enum
-     * (wrong type included), a pure enum, a nested entity that is not a stdClass or any other type is refused;
-     * native types are converted by settype(), not validated.
+     * Private and static properties are skipped; a readonly property its constructor already set and a private(set)
+     * property are refused. Hydrates bool, int, float, string, array, object and mixed, stdClass, backed enums, nested
+     * entities (from a stdClass) and date strings (DateTimeImmutable, DateTimeInterface, DateTime; an ISO `YYYY-MM-DD`
+     * string with optional time, fraction and UTC offset). A date that does not fit, a value that is not a case of its
+     * backed enum (wrong type included), a pure enum, a nested entity that is not a stdClass or any other type is
+     * refused; native types are converted by settype(), not validated.
      *
      * @throws InvalidArgumentException When a value cannot be hydrated into its property.
      * @return static|null Returns null when $row is null.
@@ -79,6 +79,22 @@ abstract class Entity implements JsonSerializable
             $property = $reflection->getProperty($name);
             if ($property->isPrivate() || $property->isStatic()) {
                 continue;
+            }
+
+            if ($property->isReadOnly() && $property->isInitialized($instance)) {
+                throw self::unwritableProperty(
+                    $instance,
+                    $name,
+                    'it is readonly and its constructor already set it. '
+                    . 'Leave it unset in the constructor, or drop readonly.'
+                );
+            }
+            if ($property->isPrivateSet()) {
+                throw self::unwritableProperty(
+                    $instance,
+                    $name,
+                    'its private(set) visibility keeps Entity from writing it. Use protected(set) instead.'
+                );
             }
 
             $reflectionType = $property->getType();
@@ -174,6 +190,13 @@ abstract class Entity implements JsonSerializable
 
         // The database value is not interpolated: the message reaches logs and error pages.
         throw new InvalidArgumentException("Invalid value for date {$declared} on property \${$name}");
+    }
+
+    private static function unwritableProperty(self $instance, string $name, string $reason): InvalidArgumentException
+    {
+        return new InvalidArgumentException(
+            "Cannot hydrate property \${$name} of " . get_debug_type($instance) . ": {$reason}"
+        );
     }
 
     private static function unsupportedType(self $instance, string $name, string $type): InvalidArgumentException
