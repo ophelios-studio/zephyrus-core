@@ -9,7 +9,7 @@ use Zephyrus\Core\Config\DatabaseConfig;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
- * Raised when a PDO-level database operation fails.
+ * Raised when a database operation fails, or when the data layer refuses a misuse, such as a persistent PDO it cannot reset.
  *
  * Driver messages can echo row values (PostgreSQL's DETAIL line, for example,
  * prints `Key (email)=(jane@example.com) already exists.`), so queryExecutionFailed(),

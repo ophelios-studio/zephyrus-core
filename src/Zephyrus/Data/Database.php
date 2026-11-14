@@ -131,7 +131,7 @@ final class Database
     ];
 
     /**
-     * @throws DatabaseException when the PDO is persistent: only fromConfig() resets a reused session.
+     * @throws DatabaseException when the PDO is persistent and was not opened by fromConfig().
      */
     public function __construct(private readonly PDO $pdo)
     {
@@ -200,15 +200,16 @@ final class Database
     /**
      * Opens a PostgreSQL connection described by $config.
      *
-     * With $config->persistent, the connection is taken from the process pool and its session is reset
-     * (ROLLBACK when a transaction is open, then DISCARD ALL, then the notifications already received are dropped). A persistent handle
-     * still held in this process is never reused: the call opens a non-persistent connection instead.
+     * With $config->persistent, the connection is taken from this process's pool and its session is reset: ROLLBACK
+     * when a transaction is open, DISCARD ALL, then the notifications already received are dropped. A persistent
+     * handle still held in this process is never reused: the call opens a non-persistent connection instead.
      *
      * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
      *        Optional factory for tests and advanced callers, receiving ($dsn, $username, $password, $options).
      *        An ATTR_DISABLE_PREPARES option it sets is overwritten on pgsql: call
      *        pdo()->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, false) afterwards to get named statements back.
-     *        It must honour the ATTR_PERSISTENT option it receives.
+     *        It must honour the ATTR_PERSISTENT option it receives and set no session state (SET ROLE included):
+     *        with $config->persistent it runs before the reset, which erases it. Set session state after fromConfig().
      *
      * @throws DatabaseException on PDO connection failure, when the factory returns a persistent connection that was
      *         not requested, or when a reused session cannot be reset, even on a second connection.
@@ -368,7 +369,9 @@ final class Database
     }
 
     /**
-     * These attributes live on the pooled handle, out of DISCARD ALL's reach. The constructor pins the fetch mode.
+     * Pins what the pooled handle keeps across requests, out of DISCARD ALL's reach; ERRMODE too, so a failed reset
+     * raises even when the factory ignored its options. connect() pins DISABLE_PREPARES; the constructor pins the fetch
+     * mode and EMULATE_PREPARES.
      */
     private static function pinSharedHandleAttributes(PDO $pdo): void
     {
