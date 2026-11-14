@@ -29,6 +29,9 @@ final class File extends FileSystemNode
     /** Upper bound of the mode of a file this class creates (the umask can only narrow it). */
     public const int DEFAULT_PERMISSIONS = 0644;
 
+    private const int FILE_TYPE_MASK = 0o170000;
+    private const int REGULAR_FILE_TYPE = 0o100000;
+
     /**
      * Create a new file with optional initial content.
      *
@@ -350,7 +353,7 @@ final class File extends FileSystemNode
         $open = fstat($handle);
 
         return $named !== false && $open !== false
-            && ($named['mode'] & 0o170000) === 0o100000
+            && ($named['mode'] & self::FILE_TYPE_MASK) === self::REGULAR_FILE_TYPE
             && self::isSameFile($named, $open);
     }
 
