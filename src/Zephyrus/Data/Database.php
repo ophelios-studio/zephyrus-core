@@ -91,7 +91,7 @@ final class Database
 
     /**
      * Pool identifier passed as PDO::ATTR_PERSISTENT, so a foreign persistent handle that skips the reset is never shared.
-     * The process id follows it: a forked child inherits the parent's pool but not its registry of held handles.
+     * The process id follows it: after a fork, parent and child no longer share a registry of held handles.
      */
     private const PERSISTENT_POOL_PREFIX = 'zephyrus:';
 
