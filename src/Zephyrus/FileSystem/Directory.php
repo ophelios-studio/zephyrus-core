@@ -138,10 +138,12 @@ final class Directory extends FileSystemNode
      * and links met inside the tree are removed without touching their targets.
      *
      * @param bool $recursive If true, delete all contents first.
-     * @throws FileSystemException if any file or directory could not be removed.
+     * @throws FileSystemException if the path holds a NUL byte or is a stream wrapper URL, or if any file or
+     *         directory could not be removed.
      */
     public function delete(bool $recursive = false): void
     {
+        self::assertLocalPath($this->path);
         if (self::isSymlink($this->path)) {
             $link = self::withoutTrailingSegments($this->path);
             if (!@unlink($link)) {

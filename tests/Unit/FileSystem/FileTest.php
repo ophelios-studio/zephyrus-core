@@ -237,6 +237,37 @@ final class FileTest extends TestCase
         self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
     }
 
+    public function testMoveRefusesAStreamWrapperSourceAndKeepsTheFile(): void
+    {
+        $src = $this->tempDir . '/moveme.txt';
+        file_put_contents($src, 'movable');
+        $source = 'file://' . $src;
+
+        try {
+            (new File($source))->move($this->tempDir . '/moved.txt');
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $source . '"', $e->getMessage());
+        }
+
+        self::assertSame('movable', (string) file_get_contents($src));
+        self::assertFileDoesNotExist($this->tempDir . '/moved.txt');
+    }
+
+    public function testMoveRefusesAPathHoldingANulByteInTheSourceAndCreatesNothing(): void
+    {
+        $destination = $this->tempDir . '/moved.txt';
+
+        try {
+            (new File($this->tempDir . "/a\0b.txt"))->move($destination);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path holds a NUL byte, which no file name can: "' . $this->tempDir . '/a\u0000b.txt"', $e->getMessage());
+        }
+
+        self::assertFileDoesNotExist($destination);
+    }
+
     public function testDeleteRemovesFile(): void
     {
         $path = $this->tempDir . '/delete-me.txt';
@@ -253,6 +284,37 @@ final class FileTest extends TestCase
         $file = new File($this->tempDir . '/already-gone.txt');
         $file->delete(); // Should not throw.
         self::assertFalse($file->exists());
+    }
+
+    public function testDeleteRefusesAStreamWrapperUrlAndKeepsTheFile(): void
+    {
+        $path = $this->tempDir . '/keep-me.txt';
+        file_put_contents($path, 'kept');
+        $url = 'file://' . $path;
+
+        try {
+            (new File($url))->delete();
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $url . '"', $e->getMessage());
+        }
+
+        self::assertSame('kept', (string) file_get_contents($path));
+    }
+
+    public function testDeleteRefusesAPathHoldingANulByteAndKeepsTheFile(): void
+    {
+        $path = $this->tempDir . '/keep-me.txt';
+        file_put_contents($path, 'kept');
+
+        try {
+            (new File($this->tempDir . "/a\0b.txt"))->delete();
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path holds a NUL byte, which no file name can: "' . $this->tempDir . '/a\u0000b.txt"', $e->getMessage());
+        }
+
+        self::assertSame('kept', (string) file_get_contents($path));
     }
 
     public function testLinesReturnsArrayOfLines(): void

@@ -232,11 +232,12 @@ final class File extends FileSystemNode
      * Move (rename) the file to a new location.
      *
      * @return File The file at the new location.
-     * @throws FileSystemException if the destination holds a NUL byte, is a stream wrapper URL or does
-     *         not end with a file name, or moving fails.
+     * @throws FileSystemException if the source holds a NUL byte or is a stream wrapper URL, if the destination
+     *         holds a NUL byte, is a stream wrapper URL or does not end with a file name, or if moving fails.
      */
     public function move(string $destination): self
     {
+        self::assertLocalPath($this->path);
         self::assertPlainFilePath($destination);
         $this->assertExists();
 
@@ -257,10 +258,11 @@ final class File extends FileSystemNode
     /**
      * Delete the file.
      *
-     * @throws FileSystemException if deletion fails.
+     * @throws FileSystemException if the path holds a NUL byte or is a stream wrapper URL, or if deletion fails.
      */
     public function delete(): void
     {
+        self::assertLocalPath($this->path);
         if (!$this->exists()) {
             return;
         }

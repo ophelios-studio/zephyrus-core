@@ -215,6 +215,35 @@ final class DirectoryTest extends TestCase
         self::assertDirectoryDoesNotExist($path);
     }
 
+    public function testDeleteRefusesAStreamWrapperUrlAndKeepsTheDirectory(): void
+    {
+        file_put_contents($this->tempDir . '/keep.txt', 'kept');
+        $path = 'file://' . $this->tempDir;
+
+        try {
+            (new Directory($path))->delete(recursive: true);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $path . '"', $e->getMessage());
+        }
+
+        self::assertSame('kept', (string) file_get_contents($this->tempDir . '/keep.txt'));
+    }
+
+    public function testDeleteRefusesAPathHoldingANulByteAndKeepsTheDirectory(): void
+    {
+        file_put_contents($this->tempDir . '/keep.txt', 'kept');
+
+        try {
+            (new Directory($this->tempDir . "/d\0x"))->delete(recursive: true);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path holds a NUL byte, which no file name can: "' . $this->tempDir . '/d\u0000x"', $e->getMessage());
+        }
+
+        self::assertSame('kept', (string) file_get_contents($this->tempDir . '/keep.txt'));
+    }
+
     public function testDeleteNonRecursiveThrowsForNonEmpty(): void
     {
         $path = $this->tempDir . '/non-empty';
