@@ -127,7 +127,6 @@ final class SessionIdleTimeoutTest extends TestCase
      */
     private function debugWarningsDuringStart(SessionManager $session, array $sessionValues): array
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $warnings = [];

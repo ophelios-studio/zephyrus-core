@@ -196,7 +196,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsWhenANonceMeetsUnsafeInline(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -227,7 +226,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testNoWarningWhenTheDirectiveHasNoUnsafeInline(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $warnings = $this->captureUserWarnings(fn () => $this->kernel(
@@ -261,7 +259,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsWhenAHashMeetsUnsafeInlineWithoutAnyNonce(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -278,7 +275,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsOnceWhenAHashedDirectiveIsAlsoNonced(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -293,7 +289,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsForAHashedDirectiveWhileAnotherDirectiveIsNonced(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -310,7 +305,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsForAnUpperCaseHashSource(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -324,7 +318,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsForAnUpperCaseUnsafeInline(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -338,7 +331,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeDoesNotWarnForAHashAloneWithoutUnsafeInline(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
@@ -392,7 +384,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testDebugModeWarnsFromAnInnerSecureHeadersThatReplacesTheNoncePolicy(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $response = null;
@@ -463,7 +454,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testNoWarningWhenARouteSetsItsOwnPolicyUnderANoncedMiddleware(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $response = null;
@@ -483,7 +473,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testNoWarningWhenTheNoncedMiddlewareIsReportOnly(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $response = null;
@@ -501,7 +490,6 @@ final class ContentSecurityPolicyNonceTest extends TestCase
 
     public function testNoNonceWarningWhenTheNoncePolicyIsAppliedInDebugMode(): void
     {
-        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
         App::setDebug(true);
 
         $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()

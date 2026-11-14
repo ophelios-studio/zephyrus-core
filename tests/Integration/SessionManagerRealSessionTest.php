@@ -108,9 +108,6 @@ final class SessionManagerRealSessionTest extends TestCase
     #[RunInSeparateProcess]
     public function testStartWarnsInDebugWhenTheHandlerCannotHonourStrictMode(): void
     {
-        \Zephyrus\Core\App::setConfiguration(
-            \Zephyrus\Core\Config\Configuration::fromArray(['application' => ['debug' => true]]),
-        );
         \Zephyrus\Core\App::setDebug(true);
 
         $session = new SessionManager();
@@ -137,9 +134,6 @@ final class SessionManagerRealSessionTest extends TestCase
     #[RunInSeparateProcess]
     public function testStartDoesNotWarnForAHandlerThatValidatesIds(): void
     {
-        \Zephyrus\Core\App::setConfiguration(
-            \Zephyrus\Core\Config\Configuration::fromArray(['application' => ['debug' => true]]),
-        );
         \Zephyrus\Core\App::setDebug(true);
 
         $session = new SessionManager();
