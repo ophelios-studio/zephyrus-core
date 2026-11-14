@@ -122,6 +122,25 @@ final class DatabasePersistentPostgresTest extends TestCase
         self::assertSame(0, (int) $this->observer->query('SELECT count(*) FROM persistent_probe_items')->fetchColumn());
     }
 
+    public function testANotificationTheClientAlreadyReceivedIsNotReadByTheNextHolder(): void
+    {
+        $first = Database::fromConfig($this->config);
+        $firstPid = $first->selectValue('SELECT pg_backend_pid()');
+        $first->pdo()->exec('LISTEN persistent_probe_channel');
+        $this->observer->exec("NOTIFY persistent_probe_channel, 'addressed to the first holder'");
+        $first->selectValue('SELECT 1');
+        unset($first);
+        gc_collect_cycles();
+
+        $second = Database::fromConfig($this->config);
+
+        self::assertSame($firstPid, $second->selectValue('SELECT pg_backend_pid()'), 'expected the pooled backend');
+        $pdo = $second->pdo();
+        self::assertFalse(
+            $pdo instanceof \Pdo\Pgsql ? $pdo->getNotify(PDO::FETCH_ASSOC) : $pdo->pgsqlGetNotify(PDO::FETCH_ASSOC),
+        );
+    }
+
     public function testAHandleStillHeldIsNeitherSharedNorReset(): void
     {
         $holder = Database::fromConfig($this->config);

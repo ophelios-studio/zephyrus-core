@@ -195,7 +195,7 @@ final class Database
      * Opens a PostgreSQL connection described by $config.
      *
      * With $config->persistent, the connection is taken from the process pool and its session is reset
-     * (ROLLBACK when a transaction is open, then DISCARD ALL) before any other statement. A persistent handle
+     * (ROLLBACK when a transaction is open, then DISCARD ALL, then the notifications already received are dropped). A persistent handle
      * still held in this process is never reused: the call opens a non-persistent connection instead.
      *
      * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
@@ -294,6 +294,17 @@ final class Database
                     $pdo->exec('ROLLBACK');
                 }
                 $pdo->exec('DISCARD ALL');
+
+                // DISCARD ALL stops listening, but libpq keeps the notifications it already received.
+                // The fetch mode is explicit: getNotify() refuses the FETCH_OBJ default the constructor sets.
+                if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+                    do {
+                        $notification = $pdo instanceof \Pdo\Pgsql
+                            ? $pdo->getNotify(PDO::FETCH_ASSOC)
+                            : $pdo->pgsqlGetNotify(PDO::FETCH_ASSOC);
+                    } while ($notification !== false);
+                }
+
                 self::heldPersistentHandles()[$pdo] = $identity;
 
                 return $pdo;
