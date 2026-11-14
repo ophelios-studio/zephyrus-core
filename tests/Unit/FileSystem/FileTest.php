@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\FileSystem;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\FileSystem\File;
 use Zephyrus\FileSystem\FileSystemException;
@@ -457,6 +458,54 @@ final class FileTest extends TestCase
 
         self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
         self::assertFalse(is_link($link));
+    }
+
+    /**
+     * @return array<string, array{bool}>
+     */
+    public static function linkTargetStates(): array
+    {
+        return [
+            'live link' => [true],
+            'dangling link' => [false],
+        ];
+    }
+
+    #[DataProvider('linkTargetStates')]
+    public function testAppendRefusesASymlinkWithoutTouchingItsTarget(bool $targetExists): void
+    {
+        $target = $this->tempDir . '/append-target.txt';
+        $link = $this->tempDir . '/append-link.txt';
+        if ($targetExists) {
+            file_put_contents($target, 'SERVER SIDE SECRET');
+        }
+        symlink($target, $link);
+
+        try {
+            (new File($link))->append('attacker content');
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a symbolic link, which is not followed: ' . $link, $e->getMessage());
+        }
+
+        self::assertTrue(is_link($link));
+        clearstatcache();
+        self::assertSame($targetExists ? 'SERVER SIDE SECRET' : false, @file_get_contents($target));
+    }
+
+    public function testAppendToAMissingFileCreatesItWithTheDefaultPermissions(): void
+    {
+        $previous = umask(0);
+        $path = $this->tempDir . '/append-new.txt';
+
+        try {
+            (new File($path))->append('first line');
+
+            self::assertSame('first line', (string) file_get_contents($path));
+            self::assertSame(0644, fileperms($path) & 0777);
+        } finally {
+            umask($previous);
+        }
     }
 
     public function testWriteNeverClobbersTheTargetOfALinkSwappedInDuringTheCall(): void

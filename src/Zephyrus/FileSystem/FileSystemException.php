@@ -34,6 +34,11 @@ final class FileSystemException extends ZephyrusRuntimeException
         );
     }
 
+    public static function symbolicLinkRefused(string $path): self
+    {
+        return new self(sprintf('Path is a symbolic link, which is not followed: %s', $path));
+    }
+
     public static function alreadyExists(string $path): self
     {
         return new self(sprintf('Path already exists: %s', $path));

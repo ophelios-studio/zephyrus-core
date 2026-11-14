@@ -21,8 +21,8 @@ namespace Zephyrus\FileSystem;
  * create(), write() and copy() replace a symbolic link at the destination with a
  * regular file instead of following it. They write only through a handle to a file
  * they created, or to the regular file the path names once opened, so a path swapped
- * for a link during the call is refused rather than followed. append() still follows
- * the link.
+ * for a link during the call is refused rather than followed. append() goes through
+ * the same checks but refuses a link instead of replacing it.
  */
 final class File extends FileSystemNode
 {
@@ -43,7 +43,7 @@ final class File extends FileSystemNode
             }
         }
 
-        self::replaceContent($path, $content, 'create file');
+        self::putContent($path, $content, 'create file');
 
         return new self($path);
     }
@@ -72,25 +72,17 @@ final class File extends FileSystemNode
      */
     public function write(string $content): void
     {
-        self::replaceContent($this->path, $content, 'write to');
+        self::putContent($this->path, $content, 'write to');
     }
 
     /**
-     * Append content to the file.
+     * Append content to the file, creating it when absent.
      *
-     * @throws FileSystemException if appending fails.
+     * @throws FileSystemException if the path is a symbolic link, or appending fails.
      */
     public function append(string $content): void
     {
-        $existed = is_file($this->path);
-
-        if (file_put_contents($this->path, $content, FILE_APPEND) === false) {
-            throw FileSystemException::operationFailed('append to', $this->path);
-        }
-
-        if (!$existed && !@chmod($this->path, self::DEFAULT_PERMISSIONS & ~umask())) {
-            throw FileSystemException::operationFailed('set permissions on', $this->path);
-        }
+        self::putContent($this->path, $content, 'append to', append: true);
     }
 
     /**
@@ -264,15 +256,16 @@ final class File extends FileSystemNode
     /**
      * @throws FileSystemException
      */
-    private static function replaceContent(string $path, string $content, string $operation): void
+    private static function putContent(string $path, string $content, string $operation, bool $append = false): void
     {
         $failure = fn (): FileSystemException => FileSystemException::operationFailed($operation, $path);
-        [$handle, $created] = self::openRegularFile($path, $failure);
+        [$handle, $created] = self::openRegularFile($path, $failure, replaceLink: !$append);
         try {
             if ($created) {
                 self::applyDefaultPermissions($path, $handle);
             }
-            if (!ftruncate($handle, 0) || fwrite($handle, $content) !== strlen($content)) {
+            $positioned = $append ? fseek($handle, 0, SEEK_END) === 0 : ftruncate($handle, 0);
+            if (!$positioned || fwrite($handle, $content) !== strlen($content)) {
                 throw $failure();
             }
         } finally {
@@ -282,18 +275,24 @@ final class File extends FileSystemNode
 
     /**
      * Open `$path` for writing without following a symbolic link: a link already there is
-     * replaced, an absent path is created exclusively, and an existing one is kept only if
-     * the path still names the regular file the handle opened. Nothing is written here.
+     * replaced (or refused), an absent path is created exclusively, and an existing one is
+     * kept only if the path still names the regular file the handle opened. Nothing is
+     * written here.
      *
      * @param \Closure(): FileSystemException $failure
      * @return array{resource, bool} The handle, and whether this call created the file.
      * @throws FileSystemException
      */
-    private static function openRegularFile(string $path, \Closure $failure): array
+    private static function openRegularFile(string $path, \Closure $failure, bool $replaceLink = true): array
     {
         clearstatcache(true, $path);
-        if (is_link($path) && !@unlink($path)) {
-            throw FileSystemException::operationFailed('replace the symbolic link at', $path);
+        if (is_link($path)) {
+            if (!$replaceLink) {
+                throw FileSystemException::symbolicLinkRefused($path);
+            }
+            if (!@unlink($path)) {
+                throw FileSystemException::operationFailed('replace the symbolic link at', $path);
+            }
         }
 
         for ($attempt = 1; ; $attempt++) {
