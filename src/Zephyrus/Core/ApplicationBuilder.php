@@ -46,9 +46,9 @@ final class ApplicationBuilder
         . 'Remove the withRouter() call to let build() discover the controllers, or start the router passed to it '
         . 'from Router::fromConfiguration($configuration, basePath: <application root>).';
 
-    private const string ROUTER_WITHOUT_BASE_PATH = 'Configuration declares router.controllers, but '
-        . 'withConfiguration() received no basePath to resolve its paths against: call '
-        . 'withConfiguration($configuration, basePath: <application root>).';
+    private const string ROUTER_WITHOUT_BASE_PATH = 'Configuration declares router.controllers, but the builder '
+        . 'received no basePath to resolve its paths against: build it with '
+        . 'ApplicationBuilder::create()->withConfiguration($configuration, basePath: <application root>).';
 
     private const array ACKNOWLEDGEABLE_SECURITY_KEYS = ['forceHttps', 'allowedHosts', 'csrf', 'maxBodySize', 'headers'];
 
@@ -105,11 +105,15 @@ final class ApplicationBuilder
     }
 
     /**
+     * Loads a root configuration file, with the real path of its directory as the application root (basePath).
+     *
      * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
      */
     public static function fromConfigurationFile(string $path): self
     {
-        return self::create()->withConfigurationFile($path);
+        $configuration = Configuration::fromFile($path);
+
+        return self::create()->withConfiguration($configuration, (string) realpath(dirname($path)));
     }
 
     /**

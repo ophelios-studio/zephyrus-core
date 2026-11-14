@@ -84,6 +84,20 @@ final class ApplicationBuilderRouterTest extends TestCase
         }
     }
 
+    public function testAConfigurationFileIsBuiltWithItsDirectoryAsTheApplicationRoot(): void
+    {
+        symlink((string) realpath(__DIR__ . '/../../Fixtures/ConfiguredControllers'), $this->root->path . '/controllers');
+        $file = $this->root->file(
+            'config.yml',
+            "application:\n  environment: development\n  debug: false\nrouter:\n  controllers:\n"
+            . "    Zephyrus\\Tests\\Fixtures\\ConfiguredControllers: controllers\n",
+        );
+
+        $application = ApplicationBuilder::buildFromConfigurationFile($file);
+
+        self::assertSame('hello', $application->handle(Request::fromArray('GET', '/greeting'))->body);
+    }
+
     public function testTheRouterSectionNeedsTheApplicationRoot(): void
     {
         $builder = ApplicationBuilder::create()->withConfiguration($this->configuration);
@@ -93,8 +107,9 @@ final class ApplicationBuilderRouterTest extends TestCase
             self::fail('expected a refusal');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                'Configuration declares router.controllers, but withConfiguration() received no basePath to resolve '
-                . 'its paths against: call withConfiguration($configuration, basePath: <application root>).',
+                'Configuration declares router.controllers, but the builder received no basePath to resolve its paths '
+                . 'against: build it with ApplicationBuilder::create()->withConfiguration($configuration, basePath: '
+                . '<application root>).',
                 $exception->getMessage(),
             );
         }
