@@ -6,6 +6,7 @@ namespace Zephyrus\Console;
 
 use Composer\InstalledVersions;
 use Zephyrus\Core\Cache\ConfigurationCache;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Exceptions\MessageValue;
@@ -87,11 +88,23 @@ final readonly class Console
         }
 
         $steps = [];
+        $warmed = [];
         foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
             try {
                 $configurationCache = ConfigurationCache::forSource($configuration);
                 $routeCache = $this->routeCacheOf($configuration);
                 foreach ([$configurationCache, ...($routeCache === null ? [] : [$routeCache])] as $cache) {
+                    if ($command === self::WARM) {
+                        if (isset($warmed[$cache->path()])) {
+                            throw new ConfigurationException(sprintf(
+                                'Two caches would be written to %s: give router.cache another path.',
+                                $cache->path(),
+                            ));
+                        }
+
+                        $warmed[$cache->path()] = true;
+                    }
+
                     $steps[] = [$configuration, $command === self::WARM
                         ? $cache->prepare()
                         : static fn (): string => ($cache->clear() ? 'Removed ' : 'Nothing to remove at ') . $cache->path()];

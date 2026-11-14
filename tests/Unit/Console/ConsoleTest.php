@@ -268,11 +268,31 @@ final class ConsoleTest extends TestCase
         self::assertFalse($written);
     }
 
-    private function routerSection(): string
+    public function testTwoCachesAtTheSamePathAreRefusedBeforeAnythingIsWritten(): void
+    {
+        $this->project->file('config.yml', $this->routerSection('var/zephyrus/config.yml.php'));
+
+        $exitCode = $this->console()->run(['cache:warm']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config.yml: Two caches would be written to %1\$s/var/zephyrus/config.yml.php: "
+                . "give router.cache another path.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
+    }
+
+    private function routerSection(?string $cache = null): string
     {
         return sprintf(
-            "router:\n  controllers:\n    Zephyrus\\Tests\\Fixtures\\ConfiguredControllers: %s\n",
+            "router:\n  controllers:\n    Zephyrus\\Tests\\Fixtures\\ConfiguredControllers: %s\n%s",
             realpath(__DIR__ . '/../../Fixtures/ConfiguredControllers'),
+            $cache === null ? '' : "  cache: $cache\n",
         );
     }
 
