@@ -13,12 +13,16 @@ namespace Zephyrus\FileSystem;
  *
  * ## Permissions
  * A file created by this class gets {@see self::DEFAULT_PERMISSIONS} masked by the
- * process umask: the mode is never wider than the umask allows.
+ * process umask: the mode is never wider than the umask allows. PHP sets a mode only
+ * by path: the path is checked to still name the new file just before, which leaves
+ * a window between that check and the chmod.
  *
  * ## Symbolic links
  * create(), write() and copy() replace a symbolic link at the destination with a
- * regular file instead of following it, so a link planted at a predictable path
- * cannot redirect the write. append() still follows the link.
+ * regular file instead of following it. They write only through a handle to a file
+ * they created, or to the regular file the path names once opened, so a path swapped
+ * for a link during the call is refused rather than followed. append() still follows
+ * the link.
  */
 final class File extends FileSystemNode
 {
@@ -39,16 +43,7 @@ final class File extends FileSystemNode
             }
         }
 
-        self::detachSymlink($path);
-        $existed = is_file($path);
-
-        if (file_put_contents($path, $content) === false) {
-            throw FileSystemException::operationFailed('create file', $path);
-        }
-
-        if (!$existed) {
-            self::applyDefaultPermissions($path);
-        }
+        self::replaceContent($path, $content, 'create file');
 
         return new self($path);
     }
@@ -77,16 +72,7 @@ final class File extends FileSystemNode
      */
     public function write(string $content): void
     {
-        self::detachSymlink($this->path);
-        $existed = is_file($this->path);
-
-        if (file_put_contents($this->path, $content) === false) {
-            throw FileSystemException::operationFailed('write to', $this->path);
-        }
-
-        if (!$existed) {
-            self::applyDefaultPermissions($this->path);
-        }
+        self::replaceContent($this->path, $content, 'write to');
     }
 
     /**
@@ -102,8 +88,8 @@ final class File extends FileSystemNode
             throw FileSystemException::operationFailed('append to', $this->path);
         }
 
-        if (!$existed) {
-            self::applyDefaultPermissions($this->path);
+        if (!$existed && !@chmod($this->path, self::DEFAULT_PERMISSIONS & ~umask())) {
+            throw FileSystemException::operationFailed('set permissions on', $this->path);
         }
     }
 
@@ -180,15 +166,32 @@ final class File extends FileSystemNode
             }
         }
 
-        self::detachSymlink($destination);
-        $existed = is_file($destination);
-
-        if (!@copy($this->path, $destination)) {
-            throw FileSystemException::operationFailed('copy', $this->path . ' to ' . $destination);
+        $failure = fn (): FileSystemException
+            => FileSystemException::operationFailed('copy', $this->path . ' to ' . $destination);
+        $source = @fopen($this->path, 'r');
+        $sourceStat = $source === false ? false : fstat($source);
+        if ($source === false || $sourceStat === false) {
+            throw $failure();
         }
 
-        if (!$existed) {
-            self::applyDefaultPermissions($destination, (int) fileperms($this->path));
+        try {
+            [$handle, $created] = self::openRegularFile($destination, $failure);
+            try {
+                $destinationStat = fstat($handle);
+                if ($destinationStat === false || self::isSameFile($sourceStat, $destinationStat)) {
+                    throw $failure();
+                }
+                if ($created) {
+                    self::applyDefaultPermissions($destination, $handle, $sourceStat['mode']);
+                }
+                if (!ftruncate($handle, 0) || stream_copy_to_stream($source, $handle) === false) {
+                    throw $failure();
+                }
+            } finally {
+                fclose($handle);
+            }
+        } finally {
+            fclose($source);
         }
 
         return new self($destination);
@@ -259,24 +262,98 @@ final class File extends FileSystemNode
     }
 
     /**
-     * Remove a symbolic link at `$path`, if any, so the write cannot follow it.
-     *
-     * @throws FileSystemException if the link is present but cannot be removed.
+     * @throws FileSystemException
      */
-    private static function detachSymlink(string $path): void
+    private static function replaceContent(string $path, string $content, string $operation): void
     {
-        if (!is_link($path)) {
-            return;
-        }
-
-        if (!@unlink($path)) {
-            throw FileSystemException::operationFailed('replace the symbolic link at', $path);
+        $failure = fn (): FileSystemException => FileSystemException::operationFailed($operation, $path);
+        [$handle, $created] = self::openRegularFile($path, $failure);
+        try {
+            if ($created) {
+                self::applyDefaultPermissions($path, $handle);
+            }
+            if (!ftruncate($handle, 0) || fwrite($handle, $content) !== strlen($content)) {
+                throw $failure();
+            }
+        } finally {
+            fclose($handle);
         }
     }
 
-    private static function applyDefaultPermissions(string $path, int $sourceMode = self::DEFAULT_PERMISSIONS): void
+    /**
+     * Open `$path` for writing without following a symbolic link: a link already there is
+     * replaced, an absent path is created exclusively, and an existing one is kept only if
+     * the path still names the regular file the handle opened. Nothing is written here.
+     *
+     * @param \Closure(): FileSystemException $failure
+     * @return array{resource, bool} The handle, and whether this call created the file.
+     * @throws FileSystemException
+     */
+    private static function openRegularFile(string $path, \Closure $failure): array
     {
-        if (!@chmod($path, $sourceMode & self::DEFAULT_PERMISSIONS & ~umask())) {
+        clearstatcache(true, $path);
+        if (is_link($path) && !@unlink($path)) {
+            throw FileSystemException::operationFailed('replace the symbolic link at', $path);
+        }
+
+        for ($attempt = 1; ; $attempt++) {
+            $exists = self::isOccupied($path);
+            // 'x' fails on any existing path, a dangling link included; 'r+' never creates.
+            $handle = @fopen($path, $exists ? 'r+' : 'x');
+            if ($handle !== false) {
+                break;
+            }
+            if ($attempt === 2 || self::isOccupied($path) === $exists) {
+                throw $failure();
+            }
+        }
+
+        if ($exists && !self::namesHandle($path, $handle)) {
+            fclose($handle);
+            throw $failure();
+        }
+
+        return [$handle, !$exists];
+    }
+
+    private static function isOccupied(string $path): bool
+    {
+        clearstatcache(true, $path);
+        return is_link($path) || file_exists($path);
+    }
+
+    /**
+     * Whether `$path`, its final link not followed, is the regular file open in `$handle`.
+     *
+     * @param resource $handle
+     */
+    private static function namesHandle(string $path, $handle): bool
+    {
+        clearstatcache(true, $path);
+        $named = @lstat($path);
+        $open = fstat($handle);
+
+        return $named !== false && $open !== false
+            && ($named['mode'] & 0o170000) === 0o100000
+            && self::isSameFile($named, $open);
+    }
+
+    /**
+     * @param array{dev: int, ino: int} $first
+     * @param array{dev: int, ino: int} $second
+     */
+    private static function isSameFile(array $first, array $second): bool
+    {
+        return $first['dev'] === $second['dev'] && $first['ino'] === $second['ino'];
+    }
+
+    /**
+     * @param resource $handle The file this call created at `$path`.
+     * @throws FileSystemException if the path no longer names that file, or chmod fails.
+     */
+    private static function applyDefaultPermissions(string $path, $handle, int $sourceMode = self::DEFAULT_PERMISSIONS): void
+    {
+        if (!self::namesHandle($path, $handle) || !@chmod($path, $sourceMode & self::DEFAULT_PERMISSIONS & ~umask())) {
             throw FileSystemException::operationFailed('set permissions on', $path);
         }
     }

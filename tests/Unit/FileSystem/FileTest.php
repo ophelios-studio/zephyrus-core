@@ -459,6 +459,45 @@ final class FileTest extends TestCase
         self::assertFalse(is_link($link));
     }
 
+    public function testWriteNeverClobbersTheTargetOfALinkSwappedInDuringTheCall(): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs the pcntl and posix extensions.');
+        }
+        $target = $this->tempDir . '/swap-target.txt';
+        $path = $this->tempDir . '/swapped.txt';
+        file_put_contents($target, 'SERVER SIDE SECRET');
+        file_put_contents($path, 'regular');
+
+        $swapper = $this->forkPathSwapper($path, $target);
+        try {
+            for ($i = 0; $i < 3000; $i++) {
+                try {
+                    (new File($path))->write('attacker content');
+                } catch (FileSystemException) {
+                }
+            }
+        } finally {
+            posix_kill($swapper, SIGKILL);
+            pcntl_waitpid($swapper, $status);
+        }
+
+        self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
+    }
+
+    public function testCopyOntoItselfIsRefusedWithoutEmptyingTheFile(): void
+    {
+        $path = $this->tempDir . '/self.txt';
+        file_put_contents($path, 'content');
+
+        try {
+            (new File($path))->copy($path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException) {
+            self::assertSame('content', (string) file_get_contents($path));
+        }
+    }
+
     public function testCopyToAFileNameEndingInASlashKeepsTheSymlinkItRefuses(): void
     {
         $source = $this->tempDir . '/slash-source.txt';
@@ -473,6 +512,34 @@ final class FileTest extends TestCase
             self::fail('expected a refusal');
         } catch (FileSystemException) {
             self::assertTrue(is_link($link));
+        }
+    }
+
+    /**
+     * Fork a process that keeps replacing `$path`, by atomic rename, with a regular file
+     * and with a link to `$target`; it never writes through the link.
+     */
+    private function forkPathSwapper(string $path, string $target): int
+    {
+        $parent = posix_getpid();
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            self::markTestSkipped('Could not fork.');
+        }
+        if ($pid > 0) {
+            return $pid;
+        }
+
+        $sideLink = $this->tempDir . '/swapper-link';
+        $sideFile = $this->tempDir . '/swapper-file';
+        for ($n = 0; ; $n++) {
+            @symlink($target, $sideLink);
+            @rename($sideLink, $path);
+            @touch($sideFile);
+            @rename($sideFile, $path);
+            if ($n % 1000 === 0 && posix_getppid() !== $parent) {
+                posix_kill(posix_getpid(), SIGKILL);
+            }
         }
     }
 
