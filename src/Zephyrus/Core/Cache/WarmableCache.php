@@ -19,11 +19,11 @@ interface WarmableCache
     public function path(): string;
 
     /**
-     * Read the source and check that the cache can be written, without writing it or reading the environment.
+     * Read and validate the source, without writing the cache or reading the environment. Directory and target-file guards run when the closure writes.
      *
      * @return \Closure(): string Writes the cache and returns the line cache:warm prints: the file written, never a
      *                            cached value.
-     * @throws ZephyrusException when the source cannot be read or the cache cannot be written safely.
+     * @throws ZephyrusException when the source is refused or a file already at the cache path is not a warm file.
      */
     public function prepare(): \Closure;
 

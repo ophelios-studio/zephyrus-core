@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-
-
 /**
  * Immutable top-level configuration tree.
  *
