@@ -478,6 +478,16 @@ final class ResponseTest extends TestCase
         ], $response->cookies);
     }
 
+    public function testWithCookieNeverReplacesAConstructorCookieWithoutAPath(): void
+    {
+        $response = (new Response(cookies: ['remember=a']))->withCookie('remember', 'b');
+
+        self::assertSame([
+            'remember=a',
+            'remember=b; Path=/; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
     public function testWithCookieReplacesACookieOfTheSameNameDomainAndPath(): void
     {
         $response = Response::noContent()
