@@ -506,7 +506,7 @@ final class File extends FileSystemNode
         if (function_exists('posix_geteuid')) {
             return posix_geteuid();
         }
-        if (self::$createdFileOwner === null) {
+        if (self::$createdFileOwner === null && function_exists('tmpfile')) {
             $handle = @tmpfile();
             $stat = $handle === false ? false : fstat($handle);
             if ($handle !== false) {
