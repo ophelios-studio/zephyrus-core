@@ -271,7 +271,7 @@ final class File extends FileSystemNode
      */
     private static function assertEndsWithAFileName(string $path): void
     {
-        if (preg_match('~(?:^|/)\.{0,2}$~', $path) === 1) {
+        if (preg_match('~(?:^|/)\.{0,2}$~D', $path) === 1) {
             throw FileSystemException::notAFileName($path);
         }
     }

@@ -626,6 +626,15 @@ final class FileTest extends TestCase
         self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
     }
 
+    public function testADotFollowedByANewlineIsAFileName(): void
+    {
+        $path = $this->tempDir . "/.\n";
+
+        File::create($path, 'content');
+
+        self::assertSame('content', (string) file_get_contents($path));
+    }
+
     private function writeThrough(string $method, string $path): void
     {
         $source = $this->tempDir . '/write-through-source.txt';
