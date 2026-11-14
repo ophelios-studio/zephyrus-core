@@ -245,18 +245,14 @@ final class RouteCacheTest extends TestCase
     #[DataProvider('editsAfterTheWarm')]
     public function testACacheIsIgnoredOnceWhatItWasReadFromChanges(string $edit): void
     {
-        $tree = $this->tree();
-        $config = $tree->configure();
-        $parent = $tree->parent('BaseController', "abstract class BaseController\n{\n}");
-        $controller = $tree->controller('ReportController', self::controllerSource('ReportController', '/reports', 'Base\BaseController'));
-        $cache = new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml');
+        [$tree, $cache, $files] = $this->inheritingController();
         $cache->warm();
 
         match ($edit) {
             'a controller added' => $tree->controller('ExportController', self::controllerSource('ExportController', '/exports')),
-            'an attribute edited' => self::rewrite($controller, '/reports', '/records'),
-            'a parent outside the controller directory edited' => self::rewrite($parent, '{', '{ '),
+            'an attribute edited' => self::rewrite($files['controller'], '/reports', '/records'),
             'config.yml edited' => self::rewrite($tree->root->path . '/config.yml', 'router:', "# edited\nrouter:"),
+            default => self::rewrite($files[$edit], '{', '{ '),
         };
 
         self::assertNull($cache->load());
@@ -270,8 +266,76 @@ final class RouteCacheTest extends TestCase
     {
         yield 'a controller added' => ['a controller added'];
         yield 'an attribute edited' => ['an attribute edited'];
-        yield 'a parent outside the controller directory edited' => ['a parent outside the controller directory edited'];
+        yield 'its parent outside the controller directory edited' => ['parent'];
+        yield 'its trait outside the controller directory edited' => ['trait'];
+        yield 'its interface outside the controller directory edited' => ['interface'];
+        yield 'its second parent, outside the application root, edited' => ['grandparent'];
         yield 'config.yml edited' => ['config.yml edited'];
+    }
+
+    public function testACacheIsServedWhileNothingItWasReadFromChanges(): void
+    {
+        [, $cache] = $this->inheritingController();
+        $cache->warm();
+
+        $routes = $cache->load();
+
+        self::assertSame(['/reports'], array_map(static fn (Route $route): string => $route->path, array_values($routes?->all() ?? [])));
+        self::assertSame('', $this->capturedErrorLog());
+    }
+
+    public function testACacheStaysFreshWhenTheApplicationRootIsMoved(): void
+    {
+        [$tree, $cache] = $this->inheritingController();
+        $cache->warm();
+        $original = $tree->root->path;
+        $moved = $original . '-moved';
+        rename($original, $moved);
+
+        try {
+            $routes = (new RouteCache($this->treeConfig($tree), $moved, $moved . '/config.yml'))->load();
+        } finally {
+            rename($moved, $original);
+        }
+
+        self::assertNotNull($routes);
+        self::assertSame('', $this->capturedErrorLog());
+    }
+
+    public function testACacheStaysFreshWhenTheDirectoryListsItsFilesInAnotherOrder(): void
+    {
+        $tree = $this->tree();
+        $config = $tree->configure();
+        $first = $tree->controller('AlphaController', self::controllerSource('AlphaController', '/alpha'));
+        $tree->controller('BetaController', self::controllerSource('BetaController', '/beta'));
+        $cache = new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml');
+        $cache->warm();
+        $source = (string) file_get_contents($first);
+        $modified = (int) filemtime($first);
+        unlink($first);
+        file_put_contents($first, $source);
+        touch($first, $modified);
+
+        self::assertNotNull($cache->load());
+        self::assertSame('', $this->capturedErrorLog());
+    }
+
+    public function testRoutesAreCachedInTheOrderOfTheirClassNamesWhateverTheOrderTheirFilesWereWritten(): void
+    {
+        $tree = $this->tree();
+        $config = $tree->configure();
+        foreach (['Beta', 'Alpha', 'Gamma'] as $name) {
+            $tree->controller($name . 'Controller', self::controllerSource($name . 'Controller', '/' . strtolower($name)));
+        }
+        $cache = new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml');
+        $cache->warm();
+
+        $routes = $cache->load();
+
+        self::assertSame(
+            ['/alpha', '/beta', '/gamma'],
+            array_map(static fn (Route $route): string => $route->path, array_values($routes?->all() ?? [])),
+        );
     }
 
     public function testAControllerAddedAfterTheWarmIsServedByDiscovery(): void
@@ -298,6 +362,11 @@ final class RouteCacheTest extends TestCase
         $tree->controller('TwinController', <<<'PHP'
             final class TwinController
             {
+                #[Get('/plain')]
+                public function plain(): void
+                {
+                }
+
                 #[Get('/one', name: 'twin')]
                 #[RequiresEnv('MODE', 'web')]
                 public function one(): void
@@ -342,8 +411,9 @@ final class RouteCacheTest extends TestCase
     public function testAMiddlewareGroupLeftUndeclaredFailsTheWarm(): void
     {
         $tree = $this->tree();
-        $tree->configure();
+        $config = $tree->configure(['web' => ['session']]);
         $tree->controller('AdminController', <<<'PHP'
+            #[MiddlewareGroup('web')]
             #[MiddlewareGroup('admin')]
             final class AdminController
             {
@@ -355,7 +425,7 @@ final class RouteCacheTest extends TestCase
             PHP);
 
         try {
-            $this->routeCacheOf($tree)->warm();
+            (new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml'))->warm();
             self::fail('expected a refusal');
         } catch (RouteMiddlewareException $exception) {
             self::assertSame(
@@ -372,20 +442,12 @@ final class RouteCacheTest extends TestCase
         self::assertFileDoesNotExist($tree->root->path . '/' . RouterConfig::DEFAULT_CACHE);
     }
 
-    public function testARequirementOnAVariableThatIsNeverReadFailsTheWarm(): void
+    #[DataProvider('spoofableRequirements')]
+    public function testARequirementOnAVariableThatIsNeverReadFailsTheWarm(string $source): void
     {
         $tree = $this->tree();
         $tree->configure();
-        $tree->controller('SpoofedController', <<<'PHP'
-            #[RequiresEnv('HTTP_MODE', 'web')]
-            final class SpoofedController
-            {
-                #[Get('/spoofed')]
-                public function index(): void
-                {
-                }
-            }
-            PHP);
+        $tree->controller('SpoofedController', $source);
 
         try {
             $this->routeCacheOf($tree)->warm();
@@ -401,6 +463,33 @@ final class RouteCacheTest extends TestCase
                 $exception->getMessage(),
             );
         }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function spoofableRequirements(): iterable
+    {
+        yield 'on the class' => [<<<'PHP'
+            #[RequiresEnv('HTTP_MODE', 'web')]
+            final class SpoofedController
+            {
+                #[Get('/spoofed')]
+                public function index(): void
+                {
+                }
+            }
+            PHP];
+        yield 'on a method' => [<<<'PHP'
+            final class SpoofedController
+            {
+                #[Get('/spoofed')]
+                #[RequiresEnv('HTTP_MODE', 'web')]
+                public function index(): void
+                {
+                }
+            }
+            PHP];
     }
 
     public function testControllersWithoutRoutesAreNotCached(): void
@@ -422,6 +511,45 @@ final class RouteCacheTest extends TestCase
                 $exception->getMessage(),
             );
         }
+    }
+
+    /**
+     * A controller whose parent, trait and interface live in lib/, and whose second parent lives outside the root.
+     *
+     * @return array{ControllerTree, RouteCache, array<string, string>}
+     */
+    private function inheritingController(): array
+    {
+        $tree = $this->tree();
+        $tree->configure();
+        $this->outside = new CacheDirectory();
+        $outsideNamespace = $tree->namespace . 'Outside';
+        $grandparent = $this->outside->file(
+            'RootController.php',
+            sprintf("<?php\n\nnamespace %s;\n\nabstract class RootController\n{\n}\n", $outsideNamespace),
+        );
+        require $grandparent;
+        $files = [
+            'grandparent' => $grandparent,
+            'trait' => $tree->parent('Reporting', "trait Reporting\n{\n}"),
+            'interface' => $tree->parent('Reportable', "interface Reportable\n{\n}"),
+            'parent' => $tree->parent('BaseController', sprintf(
+                "abstract class BaseController extends \\%s\\RootController implements Reportable, \\Countable\n{\n"
+                . "    use Reporting;\n\n    public function count(): int\n    {\n        return 0;\n    }\n}",
+                $outsideNamespace,
+            )),
+            'controller' => $tree->controller(
+                'ReportController',
+                self::controllerSource('ReportController', '/reports', 'Base\BaseController'),
+            ),
+        ];
+
+        return [$tree, new RouteCache($this->treeConfig($tree), $tree->root->path, $tree->root->path . '/config.yml'), $files];
+    }
+
+    private function treeConfig(ControllerTree $tree): RouterConfig
+    {
+        return RouterConfig::fromArray(['controllers' => [$tree->namespace => 'app/Controllers']]);
     }
 
     private static function directory(): string

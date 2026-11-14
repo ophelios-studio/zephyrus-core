@@ -25,7 +25,9 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 /**
  * Every route of the router: section with its #[RequiresEnv] pairs, written by vendor/bin/zephyrus cache:warm and
  * filtered for the environment on every load. Protected by owners and modes (see BootCache), and ignored once
- * config.yml, the router: section, a controller directory, or a file a controller inherits from, has changed.
+ * config.yml, the router: section, a controller directory, or the file of a parent class, trait or interface of a
+ * controller has changed. A constant of another class read by an attribute is not tracked: run cache:warm on every
+ * build.
  *
  * @internal
  */
@@ -337,7 +339,8 @@ final readonly class RouteCache implements WarmableCache
     }
 
     /**
-     * The files outside the controller directories that declare a parent class or a trait of a controller.
+     * The files outside the controller directories that declare a parent class, a trait or an interface of a
+     * controller.
      *
      * @param list<DiscoveredRoute> $routes
      * @return list<string> Paths relative to the application root when under it.
@@ -362,7 +365,7 @@ final readonly class RouteCache implements WarmableCache
     }
 
     /**
-     * The files of the class, its parents and every trait any of them uses.
+     * The files of the class, its parents, every trait any of them uses and every interface it implements.
      *
      * @param ReflectionClass<object> $class
      * @return list<string>
@@ -370,7 +373,7 @@ final readonly class RouteCache implements WarmableCache
     private static function declaringFiles(ReflectionClass $class): array
     {
         $files = [];
-        $pending = [$class];
+        $pending = [$class, ...array_values($class->getInterfaces())];
         while ($pending !== []) {
             $current = array_pop($pending);
             $file = $current->getFileName();
