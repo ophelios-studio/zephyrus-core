@@ -47,6 +47,20 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
         }
     }
 
+    public function testRefusesASecretShorterThanTheFloorBecauseTheCookieIsTheOnlyGuard(): void
+    {
+        try {
+            ApplicationBuilder::create()->withDebugClientAllowlist(str_repeat('a', 15) . '@10.0.0.5');
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Debug client allowlist entry 1 has a secret shorter than 16 characters before "@": '
+                . 'the tracy-debug cookie is all that guards the debugger at that address. Use a longer random secret.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testRefusesAnEmptySecretInASplitStringAtItsPosition(): void
     {
         try {
