@@ -157,7 +157,7 @@ final readonly class RouteCache implements WarmableCache
                 $route->path,
                 $route->handler,
                 $route->constraints,
-                array_values($route->middlewares),
+                $route->middlewares,
                 $route->name,
                 $route->excludedMiddlewares,
                 $conditionIndexes[$key],
@@ -373,7 +373,7 @@ final readonly class RouteCache implements WarmableCache
     private static function declaringFiles(ReflectionClass $class): array
     {
         $files = [];
-        $pending = [$class, ...array_values($class->getInterfaces())];
+        $pending = [$class, ...$class->getInterfaces()];
         while ($pending !== []) {
             $current = array_pop($pending);
             $file = $current->getFileName();
