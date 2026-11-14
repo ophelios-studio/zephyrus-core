@@ -1006,20 +1006,6 @@ final class RequestTest extends TestCase
         self::assertSame('http://app.internal:65535/public', $request->uri()->full());
     }
 
-    public function testFromGlobalsRecognisesAbsoluteRequestUriSchemeInAnyCase(): void
-    {
-        $request = Request::fromGlobals(
-            server: [
-                'REQUEST_METHOD' => 'GET',
-                'HTTP_HOST'      => 'proxy.internal',
-                'REQUEST_URI'    => 'HTTPS://real.example.com/api',
-            ],
-        );
-
-        self::assertSame('https://real.example.com/api', $request->uri()->full());
-        self::assertSame('/api', $request->path());
-    }
-
     #[DataProvider('originFormTargetsWithoutLeadingSlash')]
     public function testFromGlobalsKeepsTheHostWhenRequestTargetLacksLeadingSlash(string $target, string $expected): void
     {
@@ -2184,36 +2170,89 @@ final class RequestTest extends TestCase
     // fromGlobals: absolute REQUEST_URI (reverse proxy)
 
     #[DataProvider('absoluteRequestTargetsWithMixedCaseScheme')]
-    public function testFromGlobalsLowercasesTheSchemeOfAnAbsoluteRequestTarget(string $target, string $expected): void
+    public function testFromGlobalsIgnoresTheSchemeAndAuthorityOfAnAbsoluteTargetFromATrustedProxy(string $target, string $expected): void
     {
         $request = Request::fromGlobals(
             server: [
                 'REQUEST_METHOD' => 'GET',
                 'HTTP_HOST'      => 'proxy.internal',
                 'REQUEST_URI'    => $target,
+                'REMOTE_ADDR'    => '10.0.0.1',
             ],
+            trustedProxies: ['10.0.0.1'],
         );
 
         self::assertSame($expected, $request->uri()->full());
     }
 
+    /**
+     * @return iterable<string, array{string, string}>
+     */
     public static function absoluteRequestTargetsWithMixedCaseScheme(): iterable
     {
-        yield 'upper HTTP' => ['HTTP://real.example.com/x', 'http://real.example.com/x'];
-        yield 'mixed HTTPS' => ['Https://real.example.com/x?y=1', 'https://real.example.com/x?y=1'];
+        yield 'upper HTTP' => ['HTTP://real.example.com/x', 'http://proxy.internal/x'];
+        yield 'mixed HTTPS' => ['Https://real.example.com/x?y=1', 'http://proxy.internal/x?y=1'];
     }
 
-    public function testFromGlobalsPassesThroughAbsoluteRequestUri(): void
+    public function testFromGlobalsTakesTheSchemeAndHostOfAnAbsoluteTargetFromTheTrustedForwardedHeaders(): void
     {
         $request = Request::fromGlobals(
             server: [
-                'REQUEST_METHOD' => 'GET',
-                'HTTP_HOST'      => 'proxy.internal',
-                'REQUEST_URI'    => 'https://real.example.com/api/v1/users',
+                'REQUEST_METHOD'         => 'GET',
+                'HTTP_HOST'              => 'proxy.internal',
+                'HTTP_X_FORWARDED_PROTO' => 'http',
+                'HTTP_X_FORWARDED_HOST'  => 'app.example.com',
+                'REQUEST_URI'            => 'https://evil.test/x',
+                'REMOTE_ADDR'            => '10.0.0.1',
             ],
+            trustedProxies: ['10.0.0.1'],
         );
 
-        self::assertSame('https://real.example.com/api/v1/users', $request->uri()->full());
+        self::assertSame('http://app.example.com/x', $request->uri()->full());
+    }
+
+    /**
+     * @param array<string, string> $server
+     */
+    #[DataProvider('absoluteRequestTargetsFromAnUntrustedClient')]
+    public function testFromGlobalsKeepsOnlyThePathAndQueryOfAnAbsoluteTargetFromAnUntrustedClient(
+        string $target,
+        array $server,
+        string $expected,
+    ): void {
+        $request = Request::fromGlobals(
+            server: $server + [
+                'REQUEST_METHOD' => 'GET',
+                'HTTP_HOST'      => 'app.example.test',
+                'SERVER_PORT'    => '80',
+                'REQUEST_URI'    => $target,
+                'REMOTE_ADDR'    => '203.0.113.5',
+            ],
+            trustedProxies: ['10.0.0.1'],
+        );
+
+        self::assertSame($expected, $request->uri()->full());
+    }
+
+    /**
+     * @return iterable<string, array{string, array<string, string>, string}>
+     */
+    public static function absoluteRequestTargetsFromAnUntrustedClient(): iterable
+    {
+        yield 'path and query are kept' => ['https://example.com/x?y=1', [], 'http://app.example.test/x?y=1'];
+        yield 'upper-case scheme' => ['HTTPS://example.com/x', [], 'http://app.example.test/x'];
+        yield 'authority alone is the root' => ['https://example.com', [], 'http://app.example.test/'];
+        yield 'query right after the authority' => ['https://example.com?y=1', [], 'http://app.example.test/?y=1'];
+        yield 'port comes from SERVER_PORT' => [
+            'https://example.com:443/x',
+            ['SERVER_PORT' => '8080'],
+            'http://app.example.test:8080/x',
+        ];
+        yield 'scheme comes from HTTPS' => [
+            'http://example.com/x',
+            ['HTTPS' => 'on', 'SERVER_PORT' => '443'],
+            'https://app.example.test/x',
+        ];
     }
 
     // fromGlobals: delete / patch with JSON body

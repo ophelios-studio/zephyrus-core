@@ -598,7 +598,8 @@ final readonly class Request
      * Forwarded inputs are gated by $trustedHeaders, the same allowlist as the client
      * IP. An empty list means nothing is read forwarded. X-Forwarded-Host, -Proto and
      * -Port keep their last entry, read as absent when empty; see fromGlobals() for what
-     * the nearest proxy must do.
+     * the nearest proxy must do. An absolute-form target gives only its path and query,
+     * whatever the peer.
      *
      * @param array<string, mixed> $server
      * @param list<string>         $trustedHeaders
@@ -609,7 +610,8 @@ final readonly class Request
         $requestUri = (string) ($server['REQUEST_URI'] ?? '/');
 
         if (preg_match(self::HTTP_URL_PATTERN, $requestUri, $matches) === 1) {
-            return strtolower($matches[1]) . '://' . substr($requestUri, strlen($matches[0]));
+            $authorityAndTarget = substr($requestUri, strlen($matches[0]));
+            $requestUri = substr($authorityAndTarget, strcspn($authorityAndTarget, '/?#'));
         }
 
         $requestUri = self::rootTarget($requestUri);
