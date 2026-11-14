@@ -29,8 +29,8 @@ use Zephyrus\Core\Config\ConfigSection;
  *   - listed by exact address in the allowlist passed as $allowedClients (a loopback address only when the request
  *     carries no forwarding header), or
  *   - presenting the `tracy-debug` cookie whose value matches a `secret@address` allowlist entry, or
- *   - with no allowlist, the loopback address under PHP's built-in server (`cli-server`) only, and the request did
- *     not arrive through a proxy (Tracy's detection).
+ *   - with no allowlist, the loopback address under PHP's built-in server (`cli-server`) only, and the request
+ *     carries no X-Forwarded-For, Forwarded or X-Real-IP header.
  *
  * With debug on, the debugger stays enabled for every client, so PHP errors still reach the log directory and the
  * notification email when initialize() is given them. Whether debug is enabled at all is decided by
