@@ -507,7 +507,7 @@ final class RouteCacheTest extends TestCase
         self::assertSame(1, substr_count($log, "\n"), $log);
         self::assertStringEndsWith(
             sprintf(
-                "Zephyrus: ignored the boot cache %s: %s. Run vendor/bin/zephyrus cache:warm to rebuild it.\n",
+                "Zephyrus: ignored the boot cache %s: %s. Run vendor/bin/zephyrus cache:warm to rebuild it, or vendor/bin/zephyrus cache:clear to remove it.\n",
                 $cachePath,
                 $reason,
             ),

@@ -52,12 +52,18 @@ final readonly class AtomicFileWriter
     /**
      * Write the contents to the target, creating the missing directories.
      *
+     * @param int|null $processOwner The uid of this process, read with processOwner() when null.
      * @throws BootCacheException when the target or a directory under the base directory is refused, or the write fails.
      */
-    public function write(string $target, string $contents, int $mode = self::FILE_MODE, ?int $group = null): void
-    {
+    public function write(
+        string $target,
+        string $contents,
+        int $mode = self::FILE_MODE,
+        ?int $group = null,
+        ?int $processOwner = null,
+    ): void {
         try {
-            $this->replace($this->preparedPath($target, self::processOwner()), $contents, $mode, $group);
+            $this->replace($this->preparedPath($target, $processOwner ?? self::processOwner()), $contents, $mode, $group);
         } catch (CacheRefusal $refusal) {
             throw BootCacheException::refusedWrite($target, $refusal->getMessage());
         }
@@ -169,7 +175,7 @@ final readonly class AtomicFileWriter
 
         $permissions = fileperms($directory);
         if ($permissions === false || ($permissions & CacheFileGuard::GROUP_OR_OTHERS_WRITE) !== 0) {
-            throw new CacheRefusal(sprintf('%s is writable by its group or by others', $directory));
+            throw new CacheRefusal(sprintf('%1$s is writable by its group or by others: run chmod g-w,o-w %1$s', $directory));
         }
     }
 
@@ -201,7 +207,6 @@ final readonly class AtomicFileWriter
      */
     private function publish(string $temporary, string $path, int $mode, ?int $group): ?string
     {
-        clearstatcache(true, $temporary);
         if ($group !== null && filegroup($temporary) !== $group && !@chgrp($temporary, $group)) {
             return sprintf('the group of %s could not be set to gid %d', $temporary, $group);
         }

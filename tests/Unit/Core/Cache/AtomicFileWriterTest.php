@@ -119,7 +119,10 @@ final class AtomicFileWriterTest extends TestCase
     {
         $directory = $this->directory->directory('var/zephyrus', 0o757);
 
-        $this->assertRefused($this->target, $directory . ' is writable by its group or by others');
+        $this->assertRefused(
+            $this->target,
+            $directory . ' is writable by its group or by others: run chmod g-w,o-w ' . $directory,
+        );
         self::assertSame([], $this->directory->entries('var/zephyrus'));
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Cache;
 
+use Composer\InstalledVersions;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Yaml\Tag\TaggedValue;
@@ -197,13 +198,93 @@ final class BootCacheTest extends TestCase
         } catch (BootCacheException $e) {
             self::assertSame(
                 sprintf(
-                    'Cannot write the boot cache %s: this process is neither root nor the owner of %s, so the application would ignore the cache.',
+                    'Cannot write the boot cache %s: this process is neither root nor the owner of %s, so the application '
+                    . 'would ignore the cache: run vendor/bin/zephyrus cache:warm as root (before USER in a Dockerfile) '
+                    . 'or as that owner.',
                     $this->cachePath,
                     $this->source,
                 ),
                 $e->getMessage(),
             );
         }
+        self::assertFileDoesNotExist($this->cachePath);
+    }
+
+    public function testACacheWarmedByRootIsWrittenAndLoadedWhoeverOwnsTheSource(): void
+    {
+        $rootOwnsAllButTheSource = fn (string $path): int => $path === $this->source ? self::STRANGER : 0;
+        $cache = new BootCache(
+            $this->cachePath,
+            $this->directory->path,
+            $this->source,
+            $rootOwnsAllButTheSource,
+            static fn (): int => 0,
+        );
+
+        $cache->store(['application' => []], self::FINGERPRINT);
+
+        self::assertSame(['application' => []], $cache->load(self::fingerprint(...)));
+        self::assertSame([], $this->loggedLines());
+    }
+
+    public function testTheCacheIsStampedWithTheInstalledFrameworkVersion(): void
+    {
+        $this->cache()->store([], self::FINGERPRINT);
+
+        $cached = require $this->cachePath;
+
+        self::assertSame(
+            InstalledVersions::getPrettyVersion('zephyrus-framework/core') . '@'
+            . InstalledVersions::getReference('zephyrus-framework/core'),
+            $cached['framework'],
+        );
+    }
+
+    public function testStoreLeavesInPlaceAFileItDidNotWrite(): void
+    {
+        $this->directory->file('var/zephyrus/config.yml.php', "application: {}\n");
+
+        try {
+            $this->cache()->store([], self::FINGERPRINT);
+            self::fail('expected a refusal');
+        } catch (BootCacheException $e) {
+            self::assertSame(
+                sprintf(
+                    'Cannot write the boot cache %s: the file there was not written by vendor/bin/zephyrus cache:warm, '
+                    . 'so it is left in place.',
+                    $this->cachePath,
+                ),
+                $e->getMessage(),
+            );
+        }
+        self::assertSame("application: {}\n", file_get_contents($this->cachePath));
+    }
+
+    public function testClearLeavesInPlaceAFileItDidNotWrite(): void
+    {
+        $this->directory->file('var/zephyrus/config.yml.php', "application: {}\n");
+
+        try {
+            $this->cache()->clear();
+            self::fail('expected a refusal');
+        } catch (BootCacheException $e) {
+            self::assertSame(
+                sprintf(
+                    'Cannot remove the boot cache %s: the file there was not written by vendor/bin/zephyrus cache:warm, '
+                    . 'so it is left in place.',
+                    $this->cachePath,
+                ),
+                $e->getMessage(),
+            );
+        }
+        self::assertSame("application: {}\n", file_get_contents($this->cachePath));
+    }
+
+    public function testClearRemovesACacheItWrote(): void
+    {
+        $this->cache()->store([], self::FINGERPRINT);
+
+        self::assertTrue($this->cache()->clear());
         self::assertFileDoesNotExist($this->cachePath);
     }
 
@@ -232,7 +313,10 @@ final class BootCacheTest extends TestCase
 
     private function markedContents(): string
     {
-        return sprintf("<?php touch(%s); return ['format' => 1, 'payload' => []];\n", var_export($this->marker, true));
+        return sprintf(
+            "<?php\n\n// Written by vendor/bin/zephyrus cache:warm.\n\ntouch(%s); return ['format' => 1, 'payload' => []];\n",
+            var_export($this->marker, true),
+        );
     }
 
     private function assertIgnoredWithoutIncluding(BootCache $cache, string $reason): void
@@ -247,7 +331,7 @@ final class BootCacheTest extends TestCase
     private function ignoredLine(string $reason): string
     {
         return sprintf(
-            'Zephyrus: ignored the boot cache %s: %s. Run vendor/bin/zephyrus cache:warm to rebuild it.',
+            'Zephyrus: ignored the boot cache %s: %s. Run vendor/bin/zephyrus cache:warm to rebuild it, or vendor/bin/zephyrus cache:clear to remove it.',
             $this->cachePath,
             $reason,
         );

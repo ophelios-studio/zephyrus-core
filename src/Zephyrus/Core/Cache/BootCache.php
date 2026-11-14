@@ -17,25 +17,38 @@ final readonly class BootCache
 {
     public const int FORMAT = 1;
     public const string WARM_COMMAND = 'vendor/bin/zephyrus cache:warm';
-    public const string IGNORED_LOG_LINE = 'Zephyrus: ignored the boot cache %s: %s. Run %s to rebuild it.';
+    public const string CLEAR_COMMAND = 'vendor/bin/zephyrus cache:clear';
+    public const string IGNORED_LOG_LINE = 'Zephyrus: ignored the boot cache %s: %s. Run ' . self::WARM_COMMAND
+        . ' to rebuild it, or ' . self::CLEAR_COMMAND . ' to remove it.';
+
+    private const string HEADER = "<?php\n\n// Written by " . self::WARM_COMMAND . ".\n";
+    private const string FOREIGN_FILE = 'the file there was not written by ' . self::WARM_COMMAND
+        . ', so it is left in place';
     private const string PACKAGE = 'zephyrus-framework/core';
 
     /** @var \Closure(string): (int|false) */
     private \Closure $ownerOf;
+
+    /** @var \Closure(): int */
+    private \Closure $processOwner;
 
     /**
      * @param string $path Absolute path of the cache file.
      * @param string $baseDirectory Real path of the directory the cache must stay under.
      * @param string $trustedSource Real path of the file whose owner is trusted alongside root.
      * @param (\Closure(string): (int|false))|null $ownerOf Reads the owner uid of a path, fileowner() by default.
+     * @param (\Closure(): int)|null $processOwner Reads the uid of this process, AtomicFileWriter::processOwner()
+     *                                            by default.
      */
     public function __construct(
         private string $path,
         private string $baseDirectory,
         private string $trustedSource,
         ?\Closure $ownerOf = null,
+        ?\Closure $processOwner = null,
     ) {
         $this->ownerOf = $ownerOf ?? fileowner(...);
+        $this->processOwner = $processOwner ?? AtomicFileWriter::processOwner(...);
     }
 
     public function path(): string
@@ -59,7 +72,7 @@ final readonly class BootCache
         try {
             return $this->payload($this->includeTrusted(), $fingerprint);
         } catch (CacheRefusal $refusal) {
-            error_log(sprintf(self::IGNORED_LOG_LINE, $this->path, $refusal->getMessage(), self::WARM_COMMAND));
+            error_log(sprintf(self::IGNORED_LOG_LINE, $this->path, $refusal->getMessage()));
 
             return null;
         }
@@ -73,35 +86,84 @@ final readonly class BootCache
      */
     public function store(array $payload, string $fingerprint, int $mode = AtomicFileWriter::FILE_MODE, ?int $group = null): void
     {
-        $processOwner = AtomicFileWriter::processOwner();
+        ($this->prepareStore($payload, $fingerprint, $mode, $group))();
+    }
+
+    /**
+     * Encode the payload and check that this process may write the cache, without writing it.
+     *
+     * @param array<mixed> $payload
+     * @return \Closure(): void Writes the cache as store() does.
+     * @throws BootCacheException when the payload cannot be encoded, the application would ignore a cache this
+     *                            process writes, or the file in place was not written by cache:warm.
+     */
+    public function prepareStore(
+        array $payload,
+        string $fingerprint,
+        int $mode = AtomicFileWriter::FILE_MODE,
+        ?int $group = null,
+    ): \Closure {
+        $processOwner = ($this->processOwner)();
         if ($processOwner !== 0 && $processOwner !== ($this->ownerOf)($this->trustedSource)) {
             throw BootCacheException::refusedWrite($this->path, sprintf(
-                'this process is neither root nor the owner of %s, so the application would ignore the cache',
+                'this process is neither root nor the owner of %s, so the application would ignore the cache: run %s '
+                . 'as root (before USER in a Dockerfile) or as that owner',
                 $this->trustedSource,
+                self::WARM_COMMAND,
             ));
         }
 
-        $contents = sprintf(
-            "<?php\n\n// Written by %s.\n\nreturn ['format' => %s, 'framework' => %s, 'fingerprint' => %s, 'payload' => %s];\n",
-            self::WARM_COMMAND,
+        if ($this->holdsForeignFile()) {
+            throw BootCacheException::refusedWrite($this->path, self::FOREIGN_FILE);
+        }
+
+        $contents = self::HEADER . sprintf(
+            "\nreturn ['format' => %s, 'framework' => %s, 'fingerprint' => %s, 'payload' => %s];\n",
             var_export(self::FORMAT, true),
             var_export(self::frameworkVersion(), true),
             var_export($fingerprint, true),
             PhpValueEncoder::encode($payload),
         );
+        $writer = new AtomicFileWriter($this->baseDirectory, $this->ownerOf);
 
-        (new AtomicFileWriter($this->baseDirectory, $this->ownerOf))->write($this->path, $contents, $mode, $group);
+        return function () use ($writer, $contents, $mode, $group, $processOwner): void {
+            $writer->write($this->path, $contents, $mode, $group, $processOwner);
+        };
+    }
+
+    /**
+     * Write a file beside the cache, under the same guards, unless one is already there.
+     *
+     * @throws BootCacheException when the file cannot be written safely.
+     */
+    public function writeBesideIfAbsent(string $name, string $contents): void
+    {
+        $path = dirname($this->path) . '/' . $name;
+        if (!file_exists($path) && !is_link($path)) {
+            (new AtomicFileWriter($this->baseDirectory, $this->ownerOf))
+                ->write($path, $contents, AtomicFileWriter::FILE_MODE, null, ($this->processOwner)());
+        }
     }
 
     /**
      * Delete the cache file.
      *
      * @return bool Whether a file was deleted.
-     * @throws BootCacheException when the file cannot be deleted safely.
+     * @throws BootCacheException when the file in place was not written by cache:warm or cannot be deleted safely.
      */
     public function clear(): bool
     {
+        if ($this->holdsForeignFile()) {
+            throw BootCacheException::refusedRemoval($this->path, self::FOREIGN_FILE);
+        }
+
         return (new AtomicFileWriter($this->baseDirectory, $this->ownerOf))->remove($this->path);
+    }
+
+    private function holdsForeignFile(): bool
+    {
+        return is_file($this->path) && !is_link($this->path)
+            && @file_get_contents($this->path, length: strlen(self::HEADER)) !== self::HEADER;
     }
 
     private function includeTrusted(): mixed
@@ -157,8 +219,7 @@ final readonly class BootCache
     private static function frameworkVersion(): string
     {
         try {
-            return (InstalledVersions::getPrettyVersion(self::PACKAGE) ?? '')
-                . '@' . (InstalledVersions::getReference(self::PACKAGE) ?? '');
+            return InstalledVersions::getPrettyVersion(self::PACKAGE) . '@' . InstalledVersions::getReference(self::PACKAGE);
         } catch (\OutOfBoundsException) {
             return 'unknown';
         }

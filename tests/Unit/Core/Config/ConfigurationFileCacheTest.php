@@ -97,7 +97,7 @@ final class ConfigurationFileCacheTest extends TestCase
         self::assertFileDoesNotExist($marker);
         self::assertStringEndsWith(
             sprintf(
-                "Zephyrus: ignored the boot cache %s: %s is writable by its group or by others. Run vendor/bin/zephyrus cache:warm to rebuild it.\n",
+                "Zephyrus: ignored the boot cache %s: %s is writable by its group or by others. Run vendor/bin/zephyrus cache:warm to rebuild it, or vendor/bin/zephyrus cache:clear to remove it.\n",
                 $cachePath,
                 $cachePath,
             ),
@@ -116,7 +116,7 @@ final class ConfigurationFileCacheTest extends TestCase
         self::assertSame('edited', $label);
         self::assertStringEndsWith(
             sprintf(
-                "Zephyrus: ignored the boot cache %s: it is stale, its source changed after it was written. Run vendor/bin/zephyrus cache:warm to rebuild it.\n",
+                "Zephyrus: ignored the boot cache %s: it is stale, its source changed after it was written. Run vendor/bin/zephyrus cache:warm to rebuild it, or vendor/bin/zephyrus cache:clear to remove it.\n",
                 $cache->path(),
             ),
             $this->capturedErrorLog(),

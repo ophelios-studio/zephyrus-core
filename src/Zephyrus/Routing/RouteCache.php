@@ -33,8 +33,12 @@ final readonly class RouteCache implements WarmableCache
 {
     public const string CONFIGURATION_FILE = 'config.yml';
 
+    private const string ROOT_ONLY = 'router: is cached only from ' . self::CONFIGURATION_FILE
+        . ' at the application root';
     private const string MISSING_LOG_LINE =
         'Zephyrus: no routes cache at %s, so the controllers were discovered for this request. Run %s to write it.';
+    private const string UNCACHEABLE_LOG_LINE = 'Zephyrus: the controllers were discovered for this request: '
+        . self::ROOT_ONLY . ', and %s does not exist.';
 
     private const string FINGERPRINT_ALGORITHM = 'xxh128';
     private const int ENTRY_SIZE = 8;
@@ -67,10 +71,9 @@ final readonly class RouteCache implements WarmableCache
     {
         if (basename($source) !== self::CONFIGURATION_FILE) {
             throw new ConfigurationException(sprintf(
-                'Configuration file %s declares router:, but Router::fromConfiguration() checks the routes cache '
-                . 'against the %s of the application root: move the router: section to that file.',
+                'Configuration file %s declares router:, but %s: move the router: section to that file.',
                 basename($source),
-                self::CONFIGURATION_FILE,
+                self::ROOT_ONLY,
             ));
         }
 
@@ -83,7 +86,7 @@ final readonly class RouteCache implements WarmableCache
     }
 
     /**
-     * Discover every route, whatever the environment, and write them with their #[RequiresEnv] pairs.
+     * Write the cache now, as the closure of prepare() does.
      *
      * @throws ConfigurationException when a controller directory is missing or holds no class of its namespace.
      * @throws RouteAttributeException when a #[RequiresEnv] names a variable that is never read, or two routes of
@@ -95,23 +98,46 @@ final readonly class RouteCache implements WarmableCache
      */
     public function warm(): string
     {
+        return ($this->prepare())();
+    }
+
+    /**
+     * Discover every route, whatever the environment; the closure writes them with their #[RequiresEnv] pairs.
+     *
+     * @return \Closure(): string
+     * @throws ConfigurationException when a controller directory is missing or holds no class of its namespace.
+     * @throws RouteAttributeException when a #[RequiresEnv] names a variable that is never read, or two routes of
+     *                                 one name can be registered together.
+     * @throws RouteMiddlewareException when a #[MiddlewareGroup] is not declared under router.middleware_groups.
+     * @throws RouteSignatureException when a route path is malformed.
+     * @throws RouteCacheException when no route is found.
+     * @throws BootCacheException when the cache cannot be written safely.
+     */
+    public function prepare(): \Closure
+    {
         $routes = (new RouteDiscovery($this->config, $this->basePath))->routes();
         if ($routes === []) {
             throw RouteCacheException::noRoutes($this->path);
         }
 
-        $this->save($routes);
+        $payload = $this->payloadOf($routes);
+        $store = $this->cache->prepareStore($payload, $this->fingerprint($payload));
+        $line = sprintf('Wrote %s (%d %s)', $this->path, count($routes), count($routes) === 1 ? 'route' : 'routes');
 
-        return sprintf('Wrote %s (%d %s)', $this->path, count($routes), count($routes) === 1 ? 'route' : 'routes');
+        return static function () use ($store, $line): string {
+            $store();
+
+            return $line;
+        };
     }
 
     /**
-     * Write the routes with their #[RequiresEnv] pairs and the files their controllers inherit from.
+     * The routes with their #[RequiresEnv] pairs and the files their controllers inherit from.
      *
      * @param list<DiscoveredRoute> $routes
-     * @throws BootCacheException when the cache cannot be written safely.
+     * @return array{conditions: list<list<array{string, string}>>, routes: list<list<mixed>>, dependencies: list<string>}
      */
-    private function save(array $routes): void
+    private function payloadOf(array $routes): array
     {
         $conditions = [];
         $conditionIndexes = [];
@@ -136,13 +162,11 @@ final readonly class RouteCache implements WarmableCache
             ];
         }
 
-        $payload = [
+        return [
             'conditions' => $conditions,
             'routes' => $entries,
             'dependencies' => $this->dependencies($routes),
         ];
-
-        $this->cache->store($payload, $this->fingerprint($payload));
     }
 
     /**
@@ -151,14 +175,14 @@ final readonly class RouteCache implements WarmableCache
      */
     public function load(): ?RouteCollection
     {
-        if (!file_exists($this->path) && !is_link($this->path)) {
-            error_log(sprintf(self::MISSING_LOG_LINE, $this->path, BootCache::WARM_COMMAND));
+        if (!is_file($this->configurationFile)) {
+            error_log(sprintf(self::UNCACHEABLE_LOG_LINE, $this->configurationFile));
 
             return null;
         }
 
-        if (!is_file($this->configurationFile)) {
-            $this->logIgnored(sprintf('it is checked against %s, which does not exist', $this->configurationFile));
+        if (!file_exists($this->path) && !is_link($this->path)) {
+            error_log(sprintf(self::MISSING_LOG_LINE, $this->path, BootCache::WARM_COMMAND));
 
             return null;
         }
@@ -390,7 +414,7 @@ final readonly class RouteCache implements WarmableCache
 
     private function logIgnored(string $reason): void
     {
-        error_log(sprintf(BootCache::IGNORED_LOG_LINE, $this->path, $reason, BootCache::WARM_COMMAND));
+        error_log(sprintf(BootCache::IGNORED_LOG_LINE, $this->path, $reason));
     }
 
     private static function malformedRoute(int|string $index): CacheRefusal
