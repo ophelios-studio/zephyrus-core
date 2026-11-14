@@ -60,17 +60,6 @@ final readonly class ConfigurationCache implements WarmableCache
     }
 
     /**
-     * Write the cache now, as the closure of prepare() does.
-     *
-     * @throws ConfigurationException when the source cannot be parsed.
-     * @throws BootCacheException when the cache cannot be written safely.
-     */
-    public function warm(): string
-    {
-        return ($this->prepare())();
-    }
-
-    /**
      * Parse the source; the closure writes the cache with the source's mode, minus every write bit, and its group.
      *
      * @return \Closure(): string
@@ -99,9 +88,9 @@ final readonly class ConfigurationCache implements WarmableCache
         };
     }
 
-    public function clear(): bool
+    public function prepareClear(): \Closure
     {
-        return $this->cache->clear();
+        return $this->cache->prepareClear();
     }
 
     private function fingerprint(): string

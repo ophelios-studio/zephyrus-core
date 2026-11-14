@@ -19,7 +19,7 @@ interface WarmableCache
     public function path(): string;
 
     /**
-     * Read and validate the source, without writing the cache or reading the environment. Directory and target-file guards run when the closure writes.
+     * Read and validate the source, without writing the cache or reading the environment. The directory and target-file guards run here too, so the closure writes only what was checked.
      *
      * @return \Closure(): string Writes the cache and returns the line cache:warm prints: the file written, never a
      *                            cached value.
@@ -28,10 +28,10 @@ interface WarmableCache
     public function prepare(): \Closure;
 
     /**
-     * Delete the cache file.
+     * Check that the cache file can be deleted, without deleting it.
      *
-     * @return bool Whether a file was deleted.
-     * @throws ZephyrusException when the file cannot be deleted safely.
+     * @return \Closure(): bool Deletes the file and returns whether one was deleted.
+     * @throws ZephyrusException when the file in place was not written by cache:warm or cannot be deleted safely.
      */
-    public function clear(): bool;
+    public function prepareClear(): \Closure;
 }

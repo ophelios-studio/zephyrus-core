@@ -287,6 +287,52 @@ final class ConsoleTest extends TestCase
         self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
     }
 
+    public function testASecondConfigRefusedByADirectoryGuardLeavesTheFirstCacheUnwritten(): void
+    {
+        $this->project->directory('config/var/zephyrus', 0o777);
+
+        $exitCode = $this->console()->run([
+            'cache:warm',
+            '--config=' . $this->project->path . '/config.yml',
+            '--config=' . $this->project->path . '/config/tenant.yml',
+        ]);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config/tenant.yml: Cannot write the boot cache "
+                . "%1\$s/config/var/zephyrus/tenant.yml.php: %1\$s/config/var/zephyrus is writable by its group or by "
+                . "others: run chmod g-w,o-w %1\$s/config/var/zephyrus.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+        self::assertFileDoesNotExist($this->project->path . '/var/zephyrus/config.yml.php');
+    }
+
+    public function testClearRefusingTheSecondFileKeepsTheFirstCache(): void
+    {
+        $arguments = ['--config=' . $this->project->path . '/config.yml', '--config=' . $this->project->path . '/config/tenant.yml'];
+        $this->console()->run(['cache:warm', ...$arguments]);
+        $foreign = $this->project->file('config/var/zephyrus/tenant.yml.php', "<?php\nreturn [];\n");
+
+        $exitCode = $this->console()->run(['cache:clear', ...$arguments]);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:clear failed for %1\$s/config/tenant.yml: Cannot remove the boot cache %2\$s: the file there was "
+                . "not written by vendor/bin/zephyrus cache:warm, so it is left in place.\n",
+                $this->project->path,
+                $foreign,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertFileExists($this->project->path . '/var/zephyrus/config.yml.php');
+        self::assertFileExists($foreign);
+    }
+
     private function routerSection(?string $cache = null): string
     {
         return sprintf(

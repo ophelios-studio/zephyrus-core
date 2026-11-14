@@ -78,7 +78,7 @@ final class RouteCacheTest extends TestCase
         array $onlyInEnv = [],
         array $onlyInProcess = [],
     ): void {
-        $this->routeCache()->warm();
+        $this->routeCache()->prepare()();
         foreach ($everywhere + $onlyInEnv as $name => $value) {
             $_ENV[$name] = $value;
         }
@@ -116,7 +116,7 @@ final class RouteCacheTest extends TestCase
         $_ENV['TENANT_APP'] = 'canary-7f3a9c';
         putenv('MODE=canary-41be02');
 
-        $line = $this->routeCache()->warm();
+        $line = $this->routeCache()->prepare()();
 
         $written = (string) file_get_contents($this->routeCache()->path());
         self::assertStringNotContainsString('canary', $written . $line);
@@ -126,7 +126,7 @@ final class RouteCacheTest extends TestCase
     public function testAnUnsafeCacheIsNeverIncludedAndDiscoveryServesTheRoutes(string $unsafe): void
     {
         $cache = $this->routeCache();
-        $cache->warm();
+        $cache->prepare()();
         $marker = $this->root->path . '/included';
         $payload = sprintf("<?php touch(%s); return [];\n", var_export($marker, true));
         $reason = match ($unsafe) {
@@ -155,7 +155,7 @@ final class RouteCacheTest extends TestCase
     #[DataProvider('foreignOwners')]
     public function testACacheOwnedByAnotherUserIsNeverIncluded(string $foreign): void
     {
-        $this->routeCache()->warm();
+        $this->routeCache()->prepare()();
         $marker = $this->root->path . '/included';
         $path = $this->routeCache()->path();
         file_put_contents($path, sprintf("<?php touch(%s); return [];\n", var_export($marker, true)));
@@ -191,7 +191,7 @@ final class RouteCacheTest extends TestCase
     public function testAnUnreadableCacheFallsBackToDiscoveryWithoutFailingTheRequest(string $damage, string $reason): void
     {
         $cache = $this->routeCache();
-        $cache->warm();
+        $cache->prepare()();
         $written = (string) file_get_contents($cache->path());
         file_put_contents($cache->path(), match ($damage) {
             'corrupted' => "<?php return ['format' => ;\n",
@@ -249,7 +249,7 @@ final class RouteCacheTest extends TestCase
     public function testAMalformedPayloadFallsBackToDiscoveryWithOneLogLine(\Closure $damage, string $reason): void
     {
         $cache = $this->routeCache();
-        $cache->warm();
+        $cache->prepare()();
         $cached = require $cache->path();
         $cached['payload'] = $damage($cached['payload']);
         file_put_contents($cache->path(), "<?php\n\nreturn " . var_export($cached, true) . ";\n");
@@ -323,7 +323,7 @@ final class RouteCacheTest extends TestCase
     public function testACacheIsIgnoredOnceWhatItWasReadFromChanges(string $edit): void
     {
         [$tree, $cache, $files] = $this->inheritingController();
-        $cache->warm();
+        $cache->prepare()();
 
         match ($edit) {
             'a controller added' => $tree->controller('ExportController', self::controllerSource('ExportController', '/exports')),
@@ -353,7 +353,7 @@ final class RouteCacheTest extends TestCase
     public function testACacheIsServedWhileNothingItWasReadFromChanges(): void
     {
         [, $cache] = $this->inheritingController();
-        $cache->warm();
+        $cache->prepare()();
 
         $routes = $cache->load();
 
@@ -364,7 +364,7 @@ final class RouteCacheTest extends TestCase
     public function testACacheStaysFreshWhenTheApplicationRootIsMoved(): void
     {
         [$tree, $cache] = $this->inheritingController();
-        $cache->warm();
+        $cache->prepare()();
         $original = $tree->root->path;
         $moved = $original . '-moved';
         rename($original, $moved);
@@ -386,7 +386,7 @@ final class RouteCacheTest extends TestCase
         $first = $tree->controller('AlphaController', self::controllerSource('AlphaController', '/alpha'));
         $tree->controller('BetaController', self::controllerSource('BetaController', '/beta'));
         $cache = new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml');
-        $cache->warm();
+        $cache->prepare()();
         $source = (string) file_get_contents($first);
         $modified = (int) filemtime($first);
         unlink($first);
@@ -405,7 +405,7 @@ final class RouteCacheTest extends TestCase
             $tree->controller($name . 'Controller', self::controllerSource($name . 'Controller', '/' . strtolower($name)));
         }
         $cache = new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml');
-        $cache->warm();
+        $cache->prepare()();
 
         $routes = $cache->load();
 
@@ -420,7 +420,7 @@ final class RouteCacheTest extends TestCase
         $tree = $this->tree();
         $tree->configure();
         $tree->controller('ReportController', self::controllerSource('ReportController', '/reports'));
-        $this->routeCacheOf($tree)->warm();
+        $this->routeCacheOf($tree)->prepare()();
         $tree->controller('ExportController', self::controllerSource('ExportController', '/exports'));
 
         $paths = array_map(
@@ -460,7 +460,7 @@ final class RouteCacheTest extends TestCase
 
         try {
             $discovery === 'cache:warm'
-                ? $this->routeCacheOf($tree)->warm()
+                ? $this->routeCacheOf($tree)->prepare()()
                 : Router::fromConfiguration($this->configuration('development', $tree), $tree->root->path);
             self::fail('expected a refusal');
         } catch (RouteAttributeException $exception) {
@@ -502,7 +502,7 @@ final class RouteCacheTest extends TestCase
             PHP);
 
         try {
-            (new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml'))->warm();
+            (new RouteCache($config, $tree->root->path, $tree->root->path . '/config.yml'))->prepare()();
             self::fail('expected a refusal');
         } catch (RouteMiddlewareException $exception) {
             self::assertSame(
@@ -527,7 +527,7 @@ final class RouteCacheTest extends TestCase
         $tree->controller('SpoofedController', $source);
 
         try {
-            $this->routeCacheOf($tree)->warm();
+            $this->routeCacheOf($tree)->prepare()();
             self::fail('expected a refusal');
         } catch (RouteAttributeException $exception) {
             self::assertSame(
@@ -576,7 +576,7 @@ final class RouteCacheTest extends TestCase
         $tree->controller('EmptyController', "final class EmptyController\n{\n}");
 
         try {
-            $this->routeCacheOf($tree)->warm();
+            $this->routeCacheOf($tree)->prepare()();
             self::fail('expected a refusal');
         } catch (RouteCacheException $exception) {
             self::assertSame(

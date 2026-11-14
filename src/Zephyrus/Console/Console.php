@@ -6,6 +6,7 @@ namespace Zephyrus\Console;
 
 use Composer\InstalledVersions;
 use Zephyrus\Core\Cache\ConfigurationCache;
+use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 use Zephyrus\Core\Config\RouterConfig;
@@ -107,7 +108,7 @@ final readonly class Console
 
                     $steps[] = [$configuration, $command === self::WARM
                         ? $cache->prepare()
-                        : static fn (): string => ($cache->clear() ? 'Removed ' : 'Nothing to remove at ') . $cache->path()];
+                        : self::clearing($cache)];
                 }
 
                 if ($command === self::WARM && $routeCache === null) {
@@ -144,6 +145,17 @@ final readonly class Console
         }
 
         return RouteCache::forConfigurationFile($source, RouterConfig::fromArray($values[RouterConfig::SECTION]));
+    }
+
+    /**
+     * @return \Closure(): string
+     * @throws ZephyrusException when the cache file cannot be deleted safely.
+     */
+    private static function clearing(WarmableCache $cache): \Closure
+    {
+        $remove = $cache->prepareClear();
+
+        return static fn (): string => ($remove() ? 'Removed ' : 'Nothing to remove at ') . $cache->path();
     }
 
     /**

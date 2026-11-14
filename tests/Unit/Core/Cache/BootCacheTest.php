@@ -51,7 +51,7 @@ final class BootCacheTest extends TestCase
     public function testAStoredPayloadLoadsBackWhileTheFingerprintMatches(): void
     {
         $payload = ['database' => ['host' => 'db.example.test', 'password' => new TaggedValue('env', 'DB_PASSWORD')]];
-        $this->cache()->store($payload, self::FINGERPRINT);
+        $this->cache()->prepareStore($payload, self::FINGERPRINT)();
 
         self::assertEquals($payload, $this->cache()->load(self::fingerprint(...)));
         self::assertSame([], $this->loggedLines());
@@ -60,7 +60,7 @@ final class BootCacheTest extends TestCase
     public function testTheFingerprintIsComputedFromTheCachedPayload(): void
     {
         $payload = ['dependencies' => ['lib/Base.php', 'lib/Shared.php']];
-        $this->cache()->store($payload, 'lib/Base.php lib/Shared.php');
+        $this->cache()->prepareStore($payload, 'lib/Base.php lib/Shared.php')();
 
         $loaded = $this->cache()->load(static fn (array $cached): string => implode(' ', $cached['dependencies']));
 
@@ -165,7 +165,7 @@ final class BootCacheTest extends TestCase
     #[DataProvider('unusableContents')]
     public function testAnUnusableCacheIsIgnoredWithOneLogLineAndNoOutput(\Closure $damage, string $reason): void
     {
-        $this->cache()->store(['application' => ['name' => 'demo']], self::FINGERPRINT);
+        $this->cache()->prepareStore(['application' => ['name' => 'demo']], self::FINGERPRINT)();
         $valid = (string) file_get_contents($this->cachePath);
         $this->directory->file('var/zephyrus/config.yml.php', $damage($valid), 0o444);
         $this->expectOutputString('');
@@ -180,7 +180,7 @@ final class BootCacheTest extends TestCase
     {
         $this->plantMarkedCache();
 
-        $this->cache()->store(['application' => []], self::FINGERPRINT);
+        $this->cache()->prepareStore(['application' => []], self::FINGERPRINT)();
 
         self::assertFileDoesNotExist($this->marker);
         self::assertSame(['application' => []], $this->cache()->load(self::fingerprint(...)));
@@ -193,7 +193,7 @@ final class BootCacheTest extends TestCase
         }
 
         try {
-            $this->cache(self::strangerOwns($this->source))->store([], self::FINGERPRINT);
+            $this->cache(self::strangerOwns($this->source))->prepareStore([], self::FINGERPRINT)();
             self::fail('expected a refusal');
         } catch (BootCacheException $e) {
             self::assertSame(
@@ -222,7 +222,7 @@ final class BootCacheTest extends TestCase
             static fn (): int => 0,
         );
 
-        $cache->store(['application' => []], self::FINGERPRINT);
+        $cache->prepareStore(['application' => []], self::FINGERPRINT)();
 
         self::assertSame(['application' => []], $cache->load(self::fingerprint(...)));
         self::assertSame([], $this->loggedLines());
@@ -230,7 +230,7 @@ final class BootCacheTest extends TestCase
 
     public function testTheCacheIsStampedWithTheInstalledFrameworkVersion(): void
     {
-        $this->cache()->store([], self::FINGERPRINT);
+        $this->cache()->prepareStore([], self::FINGERPRINT)();
 
         $cached = require $this->cachePath;
 
@@ -246,7 +246,7 @@ final class BootCacheTest extends TestCase
         $this->directory->file('var/zephyrus/config.yml.php', "application: {}\n");
 
         try {
-            $this->cache()->store([], self::FINGERPRINT);
+            $this->cache()->prepareStore([], self::FINGERPRINT)();
             self::fail('expected a refusal');
         } catch (BootCacheException $e) {
             self::assertSame(
@@ -266,7 +266,7 @@ final class BootCacheTest extends TestCase
         $this->directory->file('var/zephyrus/config.yml.php', "application: {}\n");
 
         try {
-            $this->cache()->clear();
+            $this->cache()->prepareClear()();
             self::fail('expected a refusal');
         } catch (BootCacheException $e) {
             self::assertSame(
@@ -283,9 +283,9 @@ final class BootCacheTest extends TestCase
 
     public function testClearRemovesACacheItWrote(): void
     {
-        $this->cache()->store([], self::FINGERPRINT);
+        $this->cache()->prepareStore([], self::FINGERPRINT)();
 
-        self::assertTrue($this->cache()->clear());
+        self::assertTrue(($this->cache()->prepareClear())());
         self::assertFileDoesNotExist($this->cachePath);
     }
 

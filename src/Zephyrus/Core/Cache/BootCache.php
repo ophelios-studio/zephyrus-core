@@ -79,23 +79,14 @@ final readonly class BootCache
     }
 
     /**
-     * Write the payload under a header naming the format, the framework version and the fingerprint.
+     * Encode the payload under a header naming the format, the framework version and the fingerprint, and check that
+     * this process may write the cache, without writing it.
      *
      * @param array<mixed> $payload
-     * @throws BootCacheException when the payload cannot be encoded or the file cannot be written safely.
-     */
-    public function store(array $payload, string $fingerprint, int $mode = AtomicFileWriter::FILE_MODE, ?int $group = null): void
-    {
-        ($this->prepareStore($payload, $fingerprint, $mode, $group))();
-    }
-
-    /**
-     * Encode the payload and check that this process may write the cache, without writing it.
-     *
-     * @param array<mixed> $payload
-     * @return \Closure(): void Writes the cache as store() does.
+     * @return \Closure(): void Writes the cache, checking its target again.
      * @throws BootCacheException when the payload cannot be encoded, the application would ignore a cache this
-     *                            process writes, or the file in place was not written by cache:warm.
+     *                            process writes, the file in place was not written by cache:warm, or the file or a
+     *                            directory above it is refused.
      */
     public function prepareStore(
         array $payload,
@@ -124,11 +115,9 @@ final readonly class BootCache
             var_export($fingerprint, true),
             PhpValueEncoder::encode($payload),
         );
-        $writer = new AtomicFileWriter($this->baseDirectory, $this->ownerOf);
 
-        return function () use ($writer, $contents, $mode, $group, $processOwner): void {
-            $writer->write($this->path, $contents, $mode, $group, $processOwner);
-        };
+        return (new AtomicFileWriter($this->baseDirectory, $this->ownerOf))
+            ->prepareWrite($this->path, $contents, $mode, $group, $processOwner);
     }
 
     /**
@@ -146,18 +135,18 @@ final readonly class BootCache
     }
 
     /**
-     * Delete the cache file.
+     * Check that the cache file can be deleted, without deleting it.
      *
-     * @return bool Whether a file was deleted.
+     * @return \Closure(): bool Deletes the file and returns whether one was deleted.
      * @throws BootCacheException when the file in place was not written by cache:warm or cannot be deleted safely.
      */
-    public function clear(): bool
+    public function prepareClear(): \Closure
     {
         if ($this->holdsForeignFile()) {
             throw BootCacheException::refusedRemoval($this->path, self::FOREIGN_FILE);
         }
 
-        return (new AtomicFileWriter($this->baseDirectory, $this->ownerOf))->remove($this->path);
+        return (new AtomicFileWriter($this->baseDirectory, $this->ownerOf))->prepareRemove($this->path);
     }
 
     private function holdsForeignFile(): bool

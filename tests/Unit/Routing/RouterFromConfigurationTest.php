@@ -50,7 +50,7 @@ final class RouterFromConfigurationTest extends TestCase
     public function testProductionServesTheCachedRoutes(): void
     {
         $cache = $this->cache();
-        $cache->warm();
+        $cache->prepare()();
         file_put_contents(
             $cache->path(),
             str_replace("'/about'", "'/from-cache'", (string) file_get_contents($cache->path())),
@@ -65,7 +65,7 @@ final class RouterFromConfigurationTest extends TestCase
     public function testProductionReadsTheCacheThroughAnApplicationRootThatIsASymbolicLink(): void
     {
         $cache = $this->cache();
-        $cache->warm();
+        $cache->prepare()();
         file_put_contents(
             $cache->path(),
             str_replace("'/about'", "'/from-cache'", (string) file_get_contents($cache->path())),
@@ -88,7 +88,7 @@ final class RouterFromConfigurationTest extends TestCase
     public function testDevelopmentAndTestingNeverOpenTheCache(string $environment): void
     {
         $cache = $this->cache();
-        $cache->warm();
+        $cache->prepare()();
         $marker = $this->tree->root->path . '/included';
         file_put_contents($cache->path(), sprintf("<?php touch(%s); return [];\n", var_export($marker, true)));
 
@@ -127,7 +127,7 @@ final class RouterFromConfigurationTest extends TestCase
 
     public function testProductionWithoutAConfigYmlAtTheRootDiscoversTheRoutesAndSaysWhyNoCacheIsRead(): void
     {
-        $this->cache()->warm();
+        $this->cache()->prepare()();
         unlink($this->tree->root->path . '/config.yml');
 
         $paths = $this->paths('production');

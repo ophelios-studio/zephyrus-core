@@ -70,6 +70,29 @@ final readonly class AtomicFileWriter
     }
 
     /**
+     * Run the checks of write() without creating anything.
+     *
+     * @return \Closure(): void Writes as write() does, checking again.
+     * @throws BootCacheException when write() would refuse the target.
+     */
+    public function prepareWrite(
+        string $target,
+        string $contents,
+        int $mode = self::FILE_MODE,
+        ?int $group = null,
+        ?int $processOwner = null,
+    ): \Closure {
+        $processOwner ??= self::processOwner();
+        try {
+            $this->inspect($target, $processOwner);
+        } catch (CacheRefusal $refusal) {
+            throw BootCacheException::refusedWrite($target, $refusal->getMessage());
+        }
+
+        return fn () => $this->write($target, $contents, $mode, $group, $processOwner);
+    }
+
+    /**
      * Delete the target if it exists.
      *
      * @return bool Whether a file was deleted.
@@ -77,37 +100,84 @@ final readonly class AtomicFileWriter
      */
     public function remove(string $target): bool
     {
+        return $this->prepareRemove($target)();
+    }
+
+    /**
+     * Run the checks of remove() without deleting anything.
+     *
+     * @return \Closure(): bool Deletes as remove() does, and returns whether a file was deleted.
+     * @throws BootCacheException when remove() would refuse the target.
+     */
+    public function prepareRemove(string $target): \Closure
+    {
         try {
-            $directory = $this->baseDirectory;
-            $segments = $this->segmentsUnderBase($target);
-            $file = array_pop($segments);
-            foreach ($segments as $segment) {
-                $directory .= '/' . $segment;
-                if (is_link($directory)) {
-                    throw new CacheRefusal(sprintf('%s is a symbolic link', $directory));
-                }
-            }
-
-            $path = $directory . '/' . $file;
-            if (!file_exists($path) && !is_link($path)) {
-                return false;
-            }
-
-            if (!is_link($path) && !is_file($path)) {
-                throw new CacheRefusal(sprintf('%s is not a regular file', $path));
-            }
-
-            if (!@unlink($path)) {
-                throw new CacheRefusal(sprintf('%s could not be deleted', $path));
-            }
-
-            return true;
+            $path = $this->removablePath($target);
         } catch (CacheRefusal $refusal) {
             throw BootCacheException::refusedRemoval($target, $refusal->getMessage());
         }
+
+        return function () use ($target, $path): bool {
+            if ($path === null || (!file_exists($path) && !is_link($path))) {
+                return false;
+            }
+
+            if (!@unlink($path)) {
+                throw BootCacheException::refusedRemoval($target, sprintf('%s could not be deleted', $path));
+            }
+
+            return true;
+        };
+    }
+
+    /**
+     * The path to delete, or null when there is nothing there.
+     *
+     * @throws CacheRefusal
+     */
+    private function removablePath(string $target): ?string
+    {
+        $directory = $this->baseDirectory;
+        $segments = $this->segmentsUnderBase($target);
+        $file = array_pop($segments);
+        foreach ($segments as $segment) {
+            $directory .= '/' . $segment;
+            if (is_link($directory)) {
+                throw new CacheRefusal(sprintf('%s is a symbolic link', $directory));
+            }
+        }
+
+        $path = $directory . '/' . $file;
+        if (!file_exists($path) && !is_link($path)) {
+            return null;
+        }
+
+        if (!is_link($path) && !is_file($path)) {
+            throw new CacheRefusal(sprintf('%s is not a regular file', $path));
+        }
+
+        return $path;
     }
 
     private function preparedPath(string $target, int $processOwner): string
+    {
+        ['path' => $path, 'missing' => $missing] = $this->inspect($target, $processOwner);
+        foreach ($missing as $created) {
+            if (!@mkdir($created) || !@chmod($created, self::DIRECTORY_MODE)) {
+                throw new CacheRefusal(sprintf('%s could not be created', $created));
+            }
+        }
+
+        return $path;
+    }
+
+    /**
+     * Check the target and the directories above it, without creating anything.
+     *
+     * @return array{path: string, missing: list<string>} The target and the directories to create.
+     * @throws CacheRefusal
+     */
+    private function inspect(string $target, int $processOwner): array
     {
         $segments = $this->segmentsUnderBase($target);
         $file = array_pop($segments);
@@ -131,13 +201,7 @@ final readonly class AtomicFileWriter
             throw new CacheRefusal(sprintf('%s is not a regular file', $path));
         }
 
-        foreach ($missing as $created) {
-            if (!@mkdir($created) || !@chmod($created, self::DIRECTORY_MODE)) {
-                throw new CacheRefusal(sprintf('%s could not be created', $created));
-            }
-        }
-
-        return $path;
+        return ['path' => $path, 'missing' => $missing];
     }
 
     /**

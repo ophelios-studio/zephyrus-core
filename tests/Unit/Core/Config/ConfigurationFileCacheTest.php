@@ -53,7 +53,7 @@ final class ConfigurationFileCacheTest extends TestCase
     public function testAWarmedCacheIsReadInsteadOfTheYaml(): void
     {
         $cache = ConfigurationCache::forSource($this->source);
-        $cache->warm();
+        $cache->prepare()();
         $this->directory->file(
             'var/zephyrus/config.yml.php',
             str_replace("'from-yaml'", "'from-cache'", (string) file_get_contents($cache->path())),
@@ -70,7 +70,7 @@ final class ConfigurationFileCacheTest extends TestCase
     {
         $parsed = $this->configuration();
 
-        ConfigurationCache::forSource($this->source)->warm();
+        ConfigurationCache::forSource($this->source)->prepare()();
         $cached = $this->configuration();
         $_ENV[self::VARIABLE] = 'after-warm';
         $changed = $this->configuration();
@@ -108,7 +108,7 @@ final class ConfigurationFileCacheTest extends TestCase
     public function testAnEditedSourceIsParsedAgainRatherThanServedFromAStaleCache(): void
     {
         $cache = ConfigurationCache::forSource($this->source);
-        $cache->warm();
+        $cache->prepare()();
         $this->directory->file('config.yml', str_replace('from-yaml', 'edited', self::YAML));
 
         $label = (new ConfigurationFile($this->source))->read('reporting')['label'];

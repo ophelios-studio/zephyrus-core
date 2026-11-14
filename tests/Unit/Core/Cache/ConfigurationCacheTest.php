@@ -42,7 +42,7 @@ final class ConfigurationCacheTest extends TestCase
         $source = $this->directory->file('config.yml', "application: {}\n", $sourceMode);
 
         $cache = ConfigurationCache::forSource($source);
-        $cache->warm();
+        $cache->prepare()();
 
         clearstatcache();
         self::assertSame($cacheMode, fileperms($cache->path()) & 0o7777);
@@ -68,7 +68,7 @@ final class ConfigurationCacheTest extends TestCase
         chgrp($source, $otherGroups[0]);
 
         $cache = ConfigurationCache::forSource($source);
-        $cache->warm();
+        $cache->prepare()();
 
         clearstatcache();
         self::assertSame($otherGroups[0], filegroup($cache->path()));
@@ -78,7 +78,7 @@ final class ConfigurationCacheTest extends TestCase
     {
         $source = $this->directory->file('config.yml', "application: {}\n");
 
-        ConfigurationCache::forSource($source)->warm();
+        ConfigurationCache::forSource($source)->prepare()();
 
         self::assertSame("*\n", file_get_contents($this->directory->path . '/var/zephyrus/.gitignore'));
     }
@@ -88,7 +88,7 @@ final class ConfigurationCacheTest extends TestCase
         $source = $this->directory->file('config.yml', "application: {}\n");
         $ignore = $this->directory->file('var/zephyrus/.gitignore', "/routes.php\n");
 
-        ConfigurationCache::forSource($source)->warm();
+        ConfigurationCache::forSource($source)->prepare()();
 
         self::assertSame("/routes.php\n", file_get_contents($ignore));
     }

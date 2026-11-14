@@ -88,22 +88,6 @@ final readonly class RouteCache implements WarmableCache
     }
 
     /**
-     * Write the cache now, as the closure of prepare() does.
-     *
-     * @throws ConfigurationException when a controller directory is missing or holds no class of its namespace.
-     * @throws RouteAttributeException when a #[RequiresEnv] names a variable that is never read, or two routes of
-     *                                 one name can be registered together.
-     * @throws RouteMiddlewareException when a #[MiddlewareGroup] is not declared under router.middleware_groups.
-     * @throws RouteSignatureException when a route path is malformed.
-     * @throws RouteCacheException when no route is found.
-     * @throws BootCacheException when the cache cannot be written safely.
-     */
-    public function warm(): string
-    {
-        return ($this->prepare())();
-    }
-
-    /**
      * Discover every route, whatever the environment; the closure writes them with their #[RequiresEnv] pairs.
      *
      * @return \Closure(): string
@@ -203,9 +187,9 @@ final readonly class RouteCache implements WarmableCache
         }
     }
 
-    public function clear(): bool
+    public function prepareClear(): \Closure
     {
-        return $this->cache->clear();
+        return $this->cache->prepareClear();
     }
 
     /**
