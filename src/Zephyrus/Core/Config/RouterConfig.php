@@ -48,7 +48,7 @@ final readonly class RouterConfig
      * @param mixed $section The router: section as parsed, null when written empty.
      * @throws ConfigurationException when the section is not a map, a value carries a tag, a key is unknown,
      *         controllers is missing or empty, a namespace or a path is not a non-empty string, a middleware group is
-     *         not a list of names, or the cache is not a .php file.
+     *         not a list of names, or the cache is not a .php file or holds a NUL byte.
      */
     public static function fromArray(mixed $section): self
     {
@@ -266,6 +266,10 @@ final readonly class RouterConfig
 
         if (!is_string($value) || trim($value) === '') {
             throw ConfigurationException::invalidType(self::SECTION, 'cache', 'must be the path of the routes cache file');
+        }
+
+        if (str_contains($value, "\0")) {
+            throw ConfigurationException::invalidType(self::SECTION, 'cache', 'must not contain a NUL byte');
         }
 
         if (!str_ends_with($value, '.php')) {

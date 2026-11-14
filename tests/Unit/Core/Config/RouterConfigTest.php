@@ -159,6 +159,10 @@ final class RouterConfigTest extends TestCase
         ];
         yield 'an empty cache path' => [['controllers' => $controllers, 'cache' => ''], $cachePath];
         yield 'a cache path of blanks' => [['controllers' => $controllers, 'cache' => '  '], $cachePath];
+        yield 'a cache path holding a NUL byte' => [
+            ['controllers' => $controllers, 'cache' => "var/zephyrus\0/routes.php"],
+            "Configuration section 'router' field 'cache' must not contain a NUL byte.",
+        ];
         yield 'a cache that is not a PHP file' => [
             ['controllers' => $controllers, 'cache' => 'config.yml'],
             "Configuration section 'router' field 'cache' has invalid value \"config.yml\": the routes cache is PHP, so "
