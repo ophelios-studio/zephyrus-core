@@ -141,14 +141,14 @@ final class MailerConfigTest extends TestCase
         self::assertSame(1025, $config->toArray()['smtp']['port']);
     }
 
-    public function testANonIntegerPortIsStillRefused(): void
+    public function testANonIntegerPortIsRefusedUnderTheMailerSectionName(): void
     {
         try {
             MailerConfig::fromArray(['smtp' => ['port' => 'abc']]);
             self::fail('expected a refusal');
         } catch (ConfigurationException $e) {
             self::assertSame(
-                'Configuration section \'Zephyrus\\Mailer\\MailerConfig\' field \'smtp.port\' has invalid value "abc": is not an integer.',
+                'Configuration section \'mailer\' field \'smtp.port\' has invalid value "abc": is not an integer.',
                 $e->getMessage(),
             );
         }
@@ -160,5 +160,42 @@ final class MailerConfigTest extends TestCase
         };
 
         self::assertSame(25, $section->get('smtp.prot'));
+    }
+
+    public function testANullPortIsExportedAsTheDefaultTheTypedPropertyHolds(): void
+    {
+        $config = MailerConfig::fromArray(['smtp' => ['port' => null]]);
+
+        self::assertSame(587, $config->smtpPort);
+        self::assertSame(587, $config->toArray()['smtp']['port']);
+    }
+
+    public function testASectionDerivedByAnApplicationStaysPermissive(): void
+    {
+        $section = new class(['smtp' => ['prot' => 25]]) extends ConfigSection {
+        };
+
+        self::assertSame(25, $section->get('smtp.prot'));
+    }
+
+    public function testANullPortIsExportedAsTheDefaultTheTypedPropertyHolds(): void
+    {
+        $config = MailerConfig::fromArray(['smtp' => ['port' => null]]);
+
+        self::assertSame(587, $config->smtpPort);
+        self::assertSame(587, $config->toArray()['smtp']['port']);
+    }
+
+    public function testADottedKeyWrittenFlatIsToldToNest(): void
+    {
+        try {
+            MailerConfig::fromArray(['smtp.host' => 'h']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'mailer' field 'smtp.host' is written flat: nest it under 'smtp', such as smtp: { host: ... }.",
+                $e->getMessage(),
+            );
+        }
     }
 }

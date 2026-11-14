@@ -212,7 +212,7 @@ abstract class ConfigSection
             return $default;
         }
 
-        return ConfigBoolean::parse(static::class, $key, $value);
+        return ConfigBoolean::parse($this->sectionName(), $key, $value);
     }
 
     /**
@@ -293,6 +293,14 @@ abstract class ConfigSection
     }
 
     /**
+     * The name a refusal gives this section: the class by default, since a section does not know its key.
+     */
+    protected function sectionName(): string
+    {
+        return static::class;
+    }
+
+    /**
      * Build the refusal for a value this section cannot read.
      *
      * The refused value is echoed in the message, so read secrets with getString(),
@@ -301,7 +309,7 @@ abstract class ConfigSection
     private function rejected(string $key, mixed $value, string $reason): ConfigurationException
     {
         return ConfigurationException::invalidValue(
-            static::class,
+            $this->sectionName(),
             $key,
             $value,
             $reason,

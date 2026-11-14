@@ -39,6 +39,11 @@ final class RenderConfig extends ConfigSection
     public readonly string $mode;
     public readonly string $extension;
 
+    protected function sectionName(): string
+    {
+        return 'render';
+    }
+
     /**
      * @param array<string, mixed> $values
      * @throws ConfigurationException when a key is unknown or a value has the wrong type.

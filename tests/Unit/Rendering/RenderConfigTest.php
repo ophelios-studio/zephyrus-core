@@ -178,4 +178,17 @@ final class RenderConfigTest extends TestCase
         self::assertSame(1, $section->get('anything'));
         self::assertSame(2, $section::fromArray(['other' => 2])->get('other'));
     }
+
+    public function testATypeRefusalNamesTheSectionByItsConfigurationKey(): void
+    {
+        try {
+            RenderConfig::fromArray(['engine' => ['latte']]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration section 'render' field 'engine' has invalid value array: is not representable as a string.",
+                $e->getMessage(),
+            );
+        }
+    }
 }

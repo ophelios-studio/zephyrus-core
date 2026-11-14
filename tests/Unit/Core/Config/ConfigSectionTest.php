@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Core\Config;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 
 final class ConfigSectionTest extends TestCase
 {
@@ -240,6 +241,41 @@ final class ConfigSectionTest extends TestCase
 
         self::assertSame('value', $section->get('key'));
         self::assertSame('value', ($section::fromArray(['key' => 'value']))->get('key'));
+    }
+
+    public function testATypeRefusalOfAnApplicationSectionNamesItsClass(): void
+    {
+        $section = new class(['port' => 'abc']) extends ConfigSection {
+        };
+
+        try {
+            $section->getInt('port');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                sprintf("Configuration section '%s' field 'port' has invalid value \"abc\": is not an integer.", $section::class),
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testASectionNameOverrideIsUsedByTheBooleanAndTheTypeRefusals(): void
+    {
+        $section = new class(['port' => 'abc', 'on' => 'maybe']) extends ConfigSection {
+            protected function sectionName(): string
+            {
+                return 'custom';
+            }
+        };
+
+        foreach (['getInt' => 'port', 'getBool' => 'on'] as $getter => $key) {
+            try {
+                $section->$getter($key);
+                self::fail('expected a refusal');
+            } catch (ConfigurationException $e) {
+                self::assertStringStartsWith("Configuration section 'custom' field '" . $key . "' ", $e->getMessage());
+            }
+        }
     }
 }
 

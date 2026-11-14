@@ -90,7 +90,7 @@ final class MailerConfig extends ConfigSection
         $instance = new static($values);
         $instance->smtpHost = $instance->getString('smtp.host', 'localhost');
         $instance->smtpPort = $instance->getInt('smtp.port', 587);
-        if (isset($instance->values['smtp']['port'])) {
+        if (is_array($instance->values['smtp'] ?? null) && array_key_exists('port', $instance->values['smtp'])) {
             $instance->values['smtp']['port'] = $instance->smtpPort;
         }
         $instance->smtpUsername = $instance->getString('smtp.username', '');
@@ -101,6 +101,11 @@ final class MailerConfig extends ConfigSection
         $instance->fromAddress = $instance->getString('from.address', '');
         $instance->fromName = $instance->getString('from.name', '');
         return $instance;
+    }
+
+    protected function sectionName(): string
+    {
+        return 'mailer';
     }
 
     /**
