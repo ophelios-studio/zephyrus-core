@@ -306,7 +306,7 @@ abstract class ConfigSection
      * The refused value is echoed in the message, so read secrets with getString(),
      * which never refuses a string.
      */
-    private function rejected(string $key, mixed $value, string $reason): ConfigurationException
+    private function rejected(string $key, #[\SensitiveParameter] mixed $value, string $reason): ConfigurationException
     {
         return ConfigurationException::invalidValue(
             $this->sectionName(),

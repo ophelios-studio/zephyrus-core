@@ -259,6 +259,11 @@ final class ConfigSectionTest extends TestCase
         }
     }
 
+    private const array SECTION_NAME_REFUSALS = [
+        'getInt' => "Configuration section 'custom' field 'port' has invalid value \"abc\": is not an integer.",
+        'getBool' => "Configuration section 'custom' field 'on' has invalid value \"maybe\": is not a boolean; use true/false, 1/0, on/off or yes/no.",
+    ];
+
     public function testASectionNameOverrideIsUsedByTheBooleanAndTheTypeRefusals(): void
     {
         $section = new class(['port' => 'abc', 'on' => 'maybe']) extends ConfigSection {
@@ -273,8 +278,25 @@ final class ConfigSectionTest extends TestCase
                 $section->$getter($key);
                 self::fail('expected a refusal');
             } catch (ConfigurationException $e) {
-                self::assertStringStartsWith("Configuration section 'custom' field '" . $key . "' ", $e->getMessage());
+                self::assertSame(self::SECTION_NAME_REFUSALS[$getter], $e->getMessage());
             }
+        }
+    }
+
+    public function testARefusedValueIsHiddenFromTheTraceFrames(): void
+    {
+        $section = new class(['password' => ['ArrSecret7']]) extends ConfigSection {
+        };
+        $previous = ini_get('zend.exception_ignore_args');
+        ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            $section->getString('password');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertStringNotContainsString('ArrSecret7', print_r($e->getTrace(), true));
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
         }
     }
 }
