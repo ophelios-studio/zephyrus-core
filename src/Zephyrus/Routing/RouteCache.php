@@ -35,7 +35,7 @@ final readonly class RouteCache implements WarmableCache
 {
     public const string CONFIGURATION_FILE = 'config.yml';
 
-    private const string ROOT_ONLY = 'router: is cached only from ' . self::CONFIGURATION_FILE
+    public const string ROOT_ONLY = 'router: is cached only from ' . self::CONFIGURATION_FILE
         . ' at the application root';
     private const string MISSING_LOG_LINE =
         'Zephyrus: no routes cache at %s, so the controllers were discovered for this request. Run %s to write it.';

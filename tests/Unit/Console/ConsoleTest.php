@@ -357,6 +357,27 @@ final class ConsoleTest extends TestCase
         }
     }
 
+    public function testARoutesCacheFromAConfigOutsideTheRootNamesTheRuleAndTheRootItResolvedAgainst(): void
+    {
+        $this->project->file('config/config.yml', "router:\n  controllers:\n    App\\Controllers: app/Controllers\n");
+
+        $exitCode = $this->console()->run(['cache:warm', '--config=' . $this->project->path . '/config/config.yml']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config/config.yml: Configuration section 'router' field 'controllers' has "
+                . 'invalid value "app/Controllers": %1$s/config/app/Controllers, the directory of App\Controllers, is not '
+                . 'a directory. Note that router: is cached only from config.yml at the application root, and its paths '
+                . "were resolved against %1\$s/config.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+        self::assertFileDoesNotExist($this->project->path . '/config/var');
+    }
+
     private function routerSection(?string $cache = null): string
     {
         return sprintf(

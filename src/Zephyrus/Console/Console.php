@@ -107,7 +107,7 @@ final readonly class Console
                     }
 
                     $steps[] = [$configuration, $command === self::WARM
-                        ? $cache->prepare()
+                        ? $this->preparing($cache, dirname($configurationCache->source()))
                         : self::clearing($cache)];
                 }
 
@@ -144,6 +144,29 @@ final readonly class Console
         }
 
         return RouteCache::forConfigurationFile($source, RouterConfig::fromArray($values[RouterConfig::SECTION]));
+    }
+
+    /**
+     * @return \Closure(): string
+     * @throws ZephyrusException when the cache cannot be written safely, with the root rule added when a routes cache
+     *                           is warmed from a configuration file outside the project root.
+     */
+    private function preparing(WarmableCache $cache, string $root): \Closure
+    {
+        try {
+            return $cache->prepare();
+        } catch (ConfigurationException $exception) {
+            if (!$cache instanceof RouteCache || $root === $this->projectRoot) {
+                throw $exception;
+            }
+
+            throw new ConfigurationException(sprintf(
+                '%s Note that %s, and its paths were resolved against %s.',
+                $exception->getMessage(),
+                RouteCache::ROOT_ONLY,
+                $root,
+            ), previous: $exception);
+        }
     }
 
     /**
