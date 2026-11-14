@@ -12,8 +12,9 @@ use Zephyrus\Exceptions\ZephyrusRuntimeException;
  * Raised when a PDO-level database operation fails.
  *
  * Driver messages can echo row values (PostgreSQL's DETAIL line, for example,
- * prints `Key (email)=(jane@example.com) already exists.`), so queryExecutionFailed() and
- * transactionExecutionFailed() keep them out of the message: read them through sql() and driverMessage().
+ * prints `Key (email)=(jane@example.com) already exists.`), so queryExecutionFailed(),
+ * transactionExecutionFailed() and sessionResetFailed() keep them out of the message: read them through sql() and
+ * driverMessage().
  * queryFailed() prints what its caller passes. connectionFailed() prints the DSN and the reason with their
  * credentials masked; fromConfig() passes the driver's connect error, which names the server and user but
  * holds no row data.
@@ -45,6 +46,21 @@ final class DatabaseException extends ZephyrusRuntimeException
                 DatabaseConfig::messageWithoutCredentials($reason),
             ),
             previous: $previous,
+        );
+    }
+
+    /**
+     * The session of a reused persistent connection could not be reset, on the retry either.
+     */
+    public static function sessionResetFailed(#[\SensitiveParameter] PDOException $previous): self
+    {
+        $sqlState = self::extractSqlState($previous);
+
+        return self::fromDriverError(
+            "Persistent connection reset failed after one retry [SQLSTATE {$sqlState}]: driver detail withheld, "
+            . 'read driverMessage() to inspect it',
+            $sqlState,
+            $previous,
         );
     }
 
@@ -141,7 +157,7 @@ final class DatabaseException extends ZephyrusRuntimeException
 
     /**
      * The five-character SQLSTATE reported by the driver. Set by queryExecutionFailed(), transactionExecutionFailed(),
-     * transactionProbeFailed() and transactionAborted(); null from the other factories.
+     * transactionProbeFailed(), transactionAborted() and sessionResetFailed(); null from the other factories.
      * PDO reports a connection lost mid-session as HY000, not 08006.
      */
     public function sqlState(): ?string

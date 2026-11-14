@@ -80,6 +80,18 @@ final class Database
      */
     private array $failedLevels = [];
 
+    /**
+     * Persistent handles acquired by fromConfig() that are still alive in this process, mapped to their DSN and
+     * user name. While one is listed, fromConfig() opens a non-persistent connection for that DSN and user instead,
+     * so a session is never reset under its holder.
+     *
+     * @var \WeakMap<PDO, string>|null
+     */
+    private static ?\WeakMap $heldPersistentHandles = null;
+
+    /** Pool identifier passed as PDO::ATTR_PERSISTENT, so a foreign persistent handle that skips the reset is never shared. */
+    private const PERSISTENT_POOL_ID = 'zephyrus';
+
     /** Upper bound on the process-wide store; reaching it clears the store wholesale. */
     private const MAX_SHARED_COLUMN_SHAPES = 2048;
 
@@ -175,12 +187,17 @@ final class Database
     /**
      * Opens a PostgreSQL connection described by $config.
      *
+     * With $config->persistent, the connection is taken from the process pool and its session is reset
+     * (ROLLBACK when a transaction is open, then DISCARD ALL) before any other statement. A persistent handle
+     * still held in this process is never reused: the call opens a non-persistent connection instead.
+     *
      * @param null|callable(string, string, string, array<int, mixed>): PDO $pdoFactory
      *        Optional factory for tests and advanced callers, receiving ($dsn, $username, $password, $options).
      *        An ATTR_DISABLE_PREPARES option it sets is overwritten on pgsql: call
      *        pdo()->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, false) afterwards to get named statements back.
      *
-     * @throws DatabaseException on PDO connection failure.
+     * @throws DatabaseException on PDO connection failure, or when a reused session cannot be reset, even on a second
+     *         connection.
      */
     public static function fromConfig(#[\SensitiveParameter] DatabaseConfig $config, ?callable $pdoFactory = null): self
     {
@@ -204,28 +221,11 @@ final class Database
             $dsn .= ";sslrootcert='" . $config->sslRootCert . "'";
         }
 
-        $options = [
-            PDO::ATTR_PERSISTENT => false,
-
-            // Not configurable: client-side emulation is a security downgrade. See the constructor.
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ];
-
         // #[\SensitiveParameter] keeps the password out of the backtrace Tracy renders (zend.exception_ignore_args=0).
         $factory = $pdoFactory ?? static fn (string $dsn, string $username, #[\SensitiveParameter] string $password, array $options): PDO
             => new PDO($dsn, $username, $password, $options);
 
-        try {
-            $pdo = $factory($dsn, $config->username, $config->password, $options);
-
-            // Set after connecting: the key collides with other drivers' options. Server-side binding (PQexecParams)
-            // with an unnamed statement: no named prepare and close per query.
-            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
-                $pdo->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, true);
-            }
-        } catch (\Throwable $e) {
-            throw DatabaseException::connectionFailed($dsn, $e->getMessage());
-        }
+        $pdo = self::acquire($factory, $dsn, $config);
 
         $db = new self($pdo);
 
@@ -242,6 +242,110 @@ final class Database
         }
 
         return $db;
+    }
+
+    /**
+     * A connection from $factory; a persistent one comes back with its session reset, or not at all.
+     *
+     * @param callable(string, string, string, array<int, mixed>): PDO $factory
+     * @throws DatabaseException
+     */
+    private static function acquire(
+        callable $factory,
+        #[\SensitiveParameter] string $dsn,
+        #[\SensitiveParameter] DatabaseConfig $config,
+    ): PDO {
+        $identity = $dsn . "\0" . $config->username;
+        $persistent = $config->persistent
+            && !in_array($identity, iterator_to_array(self::heldPersistentHandles(), false), true);
+
+        $options = [
+            PDO::ATTR_PERSISTENT => $persistent ? self::PERSISTENT_POOL_ID : false,
+
+            // Not configurable: client-side emulation is a security downgrade. See the constructor.
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        ];
+
+        for ($attempt = 1; ; $attempt++) {
+            $pdo = self::connect($factory, $dsn, $config, $options);
+
+            if (!$pdo->getAttribute(PDO::ATTR_PERSISTENT)) {
+                return $pdo;
+            }
+
+            self::pinSharedHandleAttributes($pdo);
+
+            try {
+                // Two statements: DISCARD ALL cannot run inside the implicit block of a multi-statement string.
+                if ($pdo->inTransaction()) {
+                    $pdo->exec('ROLLBACK');
+                }
+                $pdo->exec('DISCARD ALL');
+                self::heldPersistentHandles()[$pdo] = $identity;
+
+                return $pdo;
+            } catch (PDOException $e) {
+                // Ends the backend if it is still alive, so its unreset session never returns to the pool.
+                try {
+                    $pdo->exec('SELECT pg_terminate_backend(pg_backend_pid())');
+                } catch (PDOException) {
+                    // Expected: the statement ends its own backend, or the backend was already gone.
+                }
+
+                // Released before the retry, or the pool would hand this same handle back.
+                $pdo = null;
+
+                if ($attempt === 2) {
+                    throw DatabaseException::sessionResetFailed($e);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param callable(string, string, string, array<int, mixed>): PDO $factory
+     * @param array<int, mixed> $options
+     * @throws DatabaseException when the factory fails.
+     */
+    private static function connect(
+        callable $factory,
+        #[\SensitiveParameter] string $dsn,
+        #[\SensitiveParameter] DatabaseConfig $config,
+        array $options,
+    ): PDO {
+        try {
+            $pdo = $factory($dsn, $config->username, $config->password, $options);
+
+            // Set after connecting: the key collides with other drivers' options. Server-side binding (PQexecParams)
+            // with an unnamed statement: no named prepare and close per query.
+            if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+                $pdo->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, true);
+            }
+        } catch (\Throwable $e) {
+            throw DatabaseException::connectionFailed($dsn, $e->getMessage());
+        }
+
+        return $pdo;
+    }
+
+    /**
+     * These attributes live on the pooled handle, out of DISCARD ALL's reach. The constructor pins the fetch mode.
+     */
+    private static function pinSharedHandleAttributes(PDO $pdo): void
+    {
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_CASE, PDO::CASE_NATURAL);
+        $pdo->setAttribute(PDO::ATTR_ORACLE_NULLS, PDO::NULL_NATURAL);
+        $pdo->setAttribute(PDO::ATTR_STRINGIFY_FETCHES, false);
+    }
+
+    /**
+     * @return \WeakMap<PDO, string>
+     */
+    private static function heldPersistentHandles(): \WeakMap
+    {
+        return self::$heldPersistentHandles ??= new \WeakMap();
     }
 
     /**

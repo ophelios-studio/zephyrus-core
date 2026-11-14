@@ -44,6 +44,9 @@ namespace Zephyrus\Core\Config;
  * old code keep their cache until APCU_TTL (one hour, under PHP-FPM with APCu) expires or
  * flushSharedColumnMetadata() runs from a web request. Under PHP-FPM without APCu the cache lasts only the
  * current request; in a long-running process (CLI, RoadRunner) until it restarts or is flushed in that process.
+ *
+ * persistent: reuse one connection per process across requests. Database::fromConfig() resets its session
+ * (DISCARD ALL) on every acquisition; each process then holds a server connection slot while it lives.
  */
 final readonly class DatabaseConfig
 {

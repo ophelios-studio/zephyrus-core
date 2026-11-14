@@ -142,8 +142,24 @@ final class DatabaseSensitiveTraceTest extends TestCase
         }));
 
         self::assertInstanceOf(DatabaseException::class, $e);
-        $frame = $e->getTrace()[1];
-        self::assertSame('fromConfig', $frame['function']);
-        self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][0] ?? null);
+        $fromConfigArgument = null;
+        $exposing = [];
+        foreach ($e->getTrace() as $frame) {
+            if (($frame['class'] ?? '') !== Database::class) {
+                continue;
+            }
+
+            if ($frame['function'] === 'fromConfig') {
+                $fromConfigArgument = $frame['args'][0] ?? null;
+            }
+
+            foreach ($frame['args'] ?? [] as $argument) {
+                if ($argument instanceof DatabaseConfig) {
+                    $exposing[] = $frame['function'];
+                }
+            }
+        }
+        self::assertInstanceOf(\SensitiveParameterValue::class, $fromConfigArgument);
+        self::assertSame([], $exposing);
     }
 }
