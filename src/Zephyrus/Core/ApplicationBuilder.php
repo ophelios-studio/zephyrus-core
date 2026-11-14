@@ -41,6 +41,15 @@ final class ApplicationBuilder
         . 'If this is deliberate, call ApplicationBuilder::withProductionDebugAcknowledged(); '
         . 'even then, only clients named by withDebugClientAllowlist() (or loopback under php -S, without one) can see it.';
 
+    private const string FOREIGN_ROUTER_REFUSED = 'Configuration declares router.controllers, but withRouter() '
+        . 'received a router that Router::fromConfiguration() did not build, so the routes cache would never be read. '
+        . 'Remove the withRouter() call to let build() discover the controllers, or start the router passed to it '
+        . 'from Router::fromConfiguration($configuration, basePath: <application root>).';
+
+    private const string ROUTER_WITHOUT_BASE_PATH = 'Configuration declares router.controllers, but '
+        . 'withConfiguration() received no basePath to resolve its paths against: call '
+        . 'withConfiguration($configuration, basePath: <application root>).';
+
     private const array ACKNOWLEDGEABLE_SECURITY_KEYS = ['forceHttps', 'allowedHosts', 'csrf', 'maxBodySize', 'headers'];
 
     private const string SECURITY_KEY_PREFIX = 'security.';
@@ -55,6 +64,8 @@ final class ApplicationBuilder
     private array $supportedLocales = [];
 
     private ?Configuration $configuration = null;
+
+    private ?string $basePath = null;
 
     /** @var list<string> */
     private array $acknowledgedSecurityKeys = [];
@@ -168,7 +179,9 @@ final class ApplicationBuilder
     }
 
     /**
-     * Sets the router. Without one, every request is answered with 404.
+     * Sets the router. Without one, build() builds it with Router::fromConfiguration() when the configuration
+     * declares router:, and every request is otherwise answered with 404. With router: declared, only a router
+     * that Router::fromConfiguration() built, or one derived from it, is accepted.
      */
     public function withRouter(Router $router): self
     {
@@ -382,7 +395,8 @@ final class ApplicationBuilder
      * when a declared protection is not mounted or mounted with another value, rather than letting it sit inert.
      *
      * @param Configuration $configuration The full application configuration.
-     * @param string|null   $basePath      Prefixed to a relative locale_path when given.
+     * @param string|null   $basePath      The application root: prefixed to a relative locale_path, and required
+     *                                     when build() builds the router of a router: section.
      */
     public function withConfiguration(
         #[\SensitiveParameter] Configuration $configuration,
@@ -390,6 +404,7 @@ final class ApplicationBuilder
     ): self {
         $clone = $this->withLocalizationConfig($configuration->localization, $basePath);
         $clone->configuration = $configuration;
+        $clone->basePath = $basePath;
 
         return $clone;
     }
@@ -859,8 +874,12 @@ final class ApplicationBuilder
      * attempt into an outage. Even when acknowledged, DebugIntegration shows the debugger only to the
      * withDebugClientAllowlist() entries or, without an allowlist, to loopback under PHP's built-in server.
      *
-     * @throws ConfigurationException when a declared security setting is not wired, or an enforced
-     *                                Content-Security-Policy middleware is shadowed by a SecureHeadersMiddleware csp.
+     * With a router: section and no withRouter(), the router is built with Router::fromConfiguration().
+     *
+     * @throws ConfigurationException when a declared security setting is not wired, an enforced
+     *                                Content-Security-Policy middleware is shadowed by a SecureHeadersMiddleware csp,
+     *                                or router: is declared while withConfiguration() received no basePath or
+     *                                withRouter() received a router that Router::fromConfiguration() did not build.
      * @throws RouteMiddlewareException when a route names a middleware that is not registered.
      */
     public function build(): Application
@@ -877,6 +896,8 @@ final class ApplicationBuilder
         if ($this->configuration !== null) {
             $this->assertSecurityConfigurationIsWired($this->configuration->security);
         }
+
+        $kernelBuilder = $this->kernelBuilderWithConfiguredRouter();
 
         if ($this->configuration !== null) {
             $debug = $this->isDebugEnabledForBoot();
@@ -924,10 +945,9 @@ final class ApplicationBuilder
         App::setTranslator($translator);
         App::setFormatter($formatter);
 
-        $router = $this->kernelBuilder->router();
+        $router = $kernelBuilder->router();
         App::setUrlGenerator($router === null ? null : new RouteUrlGenerator($router->routes()));
 
-        $kernelBuilder = $this->kernelBuilder;
         if ($errorsExposed) {
             $kernelBuilder = $kernelBuilder->withUnhandledExceptionsRethrown();
         }
@@ -938,5 +958,32 @@ final class ApplicationBuilder
             defaultLocale:    $this->defaultLocale,
             supportedLocales: $this->supportedLocales,
         );
+    }
+
+    /**
+     * The kernel builder with the router of the router: section, when the configuration declares one.
+     *
+     * @throws ConfigurationException
+     */
+    private function kernelBuilderWithConfiguredRouter(): KernelBuilder
+    {
+        if ($this->configuration?->router === null) {
+            return $this->kernelBuilder;
+        }
+
+        $router = $this->kernelBuilder->router();
+        if ($router !== null) {
+            if (!$router->isBuiltFromConfiguration()) {
+                throw new ConfigurationException(self::FOREIGN_ROUTER_REFUSED);
+            }
+
+            return $this->kernelBuilder;
+        }
+
+        if ($this->basePath === null) {
+            throw new ConfigurationException(self::ROUTER_WITHOUT_BASE_PATH);
+        }
+
+        return $this->kernelBuilder->withRouter(Router::fromConfiguration($this->configuration, $this->basePath));
     }
 }
