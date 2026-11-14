@@ -317,7 +317,35 @@ final class DirectoryTest extends TestCase
     /** @return array<string, array{string}> */
     public static function trailingSuffixProvider(): array
     {
-        return ['trailing slash' => ['/'], 'trailing dot segment' => ['/.'], 'doubled slash' => ['//']];
+        return [
+            'trailing slash' => ['/'],
+            'trailing dot segment' => ['/.'],
+            'doubled slash' => ['//'],
+            'dot segment then slash' => ['/./'],
+        ];
+    }
+
+    #[DataProvider('trailingSuffixProvider')]
+    public function testDeleteRemovesADirectoryWrittenWithATrailingSuffix(string $suffix): void
+    {
+        $path = $this->tempDir . '/suffixed-empty';
+        mkdir($path);
+
+        (new Directory($path . $suffix))->delete();
+
+        self::assertDirectoryDoesNotExist($path);
+    }
+
+    #[DataProvider('trailingSuffixProvider')]
+    public function testDeleteRecursiveRemovesADirectoryWrittenWithATrailingSuffix(string $suffix): void
+    {
+        $path = $this->tempDir . '/suffixed-full';
+        mkdir($path . '/sub', 0755, true);
+        file_put_contents($path . '/sub/file.txt', 'content');
+
+        (new Directory($path . $suffix))->delete(recursive: true);
+
+        self::assertDirectoryDoesNotExist($path);
     }
 
     #[DataProvider('trailingSuffixProvider')]

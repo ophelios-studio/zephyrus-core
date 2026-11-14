@@ -150,12 +150,13 @@ final class Directory extends FileSystemNode
             return;
         }
 
+        $directory = self::withoutTrailingSegments($this->path);
         if ($recursive) {
-            $this->deleteRecursive($this->path);
+            $this->deleteRecursive($directory);
             return;
         }
 
-        if (!@rmdir($this->path)) {
+        if (!@rmdir($directory)) {
             throw FileSystemException::operationFailed('delete directory', $this->path);
         }
     }
