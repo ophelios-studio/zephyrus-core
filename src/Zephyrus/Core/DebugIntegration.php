@@ -195,7 +195,7 @@ final class DebugIntegration
         $address = $_SERVER['REMOTE_ADDR'] ?? null;
         $printable = is_string($address) && filter_var($address, FILTER_VALIDATE_IP) !== false ? $address : 'unknown';
 
-        if (isset($_SERVER['HTTP_X_FORWARDED_FOR']) || isset($_SERVER['HTTP_FORWARDED']) || isset($_SERVER['HTTP_X_REAL_IP'])) {
+        if (self::carriesForwardingHeader()) {
             return 'the debugger did not admit ' . $printable . ', which forwarded the request; add secret@'
                 . $printable . ' to withDebugClientAllowlist() and send the tracy-debug cookie';
         }
@@ -247,7 +247,7 @@ final class DebugIntegration
         $secret = $_COOKIE[Debugger::CookieSecret] ?? null;
         $presented = is_string($secret) ? $secret . '@' . $address : null;
         $bareAddressAdmits = !self::isLoopback($address)
-            || (!isset($_SERVER['HTTP_X_FORWARDED_FOR']) && !isset($_SERVER['HTTP_FORWARDED']) && !isset($_SERVER['HTTP_X_REAL_IP']));
+            || !self::carriesForwardingHeader();
 
         foreach ($clients as $entry) {
             if (($bareAddressAdmits && $entry === $address) || ($presented !== null && hash_equals($entry, $presented))) {
@@ -256,6 +256,14 @@ final class DebugIntegration
         }
 
         return false;
+    }
+
+    /** Whether the request carries X-Forwarded-For, Forwarded or X-Real-IP. */
+    private static function carriesForwardingHeader(): bool
+    {
+        return isset($_SERVER['HTTP_X_FORWARDED_FOR'])
+            || isset($_SERVER['HTTP_FORWARDED'])
+            || isset($_SERVER['HTTP_X_REAL_IP']);
     }
 
     /** Whether the address is in 127.0.0.0/8, is ::1, or is an IPv4-mapped 127.0.0.0/8 address. */
