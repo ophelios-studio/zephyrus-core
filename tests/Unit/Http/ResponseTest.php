@@ -518,6 +518,38 @@ final class ResponseTest extends TestCase
         ];
     }
 
+    #[DataProvider('attributeSpellingsOfOneCookie')]
+    public function testWithCookieReplacesAConstructorCookieWhoseAttributesDifferInCaseOrSpacing(string $line): void
+    {
+        $response = (new Response(cookies: [$line]))
+            ->withCookie('remember', 'b', path: '/app', domain: 'example.com');
+
+        self::assertSame(['remember=b; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function attributeSpellingsOfOneCookie(): array
+    {
+        return [
+            'lower-case attributes' => ['remember=a; path=/app; domain=example.com'],
+            'upper-case attributes' => ['remember=a; PATH=/app; DOMAIN=example.com'],
+            'no space after the separator' => ['remember=a;Path=/app;Domain=example.com'],
+            'spaces around the equals sign' => ['remember=a; Path = /app; Domain = example.com'],
+            'space before the name' => [' remember=a; Path=/app; Domain=example.com'],
+        ];
+    }
+
+    public function testWithCookieKeepsAConstructorCookieOfAnotherPath(): void
+    {
+        $response = (new Response(cookies: ['remember=a; path=/other; domain=example.com']))
+            ->withCookie('remember', 'b', path: '/app', domain: 'example.com');
+
+        self::assertSame([
+            'remember=a; path=/other; domain=example.com',
+            'remember=b; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
     public function testSetCookieIsPresentWhenOnlyACookieWasAdded(): void
     {
         $response = Response::noContent()->withCookie('theme', 'dark');

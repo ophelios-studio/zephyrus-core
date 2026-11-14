@@ -26,11 +26,13 @@ use function substr_count;
  * - wildcard: "*.example.com", matching subdomains at any depth, never the bare domain
  *
  * An entry may pin a port ("example.com:8443", "[2001:db8::1]:8080", "*.example.com:443"): it then
- * admits that port only, a URL without a port standing for its scheme's default (80 or 443). An
- * entry without a port admits any port. Pin the port in production when the application builds
- * absolute URLs from the request. When ForceHttpsMiddleware runs after this one, also list the
- * host on port 80, which then only reaches the redirect: ["example.com:443", "example.com:80"].
- * An IPv6 literal pins a port only in brackets: "::1:8080" is an address, admitted on any port.
+ * admits that port only, a URL without a port standing for its scheme's default (80 or 443). The port
+ * is compared, not the scheme: "http://example.com:443" passes "example.com:443"; ForceHttpsMiddleware
+ * is what guarantees https. An entry without a port admits any port. Pin the port in production when
+ * the application builds absolute URLs from the request. When ForceHttpsMiddleware runs after this
+ * one, also list the host on port 80, which then only reaches the redirect:
+ * ["example.com:443", "example.com:80"]. An IPv6 literal pins a port only in brackets: "::1:8080" is
+ * an address, admitted on any port.
  *
  * Entries with a scheme, a port outside 1-65535, a comma, surrounding spaces, non-ASCII characters,
  * a lone "*" or a wildcard IP literal are refused at construction. An empty allowlist accepts every host.

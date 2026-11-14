@@ -299,7 +299,7 @@ final readonly class Response
     /** Whether a Set-Cookie line is the cookie browsers identify by this name, domain and path. */
     private static function isCookieScope(string $line, string $name, ?string $domain, string $path): bool
     {
-        $parts = explode('; ', $line);
+        $parts = array_map('trim', explode(';', $line));
         if (!str_starts_with(array_shift($parts), $name . '=')) {
             return false;
         }
@@ -307,11 +307,12 @@ final readonly class Response
         $lineDomain = null;
         $linePath = null;
         foreach ($parts as $part) {
-            if (str_starts_with($part, 'Domain=')) {
-                $lineDomain = substr($part, 7);
-            } elseif (str_starts_with($part, 'Path=')) {
-                $linePath = substr($part, 5);
-            }
+            [$attribute, $value] = array_map('trim', explode('=', $part, 2)) + [1 => ''];
+            match (strtolower($attribute)) {
+                'domain' => $lineDomain = $value,
+                'path' => $linePath = $value,
+                default => null,
+            };
         }
 
         return self::normalizeCookieDomain($lineDomain) === self::normalizeCookieDomain($domain)
