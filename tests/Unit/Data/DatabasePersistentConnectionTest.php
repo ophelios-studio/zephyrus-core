@@ -146,19 +146,25 @@ final class DatabasePersistentConnectionTest extends TestCase
     {
         $first = null;
         $releasedBeforeRetry = null;
+        // Traces keep their arguments, as under php.ini-development, so a trace holding the handle shows.
+        $ignoredArguments = ini_set('zend.exception_ignore_args', '0');
 
-        Database::fromConfig(self::config(persistent: true), static function () use (&$first, &$releasedBeforeRetry): PDO {
-            if ($first === null) {
-                $handle = new ReusedSessionPdo(failingReset: true);
-                $first = \WeakReference::create($handle);
+        try {
+            Database::fromConfig(self::config(persistent: true), static function () use (&$first, &$releasedBeforeRetry): PDO {
+                if ($first === null) {
+                    $handle = new ReusedSessionPdo(failingReset: true);
+                    $first = \WeakReference::create($handle);
 
-                return $handle;
-            }
+                    return $handle;
+                }
 
-            $releasedBeforeRetry = $first->get() === null;
+                $releasedBeforeRetry = $first->get() === null;
 
-            return new ReusedSessionPdo();
-        });
+                return new ReusedSessionPdo();
+            });
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $ignoredArguments);
+        }
 
         self::assertTrue($releasedBeforeRetry);
     }
