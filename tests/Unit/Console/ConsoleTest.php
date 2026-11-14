@@ -291,6 +291,125 @@ final class ConsoleTest extends TestCase
         self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
     }
 
+    public function testACacheWrittenUnderAnotherCacheIsRefusedBeforeAnythingIsWritten(): void
+    {
+        $this->project->file('config.yml', $this->routerSection('var/zephyrus/config.yml.php/routes.php'));
+
+        $exitCode = $this->console()->run(['cache:warm']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config.yml: The cache %1\$s/var/zephyrus/config.yml.php/routes.php would be "
+                . "written under the cache %1\$s/var/zephyrus/config.yml.php: give router.cache another path.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
+    }
+
+    public function testACacheAboveAnotherCacheIsRefusedBeforeAnythingIsWritten(): void
+    {
+        $this->project->file('p/config.yml', $this->routerSection('real/var/zephyrus/config.yml.php/x.php'));
+        $this->project->file('p/real/config.yml', "application: {}\n");
+
+        $exitCode = $this->console()->run([
+            'cache:warm',
+            '--config=' . $this->project->path . '/p/config.yml',
+            '--config=' . $this->project->path . '/p/real/config.yml',
+        ]);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/p/real/config.yml: The cache %1\$s/p/real/var/zephyrus/config.yml.php/x.php "
+                . "would be written under the cache %1\$s/p/real/var/zephyrus/config.yml.php: give router.cache another "
+                . "path.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+        self::assertSame(
+            ['config', 'config/tenant.yml', 'config.yml', 'p', 'p/config.yml', 'p/real', 'p/real/config.yml'],
+            $this->project->entries(),
+        );
+    }
+
+    public function testACacheAtTheGitIgnoreOfTheCacheDirectoryIsRefusedBeforeAnythingIsWritten(): void
+    {
+        $this->project->file('config.yml', $this->routerSection('var/zephyrus/.gitignore/r.php'));
+
+        $exitCode = $this->console()->run(['cache:warm']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config.yml: The cache %1\$s/var/zephyrus/.gitignore/r.php would be written "
+                . "under the cache %1\$s/var/zephyrus/.gitignore: give router.cache another path.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
+    }
+
+    public function testTwoConfigsInTheSameDirectoryShareTheGitIgnore(): void
+    {
+        $this->project->file('other.yml', "application: {}\n");
+
+        $exitCode = $this->console()->run([
+            'cache:warm',
+            '--config=' . $this->project->path . '/config.yml',
+            '--config=' . $this->project->path . '/other.yml',
+        ]);
+
+        self::assertSame(Console::SUCCESS, $exitCode);
+        self::assertFileExists($this->project->path . '/var/zephyrus/other.yml.php');
+    }
+
+    public function testTheSameConfigGivenTwiceIsWarmedOnce(): void
+    {
+        $exitCode = $this->console($this->project->path)->run([
+            'cache:warm',
+            '--config=' . $this->project->path . '/config.yml',
+            '--config=config.yml',
+        ]);
+
+        self::assertSame(Console::SUCCESS, $exitCode);
+        self::assertSame(
+            sprintf(
+                "Wrote %1\$s/var/zephyrus/config.yml.php\nNo router: section in %1\$s/config.yml, so no routes cache was "
+                . "written\n",
+                $this->project->path,
+            ),
+            $this->printed(),
+        );
+        self::assertFileExists($this->project->path . '/var/zephyrus/config.yml.php');
+    }
+
+    public function testTheSameConfigGivenTwiceIsClearedOnce(): void
+    {
+        $this->console()->run(['cache:warm']);
+        $before = strlen($this->printed());
+
+        $exitCode = $this->console()->run([
+            'cache:clear',
+            '--config=' . $this->project->path . '/config.yml',
+            '--config=../' . basename($this->project->path) . '/config.yml',
+        ]);
+
+        self::assertSame(Console::SUCCESS, $exitCode);
+        self::assertSame(
+            sprintf("Removed %s/var/zephyrus/config.yml.php\n", $this->project->path),
+            substr($this->printed(), $before),
+        );
+        self::assertFileDoesNotExist($this->project->path . '/var/zephyrus/config.yml.php');
+    }
+
     public function testASecondConfigRefusedByADirectoryGuardLeavesTheFirstCacheUnwritten(): void
     {
         $this->project->directory('config/var/zephyrus', 0o777);

@@ -18,7 +18,7 @@ final readonly class ConfigurationCache implements WarmableCache
 {
     public const string DIRECTORY = 'var/zephyrus';
     private const string FINGERPRINT_ALGORITHM = 'xxh128';
-    private const string GIT_IGNORE = '.gitignore';
+    public const string GIT_IGNORE = '.gitignore';
 
     private function __construct(
         private string $source,

@@ -6,6 +6,7 @@ namespace Zephyrus\Console;
 
 use Composer\InstalledVersions;
 use Zephyrus\Core\Cache\ConfigurationCache;
+use Zephyrus\Core\Cache\PathPrefix;
 use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
@@ -90,20 +91,26 @@ final readonly class Console
 
         $steps = [];
         $warmed = [];
+        $seen = [];
         foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
             try {
                 $configurationCache = ConfigurationCache::forSource($configuration);
+                if (isset($seen[$configurationCache->source()])) {
+                    continue;
+                }
+
+                $seen[$configurationCache->source()] = true;
                 $routeCache = $this->routeCacheOf($configurationCache->source());
                 foreach ([$configurationCache, ...($routeCache === null ? [] : [$routeCache])] as $cache) {
                     if ($command === self::WARM) {
-                        if (isset($warmed[$cache->path()])) {
-                            throw new ConfigurationException(sprintf(
-                                'Two caches would be written to %s: give router.cache another path.',
-                                $cache->path(),
-                            ));
+                        if ($cache === $configurationCache) {
+                            $gitIgnore = dirname($cache->path()) . '/' . ConfigurationCache::GIT_IGNORE;
+                            $this->refuseOverlap($gitIgnore, $warmed, true);
+                            $warmed[$gitIgnore] = true;
                         }
 
-                        $warmed[$cache->path()] = true;
+                        $this->refuseOverlap($cache->path(), $warmed);
+                        $warmed[$cache->path()] = false;
                     }
 
                     $steps[] = [$configuration, $command === self::WARM
@@ -129,6 +136,37 @@ final readonly class Console
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @param array<string, bool> $planned Planned path => whether it is a shared .gitignore.
+     * @throws ConfigurationException when the path is at, under or above a path already planned.
+     */
+    private function refuseOverlap(string $path, array $planned, bool $isGitIgnore = false): void
+    {
+        foreach ($planned as $other => $otherIsGitIgnore) {
+            if ($other === $path) {
+                if ($isGitIgnore && $otherIsGitIgnore) {
+                    continue;
+                }
+
+                throw new ConfigurationException(sprintf(
+                    'Two caches would be written to %s: give router.cache another path.',
+                    $path,
+                ));
+            }
+
+            $below = PathPrefix::isUnder($path, $other);
+            if ($below || PathPrefix::isUnder($other, $path)) {
+                [$inner, $outer] = $below ? [$path, $other] : [$other, $path];
+
+                throw new ConfigurationException(sprintf(
+                    'The cache %s would be written under the cache %s: give router.cache another path.',
+                    $inner,
+                    $outer,
+                ));
+            }
+        }
     }
 
     /**
