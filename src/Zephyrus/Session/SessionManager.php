@@ -174,8 +174,7 @@ final class SessionManager
             return;
         }
 
-        $configuration = App::getConfiguration();
-        if ($configuration === null || !$configuration->application->debug) {
+        if (!App::isDebug()) {
             return;
         }
 
@@ -195,8 +194,7 @@ final class SessionManager
             return;
         }
 
-        $configuration = App::getConfiguration();
-        if ($configuration === null || !$configuration->application->debug) {
+        if (!App::isDebug()) {
             return;
         }
 

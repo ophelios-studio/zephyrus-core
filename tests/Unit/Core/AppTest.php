@@ -27,6 +27,17 @@ final class AppTest extends TestCase
         App::reset();
     }
 
+    public function testDebugIsOffByDefaultAndAfterAReset(): void
+    {
+        self::assertFalse(App::isDebug());
+
+        App::setDebug(true);
+        self::assertTrue(App::isDebug());
+
+        App::reset();
+        self::assertFalse(App::isDebug());
+    }
+
     // ─── Configuration ────────────────────────────────────────────────
 
     public function testConfigurationDefaultsToNull(): void

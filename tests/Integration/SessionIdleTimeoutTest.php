@@ -8,6 +8,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\App;
+use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Data\Database;
@@ -75,6 +76,37 @@ final class SessionIdleTimeoutTest extends TestCase
     }
 
     #[RunInSeparateProcess]
+    public function testStartStaysSilentWhenAProductionBuildRefusedDebug(): void
+    {
+        $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-debug-guard-');
+        self::assertIsString($logFile);
+        ini_set('error_log', $logFile);
+
+        try {
+            ApplicationBuilder::fromConfiguration(Configuration::fromArray([
+                'application' => ['environment' => 'production', 'debug' => true],
+            ]))->build();
+        } finally {
+            @unlink($logFile);
+        }
+
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            (new SessionManager())->start(SessionConfig::fromArray(['idle_timeout' => 600]));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings);
+    }
+
+    #[RunInSeparateProcess]
     public function testStartDoesNotWarnWhenARegisteredHandlerOwnsTheIdleTimeout(): void
     {
         $session = new SessionManager();
@@ -96,6 +128,7 @@ final class SessionIdleTimeoutTest extends TestCase
     private function debugWarningsDuringStart(SessionManager $session, array $sessionValues): array
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $warnings = [];
         set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {

@@ -11,6 +11,10 @@ use Tracy\Debugger;
 use Zephyrus\Core\App;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Http\Request;
+use Zephyrus\Http\Response;
+use Zephyrus\Security\ContentSecurityPolicy;
+use Zephyrus\Security\ContentSecurityPolicyMiddleware;
 
 /**
  * `environment: production` plus `debug: true` must not boot a live debugger.
@@ -74,6 +78,63 @@ final class ApplicationBuilderProductionDebugTest extends TestCase
 
         self::assertFalse($builder->isDebugEnabledForBoot());
         self::assertTrue($acknowledged->isDebugEnabledForBoot());
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testBuildPublishesTheEffectiveDebugFlag(): void
+    {
+        $this->buildQuietly(Configuration::fromArray([
+            'application' => ['environment' => 'production', 'debug' => true],
+        ]));
+        self::assertFalse(App::isDebug());
+
+        $this->buildQuietly(Configuration::fromArray([
+            'application' => ['environment' => 'development', 'debug' => true],
+        ]));
+        self::assertTrue(App::isDebug());
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testAProductionBuildThatRefusedDebugDoesNotWarnAboutUnsafeInline(): void
+    {
+        $this->buildQuietly(Configuration::fromArray([
+            'application' => ['environment' => 'production', 'debug' => true],
+        ]));
+
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            (new ContentSecurityPolicyMiddleware(
+                ContentSecurityPolicy::create()->withDirective('script-src', ["'self'", "'unsafe-inline'"]),
+                nonceDirectives: ['script-src'],
+            ))->process(Request::fromArray('GET', '/p'), static fn (): Response => new Response());
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings);
+    }
+
+    private function buildQuietly(Configuration $configuration): void
+    {
+        $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-debug-guard-');
+        self::assertIsString($logFile);
+        $previousLog = ini_get('error_log');
+        ini_set('error_log', $logFile);
+
+        try {
+            ApplicationBuilder::fromConfiguration($configuration)->build();
+        } finally {
+            ini_set('error_log', $previousLog === false ? '' : $previousLog);
+            @unlink($logFile);
+        }
     }
 
     /**

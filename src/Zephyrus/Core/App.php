@@ -18,6 +18,7 @@ use Zephyrus\Session\SessionManager;
  * Bootstrap:
  *
  *   App::setConfiguration($config);
+ *   App::setDebug($debug);
  *   App::setSession($session);
  *   App::setFormatter(new Formatter('en_US'));
  *   App::setAsset(new Asset('/public'));
@@ -29,6 +30,7 @@ use Zephyrus\Session\SessionManager;
 final class App
 {
     private static ?Configuration $configuration = null;
+    private static bool $debug = false;
     private static ?SessionManager $session = null;
     private static ?Formatter $formatter = null;
     private static ?Asset $asset = null;
@@ -46,6 +48,22 @@ final class App
     public static function setConfiguration(?Configuration $configuration): void
     {
         self::$configuration = $configuration;
+    }
+
+    /**
+     * Records the effective debug flag, which build() resolves from the configuration and the environment.
+     */
+    public static function setDebug(bool $debug): void
+    {
+        self::$debug = $debug;
+    }
+
+    /**
+     * Whether debug is effectively on: false in a production-like environment unless acknowledged at boot.
+     */
+    public static function isDebug(): bool
+    {
+        return self::$debug;
     }
 
     public static function getConfiguration(): ?Configuration
@@ -131,6 +149,7 @@ final class App
     public static function reset(): void
     {
         self::$configuration = null;
+        self::$debug = false;
         self::$session = null;
         self::$formatter = null;
         self::$asset = null;

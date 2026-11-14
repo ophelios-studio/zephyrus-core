@@ -557,6 +557,7 @@ final class ApplicationBuilder
 
     /**
      * Whether errors of this boot reach its output: debug on, and the command line or a client the debugger admits.
+     * A long-running HTTP server under the cli SAPI (RoadRunner, Swoole, ReactPHP) is not supported: it would show them to every client.
      */
     private function exposesErrorsForBoot(): bool
     {
@@ -946,6 +947,7 @@ final class ApplicationBuilder
         );
 
         App::setConfiguration($this->configuration);
+        App::setDebug($this->isDebugEnabledForBoot());
         App::setTranslator($translator);
         App::setFormatter($formatter);
 

@@ -111,6 +111,7 @@ final class SessionManagerRealSessionTest extends TestCase
         \Zephyrus\Core\App::setConfiguration(
             \Zephyrus\Core\Config\Configuration::fromArray(['application' => ['debug' => true]]),
         );
+        \Zephyrus\Core\App::setDebug(true);
 
         $session = new SessionManager();
         $session->setHandler(new StrictModeBlindHandler());
@@ -139,9 +140,44 @@ final class SessionManagerRealSessionTest extends TestCase
         \Zephyrus\Core\App::setConfiguration(
             \Zephyrus\Core\Config\Configuration::fromArray(['application' => ['debug' => true]]),
         );
+        \Zephyrus\Core\App::setDebug(true);
 
         $session = new SessionManager();
         $session->setHandler(new StrictModeAwareHandler());
+
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            $session->start(SessionConfig::fromArray([]));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings);
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartDoesNotWarnAboutStrictModeWhenAProductionBuildRefusedDebug(): void
+    {
+        $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-debug-guard-');
+        self::assertIsString($logFile);
+        ini_set('error_log', $logFile);
+
+        try {
+            \Zephyrus\Core\ApplicationBuilder::fromConfiguration(\Zephyrus\Core\Config\Configuration::fromArray([
+                'application' => ['environment' => 'production', 'debug' => true],
+            ]))->build();
+        } finally {
+            @unlink($logFile);
+        }
+
+        $session = new SessionManager();
+        $session->setHandler(new StrictModeBlindHandler());
 
         $warnings = [];
         set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
