@@ -191,6 +191,40 @@ final class FileTest extends TestCase
         self::assertFalse(file_exists($src)); // Original is gone.
     }
 
+    public function testMoveRefusesAStreamWrapperDestinationAndKeepsTheSource(): void
+    {
+        $src = $this->tempDir . '/moveme.txt';
+        file_put_contents($src, 'movable');
+        $destination = 'file://' . $this->tempDir . '/moved.txt';
+
+        try {
+            (new File($src))->move($destination);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: ' . $destination, $e->getMessage());
+        }
+
+        self::assertSame('movable', (string) file_get_contents($src));
+        self::assertFileDoesNotExist($this->tempDir . '/moved.txt');
+    }
+
+    public function testMoveRefusesADestinationWithoutAFileNameBeforeCreatingAnyDirectory(): void
+    {
+        $src = $this->tempDir . '/moveme.txt';
+        file_put_contents($src, 'movable');
+        $destination = $this->tempDir . '/missing/sub/';
+
+        try {
+            (new File($src))->move($destination);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path does not end with a file name: ' . $destination, $e->getMessage());
+        }
+
+        self::assertSame('movable', (string) file_get_contents($src));
+        self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
+    }
+
     public function testDeleteRemovesFile(): void
     {
         $path = $this->tempDir . '/delete-me.txt';

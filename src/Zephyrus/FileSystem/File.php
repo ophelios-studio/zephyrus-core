@@ -231,10 +231,12 @@ final class File extends FileSystemNode
      * Move (rename) the file to a new location.
      *
      * @return File The file at the new location.
-     * @throws FileSystemException if moving fails.
+     * @throws FileSystemException if the destination is a stream wrapper URL or does not end with a
+     *         file name, or moving fails.
      */
     public function move(string $destination): self
     {
+        self::assertPlainFilePath($destination);
         $this->assertExists();
 
         $dir = dirname($destination);
