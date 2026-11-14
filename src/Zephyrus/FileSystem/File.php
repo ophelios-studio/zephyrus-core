@@ -54,7 +54,7 @@ final class File extends FileSystemNode
      */
     public static function create(string $path, string $content = ''): self
     {
-        self::assertWritablePath($path);
+        self::assertPlainFilePath($path);
         $dir = dirname($path);
         if (!is_dir($dir)) {
             if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
@@ -92,7 +92,7 @@ final class File extends FileSystemNode
      */
     public function write(string $content): void
     {
-        self::assertWritablePath($this->path);
+        self::assertPlainFilePath($this->path);
         self::replaceContent($this->path, self::contentWriter($content), self::failure('write to', $this->path));
     }
 
@@ -113,7 +113,7 @@ final class File extends FileSystemNode
      */
     public function append(string $content): void
     {
-        self::assertWritablePath($this->path);
+        self::assertPlainFilePath($this->path);
         self::appendContent($this->path, $content);
     }
 
@@ -182,7 +182,7 @@ final class File extends FileSystemNode
      */
     public function copy(string $destination): self
     {
-        self::assertWritablePath($destination);
+        self::assertPlainFilePath($destination);
         $this->assertExists();
         if (!is_file($this->path)) {
             throw FileSystemException::notARegularFile($this->path);
@@ -297,7 +297,7 @@ final class File extends FileSystemNode
      *
      * @throws FileSystemException
      */
-    private static function assertWritablePath(string $path): void
+    private static function assertPlainFilePath(string $path): void
     {
         if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
             throw FileSystemException::streamWrapperRefused($path);
