@@ -38,7 +38,7 @@ final class FileWithoutPosixTest extends TestCase
 
         [$output, $errors] = $this->runChild($path, 'posix_geteuid,tmpfile');
 
-        self::assertSame('Path belongs to another user in a shared directory, so it is not written: ' . $path, $output, $errors);
+        self::assertSame('Path belongs to another user in a shared directory, so it is not written: "' . $path . '"', $output, $errors);
     }
 
     private function skipUnlessTheTemporaryDirectoryIsStickyAndNotOwnedByUs(): void

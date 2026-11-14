@@ -167,6 +167,18 @@ final class FileTest extends TestCase
         self::assertTrue($file->exists()); // Original still exists.
     }
 
+    public function testCopyOfASourceHoldingANulByteIsNotFoundWithTheByteEscaped(): void
+    {
+        $source = $this->tempDir . "/a\0b";
+
+        try {
+            (new File($source))->copy($this->tempDir . '/dest.txt');
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path not found: "' . $this->tempDir . '/a\u0000b"', $e->getMessage());
+        }
+    }
+
     public function testCopyCreatesParentDirectories(): void
     {
         $src = $this->tempDir . '/src.txt';
@@ -201,7 +213,7 @@ final class FileTest extends TestCase
             (new File($src))->move($destination);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is a stream wrapper URL, which is not written: ' . $destination, $e->getMessage());
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $destination . '"', $e->getMessage());
         }
 
         self::assertSame('movable', (string) file_get_contents($src));
@@ -218,7 +230,7 @@ final class FileTest extends TestCase
             (new File($src))->move($destination);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path does not end with a file name: ' . $destination, $e->getMessage());
+            self::assertSame('Path does not end with a file name: "' . $destination . '"', $e->getMessage());
         }
 
         self::assertSame('movable', (string) file_get_contents($src));
@@ -637,7 +649,7 @@ final class FileTest extends TestCase
             $this->writeThrough($method, $path);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is not readable, which a safe write requires: ' . $path, $e->getMessage());
+            self::assertSame('Path is not readable, which a safe write requires: "' . $path . '"', $e->getMessage());
         }
 
         chmod($path, 0600);
@@ -657,7 +669,7 @@ final class FileTest extends TestCase
             $this->writeThrough($method, $path);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is not a regular file: ' . $path, $e->getMessage());
+            self::assertSame('Path is not a regular file: "' . $path . '"', $e->getMessage());
         }
 
         self::assertSame('fifo', filetype($path));
@@ -673,7 +685,7 @@ final class FileTest extends TestCase
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
             self::assertSame(
-                'Path belongs to another user in a shared directory, so it is not written: ' . $path,
+                'Path belongs to another user in a shared directory, so it is not written: "' . $path . '"',
                 $e->getMessage(),
             );
         }
@@ -712,9 +724,9 @@ final class FileTest extends TestCase
     public static function writesCutShort(): array
     {
         return [
-            'write' => ['write', 'Failed to write to: {path}'],
-            'append' => ['append', 'Failed to append to: {path}'],
-            'copy' => ['copy', 'Failed to copy: {source} to {path}'],
+            'write' => ['write', 'Failed to write to: "{path}"'],
+            'append' => ['append', 'Failed to append to: "{path}"'],
+            'copy' => ['copy', 'Failed to copy: "{source} to {path}"'],
         ];
     }
 
@@ -739,9 +751,9 @@ final class FileTest extends TestCase
             self::fail('expected a failure');
         } catch (FileSystemException $e) {
             $expected = strtr($message, ['{path}' => $path, '{source}' => $source]);
-            self::assertStringStartsWith($expected . ' (', $e->getMessage());
+            self::assertStringStartsWith($expected . ' ("', $e->getMessage());
             self::assertStringContainsString('errno=27', $e->getMessage());
-            self::assertStringEndsWith(')', $e->getMessage());
+            self::assertStringEndsWith('")', $e->getMessage());
             self::assertStringNotContainsString('lstat', $e->getMessage());
         }
     }
@@ -757,7 +769,7 @@ final class FileTest extends TestCase
             self::underFileSizeLimit(4, static fn () => File::create($path, 'more than four bytes'));
             self::fail('expected a failure');
         } catch (FileSystemException $e) {
-            self::assertStringStartsWith('Failed to create file: ' . $path . ' (fwrite(): ', $e->getMessage());
+            self::assertStringStartsWith('Failed to create file: "' . $path . '" ("fwrite(): ', $e->getMessage());
             self::assertStringContainsString('errno=27', $e->getMessage());
         }
         self::assertSame([], glob($this->tempDir . '/.zephyrus-*'));
@@ -773,7 +785,7 @@ final class FileTest extends TestCase
             (new File($source))->copy($destination);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is not a regular file: ' . $source, $e->getMessage());
+            self::assertSame('Path is not a regular file: "' . $source . '"', $e->getMessage());
         }
 
         self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
@@ -788,7 +800,7 @@ final class FileTest extends TestCase
             (new File($path))->copy($path);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Cannot copy a file onto itself: ' . $path . ' to ' . $path, $e->getMessage());
+            self::assertSame('Cannot copy a file onto itself: "' . $path . '" to "' . $path . '"', $e->getMessage());
         }
 
         self::assertSame('content', (string) file_get_contents($path));
@@ -819,7 +831,7 @@ final class FileTest extends TestCase
             $this->writeThrough($method, $link . '/');
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path does not end with a file name: ' . $link . '/', $e->getMessage());
+            self::assertSame('Path does not end with a file name: "' . $link . '/' . '"', $e->getMessage());
         }
 
         self::assertTrue(is_link($link));
@@ -846,7 +858,7 @@ final class FileTest extends TestCase
             File::create($path, 'content');
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path does not end with a file name: ' . $path, $e->getMessage());
+            self::assertSame('Path does not end with a file name: "' . $path . '"', $e->getMessage());
         }
 
         self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
@@ -877,7 +889,7 @@ final class FileTest extends TestCase
             $this->writeThrough($method, $path);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is a stream wrapper URL, which is not written: ' . $path, $e->getMessage());
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $path . '"', $e->getMessage());
         }
 
         self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
@@ -904,7 +916,7 @@ final class FileTest extends TestCase
             $this->writeThrough($method, $path);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is a stream wrapper URL, which is not written: ' . $path, $e->getMessage());
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $path . '"', $e->getMessage());
         } finally {
             chdir($previous);
         }
@@ -961,7 +973,7 @@ final class FileTest extends TestCase
             $this->writeThrough($method, $path);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path holds a NUL byte, which no file name can: ' . $this->tempDir . '/a\0b.txt', $e->getMessage());
+            self::assertSame('Path holds a NUL byte, which no file name can: "' . $this->tempDir . '/a\u0000b.txt"', $e->getMessage());
         }
 
         self::assertSame(['write-through-source.txt'], array_values(array_diff((array) scandir($this->tempDir), ['.', '..'])));
@@ -1035,7 +1047,7 @@ final class FileTest extends TestCase
             (new File($link))->append('attacker content');
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Path is a symbolic link, which is not followed: ' . $link, $e->getMessage());
+            self::assertSame('Path is a symbolic link, which is not followed: "' . $link . '"', $e->getMessage());
         }
 
         self::assertTrue(is_link($link));
