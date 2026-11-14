@@ -468,6 +468,21 @@ final class DatabaseConfigTest extends TestCase
         self::assertFalse($config->persistent);
     }
 
+    public function testADirectlyBuiltConfigIsNotPersistentByDefault(): void
+    {
+        $config = new DatabaseConfig(
+            driver: 'pgsql',
+            host: 'localhost',
+            port: 5432,
+            database: 'db',
+            username: 'u',
+            password: '',
+            charset: 'utf8',
+        );
+
+        self::assertFalse($config->persistent);
+    }
+
     public function testPersistentIsReadAsABoolean(): void
     {
         $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'persistent' => 'true']);
