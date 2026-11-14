@@ -1,0 +1,8 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require $GLOBALS['_composer_autoload_path'] ?? __DIR__ . '/../vendor/autoload.php';
+
+exit(Zephyrus\Console\Console::fromEnvironment()->run(array_values(array_slice($_SERVER['argv'], 1))));

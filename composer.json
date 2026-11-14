@@ -3,6 +3,7 @@
   "description": "Cohesive PHP 8.4+ framework: attribute routing, immutable HTTP, typed config, and security middleware out of the box.",
   "type": "library",
   "license": "MIT",
+  "bin": ["bin/zephyrus"],
   "require": {
     "php": "^8.4",
     "ext-mbstring": "*",
