@@ -111,15 +111,16 @@ final class DatabasePersistentConnectionTest extends TestCase
 
     public function testASilentErrorModeLeftOnTheHandleCannotHideAFailedReset(): void
     {
-        $factory = static function (): PDO {
-            $pdo = new ReusedSessionPdo(failingReset: true);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
-
-            return $pdo;
-        };
+        $handles = [new ReusedSessionPdo(failingReset: true), new ReusedSessionPdo(failingReset: true)];
+        foreach ($handles as $handle) {
+            $handle->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
+        }
+        $calls = 0;
 
         try {
-            Database::fromConfig(self::config(persistent: true), $factory);
+            Database::fromConfig(self::config(persistent: true), static function () use (&$handles, &$calls): PDO {
+                return $handles[$calls++];
+            });
 
             self::fail('A failed reset was ignored.');
         } catch (DatabaseException $e) {
