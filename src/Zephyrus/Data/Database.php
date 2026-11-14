@@ -95,6 +95,9 @@ final class Database
      */
     private const PERSISTENT_POOL_PREFIX = 'zephyrus:';
 
+    /** Connections tried for a persistent session that cannot be reset, before fromConfig() gives up. */
+    private const SESSION_RESET_ATTEMPTS = 2;
+
     /** Upper bound on the process-wide store; reaching it clears the store wholesale. */
     private const MAX_SHARED_COLUMN_SHAPES = 2048;
 
@@ -278,7 +281,10 @@ final class Database
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         ];
 
-        for ($attempt = 1; ; $attempt++) {
+        $attempts = 0;
+
+        do {
+            $attempts++;
             $pdo = self::connect($factory, $dsn, $config, $options);
 
             if (!$pdo->getAttribute(PDO::ATTR_PERSISTENT)) {
@@ -291,6 +297,7 @@ final class Database
 
             self::pinSharedHandleAttributes($pdo);
 
+            // Sent from here, not from a helper taking $pdo: the failure's trace arguments would keep the handle alive.
             try {
                 // Two statements: DISCARD ALL cannot run inside the implicit block of a multi-statement string.
                 if ($pdo->inTransaction()) {
@@ -311,21 +318,26 @@ final class Database
                 self::heldPersistentHandles()[$pdo] = $identity;
 
                 return $pdo;
-            } catch (PDOException $e) {
-                // Ends the backend if it is still alive, so its unreset session never returns to the pool.
-                try {
-                    $pdo->exec('SELECT pg_terminate_backend(pg_backend_pid())');
-                } catch (PDOException) {
-                    // Expected: the statement ends its own backend, or the backend was already gone.
-                }
+            } catch (PDOException $failure) {
+                self::terminateBackend($pdo);
 
                 // Released before the retry, or the pool would hand this same handle back.
                 $pdo = null;
-
-                if ($attempt === 2) {
-                    throw DatabaseException::sessionResetFailed($e);
-                }
             }
+        } while ($attempts < self::SESSION_RESET_ATTEMPTS);
+
+        throw DatabaseException::sessionResetFailed($failure);
+    }
+
+    /**
+     * Ends the backend if it is still alive, so its unreset session never returns to the pool.
+     */
+    private static function terminateBackend(PDO $pdo): void
+    {
+        try {
+            $pdo->exec('SELECT pg_terminate_backend(pg_backend_pid())');
+        } catch (PDOException) {
+            // Expected: the statement ends its own backend, or the backend was already gone.
         }
     }
 
