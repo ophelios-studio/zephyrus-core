@@ -27,8 +27,10 @@ use Zephyrus\Exceptions\MessageValue;
  * {@see EnvironmentVariable::read()}. The router: section refuses every tag.
  *
  * When vendor/bin/zephyrus cache:warm has written var/zephyrus/<file name>.php
- * beside the file, the YAML is read from that cache while it matches the file and
- * its owners and modes pass the checks; !env tags are still resolved on every read.
+ * beside the file, that PHP file is included instead of parsing the YAML, while it
+ * matches the file and its owners and modes pass the checks; !env tags are still
+ * resolved on every read. Whoever may write beside the YAML may therefore run code:
+ * never read a YAML file from a directory that someone else can write.
  */
 final class ConfigurationFile
 {
