@@ -32,13 +32,13 @@ use Zephyrus\Routing\Exception\RouteSignatureException;
 final readonly class RouteCache implements WarmableCache
 {
     public const string CONFIGURATION_FILE = 'config.yml';
-    public const string MISSING_LOG_LINE =
+
+    private const string MISSING_LOG_LINE =
         'Zephyrus: no routes cache at %s, so the controllers were discovered for this request. Run %s to write it.';
 
     private const string FINGERPRINT_ALGORITHM = 'xxh128';
     private const int ENTRY_SIZE = 8;
 
-    private string $basePath;
     private string $path;
     private BootCache $cache;
 
@@ -50,12 +50,11 @@ final readonly class RouteCache implements WarmableCache
      */
     public function __construct(
         private RouterConfig $config,
-        string $basePath,
+        private string $basePath,
         private string $configurationFile,
         ?\Closure $ownerOf = null,
     ) {
-        $this->basePath = rtrim($basePath, '/');
-        $this->path = $config->cachePath($this->basePath);
+        $this->path = $config->cachePath($basePath);
         $this->cache = new BootCache($this->path, $this->basePath, $configurationFile, $ownerOf);
     }
 
@@ -81,11 +80,6 @@ final readonly class RouteCache implements WarmableCache
     public function path(): string
     {
         return $this->path;
-    }
-
-    public function has(): bool
-    {
-        return file_exists($this->path) || is_link($this->path);
     }
 
     /**
@@ -117,7 +111,7 @@ final readonly class RouteCache implements WarmableCache
      * @param list<DiscoveredRoute> $routes
      * @throws BootCacheException when the cache cannot be written safely.
      */
-    public function save(array $routes): void
+    private function save(array $routes): void
     {
         $conditions = [];
         $conditionIndexes = [];
@@ -152,11 +146,17 @@ final readonly class RouteCache implements WarmableCache
     }
 
     /**
-     * The cached routes the environment meets, in discovery order, or null when the cache is absent or unusable,
-     * with one error_log line when it is unusable.
+     * The cached routes the environment meets, in discovery order, or null with one error_log line when the cache
+     * is absent or unusable.
      */
     public function load(): ?RouteCollection
     {
+        if (!file_exists($this->path) && !is_link($this->path)) {
+            error_log(sprintf(self::MISSING_LOG_LINE, $this->path, BootCache::WARM_COMMAND));
+
+            return null;
+        }
+
         if (!is_file($this->configurationFile)) {
             $this->logIgnored(sprintf('it is checked against %s, which does not exist', $this->configurationFile));
 
@@ -286,11 +286,15 @@ final readonly class RouteCache implements WarmableCache
 
         $lines = [];
         foreach ($directories as $directory) {
-            array_push($lines, ...$this->directoryLines($directory));
+            $directoryIterator = new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS);
+            foreach (new RecursiveIteratorIterator($directoryIterator) as $file) {
+                $lines[] = $this->fileLine($file);
+            }
         }
 
         foreach ($dependencies as $dependency) {
-            $lines[] = $this->fileLine($this->absolute($dependency));
+            $path = $this->absolute($dependency);
+            $lines[] = is_file($path) ? $this->fileLine(new SplFileInfo($path)) : '';
         }
 
         sort($lines);
@@ -303,36 +307,9 @@ final readonly class RouteCache implements WarmableCache
         return hash(self::FINGERPRINT_ALGORITHM, implode("\n", $lines));
     }
 
-    /**
-     * One line per directory (its mtime) and per file (its mtime and size), the directory included.
-     *
-     * @return list<string>
-     */
-    private function directoryLines(string $directory): array
+    private function fileLine(SplFileInfo $file): string
     {
-        $lines = [$this->entryLine(new SplFileInfo($directory))];
-        $entries = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST,
-        );
-
-        foreach ($entries as $entry) {
-            $lines[] = $this->entryLine($entry);
-        }
-
-        return $lines;
-    }
-
-    private function fileLine(string $path): string
-    {
-        return is_file($path) ? $this->entryLine(new SplFileInfo($path)) : $this->relative($path) . ' missing';
-    }
-
-    private function entryLine(SplFileInfo $entry): string
-    {
-        return $entry->isDir()
-            ? sprintf('%s/ %d', $this->relative($entry->getPathname()), $entry->getMTime())
-            : sprintf('%s %d %d', $this->relative($entry->getPathname()), $entry->getMTime(), $entry->getSize());
+        return sprintf('%s %d %d', $this->relative($file->getPathname()), $file->getMTime(), $file->getSize());
     }
 
     /**
@@ -348,18 +325,16 @@ final readonly class RouteCache implements WarmableCache
         $files = [];
         foreach ($routes as $discovered) {
             /** @var class-string $className */
-            $className = strstr($discovered->route->handler, '@', true) ?: $discovered->route->handler;
+            $className = explode('@', $discovered->route->handler)[0];
             foreach (self::declaringFiles(new ReflectionClass($className)) as $file) {
                 if (!self::isUnderAny($file, $directories)) {
-                    $files[$this->relative($file)] = true;
+                    $relative = $this->relative($file);
+                    $files[$relative] = $relative;
                 }
             }
         }
 
-        $files = array_keys($files);
-        sort($files);
-
-        return $files;
+        return array_values($files);
     }
 
     /**

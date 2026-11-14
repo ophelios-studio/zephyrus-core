@@ -38,9 +38,9 @@ final class RouteCollection
      * @internal Read by Router and RouteCache.
      * @param list<Route> $routes
      */
-    public static function fromRoutes(array $routes, bool $trailingSlashTolerant = true): self
+    public static function fromRoutes(array $routes): self
     {
-        $collection = new self($trailingSlashTolerant);
+        $collection = new self();
         $collection->routes = $routes;
 
         return $collection;

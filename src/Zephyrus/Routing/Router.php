@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
-use Zephyrus\Core\Cache\BootCache;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
@@ -69,19 +68,21 @@ final class Router
             ));
         }
 
-        $basePath = realpath($basePath) ?: rtrim($basePath, '/');
-        $cache = new RouteCache($config, $basePath, $basePath . '/' . RouteCache::CONFIGURATION_FILE);
+        $basePath = realpath($basePath) ?: $basePath;
+        $routes = $configuration->application->environment->isProductionLike()
+            ? (new RouteCache($config, $basePath, $basePath . '/' . RouteCache::CONFIGURATION_FILE))->load()
+            : null;
 
-        $routes = $configuration->application->environment->isProductionLike() ? self::cachedRoutes($cache) : null;
-        $routes ??= RouteCollection::fromRoutes(array_values(array_map(
-            static fn (DiscoveredRoute $discovered): Route => $discovered->route,
-            array_filter(
-                (new RouteDiscovery($config, $basePath))->routes(),
-                static fn (DiscoveredRoute $discovered): bool => RouteAttributeReader::requirementsMet(
-                    $discovered->requirements,
-                ),
-            ),
-        )));
+        if ($routes === null) {
+            $active = [];
+            foreach ((new RouteDiscovery($config, $basePath))->routes() as $discovered) {
+                if (RouteAttributeReader::requirementsMet($discovered->requirements)) {
+                    $active[] = $discovered->route;
+                }
+            }
+
+            $routes = RouteCollection::fromRoutes($active);
+        }
 
         $router = new self($routes, null, $config->middlewareGroups);
         $router->builtFromConfiguration = true;
@@ -97,17 +98,6 @@ final class Router
     public function isBuiltFromConfiguration(): bool
     {
         return $this->builtFromConfiguration;
-    }
-
-    private static function cachedRoutes(RouteCache $cache): ?RouteCollection
-    {
-        if (!$cache->has()) {
-            error_log(sprintf(RouteCache::MISSING_LOG_LINE, $cache->path(), BootCache::WARM_COMMAND));
-
-            return null;
-        }
-
-        return $cache->load();
     }
 
     /**
