@@ -22,17 +22,24 @@ use finfo;
  * - the last extension of an explicit `$targetName` must be one the sniffed type
  *   maps to or a common alias of it, no earlier segment may be an executable
  *   extension, the extension allowlist applies in addition, and the name may not
- *   be a dotfile, contain a colon or an ASCII control character, or end with a dot or a space.
+ *   be a dotfile, contain a colon, a control, format or line separator character (a null byte, U+0085,
+ *   U+2028 or the right-to-left override included), be invalid UTF-8, end with a dot or a space, or have a
+ *   reserved Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`,
+ *   superscript digits and `CONIN$`, `CONOUT$` included) before its first dot.
  *
- * `..` segments are refused, null bytes are stripped, and the destination must
- * stay under the root after `realpath()`. An existing file is replaced only with
- * `$overwriteExisting`.
+ * `..` segments are refused, a sub-directory segment gets the same character and device name checks,
+ * and the destination must stay under the root after `realpath()`. An existing file is replaced
+ * only with `$overwriteExisting`.
  *
  * The default mover accepts only genuine HTTP uploads and has no fallback.
  * Non-HTTP callers and tests inject their own `$fileMover`.
  */
 final class Uploader
 {
+    /** Windows device names, reserved with any extension and in any case. */
+    private const string DEVICE_NAME_PATTERN =
+        '/^(?:CONIN\$|CONOUT\$|CON|PRN|AUX|NUL|(?:COM|LPT)[1-9\x{B9}\x{B2}\x{B3}])$/iu';
+
     /**
      * Sniffed MIME type to the extension the stored file receives.
      *
@@ -381,16 +388,19 @@ final class Uploader
     }
 
     /**
-     * Splits the sub-directory string on any separator, rejects `..` segments,
+     * Splits the sub-directory string on any separator, rejects `..` and unsafe segments,
      * and reassembles with forward slashes.
      */
     private function normalizeSubDirectory(string $subDirectory): string
     {
-        $raw = str_replace("\0", '', $subDirectory);
-        $segments = (array) preg_split('#[/\\\\]+#', $raw);
+        $segments = (array) preg_split('#[/\\\\]+#', $subDirectory);
         $cleaned = [];
 
         foreach ($segments as $segment) {
+            if (self::isUnsafeName((string) $segment)) {
+                throw UploadException::invalidSubDirectorySegment((string) $segment);
+            }
+
             $segment = trim((string) $segment);
 
             if ($segment === '' || $segment === '.') {
@@ -401,6 +411,10 @@ final class Uploader
                 throw UploadException::pathTraversalDetected($segment);
             }
 
+            if (str_ends_with($segment, '.')) {
+                throw UploadException::invalidSubDirectorySegment($segment);
+            }
+
             $cleaned[] = $segment;
         }
 
@@ -408,15 +422,26 @@ final class Uploader
     }
 
     /**
-     * Validates a caller-supplied target filename: a bare name, not a dot-alias or dotfile, with no colon, ASCII
-     * control character or trailing dot or space, that satisfies the extension allowlist and ends with an
-     * extension of the sniffed type.
+     * Whether a name or path segment is invalid UTF-8, holds a colon, a control, format or line separator
+     * character, or whose part before the first dot is a reserved Windows device name.
+     */
+    private static function isUnsafeName(string $name): bool
+    {
+        if (preg_match('/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}:]/u', $name) !== 0) {
+            return true;
+        }
+
+        return preg_match(self::DEVICE_NAME_PATTERN, trim(strstr($name, '.', true) ?: $name, ' ')) === 1;
+    }
+
+    /**
+     * Validates a caller-supplied target filename: a bare name, valid UTF-8, not a dot-alias, dotfile or
+     * Windows device name, with no colon, control, format or line separator character or trailing dot or
+     * space, that satisfies the extension allowlist and ends with an extension of the sniffed type.
      */
     private function validateTargetName(string $name, string $sniffedMimeType): string
     {
-        $name = str_replace("\0", '', $name);
-
-        if (preg_match('/[\x00-\x1F\x7F:]|[. ]$/', $name) === 1) {
+        if (self::isUnsafeName($name) || preg_match('/[. ]$/', $name) === 1) {
             throw UploadException::invalidTargetName($name);
         }
 

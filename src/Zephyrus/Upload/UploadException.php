@@ -42,6 +42,11 @@ final class UploadException extends ZephyrusRuntimeException
         ));
     }
 
+    public static function invalidSubDirectorySegment(string $segment): self
+    {
+        return new self(sprintf('Invalid upload sub-directory segment: %s.', MessageValue::quote($segment)));
+    }
+
     public static function invalidTargetName(string $name): self
     {
         return new self(sprintf('Invalid upload target filename: %s.', MessageValue::quote($name)));

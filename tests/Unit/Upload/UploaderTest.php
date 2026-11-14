@@ -769,6 +769,92 @@ final class UploaderTest extends TestCase
         self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.jpg$#', $relative);
     }
 
+    /** @return array<string, array{string}> */
+    public static function acceptedTargetNameProvider(): array
+    {
+        return [
+            'device name as a prefix' => ['CONSOLE.png'],
+            'device name inside' => ['icon.png'],
+            'device number out of range' => ['COM0.png'],
+            'accented letter' => ["caf\u{E9}.png"],
+            'japanese' => ["\u{65E5}\u{672C}.png"],
+        ];
+    }
+
+    #[DataProvider('acceptedTargetNameProvider')]
+    public function test_store_accepts_a_legitimate_target_name(string $targetName): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, null, $targetName);
+
+        self::assertSame($targetName, $relative);
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function refusedSubDirectoryProvider(): array
+    {
+        $invalid = static fn (string $shown): string => 'Invalid upload sub-directory segment: ' . $shown . '.';
+
+        return [
+            'null byte' => ["images/a\0b", $invalid('"a\u0000b"')],
+            'line feed' => ["a\nb", $invalid('"a\nb"')],
+            'right to left override' => ["a\u{202E}b", $invalid('"a\u202eb"')],
+            'line separator' => ["a\u{2028}b", $invalid('"a\u2028b"')],
+            'colon' => ['a:b', $invalid('"a:b"')],
+            'invalid utf-8' => ["a\xFFb", $invalid("\"a\u{FFFD}b\"")],
+            'device name' => ['NUL', $invalid('"NUL"')],
+            'device name in lower case with an extension' => ['images/con.d', $invalid('"con.d"')],
+            'device name after leading spaces' => ['  NUL', $invalid('"  NUL"')],
+            'device name between spaces' => [' con ', $invalid('" con "')],
+            'console device after a space' => ['a/ conin$/b', $invalid('" conin$"')],
+            'null byte alone in a segment' => ["a/\0", $invalid('"\u0000"')],
+            'only dots' => ['...', $invalid('"..."')],
+            'dots and a space' => ['. .', $invalid('". ."')],
+            'trailing dot' => ['a.', $invalid('"a."')],
+        ];
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function acceptedSubDirectoryProvider(): array
+    {
+        return [
+            'plain' => ['avatars', 'avatars'],
+            'dated' => ['2026/11', '2026/11'],
+            'accented' => ["\u{E9}/\u{FC}", "\u{E9}/\u{FC}"],
+            'dot inside a segment' => ['node.js', 'node.js'],
+            'version segment' => ['v1.2/x', 'v1.2/x'],
+        ];
+    }
+
+    #[DataProvider('acceptedSubDirectoryProvider')]
+    public function test_store_accepts_a_legitimate_sub_directory(string $subDirectory, string $expected): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, $subDirectory);
+
+        self::assertStringStartsWith($expected . '/', $relative);
+    }
+
+    #[DataProvider('refusedSubDirectoryProvider')]
+    public function test_store_refuses_an_unsafe_sub_directory_segment(string $subDirectory, string $message): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, $subDirectory);
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame($message, $e->getMessage());
+        } finally {
+            self::assertSame([], glob($dest . '/*') ?: []);
+        }
+    }
+
     /** @return array<string, array{string, string}> */
     public static function refusedTargetNameProvider(): array
     {
@@ -793,6 +879,30 @@ final class UploaderTest extends TestCase
                 'avatar.jsp.png',
                 'Upload target name carries the executable extension "jsp" before its final extension.',
             ],
+            'next line control' => ["avatar\u{85}.png", $invalid('"avatar\u0085.png"')],
+            'right to left override' => ["photo\u{202E}gnp.exe", $invalid('"photo\u202egnp.exe"')],
+            'format character with a valid extension' => ["x\u{202E}exe.png", $invalid('"x\u202eexe.png"')],
+            'line separator' => ["avatar\u{2028}.png", $invalid('"avatar\u2028.png"')],
+            'paragraph separator' => ["avatar\u{2029}.png", $invalid('"avatar\u2029.png"')],
+            'console input device' => ['CONIN$.png', $invalid('"CONIN$.png"')],
+            'console output device' => ['conout$.png', $invalid('"conout$.png"')],
+            'zero width space' => ["avatar\u{200B}.png", $invalid('"avatar\u200b.png"')],
+            'invalid utf-8' => ["\xFF.png", $invalid("\"\u{FFFD}.png\"")],
+            'null byte inside' => ["avatar\0.png", $invalid('"avatar\u0000.png"')],
+            'null byte at the end' => ["avatar.png\0", $invalid('"avatar.png\u0000"')],
+            'device name' => ['CON.png', $invalid('"CON.png"')],
+            'device name in lower case' => ['con.tar.gz', $invalid('"con.tar.gz"')],
+            'device name after a leading space' => [' con.png', $invalid('" con.png"')],
+            'serial device after a leading space' => [' com1.png', $invalid('" com1.png"')],
+            'null byte after a space' => [" \0", $invalid('" \u0000"')],
+            'device name in mixed case' => ['Lpt1.jpg', $invalid('"Lpt1.jpg"')],
+            'device name without extension' => ['NUL', $invalid('"NUL"')],
+            'serial device' => ['com9.png', $invalid('"com9.png"')],
+            'printer device' => ['AUX.png', $invalid('"AUX.png"')],
+            'print device' => ['PRN.png', $invalid('"PRN.png"')],
+            'superscript serial device' => ["COM\u{00B9}.png", $invalid("\"COM\u{00B9}.png\"")],
+            'superscript printer device' => ["lpt\u{00B3}.png", $invalid("\"lpt\u{00B3}.png\"")],
+            'device name before a space' => ['CON .png', $invalid('"CON .png"')],
             'dotfile' => ['.htaccess', $invalid('".htaccess"')],
             'padded dotfile' => [' .user.ini', $invalid('".user.ini"')],
         ];
