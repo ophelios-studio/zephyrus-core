@@ -16,6 +16,7 @@ use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Mailer\MailerConfig;
+use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 
 final class ConfigurationTest extends TestCase
 {
@@ -255,6 +256,44 @@ final class ConfigurationTest extends TestCase
             self::assertTrue($config->security->forceHttps);
         } finally {
             @unlink($path);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function phpListDocuments(): iterable
+    {
+        yield 'list of strings' => ["<?php\nreturn ['a', 'b'];\n"];
+        yield 'list of sections' => ["<?php\nreturn [['localization' => ['locale' => 'fr']]];\n"];
+    }
+
+    #[DataProvider('phpListDocuments')]
+    public function testAPhpFileThatReturnsAListIsRefused(string $source): void
+    {
+        $directory = new CacheDirectory();
+        $path = $directory->file('config.php', $source);
+
+        try {
+            Configuration::fromFile($path);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file config.php: must be a mapping of sections', $e->getMessage());
+        } finally {
+            $directory->remove();
+        }
+    }
+
+    public function testAPhpFileThatReturnsAnEmptyArrayLoadsWithTheDefaults(): void
+    {
+        $directory = new CacheDirectory();
+        $path = $directory->file('config.php', "<?php\nreturn [];\n");
+
+        try {
+            $config = Configuration::fromFile($path);
+            self::assertSame(Configuration::defaults()->localization->locale, $config->localization->locale);
+        } finally {
+            $directory->remove();
         }
     }
 

@@ -339,12 +339,12 @@ final readonly class Configuration
     }
 
     /**
-     * Build a Configuration tree from one file: YAML (.yml, .yaml) or a PHP file (.php) returning an array.
+     * Build a Configuration tree from one file: YAML (.yml, .yaml) or a PHP file (.php) returning a mapping.
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when the file has another extension, is a PHP file given as a stream wrapper URL,
-     *        is missing, is a YAML file that does not parse or is not a mapping, fails to load, or does not return an
-     *        array, an !env tag is refused, or the configuration is refused by fromArray().
+     *        is missing, is a YAML file that does not parse or is not a mapping, is a PHP file that fails to load or
+     *        does not return a mapping, an !env tag is refused, or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
@@ -370,8 +370,8 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a file has another extension than .yml, .yaml or .php,
      *        or is a PHP file given as a stream wrapper URL, when a path is not a non-empty string, a file is missing,
-     *        is a YAML file that does not parse or is not a mapping, fails to load or does not return an array,
-     *        an !env tag is refused,
+     *        is a YAML file that does not parse or is not a mapping, is a PHP file that fails to load or
+     *        does not return a mapping, an !env tag is refused,
      *        or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
@@ -390,8 +390,8 @@ final readonly class Configuration
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a present file has another extension than .yml, .yaml or .php,
      *        or is a PHP file given as a stream wrapper URL, when a path is not a non-empty string, a present file is
-     *        a YAML file that does not parse or is not a mapping, fails to load or does not return an array,
-     *        an !env tag is refused,
+     *        a YAML file that does not parse or is not a mapping, is a PHP file that fails to load or
+     *        does not return a mapping, an !env tag is refused,
      *        or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
@@ -566,6 +566,10 @@ final readonly class Configuration
 
         if (!is_array($loaded)) {
             throw ConfigurationException::invalidFormat($path);
+        }
+
+        if ($loaded !== [] && array_is_list($loaded)) {
+            throw ConfigurationException::invalidFormat($path, 'must be a mapping of sections');
         }
 
         return $loaded;
