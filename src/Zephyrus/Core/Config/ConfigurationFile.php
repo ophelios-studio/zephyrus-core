@@ -8,7 +8,6 @@ use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Exceptions\MessageValue;
-use Zephyrus\Routing\RouterConfig;
 
 /**
  * Parses a YAML configuration file with support for the custom !env tag.

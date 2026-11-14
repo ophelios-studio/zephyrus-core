@@ -8,6 +8,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;

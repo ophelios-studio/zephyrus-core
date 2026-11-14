@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Routing;
 
-use Zephyrus\Routing\RouterConfig;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 
 /**

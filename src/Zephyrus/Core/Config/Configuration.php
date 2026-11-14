@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-use Zephyrus\Routing\RouterConfig;
+
 
 /**
  * Immutable top-level configuration tree.

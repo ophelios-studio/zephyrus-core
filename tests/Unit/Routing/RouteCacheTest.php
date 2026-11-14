@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteCacheException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
@@ -14,7 +15,6 @@ use Zephyrus\Routing\Route;
 use Zephyrus\Routing\RouteCache;
 use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\Router;
-use Zephyrus\Routing\RouterConfig;
 use Zephyrus\Tests\Support\CapturedErrorLog;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 

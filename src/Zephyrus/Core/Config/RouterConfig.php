@@ -2,12 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Zephyrus\Routing;
+namespace Zephyrus\Core\Config;
 
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Zephyrus\Core\Cache\BootCache;
-use Zephyrus\Core\Config\ConfigKeys;
-use Zephyrus\Core\Config\ConfigurationException;
 
 /**
  * The router: section, read by Router::fromConfiguration() and by vendor/bin/zephyrus cache:warm.

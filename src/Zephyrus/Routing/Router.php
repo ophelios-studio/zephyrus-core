@@ -7,6 +7,7 @@ namespace Zephyrus\Routing;
 use Zephyrus\Core\Cache\BootCache;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteAttributeException;

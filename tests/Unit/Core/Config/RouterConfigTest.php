@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Zephyrus\Tests\Unit\Routing;
+namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Zephyrus\Core\Config\ConfigurationException;
-use Zephyrus\Routing\RouterConfig;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 
 final class RouterConfigTest extends TestCase

@@ -14,6 +14,7 @@ use Zephyrus\Core\Cache\BootCacheException;
 use Zephyrus\Core\Cache\CacheRefusal;
 use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationException;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteCacheException;

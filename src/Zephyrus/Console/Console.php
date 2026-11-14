@@ -8,10 +8,10 @@ use Composer\InstalledVersions;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationFile;
+use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
 use Zephyrus\Routing\RouteCache;
-use Zephyrus\Routing\RouterConfig;
 
 /**
  * The vendor/bin/zephyrus command line: cache:warm and cache:clear over one or more configuration files, each with
