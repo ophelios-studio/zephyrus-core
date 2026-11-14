@@ -49,8 +49,8 @@ final class File extends FileSystemNode
     /**
      * Create a new file with optional initial content.
      *
-     * @throws FileSystemException if the path is a stream wrapper URL or does not end with a file
-     *         name, or creation fails.
+     * @throws FileSystemException if the path holds a NUL byte, is a stream wrapper URL or does not
+     *         end with a file name, or creation fails.
      */
     public static function create(string $path, string $content = ''): self
     {
@@ -87,8 +87,8 @@ final class File extends FileSystemNode
     /**
      * Overwrite the file with new content.
      *
-     * @throws FileSystemException if the path is a stream wrapper URL or does not end with a file
-     *         name, or writing fails.
+     * @throws FileSystemException if the path holds a NUL byte, is a stream wrapper URL or does not
+     *         end with a file name, or writing fails.
      */
     public function write(string $content): void
     {
@@ -108,8 +108,8 @@ final class File extends FileSystemNode
      * without limit, so any process that can open the file (one readable by other users
      * included) can hold append() back.
      *
-     * @throws FileSystemException if the path is a stream wrapper URL, does not end with a file
-     *         name, is a symbolic link, or appending fails.
+     * @throws FileSystemException if the path holds a NUL byte, is a stream wrapper URL, does not
+     *         end with a file name, is a symbolic link, or appending fails.
      */
     public function append(string $content): void
     {
@@ -178,7 +178,8 @@ final class File extends FileSystemNode
      *
      * @return File The new file at the destination path.
      * @throws FileSystemException if the source is not a readable regular file, the destination
-     *         is a stream wrapper URL, does not end with a file name or is the source itself, or copying fails.
+     *         holds a NUL byte, is a stream wrapper URL, does not end with a file name or is the source
+     *         itself, or copying fails.
      */
     public function copy(string $destination): self
     {
@@ -231,8 +232,8 @@ final class File extends FileSystemNode
      * Move (rename) the file to a new location.
      *
      * @return File The file at the new location.
-     * @throws FileSystemException if the destination is a stream wrapper URL or does not end with a
-     *         file name, or moving fails.
+     * @throws FileSystemException if the destination holds a NUL byte, is a stream wrapper URL or does
+     *         not end with a file name, or moving fails.
      */
     public function move(string $destination): self
     {
@@ -294,13 +295,16 @@ final class File extends FileSystemNode
     }
 
     /**
-     * A stream wrapper URL is never written, and a path whose last segment is empty, "." or
-     * ".." names a directory, never a file.
+     * A path holding a NUL byte or a stream wrapper URL is never written, and a path whose last
+     * segment is empty, "." or ".." names a directory, never a file.
      *
      * @throws FileSystemException
      */
     private static function assertPlainFilePath(string $path): void
     {
+        if (str_contains($path, "\0")) {
+            throw FileSystemException::nulByteRefused($path);
+        }
         if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
             throw FileSystemException::streamWrapperRefused($path);
         }

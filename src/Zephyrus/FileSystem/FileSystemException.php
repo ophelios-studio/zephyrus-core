@@ -45,6 +45,11 @@ final class FileSystemException extends ZephyrusRuntimeException
         return new self(sprintf('Path does not end with a file name: %s', $path));
     }
 
+    public static function nulByteRefused(string $path): self
+    {
+        return new self(sprintf('Path holds a NUL byte, which no file name can: %s', str_replace("\0", '\0', $path)));
+    }
+
     public static function streamWrapperRefused(string $path): self
     {
         return new self(sprintf('Path is a stream wrapper URL, which is not written: %s', $path));

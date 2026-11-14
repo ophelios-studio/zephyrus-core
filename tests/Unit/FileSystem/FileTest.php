@@ -938,6 +938,35 @@ final class FileTest extends TestCase
         self::assertSame('content', (string) file_get_contents($path));
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nulBytePathOperations(): array
+    {
+        return [
+            'create' => ['create'],
+            'write' => ['write'],
+            'append' => ['append'],
+            'copy' => ['copy'],
+            'move' => ['move'],
+        ];
+    }
+
+    #[DataProvider('nulBytePathOperations')]
+    public function testAPathHoldingANulByteIsRefusedBeforeAnythingIsCreated(string $method): void
+    {
+        $path = $this->tempDir . "/a\0b.txt";
+
+        try {
+            $this->writeThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path holds a NUL byte, which no file name can: ' . $this->tempDir . '/a\0b.txt', $e->getMessage());
+        }
+
+        self::assertSame(['write-through-source.txt'], array_values(array_diff((array) scandir($this->tempDir), ['.', '..'])));
+    }
+
     private function writeThrough(string $method, string $path): void
     {
         $source = $this->tempDir . '/write-through-source.txt';
@@ -948,6 +977,7 @@ final class FileTest extends TestCase
             'write' => (new File($path))->write('attacker content'),
             'append' => (new File($path))->append('attacker content'),
             'copy' => (new File($source))->copy($path),
+            'move' => (new File($source))->move($path),
         };
     }
 
