@@ -12,6 +12,8 @@ use Zephyrus\FileSystem\FileSystemNode;
 
 final class FileTest extends TestCase
 {
+    private const int ANOTHER_UID = 2000;
+
     private string $tempDir;
 
     protected function setUp(): void
@@ -627,6 +629,49 @@ final class FileTest extends TestCase
         self::assertSame('fifo', filetype($path));
     }
 
+    #[DataProvider('writingMethods')]
+    public function testAFileAnotherUserOwnsInAStickyDirectoryIsRefusedUntouched(string $method): void
+    {
+        $path = $this->fileInSharedDirectory(directoryMode: 0o1777, directoryOwner: 0, fileOwner: self::ANOTHER_UID);
+
+        try {
+            $this->writeThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame(
+                'Path belongs to another user in a shared directory, so it is not written: ' . $path,
+                $e->getMessage(),
+            );
+        }
+
+        self::assertSame('kept', (string) file_get_contents($path));
+    }
+
+    /**
+     * @return array<string, array{int, int, int}>
+     */
+    public static function writableSharedFiles(): array
+    {
+        return [
+            'directory without the sticky bit' => [0o777, 0, self::ANOTHER_UID],
+            'file of the directory owner' => [0o1777, self::ANOTHER_UID, self::ANOTHER_UID],
+            'file of the effective user' => [0o1777, self::ANOTHER_UID, 0],
+        ];
+    }
+
+    #[DataProvider('writableSharedFiles')]
+    public function testASharedFileIsWrittenUnlessAnotherUserOwnsItInAStickyDirectory(
+        int $directoryMode,
+        int $directoryOwner,
+        int $fileOwner,
+    ): void {
+        $path = $this->fileInSharedDirectory($directoryMode, $directoryOwner, $fileOwner);
+
+        (new File($path))->write('new');
+
+        self::assertSame('new', (string) file_get_contents($path));
+    }
+
     public function testCopyOfADirectoryIsRefusedBeforeTouchingTheDestination(): void
     {
         $source = $this->tempDir . '/folder';
@@ -736,6 +781,26 @@ final class FileTest extends TestCase
             'append' => (new File($path))->append('attacker content'),
             'copy' => (new File($source))->copy($path),
         };
+    }
+
+    /**
+     * Run as root, to give the directory and the file their owners; root is the writer.
+     */
+    private function fileInSharedDirectory(int $directoryMode, int $directoryOwner, int $fileOwner): string
+    {
+        if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+            self::markTestSkipped('Needs root, to give a file to another user.');
+        }
+        $directory = $this->tempDir . '/shared';
+        mkdir($directory);
+        chown($directory, $directoryOwner);
+        chmod($directory, $directoryMode);
+        $path = $directory . '/report.csv';
+        file_put_contents($path, 'kept');
+        chown($path, $fileOwner);
+        chmod($path, 0666);
+
+        return $path;
     }
 
     private function assertAppendRefusesTheLink(string $link): void

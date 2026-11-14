@@ -54,6 +54,11 @@ final class FileSystemException extends ZephyrusRuntimeException
         return new self(sprintf('Path is not readable, which a safe write requires: %s', $path));
     }
 
+    public static function belongsToAnotherUserInSharedDirectory(string $path): self
+    {
+        return new self(sprintf('Path belongs to another user in a shared directory, so it is not written: %s', $path));
+    }
+
     public static function copyOntoItself(string $source, string $destination): self
     {
         return new self(sprintf('Cannot copy a file onto itself: %s to %s', $source, $destination));

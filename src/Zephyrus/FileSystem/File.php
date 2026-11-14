@@ -26,6 +26,10 @@ namespace Zephyrus\FileSystem;
  * during the call, is therefore replaced (refused by append()), never followed. This
  * holds for the last segment of the path: a link among its parent directories is
  * followed.
+ *
+ * ## Shared directories
+ * An existing file in a sticky directory such as /tmp is refused when it belongs to neither
+ * the directory owner nor the effective user, the Linux fs.protected_regular rule.
  */
 final class File extends FileSystemNode
 {
@@ -35,6 +39,7 @@ final class File extends FileSystemNode
     private const int FILE_TYPE_MASK = 0o170000;
     private const int REGULAR_FILE_TYPE = 0o100000;
     private const int SYMBOLIC_LINK_TYPE = 0o120000;
+    private const int STICKY_BIT = 0o1000;
     private const int PERMISSION_BITS = 0o777;
     private const string TEMPORARY_PREFIX = '.zephyrus-';
 
@@ -423,12 +428,41 @@ final class File extends FileSystemNode
             }
         }
 
-        if (!self::namesHandle($path, $handle)) {
+        try {
+            if (!self::namesHandle($path, $handle)) {
+                throw $failure();
+            }
+            self::refuseAnotherUsersFileInStickyDirectory($path, $handle, $failure);
+        } catch (FileSystemException $e) {
             fclose($handle);
-            throw $failure();
+            throw $e;
         }
 
         return $handle;
+    }
+
+    /**
+     * Refuse what fs.protected_regular refuses to an open that may create the file, which an
+     * open in place escapes: a file in a sticky directory owned by neither its owner nor us.
+     *
+     * @param resource $handle
+     * @param \Closure(): FileSystemException $failure
+     * @throws FileSystemException
+     */
+    private static function refuseAnotherUsersFileInStickyDirectory(string $path, $handle, \Closure $failure): void
+    {
+        $file = fstat($handle);
+        $directory = @stat(dirname($path));
+        if ($file === false || $directory === false) {
+            throw $failure();
+        }
+        if (($directory['mode'] & self::STICKY_BIT) === 0 || $file['uid'] === $directory['uid']) {
+            return;
+        }
+        // Without ext-posix the effective user is unknown, so the file is taken as another user's.
+        if (!function_exists('posix_geteuid') || $file['uid'] !== posix_geteuid()) {
+            throw FileSystemException::belongsToAnotherUserInSharedDirectory($path);
+        }
     }
 
     /**
