@@ -8,6 +8,28 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Breaking changes
+
+#### Routing
+
+- `RouteCache` is `@internal` and its public API is gone: `new RouteCache($cacheFile)`, `filePath()`, `isFresh()`, `metadata()`, `generatedAt()`, `routeCount()`, `routesHash()`, `metadataVersion()`, `age()`, `expiresAt()`, `isExpired()`, `isFreshWithin()`, `ensureFreshWithin()`, `canUseWithin()`, `inspect()` and `warmIfStale()` no longer exist, nor does `RouteCacheException::refused()`. A cache of a build artifact is judged by what it was read from, not by its age. Replace the calls with the `router:` section and `vendor/bin/zephyrus cache:warm` (see Added), and delete any code that warms or inspects a `RouteCache` itself.
+
+#### Core
+
+- `ApplicationBuilder::fromConfigurationFile()` and `buildFromConfigurationFile()` pass the real path of the file's directory as `basePath`, so a relative `localization.locale_path` resolves against that directory, where it used to resolve against the current directory. Write the path relative to the configuration file, or absolute.
+
+#### Configuration
+
+- `router` is a reserved section name: a section factory registered under it throws `InvalidArgumentException` (`Section factory "router" collides with the built-in section "router"; read it with $configuration->router instead.`), and a `router:` key in `config.yml` is now read and validated, where it used to be ignored unless registered. An application that has its own `router:` section: rename it (`routing`, for instance). A section named `routes` is now refused as a typo of `router`: rename it too.
+
+### Added
+
+- A built-in `router:` section in `config.yml` declares the controllers (`controllers`, a PSR-4 namespace to directory map, required), the `middleware_groups` (as `Router::middlewareGroup()`) and the routes `cache` file (a `.php` file under the application root, default `var/zephyrus/routes.php`). Relative paths resolve against `basePath`, no value may carry a YAML tag (`!env` included), and a controller directory that is missing or holds no class of its namespace is refused, where `discoverControllers()` registers nothing silently. The cache holds every route path, name and constraint in clear: never build a route from a secret.
+- `Router::fromConfiguration(Configuration $configuration, string $basePath)` builds the router of that section. In production and staging it reads the routes cache, and falls back to discovery with one `error_log` line when the cache is absent, stale or refused, or when `basePath` holds no `config.yml` (the routes cache is read only from the `config.yml` of the application root); in development and testing it always discovers. The cache is stale once `config.yml`, a file under a controller directory, or the file of a parent class, trait or interface of a controller changes (to the second). A constant of another class read by an attribute is not tracked: run `cache:warm` on every build. `#[RequiresEnv]` is evaluated on every request, so one cache serves every `MODE` and `APP_ENV`. Two routes of one name that can be registered together are refused, by the warm and by the discovery in development.
+- `ApplicationBuilder::build()` builds that router when the configuration declares `router:` and there is no `withRouter()`; it refuses a `withConfiguration()` without `basePath` and a `withRouter()` whose router `Router::fromConfiguration()` did not build (or derive), so that a half-done migration cannot write a cache nobody reads. To upgrade: add `router: { controllers: { App\Controllers: app/Controllers } }` to `config.yml`, call `withConfiguration($config, basePath: $root)` and delete the `discoverControllers()` and `withRouter()` lines (or replace the router with `Router::fromConfiguration($config, basePath: $root)` when it is needed before `build()`). Without a `router:` section nothing changes. Declare the groups of `middlewareGroup()` under `router.middleware_groups`. `ApplicationBuilder::fromConfigurationFile()` and `buildFromConfigurationFile()` take the directory of the file as `basePath`.
+- `vendor/bin/zephyrus cache:warm` and `cache:clear` (`--config=PATH`, repeatable, default the `config.yml` of the project root) write and delete the caches: `var/zephyrus/config.yml.php` and, with a `router:` section, `var/zephyrus/routes.php`. Exit codes: 0, 1 refused, 2 usage error. The command reads no `.env` and resolves no `!env`, and it reads and checks every file and section before it writes or removes the first cache. The files are protected by their owner and file modes, and are not included otherwise; a file at a cache path that `cache:warm` did not write is never replaced or deleted. Warming writes `var/zephyrus/.gitignore` (`*`) unless one is there. To upgrade: run `RUN php vendor/bin/zephyrus cache:warm` in the image build, after `COPY` and `composer dump-autoload`, before any `USER`, on a path no `chown` touches afterwards; add `var/zephyrus/` to `.dockerignore`.
+- `Configuration::fromYamlFile()` reads the parsed YAML from `var/zephyrus/<file name>.php` beside the file when it matches the file's content, with no change to your code. The cache holds the YAML before any tag is resolved, so `!env` is still read from the environment on every load and never written to disk. A cache that does not match, or that the owner and mode checks refuse, is ignored with one `error_log` line.
+
 ## [0.15.0] - 2026-11-12
 
 ### Breaking changes
