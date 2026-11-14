@@ -383,6 +383,7 @@ final readonly class Configuration
     /**
      * Build a Configuration tree from multiple files and ignore missing paths.
      * A missing file is skipped; an existing file with another extension is refused.
+     * A PHP file given as a stream wrapper URL is refused, found or not.
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
@@ -520,6 +521,15 @@ final readonly class Configuration
     }
 
     /**
+     * Whether a path is a .php file named through a stream wrapper URL (scheme://, data:).
+     */
+    private static function isPhpStreamWrapperUrl(string $path): bool
+    {
+        return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'php'
+            && preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1;
+    }
+
+    /**
      * Load a single file as an array (YAML or PHP by extension, any other extension refused).
      *
      * @return array<string, mixed>
@@ -536,7 +546,7 @@ final readonly class Configuration
             throw ConfigurationException::invalidFormat($path, 'must be YAML (.yml, .yaml) or PHP (.php)');
         }
 
-        if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
+        if (self::isPhpStreamWrapperUrl($path)) {
             throw ConfigurationException::invalidFormat($path, 'must be a local path, not a stream wrapper URL');
         }
 
@@ -568,7 +578,7 @@ final readonly class Configuration
         $merged = [];
 
         foreach (self::normalizePaths($paths) as $path) {
-            if ($ignoreMissing && !is_file($path)) {
+            if ($ignoreMissing && !self::isPhpStreamWrapperUrl($path) && !is_file($path)) {
                 continue;
             }
 

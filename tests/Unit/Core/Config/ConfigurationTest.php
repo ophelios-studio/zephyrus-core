@@ -303,20 +303,39 @@ final class ConfigurationTest extends TestCase
         }
     }
 
-    public function testAPhpFileGivenAsAStreamWrapperUrlIsRefusedAndNeverExecuted(): void
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function streamWrapperUrlPrefixes(): array
+    {
+        return [
+            'file scheme' => ['file://'],
+            'upper-case scheme' => ['PHAR://'],
+            'data URL' => ['data:,'],
+            'compression wrapper' => ['compress.zlib://'],
+            'filter wrapper' => ['php://filter/resource='],
+            'glob wrapper' => ['glob://'],
+            'two-character scheme' => ['xy://'],
+            'scheme with plus and minus' => ['x+y-z://'],
+        ];
+    }
+
+    #[DataProvider('streamWrapperUrlPrefixes')]
+    public function testAPhpFileGivenAsAStreamWrapperUrlIsRefusedAndNeverExecuted(string $prefix): void
     {
         $directory = sys_get_temp_dir() . '/zephyrus-config-wrapper-' . bin2hex(random_bytes(8));
         mkdir($directory);
         $path = $directory . '/config.php';
         $marker = $directory . '/marker';
         file_put_contents($path, "<?php file_put_contents('" . $marker . "', 'ran'); return [];");
-        $url = 'file://' . $path;
+        $url = $prefix . $path;
         $expected = 'Configuration file config.php: must be a local path, not a stream wrapper URL';
 
         try {
             $loaders = [
                 fn () => Configuration::fromFile($url),
                 fn () => Configuration::fromFiles([$url]),
+                fn () => Configuration::fromOptionalFiles([$url]),
             ];
 
             foreach ($loaders as $load) {
@@ -331,6 +350,57 @@ final class ConfigurationTest extends TestCase
         } finally {
             @unlink($path);
             @unlink($marker);
+            @rmdir($directory);
+        }
+    }
+
+    public function testAnUpperCasePhpExtensionGivenAsAStreamWrapperUrlIsRefused(): void
+    {
+        $url = 'compress.zlib://' . sys_get_temp_dir() . '/missing-' . bin2hex(random_bytes(8)) . '/CONFIG.PHP';
+
+        try {
+            Configuration::fromOptionalFiles([$url]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                'Configuration file CONFIG.PHP: must be a local path, not a stream wrapper URL',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testFromOptionalFilesRefusesAPhpPathWithAnUnknownSchemeWithoutAWarning(): void
+    {
+        $url = 'zz9://' . sys_get_temp_dir() . '/missing-' . bin2hex(random_bytes(8)) . '/c.php';
+
+        try {
+            Configuration::fromOptionalFiles([$url]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                'Configuration file c.php: must be a local path, not a stream wrapper URL',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAPhpPathWithADirectoryEndingInAColonIsALocalPathAndLoads(): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-config-colon-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        mkdir($directory . '/ab:');
+        $path = $directory . '/ab:/config.php';
+        file_put_contents($path, "<?php\nreturn " . var_export(['localization' => ['locale' => 'fr']], true) . ";\n");
+
+        try {
+            $config = Configuration::fromFile($directory . '/ab://config.php');
+            self::assertSame('fr', $config->localization->locale);
+
+            $optional = Configuration::fromOptionalFiles([$directory . '/ab://config.php']);
+            self::assertSame('fr', $optional->localization->locale);
+        } finally {
+            @unlink($path);
+            @rmdir($directory . '/ab:');
             @rmdir($directory);
         }
     }
