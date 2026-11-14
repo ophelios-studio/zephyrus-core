@@ -32,6 +32,20 @@ final class RouteCollection
     ) {
     }
 
+    /**
+     * A collection of the given routes, in that order, built at once.
+     *
+     * @internal Read by Router and RouteCache.
+     * @param list<Route> $routes
+     */
+    public static function fromRoutes(array $routes, bool $trailingSlashTolerant = true): self
+    {
+        $collection = new self($trailingSlashTolerant);
+        $collection->routes = $routes;
+
+        return $collection;
+    }
+
     public function add(Route $route): void
     {
         $this->routes[] = $route;

@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use ReflectionClass;
+use Zephyrus\Core\Cache\BootCache;
+use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteAttributeException;
@@ -20,6 +20,8 @@ final class Router
 
     /** @var array<string, array<int, string>> */
     private array $middlewareGroups;
+
+    private bool $builtFromConfiguration = false;
 
     /**
      * @param array<string, array<int, string>> $middlewareGroups
@@ -35,6 +37,79 @@ final class Router
     }
 
     /**
+     * The router of the router: section. In production and staging, its routes are read from the cache written by
+     * vendor/bin/zephyrus cache:warm while that cache is usable; otherwise, and always in development and testing,
+     * the controllers are discovered, with one error_log line in production and staging. Either way, a route
+     * whose #[RequiresEnv] the environment does not meet is left out, on every call.
+     *
+     * Discovery refuses two routes of one name that can be registered together, a #[MiddlewareGroup] that
+     * router.middleware_groups does not declare, and a controller directory that is missing or holds no class.
+     *
+     * @param string $basePath Absolute path of the application root: relative router: paths are resolved against
+     *                         it, and the routes cache is checked against its config.yml.
+     * @throws \InvalidArgumentException When basePath is not an absolute path.
+     * @throws ConfigurationException When the configuration has no router: section, a controller directory is
+     *                                missing or holds no class of its namespace, or the cache leaves basePath.
+     * @throws RouteAttributeException When a class cannot be reflected, a #[RequiresEnv] names a variable that is
+     *                                 never read, or two routes of one name can be registered together.
+     * @throws RouteSignatureException When a route path is malformed.
+     * @throws RouteMiddlewareException When a #[MiddlewareGroup] is not declared, groups reference each other in a
+     *                                  cycle, or a #[WithoutMiddleware] names a class it may not skip.
+     */
+    public static function fromConfiguration(Configuration $configuration, string $basePath): self
+    {
+        $config = $configuration->router
+            ?? throw ConfigurationException::missingRequired(RouterConfig::SECTION, 'controllers');
+
+        if (!str_starts_with($basePath, '/')) {
+            throw new \InvalidArgumentException(sprintf(
+                'Router::fromConfiguration() needs the absolute path of the application root as basePath, not "%s".',
+                $basePath,
+            ));
+        }
+
+        $basePath = realpath($basePath) ?: rtrim($basePath, '/');
+        $cache = new RouteCache($config, $basePath, $basePath . '/' . RouteCache::CONFIGURATION_FILE);
+
+        $routes = $configuration->application->environment->isProductionLike() ? self::cachedRoutes($cache) : null;
+        $routes ??= RouteCollection::fromRoutes(array_values(array_map(
+            static fn (DiscoveredRoute $discovered): Route => $discovered->route,
+            array_filter(
+                (new RouteDiscovery($config, $basePath))->routes(),
+                static fn (DiscoveredRoute $discovered): bool => RouteAttributeReader::requirementsMet(
+                    $discovered->requirements,
+                ),
+            ),
+        )));
+
+        $router = new self($routes, null, $config->middlewareGroups);
+        $router->builtFromConfiguration = true;
+
+        return $router;
+    }
+
+    /**
+     * Whether Router::fromConfiguration() built this router or the router it was derived from.
+     *
+     * @internal Read by ApplicationBuilder.
+     */
+    public function isBuiltFromConfiguration(): bool
+    {
+        return $this->builtFromConfiguration;
+    }
+
+    private static function cachedRoutes(RouteCache $cache): ?RouteCollection
+    {
+        if (!$cache->has()) {
+            error_log(sprintf(RouteCache::MISSING_LOG_LINE, $cache->path(), BootCache::WARM_COMMAND));
+
+            return null;
+        }
+
+        return $cache->load();
+    }
+
+    /**
      * Returns a copy with trailing-slash tolerance set; with false, `/users` and `/users/` are distinct.
      */
     public function withTrailingSlashTolerance(bool $tolerant = true): self
@@ -45,7 +120,7 @@ final class Router
             $routes->add($route);
         }
 
-        return new self($routes, $this->attributeReader, $this->middlewareGroups);
+        return $this->derive($routes);
     }
 
     /**
@@ -87,13 +162,9 @@ final class Router
         array $middlewares = [],
         ?string $name = null,
     ): self {
-        return new self(
-            $this->routes->withRoute(
-                Route::define($method, $path, $handler, $constraints, $this->expandMiddlewares($middlewares), $name),
-            ),
-            $this->attributeReader,
-            $this->middlewareGroups,
-        );
+        return $this->derive($this->routes->withRoute(
+            Route::define($method, $path, $handler, $constraints, $this->expandMiddlewares($middlewares), $name),
+        ));
     }
 
     /**
@@ -103,7 +174,7 @@ final class Router
      */
     public function name(string $routeName): self
     {
-        return new self($this->routes->withLastRouteName($routeName), $this->attributeReader, $this->middlewareGroups);
+        return $this->derive($this->routes->withLastRouteName($routeName));
     }
 
     /**
@@ -133,11 +204,7 @@ final class Router
             );
         }
 
-        return new self(
-            $this->routes->withLastRouteExcludedMiddlewares(array_values($middlewares)),
-            $this->attributeReader,
-            $this->middlewareGroups,
-        );
+        return $this->derive($this->routes->withLastRouteExcludedMiddlewares(array_values($middlewares)));
     }
 
     /**
@@ -167,7 +234,7 @@ final class Router
         ?string $namePrefix = null,
         array $excludedMiddlewares = [],
     ): self {
-        $scoped = new self(null, $this->attributeReader, $this->middlewareGroups);
+        $scoped = $this->derive(new RouteCollection());
         $scopedResult = $registrar($scoped);
 
         $router = $this;
@@ -379,19 +446,15 @@ final class Router
         $router = $this;
 
         foreach ($discovered as $route) {
-            $router = new self(
-                $router->routes->withRoute(new Route(
-                    method: $route->method,
-                    path: $route->path,
-                    handler: $route->handler,
-                    constraints: $route->constraints,
-                    middlewares: $router->expandMiddlewares($route->middlewares),
-                    name: $route->name,
-                    excludedMiddlewares: $route->excludedMiddlewares,
-                )),
-                $router->attributeReader,
-                $router->middlewareGroups,
-            );
+            $router = $router->derive($router->routes->withRoute(new Route(
+                method: $route->method,
+                path: $route->path,
+                handler: $route->handler,
+                constraints: $route->constraints,
+                middlewares: $router->expandMiddlewares($route->middlewares),
+                name: $route->name,
+                excludedMiddlewares: $route->excludedMiddlewares,
+            )));
         }
 
         return $router;
@@ -422,7 +485,7 @@ final class Router
             return $this;
         }
 
-        $classes = $this->scanDirectory($namespace, $directory);
+        $classes = RouteDiscovery::classesIn($namespace, $directory);
         $router = $this;
 
         foreach ($classes as $className) {
@@ -434,46 +497,6 @@ final class Router
         }
 
         return $router;
-    }
-
-    /**
-     * @return list<class-string>
-     */
-    private function scanDirectory(string $namespace, string $directory): array
-    {
-        $namespace = rtrim($namespace, '\\') . '\\';
-        $classes = [];
-
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
-        );
-
-        foreach ($iterator as $file) {
-            if ($file->getExtension() !== 'php') {
-                continue;
-            }
-
-            $relativePath = substr($file->getPathname(), strlen($directory) + 1);
-            $className = $namespace . str_replace(
-                ['/', '\\', '.php'],
-                ['\\', '\\', ''],
-                $relativePath,
-            );
-
-            if (!class_exists($className)) {
-                continue;
-            }
-
-            $reflection = new ReflectionClass($className);
-            if ($reflection->isAbstract() || $reflection->isInterface() || $reflection->isTrait()) {
-                continue;
-            }
-
-            $classes[] = $className;
-        }
-
-        sort($classes);
-        return $classes;
     }
 
     public function routes(): RouteCollection
@@ -669,24 +692,53 @@ final class Router
     }
 
     /**
+     * A copy holding the given routes, keeping the reader, the middleware groups and the configuration mark.
+     */
+    private function derive(RouteCollection $routes): self
+    {
+        $router = new self($routes, $this->attributeReader, $this->middlewareGroups);
+        $router->builtFromConfiguration = $this->builtFromConfiguration;
+
+        return $router;
+    }
+
+    /**
+     * @param array<int, string> $middlewares
+     *
+     * @return array<int, string>
+     *
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
+     */
+    private function expandMiddlewares(array $middlewares): array
+    {
+        return self::expandMiddlewareGroups($this->middlewareGroups, $middlewares);
+    }
+
+    /**
+     * Replaces each group name by the middlewares of the group, recursively, keeping the first of duplicates.
+     *
+     * @internal Read by RouteDiscovery.
+     * @param array<string, array<int, string>> $groups
      * @param array<int, string> $middlewares
      * @param array<int, string> $stack
      *
      * @return array<int, string>
+     *
+     * @throws RouteMiddlewareException When middleware groups reference each other in a cycle.
      */
-    private function expandMiddlewares(array $middlewares, array $stack = []): array
+    public static function expandMiddlewareGroups(array $groups, array $middlewares, array $stack = []): array
     {
         $expanded = [];
 
         foreach ($middlewares as $name) {
-            if (isset($this->middlewareGroups[$name])) {
+            if (isset($groups[$name])) {
                 if (in_array($name, $stack, true)) {
                     throw RouteMiddlewareException::circularGroupReference($stack, $name);
                 }
 
                 $expanded = [
                     ...$expanded,
-                    ...$this->expandMiddlewares($this->middlewareGroups[$name], [...$stack, $name]),
+                    ...self::expandMiddlewareGroups($groups, $groups[$name], [...$stack, $name]),
                 ];
                 continue;
             }

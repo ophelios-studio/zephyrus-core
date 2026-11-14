@@ -46,30 +46,105 @@ final class RouteAttributeReader
      */
     public function read(string $className): array
     {
-        try {
-            $reflection = new ReflectionClass($className);
-        } catch (ReflectionException $e) {
-            throw RouteAttributeException::unresolvableClass($className, $e);
-        }
+        $reflection = $this->reflect($className);
 
-        if (!$this->satisfiesInheritedEnvRequirements($reflection)) {
+        if (!self::requirementsMet($this->classRequirements($reflection))) {
             return [];
         }
 
+        return array_map(
+            static fn (DiscoveredRoute $discovered): Route => $discovered->route,
+            $this->routesOf($className, $reflection, [], activeOnly: true),
+        );
+    }
+
+    /**
+     * Returns every route of the class, as read() would under any environment, each with the #[RequiresEnv] pairs
+     * of its class, the parents of its class and its method. No pair is evaluated, and no route name is compared.
+     *
+     * @internal Read by RouteDiscovery.
+     * @param class-string $className
+     * @return list<DiscoveredRoute>
+     * @throws RouteAttributeException When the class cannot be reflected or a #[RequiresEnv] names a variable that
+     *                                 is never read as configuration.
+     * @throws RouteSignatureException When a route placeholder is malformed, duplicated or reserved.
+     * @throws RouteMiddlewareException When a #[WithoutMiddleware] names a class the route may not skip.
+     */
+    public function readWithRequirements(string $className): array
+    {
+        $reflection = $this->reflect($className);
+        $classRequirements = $this->classRequirements($reflection);
+        self::assertReadableVariables($className, $classRequirements);
+
+        return $this->routesOf($className, $reflection, $classRequirements, activeOnly: false);
+    }
+
+    /**
+     * Whether the environment holds every (variable, value) pair, each read with EnvironmentVariable::read(): the
+     * one evaluation of #[RequiresEnv], shared by attribute discovery and the routes cache.
+     *
+     * @internal
+     * @param list<array{string, string}> $requirements
+     * @throws \InvalidArgumentException When a variable name is refused by EnvironmentVariable::read().
+     */
+    public static function requirementsMet(array $requirements): bool
+    {
+        foreach ($requirements as [$variable, $value]) {
+            if (EnvironmentVariable::read($variable) !== $value) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param class-string $className
+     * @return ReflectionClass<object>
+     */
+    private function reflect(string $className): ReflectionClass
+    {
+        try {
+            return new ReflectionClass($className);
+        } catch (ReflectionException $e) {
+            throw RouteAttributeException::unresolvableClass($className, $e);
+        }
+    }
+
+    /**
+     * @param ReflectionClass<object> $reflection
+     * @param list<array{string, string}> $classRequirements
+     * @return list<DiscoveredRoute>
+     * @throws RouteAttributeException
+     * @throws RouteSignatureException
+     * @throws RouteMiddlewareException
+     */
+    private function routesOf(
+        string $className,
+        ReflectionClass $reflection,
+        array $classRequirements,
+        bool $activeOnly,
+    ): array {
         $routes = [];
         $seenRouteNames = [];
         $rootPrefix = $this->resolveRootPrefix($reflection);
 
         $classMiddlewares = $this->readInheritedMiddlewares($reflection);
         $classExclusions = $this->readInheritedExclusions($reflection);
+        $classGroups = $this->readInheritedGroups($reflection);
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->getDeclaringClass()->getName() !== $className) {
                 continue;
             }
 
-            if (!$this->satisfiesEnvRequirements($method->getAttributes(RequiresEnvAttribute::class))) {
+            $methodRequirements = $this->requirementsOf($method->getAttributes(RequiresEnvAttribute::class));
+            if ($activeOnly && !self::requirementsMet($methodRequirements)) {
                 continue;
+            }
+
+            if (!$activeOnly) {
+                self::assertReadableVariables($className, $methodRequirements);
             }
 
             $handler = sprintf('%s@%s', $className, $method->getName());
@@ -77,11 +152,15 @@ final class RouteAttributeReader
                 ...$classExclusions,
                 ...$this->readExclusionAttributes($method->getAttributes(WithoutMiddlewareAttribute::class)),
             ];
+            $groups = [
+                ...$classGroups,
+                ...$this->readMiddlewareGroupAttributes($method->getAttributes(MiddlewareGroupAttribute::class)),
+            ];
 
             foreach ($this->readMethodAttributes($method, $classMiddlewares) as $attr) {
                 $name = $attr['name'] !== '' ? $attr['name'] : null;
 
-                if ($name !== null) {
+                if ($activeOnly && $name !== null) {
                     if (isset($seenRouteNames[$name])) {
                         throw RouteAttributeException::duplicateRouteName($className, $name);
                     }
@@ -89,14 +168,18 @@ final class RouteAttributeReader
                     $seenRouteNames[$name] = true;
                 }
 
-                $routes[] = Route::define(
-                    method: $attr['method'],
-                    path: $this->joinPath($rootPrefix, $attr['path']),
-                    handler: $handler,
-                    constraints: $attr['constraints'],
-                    middlewares: $attr['middlewares'],
-                    name: $name,
-                    excludedMiddlewares: $exclusions,
+                $routes[] = new DiscoveredRoute(
+                    Route::define(
+                        method: $attr['method'],
+                        path: $this->joinPath($rootPrefix, $attr['path']),
+                        handler: $handler,
+                        constraints: $attr['constraints'],
+                        middlewares: $attr['middlewares'],
+                        name: $name,
+                        excludedMiddlewares: $exclusions,
+                    ),
+                    [...$classRequirements, ...$methodRequirements],
+                    $groups,
                 );
             }
         }
@@ -296,39 +379,69 @@ final class RouteAttributeReader
     }
 
     /**
-     * Checks that all #[RequiresEnv] attributes are satisfied by the
-     * current environment. Returns false if any requirement fails.
+     * The #[RequiresEnv] pairs of the class and its parents, the class first.
      *
-     * @param list<\ReflectionAttribute<RequiresEnvAttribute>> $attributes
+     * @param ReflectionClass<object> $reflection
+     * @return list<array{string, string}>
      */
-    private function satisfiesEnvRequirements(array $attributes): bool
+    private function classRequirements(ReflectionClass $reflection): array
     {
-        foreach ($attributes as $attributeRef) {
-            /** @var RequiresEnvAttribute $attr */
-            $attr = $attributeRef->newInstance();
-            if (EnvironmentVariable::read($attr->variable) !== $attr->value) {
-                return false;
-            }
+        $requirements = [];
+        for ($current = $reflection; $current !== false; $current = $current->getParentClass()) {
+            array_push($requirements, ...$this->requirementsOf($current->getAttributes(RequiresEnvAttribute::class)));
         }
 
-        return true;
+        return $requirements;
     }
 
     /**
-     * Check #[RequiresEnv] on the class and all its parents.
+     * @param list<\ReflectionAttribute<RequiresEnvAttribute>> $attributes
+     * @return list<array{string, string}>
+     */
+    private function requirementsOf(array $attributes): array
+    {
+        $requirements = [];
+        foreach ($attributes as $attributeRef) {
+            $attr = $attributeRef->newInstance();
+            $requirements[] = [$attr->variable, $attr->value];
+        }
+
+        return $requirements;
+    }
+
+    /**
+     * @param list<array{string, string}> $requirements
+     * @throws RouteAttributeException
+     */
+    private static function assertReadableVariables(string $className, array $requirements): void
+    {
+        foreach ($requirements as [$variable]) {
+            try {
+                // Checks the name only: the value read is discarded.
+                EnvironmentVariable::read($variable);
+            } catch (\InvalidArgumentException $e) {
+                throw RouteAttributeException::unreadableRequirement($className, $e);
+            }
+        }
+    }
+
+    /**
+     * The #[MiddlewareGroup] names of the class and its parents, parent-first.
      *
      * @param ReflectionClass<object> $reflection
+     * @return list<string>
      */
-    private function satisfiesInheritedEnvRequirements(ReflectionClass $reflection): bool
+    private function readInheritedGroups(ReflectionClass $reflection): array
     {
-        $current = $reflection;
-        while ($current !== false) {
-            if (!$this->satisfiesEnvRequirements($current->getAttributes(RequiresEnvAttribute::class))) {
-                return false;
-            }
-            $current = $current->getParentClass();
+        $groups = [];
+        foreach ($this->parentFirstChain($reflection) as $class) {
+            array_push(
+                $groups,
+                ...$this->readMiddlewareGroupAttributes($class->getAttributes(MiddlewareGroupAttribute::class)),
+            );
         }
-        return true;
+
+        return $groups;
     }
 
     private function joinPath(string $prefix, string $path): string

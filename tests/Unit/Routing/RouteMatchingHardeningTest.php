@@ -14,7 +14,6 @@ use Zephyrus\Routing\Exception\RouteParameterException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\HandlerResolver;
 use Zephyrus\Routing\Route;
-use Zephyrus\Routing\RouteCache;
 use Zephyrus\Routing\RouteCollection;
 use Zephyrus\Routing\RouteDispatcher;
 use Zephyrus\Routing\RouteMatch;
@@ -388,69 +387,6 @@ final class RouteMatchingHardeningTest extends TestCase
         self::assertSame('/x/{_draft}', Route::define('GET', '/x/{_draft}', 'C@show')->path);
         // A brace that closes no placeholder is a literal.
         self::assertSame('/x/a{b', Route::define('GET', '/x/a{b', 'C@show')->path);
-    }
-
-    public function testAPoisonedRouteCacheFailsAsARouteCacheError(): void
-    {
-        $file = sys_get_temp_dir() . '/zephyrus-poisoned-cache-' . bin2hex(random_bytes(8)) . '.json';
-        file_put_contents($file, json_encode([
-            'routes' => [
-                ['method' => 'GET', 'path' => '/x/{client_ip}', 'handler' => 'C@show'],
-            ],
-        ], JSON_THROW_ON_ERROR));
-
-        try {
-            $this->expectException(\Zephyrus\Routing\Exception\RouteCacheException::class);
-            (new RouteCache($file))->load();
-        } finally {
-            @unlink($file);
-        }
-    }
-
-    public function testTheCacheDirectoryAndFileAreNotWorldWritable(): void
-    {
-        // The cache drives Class@method dispatch, so it must not be writable by others.
-        // The umask is set to 0 so that the modes are proven, not inherited.
-        $previousUmask = umask(0);
-        $directory = sys_get_temp_dir() . '/zephyrus-cache-perm-' . bin2hex(random_bytes(8));
-        $file = $directory . '/routes.json';
-
-        try {
-            $routes = new RouteCollection();
-            $routes->add(Route::define('GET', '/users', 'UserController@index'));
-
-            (new RouteCache($file))->save($routes);
-
-            self::assertSame('0755', substr(sprintf('%o', fileperms($directory)), -4));
-            self::assertSame('0644', substr(sprintf('%o', fileperms($file)), -4));
-        } finally {
-            @unlink($file);
-            @rmdir($directory);
-            umask($previousUmask);
-        }
-    }
-
-    public function testNoTemporaryFileSurvivesASuccessfulSave(): void
-    {
-        $directory = sys_get_temp_dir() . '/zephyrus-cache-tmp-' . bin2hex(random_bytes(8));
-        $file = $directory . '/routes.json';
-
-        try {
-            $routes = new RouteCollection();
-            $routes->add(Route::define('GET', '/users', 'UserController@index'));
-
-            $cache = new RouteCache($file);
-            $cache->save($routes);
-            $cache->save($routes);
-
-            self::assertSame([], glob($directory . '/*.tmp'));
-            self::assertCount(1, $cache->load()->all());
-        } finally {
-            foreach (glob($directory . '/*') ?: [] as $leftover) {
-                @unlink($leftover);
-            }
-            @rmdir($directory);
-        }
     }
 
     /**

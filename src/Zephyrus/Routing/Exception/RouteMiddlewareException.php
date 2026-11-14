@@ -20,6 +20,19 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     }
 
     /**
+     * A #[MiddlewareGroup] that the router: section does not declare, so its routes would run without it.
+     */
+    public static function undeclaredMiddlewareGroup(string $group, string $handler): self
+    {
+        return new self(sprintf(
+            'Middleware group %s, named by a #[MiddlewareGroup] of %s, is not declared under '
+            . 'router.middleware_groups: declare it there, or the route would run without its middlewares.',
+            MessageValue::quote($group),
+            $handler,
+        ));
+    }
+
+    /**
      * @param list<array{name: string, method: string, path: string}> $unknown The unregistered names, in route order.
      * @param list<string> $registered The registered route middleware names.
      */

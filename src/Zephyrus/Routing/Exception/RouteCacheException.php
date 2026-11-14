@@ -7,19 +7,19 @@ namespace Zephyrus\Routing\Exception;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
- * Thrown when route cache operations fail.
- *
- * Covers file I/O, serialization, payload validation, integrity checks,
- * and refused cache files.
+ * Thrown when the routes cache cannot be written.
  */
 final class RouteCacheException extends ZephyrusRuntimeException
 {
     /**
-     * A cache file is refused: the message names the file, the problem and the fix.
-     * $problem completes the phrase "Route cache file <file> has ...".
+     * The controllers of router.controllers declare no route, so there is nothing to cache.
      */
-    public static function refused(string $file, string $problem): self
+    public static function noRoutes(string $file): self
     {
-        return new self(sprintf('Route cache file %s has %s; rebuild the cache with save() or warm()', $file, $problem));
+        return new self(sprintf(
+            'The controllers of router.controllers declare no route, so the routes cache %s was not written: check '
+            . 'that each namespace matches its directory.',
+            $file,
+        ));
     }
 }

@@ -324,6 +324,35 @@ final readonly class Route
         );
     }
 
+    /**
+     * Rebuilds routes that were validated when the routes cache was written, without validating them again.
+     *
+     * @internal Read by RouteCache only.
+     * @param list<array{string, string, string, array<string, string>, list<string>, ?string, list<class-string<MiddlewareInterface>>}> $fields
+     *        Method, path, handler, constraints, middlewares, name and excluded middlewares of each route.
+     * @return list<self>
+     */
+    public static function restoreAll(array $fields): array
+    {
+        $class = new \ReflectionClass(self::class);
+        $properties = array_map(
+            $class->getProperty(...),
+            ['method', 'path', 'handler', 'constraints', 'middlewares', 'name', 'excludedMiddlewares'],
+        );
+
+        $routes = [];
+        foreach ($fields as $values) {
+            $route = $class->newInstanceWithoutConstructor();
+            foreach ($properties as $index => $property) {
+                $property->setValue($route, $values[$index]);
+            }
+
+            $routes[] = $route;
+        }
+
+        return $routes;
+    }
+
     public function matchesMethod(string $method): bool
     {
         return $this->method === strtoupper($method);

@@ -26,4 +26,30 @@ final class RouteAttributeException extends ZephyrusRuntimeException
             $className,
         ));
     }
+
+    /**
+     * Two routes of one name that no #[RequiresEnv] pair keeps apart, so both can be registered at once.
+     */
+    public static function coexistingRouteNames(string $routeName, string $firstHandler, string $secondHandler): self
+    {
+        return new self(sprintf(
+            'Route name "%s" is declared by %s and by %s, which can be registered together: rename one, or require '
+            . 'one environment variable at a different value on each with #[RequiresEnv].',
+            $routeName,
+            $firstHandler,
+            $secondHandler,
+        ));
+    }
+
+    /**
+     * A #[RequiresEnv] whose variable EnvironmentVariable::read() refuses to read.
+     */
+    public static function unreadableRequirement(string $className, \InvalidArgumentException $previous): self
+    {
+        return new self(
+            sprintf('Cannot read the #[RequiresEnv] of class "%s": %s', $className, $previous->getMessage()),
+            0,
+            $previous,
+        );
+    }
 }
