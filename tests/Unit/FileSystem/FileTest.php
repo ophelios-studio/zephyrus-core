@@ -884,7 +884,11 @@ final class FileTest extends TestCase
             (new File($source))->move($destination);
             self::fail('expected a refusal');
         } catch (FileSystemException $e) {
-            self::assertSame('Failed to move "' . $source . '" to "' . $destination . '"', $e->getMessage());
+            self::assertSame(
+                'Failed to move "' . $source . '" to "' . $destination . '"'
+                . ' ("rename(' . $source . ',' . $destination . '): Permission denied")',
+                $e->getMessage(),
+            );
         } finally {
             chmod($locked, 0755);
         }

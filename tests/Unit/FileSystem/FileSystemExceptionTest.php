@@ -105,6 +105,26 @@ final class FileSystemExceptionTest extends TestCase
         self::assertSame('Failed to copy "/a" to "/c" ("x\ny")', $exception->getMessage());
     }
 
+    public function testAReasonOver256BytesKeepsItsEndFollowedByItsLength(): void
+    {
+        $reason = 'rename(' . str_repeat('a', 300) . '): Permission denied';
+        $exception = FileSystemException::operationFailed('write to', '/p', reason: $reason);
+        self::assertSame(
+            'Failed to write to: "/p" ("...' . substr($reason, -256) . '" (' . strlen($reason) . ' bytes))',
+            $exception->getMessage(),
+        );
+    }
+
+    public function testATransferReasonOver256BytesKeepsItsEndFollowedByItsLength(): void
+    {
+        $reason = 'rename(' . str_repeat('a', 300) . '): Permission denied';
+        $exception = FileSystemException::transferFailed('move', '/a', '/c', $reason);
+        self::assertSame(
+            'Failed to move "/a" to "/c" ("...' . substr($reason, -256) . '" (' . strlen($reason) . ' bytes))',
+            $exception->getMessage(),
+        );
+    }
+
     public function testBothPathsOfACopyOntoItselfAreQuoted(): void
     {
         $exception = FileSystemException::copyOntoItself('/a', '/b');

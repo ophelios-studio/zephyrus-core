@@ -248,8 +248,9 @@ final class File extends FileSystemNode
             }
         }
 
+        error_clear_last();
         if (!@rename($this->path, $destination)) {
-            throw FileSystemException::transferFailed('move', $this->path, $destination);
+            throw FileSystemException::transferFailed('move', $this->path, $destination, self::lastError());
         }
 
         return new self($destination);

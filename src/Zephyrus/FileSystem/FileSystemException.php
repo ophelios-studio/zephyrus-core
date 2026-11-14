@@ -43,7 +43,7 @@ final class FileSystemException extends ZephyrusRuntimeException
                     'Failed to %s: %s (%s)',
                     $operation,
                     self::quotePath($path),
-                    MessageValue::quote($reason, self::MAX_REASON_BYTES),
+                    MessageValue::quote($reason, self::MAX_REASON_BYTES, keepEnd: true),
                 ),
             previous: $previous,
         );
@@ -65,7 +65,11 @@ final class FileSystemException extends ZephyrusRuntimeException
         return new self(
             $reason === null
                 ? $message
-                : sprintf('%s (%s)', $message, MessageValue::quote($reason, self::MAX_REASON_BYTES)),
+                : sprintf(
+                    '%s (%s)',
+                    $message,
+                    MessageValue::quote($reason, self::MAX_REASON_BYTES, keepEnd: true),
+                ),
         );
     }
 
