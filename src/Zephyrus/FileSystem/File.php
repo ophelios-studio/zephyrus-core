@@ -95,7 +95,9 @@ final class File extends FileSystemNode
      * Append content to the file, creating it when absent.
      *
      * Each append holds an exclusive flock() on the file: concurrent append() calls never
-     * overwrite each other, but a writer that does not take that lock is not coordinated.
+     * overwrite each other, but they can overwrite and lose lines of a writer that does not
+     * take that lock (file_put_contents() with FILE_APPEND, error_log(), a default Monolog
+     * StreamHandler).
      * On a thread-safe PHP build or a filesystem without hard links, two calls that create
      * the file at the same instant may leave only one of their contents. The lock is awaited
      * without limit, so any process that can open the file (one readable by other users
