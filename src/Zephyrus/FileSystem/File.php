@@ -206,7 +206,11 @@ final class File extends FileSystemNode
 
             self::replaceContent(
                 $destination,
-                static fn ($handle): bool => @stream_copy_to_stream($source, $handle) !== false,
+                static function ($handle) use ($source): bool {
+                    error_clear_last();
+
+                    return @stream_copy_to_stream($source, $handle) !== false;
+                },
                 self::failure('copy', $this->path . ' to ' . $destination),
                 $sourceStat['mode'],
                 function (array $existing) use ($sourceStat, $destination): void {
@@ -307,22 +311,36 @@ final class File extends FileSystemNode
      */
     private static function contentWriter(string $content): \Closure
     {
-        return static fn ($handle): bool => @fwrite($handle, $content) === strlen($content);
+        return static function ($handle) use ($content): bool {
+            error_clear_last();
+
+            return @fwrite($handle, $content) === strlen($content);
+        };
     }
 
     /**
-     * @return \Closure(): FileSystemException
+     * @return \Closure(?string=): FileSystemException
      */
     private static function failure(string $operation, string $path): \Closure
     {
-        return static fn (): FileSystemException => FileSystemException::operationFailed($operation, $path);
+        return static fn (?string $reason = null): FileSystemException
+            => FileSystemException::operationFailed($operation, $path, reason: $reason);
+    }
+
+    /**
+     * The message of the error raised since the last error_clear_last(): call that right
+     * before the silenced call whose failure is being explained.
+     */
+    private static function lastError(): ?string
+    {
+        return error_get_last()['message'] ?? null;
     }
 
     /**
      * Replace the content of `$path` without following a symbolic link at it.
      *
      * @param \Closure(resource): bool $write Writes the new content into an empty file.
-     * @param \Closure(): FileSystemException $failure
+     * @param \Closure(?string=): FileSystemException $failure
      * @param (\Closure(array{dev: int, ino: int}): void)|null $refuseExisting Throws to leave an existing file alone.
      * @throws FileSystemException
      */
@@ -347,8 +365,9 @@ final class File extends FileSystemNode
             if ($refuseExisting !== null) {
                 $refuseExisting($existing);
             }
+            error_clear_last();
             if (!ftruncate($handle, 0) || !$write($handle)) {
-                throw $failure();
+                throw $failure(self::lastError());
             }
         } finally {
             fclose($handle);
@@ -377,7 +396,7 @@ final class File extends FileSystemNode
 
         try {
             if (!self::appendUnderLock($handle, $content)) {
-                throw $failure();
+                throw $failure(self::lastError());
             }
         } finally {
             fclose($handle);
@@ -389,6 +408,7 @@ final class File extends FileSystemNode
      */
     private static function appendUnderLock($handle, string $content): bool
     {
+        error_clear_last();
         if (!flock($handle, LOCK_EX)) {
             return false;
         }
@@ -405,7 +425,7 @@ final class File extends FileSystemNode
      * Open the regular file `$path` names for reading and writing, never creating it: null
      * when the path is absent or is a symbolic link to replace.
      *
-     * @param \Closure(): FileSystemException $failure
+     * @param \Closure(?string=): FileSystemException $failure
      * @return resource|null
      * @throws FileSystemException
      */
@@ -427,14 +447,16 @@ final class File extends FileSystemNode
                 throw FileSystemException::notARegularFile($path);
             }
 
+            error_clear_last();
             $handle = @fopen($path, 'r+');
             if ($handle !== false) {
                 break;
             }
+            $reason = self::lastError();
             clearstatcache(true, $path);
             $now = @lstat($path);
             if ($attempt === 2 || ($now !== false && self::isSameFile($named, $now))) {
-                throw is_readable($path) ? $failure() : FileSystemException::notReadableForSafeWrite($path);
+                throw is_readable($path) ? $failure($reason) : FileSystemException::notReadableForSafeWrite($path);
             }
         }
 
@@ -456,7 +478,7 @@ final class File extends FileSystemNode
      * open in place escapes: a file in a sticky directory owned by neither its owner nor us.
      *
      * @param resource $handle
-     * @param \Closure(): FileSystemException $failure
+     * @param \Closure(?string=): FileSystemException $failure
      * @throws FileSystemException
      */
     private static function refuseAnotherUsersFileInStickyDirectory(string $path, $handle, \Closure $failure): void
@@ -502,7 +524,7 @@ final class File extends FileSystemNode
      * call.
      *
      * @param \Closure(resource): bool $write
-     * @param \Closure(): FileSystemException $failure
+     * @param \Closure(?string=): FileSystemException $failure
      * @return bool False when link() failed.
      * @throws FileSystemException
      */
@@ -514,9 +536,10 @@ final class File extends FileSystemNode
         int $mode = self::DEFAULT_PERMISSIONS,
     ): bool {
         $directory = dirname($path);
+        error_clear_last();
         $temporary = @tempnam($directory, self::TEMPORARY_PREFIX);
         if ($temporary === false) {
-            throw $failure();
+            throw $failure(self::lastError());
         }
 
         $temporaryLeft = true;
@@ -525,9 +548,10 @@ final class File extends FileSystemNode
             if (dirname($temporary) !== realpath($directory)) {
                 throw $failure();
             }
+            error_clear_last();
             $handle = @fopen($temporary, 'r+');
             if ($handle === false) {
-                throw $failure();
+                throw $failure(self::lastError());
             }
             try {
                 if (!self::namesHandle($temporary, $handle)) {
@@ -537,7 +561,7 @@ final class File extends FileSystemNode
                     throw FileSystemException::operationFailed('set permissions on', $path);
                 }
                 if (!$write($handle)) {
-                    throw $failure();
+                    throw $failure(self::lastError());
                 }
             } finally {
                 fclose($handle);
@@ -546,8 +570,9 @@ final class File extends FileSystemNode
             if (!$replace) {
                 return @link($temporary, $path);
             }
+            error_clear_last();
             if (!@rename($temporary, $path)) {
-                throw $failure();
+                throw $failure(self::lastError());
             }
             $temporaryLeft = false;
 

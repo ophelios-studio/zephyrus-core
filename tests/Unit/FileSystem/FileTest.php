@@ -694,6 +694,7 @@ final class FileTest extends TestCase
         $source = $this->tempDir . '/source.txt';
         file_put_contents($path, '');
         file_put_contents($source, 'more than four bytes');
+        @lstat($this->tempDir . '/missing.txt');
 
         try {
             self::underFileSizeLimit(4, match ($method) {
@@ -703,8 +704,29 @@ final class FileTest extends TestCase
             });
             self::fail('expected a failure');
         } catch (FileSystemException $e) {
-            self::assertSame(strtr($message, ['{path}' => $path, '{source}' => $source]), $e->getMessage());
+            $expected = strtr($message, ['{path}' => $path, '{source}' => $source]);
+            self::assertStringStartsWith($expected . ' (', $e->getMessage());
+            self::assertStringContainsString('errno=27', $e->getMessage());
+            self::assertStringEndsWith(')', $e->getMessage());
+            self::assertStringNotContainsString('lstat', $e->getMessage());
         }
+    }
+
+    public function testAWriteOfANewFileCutShortNamesTheErrorOfTheWriteAlone(): void
+    {
+        if (!function_exists('posix_setrlimit') || !function_exists('pcntl_signal')) {
+            self::markTestSkipped('Needs the posix and pcntl extensions.');
+        }
+        $path = $this->tempDir . '/new.txt';
+
+        try {
+            self::underFileSizeLimit(4, static fn () => File::create($path, 'more than four bytes'));
+            self::fail('expected a failure');
+        } catch (FileSystemException $e) {
+            self::assertStringStartsWith('Failed to create file: ' . $path . ' (fwrite(): ', $e->getMessage());
+            self::assertStringContainsString('errno=27', $e->getMessage());
+        }
+        self::assertSame([], glob($this->tempDir . '/.zephyrus-*'));
     }
 
     public function testCopyOfADirectoryIsRefusedBeforeTouchingTheDestination(): void

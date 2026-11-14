@@ -26,10 +26,16 @@ final class FileSystemException extends ZephyrusRuntimeException
         return new self(sprintf('Path is not writable: %s', $path));
     }
 
-    public static function operationFailed(string $operation, string $path, ?\Throwable $previous = null): self
-    {
+    public static function operationFailed(
+        string $operation,
+        string $path,
+        ?\Throwable $previous = null,
+        ?string $reason = null,
+    ): self {
         return new self(
-            sprintf('Failed to %s: %s', $operation, $path),
+            $reason === null
+                ? sprintf('Failed to %s: %s', $operation, $path)
+                : sprintf('Failed to %s: %s (%s)', $operation, $path, $reason),
             previous: $previous,
         );
     }

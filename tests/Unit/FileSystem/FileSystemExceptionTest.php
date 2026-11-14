@@ -47,6 +47,18 @@ final class FileSystemExceptionTest extends TestCase
         self::assertSame('Path is a stream wrapper URL, which is not written: phar:///a/b.phar/c', $exception->getMessage());
     }
 
+    public function testOperationFailedWithAReasonQuotesItAfterThePath(): void
+    {
+        $exception = FileSystemException::operationFailed('write to', '/path/to/file', reason: 'No space left on device');
+        self::assertSame('Failed to write to: /path/to/file (No space left on device)', $exception->getMessage());
+    }
+
+    public function testOperationFailedWithoutAReasonNamesOnlyThePath(): void
+    {
+        $exception = FileSystemException::operationFailed('write to', '/path/to/file');
+        self::assertSame('Failed to write to: /path/to/file', $exception->getMessage());
+    }
+
     public function testOperationFailedWithPrevious(): void
     {
         $previous = new \RuntimeException('disk error');
