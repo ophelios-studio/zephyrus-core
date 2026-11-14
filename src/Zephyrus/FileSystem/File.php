@@ -14,15 +14,18 @@ namespace Zephyrus\FileSystem;
  * ## Permissions
  * A file created by this class gets {@see self::DEFAULT_PERMISSIONS} masked by the
  * process umask: the mode is never wider than the umask allows. PHP sets a mode only
- * by path: the path is checked to still name the new file just before, which leaves
- * a window between that check and the chmod.
+ * by path, so it is set on the temporary file before that file is put in place.
  *
  * ## Symbolic links
- * create(), write() and copy() replace a symbolic link at the destination with a
- * regular file instead of following it. They write only through a handle to a file
- * they created, or to the regular file the path names once opened, so a path swapped
- * for a link during the call is refused rather than followed. append() goes through
- * the same checks but refuses a link instead of replacing it.
+ * A new file is never opened by its final path: it is written as a temporary file in
+ * the same directory, then renamed over the path (create(), write(), copy()) or hard
+ * linked to it (append(), which fails on any existing path; renamed where no hard link
+ * can be made, and on a thread-safe build, whose link() follows a link at the path).
+ * An existing regular file is written in place through a handle, kept only if the path
+ * still names it once opened. A symbolic link at the path, there before or swapped in
+ * during the call, is therefore replaced (refused by append()), never followed. This
+ * holds for the last segment of the path: a link among its parent directories is
+ * followed.
  */
 final class File extends FileSystemNode
 {
@@ -31,6 +34,9 @@ final class File extends FileSystemNode
 
     private const int FILE_TYPE_MASK = 0o170000;
     private const int REGULAR_FILE_TYPE = 0o100000;
+    private const int SYMBOLIC_LINK_TYPE = 0o120000;
+    private const int PERMISSION_BITS = 0o777;
+    private const string TEMPORARY_PREFIX = '.zephyrus-';
 
     /**
      * Create a new file with optional initial content.
@@ -47,7 +53,7 @@ final class File extends FileSystemNode
             }
         }
 
-        self::putContent($path, $content, 'create file');
+        self::replaceContent($path, self::contentWriter($content), self::failure('create file', $path));
 
         return new self($path);
     }
@@ -77,7 +83,7 @@ final class File extends FileSystemNode
     public function write(string $content): void
     {
         self::assertEndsWithAFileName($this->path);
-        self::putContent($this->path, $content, 'write to');
+        self::replaceContent($this->path, self::contentWriter($content), self::failure('write to', $this->path));
     }
 
     /**
@@ -85,6 +91,10 @@ final class File extends FileSystemNode
      *
      * Each append holds an exclusive flock() on the file: concurrent append() calls never
      * overwrite each other, but a writer that does not take that lock is not coordinated.
+     * On a thread-safe PHP build or a filesystem without hard links, two calls that create
+     * the file at the same instant may leave only one of their contents. The lock is awaited
+     * without limit, so any process that can open the file (one readable by other users
+     * included) can hold append() back.
      *
      * @throws FileSystemException if the path does not end with a file name, is a symbolic
      *         link, or appending fails.
@@ -92,7 +102,7 @@ final class File extends FileSystemNode
     public function append(string $content): void
     {
         self::assertEndsWithAFileName($this->path);
-        self::putContent($this->path, $content, 'append to', append: true);
+        self::appendContent($this->path, $content);
     }
 
     /**
@@ -155,44 +165,45 @@ final class File extends FileSystemNode
      * or the umask allow; an existing destination keeps its permissions.
      *
      * @return File The new file at the destination path.
-     * @throws FileSystemException if the destination does not end with a file name, or copying fails.
+     * @throws FileSystemException if the source is not a readable regular file, the destination
+     *         does not end with a file name or is the source itself, or copying fails.
      */
     public function copy(string $destination): self
     {
         self::assertEndsWithAFileName($destination);
         $this->assertExists();
-
-        $dir = dirname($destination);
-        if (!is_dir($dir)) {
-            if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
-                throw FileSystemException::operationFailed('create directory for', $destination);
-            }
+        if (!is_file($this->path)) {
+            throw FileSystemException::notARegularFile($this->path);
         }
-
-        $failure = fn (): FileSystemException
-            => FileSystemException::operationFailed('copy', $this->path . ' to ' . $destination);
         $source = @fopen($this->path, 'r');
-        $sourceStat = $source === false ? false : fstat($source);
-        if ($source === false || $sourceStat === false) {
-            throw $failure();
+        if ($source === false) {
+            throw FileSystemException::notReadable($this->path);
         }
 
         try {
-            [$handle, $created] = self::openRegularFile($destination, $failure);
-            try {
-                $destinationStat = fstat($handle);
-                if ($destinationStat === false || self::isSameFile($sourceStat, $destinationStat)) {
-                    throw $failure();
-                }
-                if ($created) {
-                    self::applyDefaultPermissions($destination, $handle, $sourceStat['mode']);
-                }
-                if (!ftruncate($handle, 0) || stream_copy_to_stream($source, $handle) === false) {
-                    throw $failure();
-                }
-            } finally {
-                fclose($handle);
+            $sourceStat = fstat($source);
+            if ($sourceStat === false || !self::isOfType($sourceStat, self::REGULAR_FILE_TYPE)) {
+                throw FileSystemException::notARegularFile($this->path);
             }
+
+            $dir = dirname($destination);
+            if (!is_dir($dir)) {
+                if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
+                    throw FileSystemException::operationFailed('create directory for', $destination);
+                }
+            }
+
+            self::replaceContent(
+                $destination,
+                static fn ($handle): bool => stream_copy_to_stream($source, $handle) !== false,
+                self::failure('copy', $this->path . ' to ' . $destination),
+                $sourceStat['mode'],
+                function (array $existing) use ($sourceStat, $destination): void {
+                    if (self::isSameFile($sourceStat, $existing)) {
+                        throw FileSystemException::copyOntoItself($this->path, $destination);
+                    }
+                },
+            );
         } finally {
             fclose($source);
         }
@@ -277,20 +288,80 @@ final class File extends FileSystemNode
     }
 
     /**
+     * @return \Closure(resource): bool
+     */
+    private static function contentWriter(string $content): \Closure
+    {
+        return static fn ($handle): bool => fwrite($handle, $content) === strlen($content);
+    }
+
+    /**
+     * @return \Closure(): FileSystemException
+     */
+    private static function failure(string $operation, string $path): \Closure
+    {
+        return static fn (): FileSystemException => FileSystemException::operationFailed($operation, $path);
+    }
+
+    /**
+     * Replace the content of `$path` without following a symbolic link at it.
+     *
+     * @param \Closure(resource): bool $write Writes the new content into an empty file.
+     * @param \Closure(): FileSystemException $failure
+     * @param (\Closure(array{dev: int, ino: int}): void)|null $refuseExisting Throws to leave an existing file alone.
      * @throws FileSystemException
      */
-    private static function putContent(string $path, string $content, string $operation, bool $append = false): void
-    {
-        $failure = fn (): FileSystemException => FileSystemException::operationFailed($operation, $path);
-        [$handle, $created] = self::openRegularFile($path, $failure, replaceLink: !$append);
+    private static function replaceContent(
+        string $path,
+        \Closure $write,
+        \Closure $failure,
+        int $mode = self::DEFAULT_PERMISSIONS,
+        ?\Closure $refuseExisting = null,
+    ): void {
+        $handle = self::openInPlace($path, $failure, refuseLink: false);
+        if ($handle === null) {
+            self::createThroughTemporary($path, $write, $failure, replace: true, mode: $mode);
+            return;
+        }
+
         try {
-            if ($created) {
-                self::applyDefaultPermissions($path, $handle);
+            $existing = fstat($handle);
+            if ($existing === false) {
+                throw $failure();
             }
-            $written = $append
-                ? self::appendUnderLock($handle, $content)
-                : ftruncate($handle, 0) && fwrite($handle, $content) === strlen($content);
-            if (!$written) {
+            if ($refuseExisting !== null) {
+                $refuseExisting($existing);
+            }
+            if (!ftruncate($handle, 0) || !$write($handle)) {
+                throw $failure();
+            }
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
+     * @throws FileSystemException
+     */
+    private static function appendContent(string $path, string $content): void
+    {
+        $failure = self::failure('append to', $path);
+        $handle = self::openInPlace($path, $failure, refuseLink: true);
+        if ($handle === null) {
+            $writer = self::contentWriter($content);
+            // A thread-safe build resolves the new path of link(), following a link planted there.
+            if (!PHP_ZTS && self::createThroughTemporary($path, $writer, $failure, replace: false)) {
+                return;
+            }
+            $handle = self::openInPlace($path, $failure, refuseLink: true);
+            if ($handle === null) {
+                self::createThroughTemporary($path, $writer, $failure, replace: true);
+                return;
+            }
+        }
+
+        try {
+            if (!self::appendUnderLock($handle, $content)) {
                 throw $failure();
             }
         } finally {
@@ -316,51 +387,129 @@ final class File extends FileSystemNode
     }
 
     /**
-     * Open `$path` for writing without following a symbolic link: a link already there is
-     * replaced (or refused), an absent path is created exclusively, and an existing one is
-     * kept only if the path still names the regular file the handle opened. Nothing is
-     * written here.
+     * Open the regular file `$path` names for reading and writing, never creating it: null
+     * when the path is absent or is a symbolic link to replace.
      *
      * @param \Closure(): FileSystemException $failure
-     * @return array{resource, bool} The handle, and whether this call created the file.
+     * @return resource|null
      * @throws FileSystemException
      */
-    private static function openRegularFile(string $path, \Closure $failure, bool $replaceLink = true): array
+    private static function openInPlace(string $path, \Closure $failure, bool $refuseLink)
     {
-        clearstatcache(true, $path);
-        if (is_link($path)) {
-            if (!$replaceLink) {
-                throw FileSystemException::symbolicLinkRefused($path);
-            }
-            if (!@unlink($path)) {
-                throw FileSystemException::operationFailed('replace the symbolic link at', $path);
-            }
-        }
-
         for ($attempt = 1; ; $attempt++) {
-            $exists = self::isOccupied($path);
-            // 'x' fails on any existing path, a dangling link included; 'r+' never creates.
-            $handle = @fopen($path, $exists ? 'r+' : 'x');
+            clearstatcache(true, $path);
+            $named = @lstat($path);
+            if ($named === false) {
+                return null;
+            }
+            if (self::isOfType($named, self::SYMBOLIC_LINK_TYPE)) {
+                if ($refuseLink) {
+                    throw FileSystemException::symbolicLinkRefused($path);
+                }
+                return null;
+            }
+            if (!self::isOfType($named, self::REGULAR_FILE_TYPE)) {
+                throw FileSystemException::notARegularFile($path);
+            }
+
+            $handle = @fopen($path, 'r+');
             if ($handle !== false) {
                 break;
             }
-            if ($attempt === 2 || self::isOccupied($path) === $exists) {
-                throw $failure();
+            clearstatcache(true, $path);
+            $now = @lstat($path);
+            if ($attempt === 2 || ($now !== false && self::isSameFile($named, $now))) {
+                throw is_readable($path) ? $failure() : FileSystemException::notReadableForSafeWrite($path);
             }
         }
 
-        if ($exists && !self::namesHandle($path, $handle)) {
+        if (!self::namesHandle($path, $handle)) {
             fclose($handle);
             throw $failure();
         }
 
-        return [$handle, !$exists];
+        return $handle;
     }
 
-    private static function isOccupied(string $path): bool
+    /**
+     * Write a new file through a temporary file in the directory of `$path`, then put it in
+     * place: rename() replaces whatever the path names without following it, link() (when
+     * `$replace` is false) fails on any existing path. The temporary file never outlives the
+     * call.
+     *
+     * @param \Closure(resource): bool $write
+     * @param \Closure(): FileSystemException $failure
+     * @return bool False when link() failed.
+     * @throws FileSystemException
+     */
+    private static function createThroughTemporary(
+        string $path,
+        \Closure $write,
+        \Closure $failure,
+        bool $replace,
+        int $mode = self::DEFAULT_PERMISSIONS,
+    ): bool {
+        $directory = dirname($path);
+        $temporary = @tempnam($directory, self::TEMPORARY_PREFIX);
+        if ($temporary === false) {
+            throw $failure();
+        }
+
+        $temporaryLeft = true;
+        try {
+            // tempnam() falls back to the system directory when this one is unusable.
+            if (dirname($temporary) !== realpath($directory)) {
+                throw $failure();
+            }
+            $handle = @fopen($temporary, 'r+');
+            if ($handle === false) {
+                throw $failure();
+            }
+            try {
+                if (!self::namesHandle($temporary, $handle)) {
+                    throw $failure();
+                }
+                if (!self::applyPermissions($temporary, $handle, $mode)) {
+                    throw FileSystemException::operationFailed('set permissions on', $path);
+                }
+                if (!$write($handle)) {
+                    throw $failure();
+                }
+            } finally {
+                fclose($handle);
+            }
+
+            if (!$replace) {
+                return @link($temporary, $path);
+            }
+            if (!@rename($temporary, $path)) {
+                throw $failure();
+            }
+            $temporaryLeft = false;
+
+            return true;
+        } finally {
+            if ($temporaryLeft) {
+                @unlink($temporary);
+            }
+        }
+    }
+
+    /**
+     * Give the file open in `$handle`, which `$path` names, the mode `$mode` narrowed by
+     * {@see self::DEFAULT_PERMISSIONS} and the umask; no chmod when it already has it.
+     *
+     * @param resource $handle
+     */
+    private static function applyPermissions(string $path, $handle, int $mode): bool
     {
-        clearstatcache(true, $path);
-        return is_link($path) || file_exists($path);
+        $wanted = $mode & self::DEFAULT_PERMISSIONS & ~umask();
+        $current = fstat($handle);
+        if ($current !== false && ($current['mode'] & self::PERMISSION_BITS) === $wanted) {
+            return true;
+        }
+
+        return self::namesHandle($path, $handle) && @chmod($path, $wanted);
     }
 
     /**
@@ -375,8 +524,16 @@ final class File extends FileSystemNode
         $open = fstat($handle);
 
         return $named !== false && $open !== false
-            && ($named['mode'] & self::FILE_TYPE_MASK) === self::REGULAR_FILE_TYPE
+            && self::isOfType($named, self::REGULAR_FILE_TYPE)
             && self::isSameFile($named, $open);
+    }
+
+    /**
+     * @param array{mode: int} $stat
+     */
+    private static function isOfType(array $stat, int $type): bool
+    {
+        return ($stat['mode'] & self::FILE_TYPE_MASK) === $type;
     }
 
     /**
@@ -386,16 +543,5 @@ final class File extends FileSystemNode
     private static function isSameFile(array $first, array $second): bool
     {
         return $first['dev'] === $second['dev'] && $first['ino'] === $second['ino'];
-    }
-
-    /**
-     * @param resource $handle The file this call created at `$path`.
-     * @throws FileSystemException if the path no longer names that file, or chmod fails.
-     */
-    private static function applyDefaultPermissions(string $path, $handle, int $sourceMode = self::DEFAULT_PERMISSIONS): void
-    {
-        if (!self::namesHandle($path, $handle) || !@chmod($path, $sourceMode & self::DEFAULT_PERMISSIONS & ~umask())) {
-            throw FileSystemException::operationFailed('set permissions on', $path);
-        }
     }
 }

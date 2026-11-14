@@ -460,37 +460,28 @@ final class FileTest extends TestCase
         self::assertFalse(is_link($link));
     }
 
-    /**
-     * @return array<string, array{bool}>
-     */
-    public static function linkTargetStates(): array
-    {
-        return [
-            'live link' => [true],
-            'dangling link' => [false],
-        ];
-    }
-
-    #[DataProvider('linkTargetStates')]
-    public function testAppendRefusesASymlinkWithoutTouchingItsTarget(bool $targetExists): void
+    public function testAppendRefusesALinkToAFileWithoutTouchingIt(): void
     {
         $target = $this->tempDir . '/append-target.txt';
         $link = $this->tempDir . '/append-link.txt';
-        if ($targetExists) {
-            file_put_contents($target, 'SERVER SIDE SECRET');
-        }
+        file_put_contents($target, 'SERVER SIDE SECRET');
         symlink($target, $link);
 
-        try {
-            (new File($link))->append('attacker content');
-            self::fail('expected a refusal');
-        } catch (FileSystemException $e) {
-            self::assertSame('Path is a symbolic link, which is not followed: ' . $link, $e->getMessage());
-        }
+        $this->assertAppendRefusesTheLink($link);
 
-        self::assertTrue(is_link($link));
+        self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
+    }
+
+    public function testAppendRefusesADanglingLinkWithoutCreatingItsTarget(): void
+    {
+        $target = $this->tempDir . '/append-target.txt';
+        $link = $this->tempDir . '/append-link.txt';
+        symlink($target, $link);
+
+        $this->assertAppendRefusesTheLink($link);
+
         clearstatcache();
-        self::assertSame($targetExists ? 'SERVER SIDE SECRET' : false, @file_get_contents($target));
+        self::assertFileDoesNotExist($target);
     }
 
     public function testAppendToAMissingFileCreatesItWithTheDefaultPermissions(): void
@@ -555,6 +546,103 @@ final class FileTest extends TestCase
         self::assertSame('SERVER SIDE SECRET', (string) file_get_contents($target));
     }
 
+    #[DataProvider('writingMethods')]
+    public function testALinkPlantedOnAnAbsentPathNeverHasItsTargetCreated(string $method): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs the pcntl and posix extensions.');
+        }
+        $path = $this->tempDir . '/planted.txt';
+        $target = $this->tempDir . '/planted-target.txt';
+
+        $planter = $this->forkLinkPlanter($path, $target);
+        try {
+            for ($i = 0; $i < 2000; $i++) {
+                @unlink($path);
+                try {
+                    $this->writeThrough($method, $path);
+                } catch (FileSystemException) {
+                }
+            }
+        } finally {
+            posix_kill($planter, SIGKILL);
+            pcntl_waitpid($planter, $status);
+        }
+
+        clearstatcache(true);
+        self::assertFileDoesNotExist($target);
+        $expected = ['.', '..', 'planted.txt', 'planter-link', 'write-through-source.txt'];
+        self::assertSame([], array_values(array_diff((array) scandir($this->tempDir), $expected)));
+    }
+
+    public function testWriteRewritesAnExistingFileInPlaceSoItsHardLinksSeeTheNewContent(): void
+    {
+        $path = $this->tempDir . '/linked.txt';
+        $alias = $this->tempDir . '/alias.txt';
+        file_put_contents($path, 'old');
+        link($path, $alias);
+
+        (new File($path))->write('new');
+
+        self::assertSame('new', (string) file_get_contents($alias));
+    }
+
+    #[DataProvider('writingMethods')]
+    public function testAnExistingFileTheProcessCannotReadIsRefusedUntouched(string $method): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root reads any file.');
+        }
+        $path = $this->tempDir . '/write-only.txt';
+        file_put_contents($path, 'kept');
+        chmod($path, 0200);
+
+        try {
+            $this->writeThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is not readable, which a safe write requires: ' . $path, $e->getMessage());
+        }
+
+        chmod($path, 0600);
+        self::assertSame('kept', (string) file_get_contents($path));
+    }
+
+    #[DataProvider('writingMethods')]
+    public function testAFifoIsRefusedAsNotARegularFile(string $method): void
+    {
+        if (!function_exists('posix_mkfifo')) {
+            self::markTestSkipped('Needs the posix extension.');
+        }
+        $path = $this->tempDir . '/pipe';
+        posix_mkfifo($path, 0600);
+
+        try {
+            $this->writeThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is not a regular file: ' . $path, $e->getMessage());
+        }
+
+        self::assertSame('fifo', filetype($path));
+    }
+
+    public function testCopyOfADirectoryIsRefusedBeforeTouchingTheDestination(): void
+    {
+        $source = $this->tempDir . '/folder';
+        mkdir($source);
+        $destination = $this->tempDir . '/missing/copy.txt';
+
+        try {
+            (new File($source))->copy($destination);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is not a regular file: ' . $source, $e->getMessage());
+        }
+
+        self::assertDirectoryDoesNotExist($this->tempDir . '/missing');
+    }
+
     public function testCopyOntoItselfIsRefusedWithoutEmptyingTheFile(): void
     {
         $path = $this->tempDir . '/self.txt';
@@ -563,9 +651,11 @@ final class FileTest extends TestCase
         try {
             (new File($path))->copy($path);
             self::fail('expected a refusal');
-        } catch (FileSystemException) {
-            self::assertSame('content', (string) file_get_contents($path));
+        } catch (FileSystemException $e) {
+            self::assertSame('Cannot copy a file onto itself: ' . $path . ' to ' . $path, $e->getMessage());
         }
+
+        self::assertSame('content', (string) file_get_contents($path));
     }
 
     /**
@@ -648,6 +738,18 @@ final class FileTest extends TestCase
         };
     }
 
+    private function assertAppendRefusesTheLink(string $link): void
+    {
+        try {
+            (new File($link))->append('attacker content');
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a symbolic link, which is not followed: ' . $link, $e->getMessage());
+        }
+
+        self::assertTrue(is_link($link));
+    }
+
     /**
      * @return list<string>
      */
@@ -706,6 +808,37 @@ final class FileTest extends TestCase
             @rename($sideLink, $path);
             @touch($sideFile);
             @rename($sideFile, $path);
+            if ($n % 1000 === 0 && posix_getppid() !== $parent) {
+                posix_kill(posix_getpid(), SIGKILL);
+            }
+        }
+    }
+
+    /**
+     * Fork a process that keeps placing a link to the absent `$target` at `$path` whenever
+     * the path is free. PHP's symlink() follows a dangling link at its link name, so the
+     * link is made under a free side name and renamed into place.
+     */
+    private function forkLinkPlanter(string $path, string $target): int
+    {
+        $parent = posix_getpid();
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            self::markTestSkipped('Could not fork.');
+        }
+        if ($pid > 0) {
+            return $pid;
+        }
+
+        $sideLink = $this->tempDir . '/planter-link';
+        for ($n = 0; ; $n++) {
+            clearstatcache(true);
+            if (!is_link($sideLink)) {
+                @symlink($target, $sideLink);
+            }
+            if (!is_link($path) && !file_exists($path)) {
+                @rename($sideLink, $path);
+            }
             if ($n % 1000 === 0 && posix_getppid() !== $parent) {
                 posix_kill(posix_getpid(), SIGKILL);
             }
