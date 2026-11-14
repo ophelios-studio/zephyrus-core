@@ -37,9 +37,9 @@ final class FileWithoutPosixTest extends TestCase
         );
         self::assertIsResource($process);
         $output = (string) stream_get_contents($pipes[1]);
-        stream_get_contents($pipes[2]);
+        $errors = (string) stream_get_contents($pipes[2]);
         proc_close($process);
 
-        self::assertSame('new', $output);
+        self::assertSame('new', $output, $errors);
     }
 }
