@@ -524,7 +524,9 @@ final class ResponseTest extends TestCase
         $response = (new Response(cookies: [$line]))
             ->withCookie('remember', 'b', path: '/app', domain: 'example.com');
 
-        self::assertSame(['remember=b; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+        self::assertSame([
+            'remember=b; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
     }
 
     /** @return array<string, array{string}> */
@@ -536,6 +538,33 @@ final class ResponseTest extends TestCase
             'no space after the separator' => ['remember=a;Path=/app;Domain=example.com'],
             'spaces around the equals sign' => ['remember=a; Path = /app; Domain = example.com'],
             'space before the name' => [' remember=a; Path=/app; Domain=example.com'],
+            'space before the equals sign' => ['remember =a; path=/app; domain=example.com'],
+        ];
+    }
+
+    public function testWithCookieReplacesAConstructorCookieWithAnEmptyDomain(): void
+    {
+        $response = (new Response(cookies: ['remember=a; Path=/; Domain=']))
+            ->withCookie('remember', 'b');
+
+        self::assertSame(['remember=b; Path=/; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    #[DataProvider('partitionedLines')]
+    public function testWithCookieKeepsAPartitionedConstructorCookie(string $line): void
+    {
+        $response = (new Response(cookies: [$line]))
+            ->withCookie('remember', 'b');
+
+        self::assertSame([$line, 'remember=b; Path=/; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function partitionedLines(): array
+    {
+        return [
+            'capitalised attribute' => ['remember=a; Path=/; Secure; Partitioned'],
+            'lower-case attribute' => ['remember=a; Path=/; Secure; partitioned'],
         ];
     }
 
@@ -548,6 +577,41 @@ final class ResponseTest extends TestCase
             'remember=a; path=/other; domain=example.com',
             'remember=b; Path=/app; Domain=example.com; Secure; HttpOnly; SameSite=Lax',
         ], $response->cookies);
+    }
+
+    public function testWithCookieKeepsAConstructorLineWithoutAnEqualsSign(): void
+    {
+        $response = (new Response(cookies: ['remember; Path=/']))
+            ->withCookie('remember', 'b');
+
+        self::assertSame([
+            'remember; Path=/',
+            'remember=b; Path=/; Secure; HttpOnly; SameSite=Lax',
+        ], $response->cookies);
+    }
+
+    /** @param list<string> $expected */
+    #[DataProvider('emptyDomainAttributeScopes')]
+    public function testWithCookieIgnoresATrailingEmptyDomainWhenScopingAnEarlierDomain(?string $domain, array $expected): void
+    {
+        $response = (new Response(cookies: ['remember=a; Path=/; Domain=example.com; Domain=']))
+            ->withCookie('remember', 'b', domain: $domain);
+
+        self::assertSame($expected, $response->cookies);
+    }
+
+    /** @return array<string, array{?string, list<string>}> */
+    public static function emptyDomainAttributeScopes(): array
+    {
+        return [
+            'same domain replaces the line' => ['example.com', [
+                'remember=b; Path=/; Domain=example.com; Secure; HttpOnly; SameSite=Lax',
+            ]],
+            'host-only keeps the line' => [null, [
+                'remember=a; Path=/; Domain=example.com; Domain=',
+                'remember=b; Path=/; Secure; HttpOnly; SameSite=Lax',
+            ]],
+        ];
     }
 
     public function testSetCookieIsPresentWhenOnlyACookieWasAdded(): void

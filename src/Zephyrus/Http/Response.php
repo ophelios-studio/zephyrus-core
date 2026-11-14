@@ -242,8 +242,9 @@ final readonly class Response
     }
 
     /**
-     * Returns a copy that sets a cookie on its own Set-Cookie line, replacing an earlier cookie of the same name, domain and path
-     * (never a constructor line without Path=, which browsers scope to the request's directory).
+     * Returns a copy that sets a cookie on its own Set-Cookie line, replacing an earlier cookie of the same name, domain
+     * and path (never a constructor line without Path=, which browsers scope to the request's directory, nor one marked
+     * Partitioned, which browsers store apart).
      *
      * Secure, HttpOnly, SameSite=Lax and the path "/" unless told otherwise; Secure is on even where the session
      * setting is "auto", so pass $secure = false explicitly for plain-HTTP development. The value is percent-encoded as
@@ -296,11 +297,12 @@ final readonly class Response
         );
     }
 
-    /** Whether a Set-Cookie line is the cookie browsers identify by this name, domain and path. */
+    /** Whether a Set-Cookie line is the cookie browsers identify by this name, domain and path; a partitioned line never is. */
     private static function isCookieScope(string $line, string $name, ?string $domain, string $path): bool
     {
         $parts = array_map('trim', explode(';', $line));
-        if (!str_starts_with(array_shift($parts), $name . '=')) {
+        $pair = explode('=', array_shift($parts), 2);
+        if (count($pair) !== 2 || trim($pair[0]) !== $name) {
             return false;
         }
 
@@ -308,8 +310,11 @@ final readonly class Response
         $linePath = null;
         foreach ($parts as $part) {
             [$attribute, $value] = array_map('trim', explode('=', $part, 2)) + [1 => ''];
+            if (strtolower($attribute) === 'partitioned') {
+                return false;
+            }
             match (strtolower($attribute)) {
-                'domain' => $lineDomain = $value,
+                'domain' => $lineDomain = $value !== '' ? $value : $lineDomain,
                 'path' => $linePath = $value,
                 default => null,
             };
