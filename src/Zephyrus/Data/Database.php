@@ -85,7 +85,7 @@ final class Database
      * user name. While one is listed, fromConfig() opens a non-persistent connection for that DSN and user instead,
      * so a session is never reset under its holder.
      *
-     * @var \WeakMap<PDO, string>|null
+     * @var \WeakMap<PDO, array{string, string}>|null
      */
     private static ?\WeakMap $heldPersistentHandles = null;
 
@@ -270,7 +270,7 @@ final class Database
         #[\SensitiveParameter] string $dsn,
         #[\SensitiveParameter] DatabaseConfig $config,
     ): PDO {
-        $identity = $dsn . "\0" . $config->username;
+        $identity = [$dsn, $config->username];
         $persistent = $config->persistent
             && !in_array($identity, iterator_to_array(self::heldPersistentHandles(), false), true);
 
@@ -382,7 +382,7 @@ final class Database
     }
 
     /**
-     * @return \WeakMap<PDO, string>
+     * @return \WeakMap<PDO, array{string, string}>
      */
     private static function heldPersistentHandles(): \WeakMap
     {
