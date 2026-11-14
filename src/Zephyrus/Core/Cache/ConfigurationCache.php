@@ -63,7 +63,7 @@ final readonly class ConfigurationCache implements WarmableCache
      * @throws ConfigurationException when the source cannot be parsed.
      * @throws BootCacheException when the cache cannot be written safely.
      */
-    public function warm(): void
+    public function warm(): string
     {
         // Fingerprint before parsing: a source edited meanwhile then reads as stale, never as fresh.
         $fingerprint = $this->fingerprint();
@@ -76,6 +76,8 @@ final readonly class ConfigurationCache implements WarmableCache
             $permissions === false ? 0o400 : $permissions & 0o444,
             $group === false ? null : $group,
         );
+
+        return 'Wrote ' . $this->path();
     }
 
     public function clear(): bool

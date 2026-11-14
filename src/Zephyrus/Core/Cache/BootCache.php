@@ -46,7 +46,8 @@ final readonly class BootCache
     /**
      * The cached payload, or null when the file is absent (silently) or unusable (with one error_log line).
      *
-     * @param \Closure(): string $fingerprint Computes the current fingerprint of the source, only when the file exists.
+     * @param \Closure(array<mixed>): string $fingerprint Computes the current fingerprint of the source from the cached
+     *                                                    payload, only when the file exists and holds one.
      * @return array<mixed>|null
      */
     public function load(\Closure $fingerprint): ?array
@@ -125,7 +126,7 @@ final readonly class BootCache
     }
 
     /**
-     * @param \Closure(): string $fingerprint
+     * @param \Closure(array<mixed>): string $fingerprint
      * @return array<mixed>
      */
     private function payload(mixed $cached, \Closure $fingerprint): array
@@ -142,12 +143,12 @@ final readonly class BootCache
             throw new CacheRefusal('it was written by another version of the framework');
         }
 
-        if (($cached['fingerprint'] ?? null) !== $fingerprint()) {
-            throw new CacheRefusal('it is stale, its source changed after it was written');
-        }
-
         if (!is_array($cached['payload'] ?? null)) {
             throw new CacheRefusal('it does not return a boot cache array');
+        }
+
+        if (($cached['fingerprint'] ?? null) !== $fingerprint($cached['payload'])) {
+            throw new CacheRefusal('it is stale, its source changed after it was written');
         }
 
         return $cached['payload'];

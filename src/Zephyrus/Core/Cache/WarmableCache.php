@@ -21,9 +21,10 @@ interface WarmableCache
     /**
      * Write the cache from its source, without reading the environment.
      *
+     * @return string The line cache:warm prints: the file written, never a cached value.
      * @throws ZephyrusException when the source cannot be read or the cache cannot be written safely.
      */
-    public function warm(): void;
+    public function warm(): string;
 
     /**
      * Delete the cache file.

@@ -56,6 +56,16 @@ final class BootCacheTest extends TestCase
         self::assertSame([], $this->loggedLines());
     }
 
+    public function testTheFingerprintIsComputedFromTheCachedPayload(): void
+    {
+        $payload = ['dependencies' => ['lib/Base.php', 'lib/Shared.php']];
+        $this->cache()->store($payload, 'lib/Base.php lib/Shared.php');
+
+        $loaded = $this->cache()->load(static fn (array $cached): string => implode(' ', $cached['dependencies']));
+
+        self::assertSame($payload, $loaded);
+    }
+
     public function testAGroupWritableCacheFileIsNeverIncluded(): void
     {
         $this->plantMarkedCache(0o664);
