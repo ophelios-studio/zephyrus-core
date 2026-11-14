@@ -382,19 +382,61 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         self::assertStringContainsString('nonce-', $response->headers['content-security-policy']);
     }
 
-    public function testDebugModeWarnsWhenTheNoncePolicyIsNotAppliedBecauseCspIsAlreadySet(): void
+    public function testDebugModeWarnsFromAnInnerSecureHeadersThatReplacesTheNoncePolicy(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
 
-        $warnings = $this->captureUserWarnings(fn () => $this->handleOutsideBuilder(
-            new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
-            new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
-        ));
+        $response = null;
+        $warnings = $this->captureUserWarnings(function () use (&$response): void {
+            $response = $this->handleOutsideBuilder(
+                new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
+                new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+            );
+        });
 
-        self::assertCount(1, $warnings);
-        self::assertStringContainsString('the nonce policy was not applied', $warnings[0]);
-        self::assertStringContainsString('by SecureHeadersMiddleware registered after this middleware', $warnings[0]);
-        self::assertStringContainsString('Register ContentSecurityPolicyMiddleware after SecureHeadersMiddleware', $warnings[0]);
+        self::assertSame([
+            'Content-Security-Policy: the csp of this SecureHeadersMiddleware replaces the nonce policy of this '
+            . 'request, because it is registered after (inside) ContentSecurityPolicyMiddleware. Leave its csp '
+            . 'empty, or, when both are registered at the same level (global, group or route), register it '
+            . 'before ContentSecurityPolicyMiddleware.',
+        ], $warnings);
+        self::assertSame("default-src 'none'", $response?->headers['content-security-policy']);
+    }
+
+    public function testNoWarningWhenARouteSetsItsOwnPolicyUnderANoncedMiddleware(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $response = null;
+        $warnings = $this->captureUserWarnings(function () use (&$response): void {
+            $response = (new MiddlewarePipeline([
+                new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
+            ]))->handle(
+                Request::fromArray('GET', '/p'),
+                static fn (Request $request): Response => Response::text('ok')
+                    ->withHeader('Content-Security-Policy', "default-src 'none'"),
+            );
+        });
+
+        self::assertSame([], $warnings);
+        self::assertSame("default-src 'none'", $response?->headers['content-security-policy']);
+    }
+
+    public function testNoWarningWhenTheNoncedMiddlewareIsReportOnly(): void
+    {
+        App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+
+        $response = null;
+        $warnings = $this->captureUserWarnings(function () use (&$response): void {
+            $response = $this->handleOutsideBuilder(
+                new ContentSecurityPolicyMiddleware($this->policy(), reportOnly: true, nonceDirectives: ['script-src']),
+                new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+            );
+        });
+
+        self::assertSame([], $warnings);
+        self::assertSame("default-src 'none'", $response?->headers['content-security-policy']);
+        self::assertStringContainsString('nonce-', $response?->headers['content-security-policy-report-only']);
     }
 
     public function testNoNonceWarningWhenTheNoncePolicyIsAppliedInDebugMode(): void

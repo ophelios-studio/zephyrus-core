@@ -44,6 +44,9 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
     /** Request attribute carrying the nonce shared by every nonced CSP middleware of the request. */
     private const string NONCE_ATTRIBUTE = 'zephyrus.csp_nonce';
 
+    /** Request attribute listing the headers that outer nonced CSP middleware will write. */
+    private const string ANNOUNCED_HEADERS_ATTRIBUTE = 'zephyrus.csp_nonce_headers';
+
     private string $policy;
 
     private ?ContentSecurityPolicy $nonceTemplate;
@@ -97,6 +100,30 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         return !$this->reportOnly && ($this->policy !== '' || $this->nonceDirectives !== []);
     }
 
+    /**
+     * Whether a nonced middleware outside the caller will write this header on the response.
+     *
+     * @internal Read by SecureHeadersMiddleware only.
+     */
+    public static function announcesHeader(Request $request, string $header): bool
+    {
+        $announced = $request->attribute(self::ANNOUNCED_HEADERS_ATTRIBUTE);
+
+        return is_array($announced) && in_array($header, $announced, true);
+    }
+
+    /**
+     * Debug mode, as read by the CSP warnings.
+     *
+     * @internal Read by this class and SecureHeadersMiddleware only.
+     */
+    public static function isDebug(): bool
+    {
+        $configuration = App::getConfiguration();
+
+        return $configuration !== null && $configuration->application->debug;
+    }
+
     public function process(Request $request, callable $next): Response
     {
         if ($this->nonceTemplate !== null) {
@@ -123,6 +150,12 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
             $request = $request->withAttribute(self::NONCE_ATTRIBUTE, $nonce);
         }
 
+        $announced = $request->attribute(self::ANNOUNCED_HEADERS_ATTRIBUTE);
+        $request = $request->withAttribute(
+            self::ANNOUNCED_HEADERS_ATTRIBUTE,
+            [...(is_array($announced) ? $announced : []), $this->headerName()],
+        );
+
         $policy = $this->nonceTemplate;
         foreach ($this->nonceDirectives as $directive) {
             $policy = $policy->appendNonce($directive, $nonce);
@@ -137,38 +170,10 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         }
 
         if ($response->hasNonBlankHeader($this->headerName())) {
-            $this->warnNoncePolicyNotApplied();
-
             return $response;
         }
 
         return $response->withHeader($this->headerName(), $headerValue);
-    }
-
-    /** Debug only: a header already on the response wins, so the nonce policy is not sent. */
-    private function warnNoncePolicyNotApplied(): void
-    {
-        if (!self::isDebug()) {
-            return;
-        }
-
-        trigger_error(
-            sprintf(
-                'Content-Security-Policy: the nonce policy was not applied because %s is already set on the '
-                . 'response, by SecureHeadersMiddleware registered after this middleware or by a route. '
-                . 'Register ContentSecurityPolicyMiddleware after SecureHeadersMiddleware, or leave '
-                . 'SecureHeadersConfig::csp empty.',
-                $this->headerName(),
-            ),
-            E_USER_WARNING,
-        );
-    }
-
-    private static function isDebug(): bool
-    {
-        $configuration = App::getConfiguration();
-
-        return $configuration !== null && $configuration->application->debug;
     }
 
     /** Debug only: warns about 'unsafe-inline' beside a nonce or hash in the same directive. */
