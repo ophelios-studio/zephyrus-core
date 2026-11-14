@@ -50,6 +50,30 @@ final class DatabaseException extends ZephyrusRuntimeException
     }
 
     /**
+     * A $pdoFactory returned a persistent connection that fromConfig() did not request.
+     */
+    public static function unrequestedPersistentConnection(): self
+    {
+        return new self(
+            'The PDO factory given to Database::fromConfig() returned a persistent connection it was not asked for, '
+            . 'whose session would carry over from an earlier request: remove PDO::ATTR_PERSISTENT from the factory '
+            . 'and set database.persistent: true in the configuration to reuse connections.',
+        );
+    }
+
+    /**
+     * A persistent PDO was passed to the Database constructor.
+     */
+    public static function persistentPdoInjected(): self
+    {
+        return new self(
+            'Database refuses a persistent PDO, whose session would carry over from an earlier request: remove '
+            . 'PDO::ATTR_PERSISTENT from the PDO and set database.persistent: true in the configuration, so '
+            . 'Database::fromConfig() resets the session each time it reuses the connection.',
+        );
+    }
+
+    /**
      * The session of a reused persistent connection could not be reset, on the retry either.
      */
     public static function sessionResetFailed(#[\SensitiveParameter] PDOException $previous): self

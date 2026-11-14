@@ -124,8 +124,15 @@ final class Database
         'BOOL' => 'boolval',
     ];
 
+    /**
+     * @throws DatabaseException when the PDO is persistent: only fromConfig() resets a reused session.
+     */
     public function __construct(private readonly PDO $pdo)
     {
+        if ($this->pdo->getAttribute(PDO::ATTR_PERSISTENT) && !isset(self::heldPersistentHandles()[$this->pdo])) {
+            throw DatabaseException::persistentPdoInjected();
+        }
+
         $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
 
@@ -195,9 +202,10 @@ final class Database
      *        Optional factory for tests and advanced callers, receiving ($dsn, $username, $password, $options).
      *        An ATTR_DISABLE_PREPARES option it sets is overwritten on pgsql: call
      *        pdo()->setAttribute(\Pdo\Pgsql::ATTR_DISABLE_PREPARES, false) afterwards to get named statements back.
+     *        It must honour the ATTR_PERSISTENT option it receives.
      *
-     * @throws DatabaseException on PDO connection failure, or when a reused session cannot be reset, even on a second
-     *         connection.
+     * @throws DatabaseException on PDO connection failure, when the factory returns a persistent connection that was
+     *         not requested, or when a reused session cannot be reset, even on a second connection.
      */
     public static function fromConfig(#[\SensitiveParameter] DatabaseConfig $config, ?callable $pdoFactory = null): self
     {
@@ -272,6 +280,10 @@ final class Database
 
             if (!$pdo->getAttribute(PDO::ATTR_PERSISTENT)) {
                 return $pdo;
+            }
+
+            if (!$persistent) {
+                throw DatabaseException::unrequestedPersistentConnection();
             }
 
             self::pinSharedHandleAttributes($pdo);

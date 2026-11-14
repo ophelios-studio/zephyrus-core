@@ -161,6 +161,42 @@ final class DatabasePersistentConnectionTest extends TestCase
         self::assertSame(['DISCARD ALL', 'SELECT pg_terminate_backend(pg_backend_pid())'], $handles[1]->statements);
     }
 
+    public function testAFactoryThatForcesPersistenceOnANonPersistentConfigIsRefused(): void
+    {
+        $pdo = new ReusedSessionPdo();
+
+        try {
+            Database::fromConfig(self::config(persistent: false), static fn (): PDO => $pdo);
+
+            self::fail('A persistent connection the configuration did not ask for was accepted.');
+        } catch (DatabaseException $e) {
+            self::assertSame(
+                'The PDO factory given to Database::fromConfig() returned a persistent connection it was not asked '
+                . 'for, whose session would carry over from an earlier request: remove PDO::ATTR_PERSISTENT from the '
+                . 'factory and set database.persistent: true in the configuration to reuse connections.',
+                $e->getMessage(),
+            );
+        }
+
+        self::assertSame([], $pdo->statements);
+    }
+
+    public function testAnInjectedPersistentPdoIsRefused(): void
+    {
+        try {
+            new Database(new ReusedSessionPdo());
+
+            self::fail('An injected persistent PDO was accepted.');
+        } catch (DatabaseException $e) {
+            self::assertSame(
+                'Database refuses a persistent PDO, whose session would carry over from an earlier request: remove '
+                . 'PDO::ATTR_PERSISTENT from the PDO and set database.persistent: true in the configuration, so '
+                . 'Database::fromConfig() resets the session each time it reuses the connection.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     private static function config(bool $persistent): DatabaseConfig
     {
         return DatabaseConfig::fromArray(['database' => 'zephyrus', 'username' => 'app', 'persistent' => $persistent]);
