@@ -48,8 +48,7 @@ final class RouteAttributeException extends ZephyrusRuntimeException
     {
         return new self(
             sprintf('Cannot read the #[RequiresEnv] of class "%s": %s', $className, $previous->getMessage()),
-            0,
-            $previous,
+            previous: $previous,
         );
     }
 }

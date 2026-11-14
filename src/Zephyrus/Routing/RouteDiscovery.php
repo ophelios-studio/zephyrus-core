@@ -96,7 +96,7 @@ final readonly class RouteDiscovery
             }
 
             $reflection = new ReflectionClass($className);
-            if ($reflection->isAbstract() || $reflection->isInterface() || $reflection->isTrait()) {
+            if ($reflection->isAbstract()) {
                 continue;
             }
 
