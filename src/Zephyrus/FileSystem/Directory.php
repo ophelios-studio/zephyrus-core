@@ -21,10 +21,12 @@ final class Directory extends FileSystemNode
      * Ensure a directory exists, creating it if necessary.
      *
      * @return self The directory instance.
-     * @throws FileSystemException if creation fails.
+     * @throws FileSystemException if the path holds a NUL byte or is a stream wrapper URL, or if creation fails.
      */
     public static function ensure(string $path, int $permissions = 0755): self
     {
+        self::assertLocalPath($path);
+
         if (!is_dir($path)) {
             if (!@mkdir($path, $permissions, true) && !is_dir($path)) {
                 throw FileSystemException::operationFailed('create directory', $path);
@@ -112,10 +114,12 @@ final class Directory extends FileSystemNode
     /**
      * Create the directory.
      *
-     * @throws FileSystemException if creation fails.
+     * @throws FileSystemException if the path holds a NUL byte or is a stream wrapper URL, or if creation fails.
      */
     public function create(int $permissions = 0755): void
     {
+        self::assertLocalPath($this->path);
+
         if (is_dir($this->path)) {
             return;
         }

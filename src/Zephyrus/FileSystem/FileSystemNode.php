@@ -89,6 +89,21 @@ abstract class FileSystemNode
     }
 
     /**
+     * A path holding a NUL byte or a stream wrapper URL is never written.
+     *
+     * @throws FileSystemException
+     */
+    protected static function assertLocalPath(string $path): void
+    {
+        if (str_contains($path, "\0")) {
+            throw FileSystemException::nulByteRefused($path);
+        }
+        if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
+            throw FileSystemException::streamWrapperRefused($path);
+        }
+    }
+
+    /**
      * Check whether `$path` is a symbolic link, ignoring trailing "/" and "/." segments
      * (which would make the system resolve the link first).
      */

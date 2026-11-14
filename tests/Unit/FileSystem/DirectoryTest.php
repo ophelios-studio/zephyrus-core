@@ -32,6 +32,49 @@ final class DirectoryTest extends TestCase
         self::assertInstanceOf(FileSystemNode::class, $dir);
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function creators(): array
+    {
+        return ['ensure' => ['ensure'], 'create' => ['create']];
+    }
+
+    private function createThrough(string $method, string $path): void
+    {
+        if ($method === 'ensure') {
+            Directory::ensure($path);
+            return;
+        }
+        (new Directory($path))->create();
+    }
+
+    #[DataProvider('creators')]
+    public function testAPathHoldingANulByteIsRefusedBeforeADirectoryIsCreated(string $method): void
+    {
+        try {
+            $this->createThrough($method, $this->tempDir . "/d\0x");
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path holds a NUL byte, which no file name can: "' . $this->tempDir . '/d\u0000x"', $e->getMessage());
+        }
+        self::assertDirectoryDoesNotExist($this->tempDir . '/d');
+    }
+
+    #[DataProvider('creators')]
+    public function testAStreamWrapperUrlIsRefusedBeforeADirectoryIsCreated(string $method): void
+    {
+        $path = 'phar://' . $this->tempDir . '/x';
+
+        try {
+            $this->createThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: "' . $path . '"', $e->getMessage());
+        }
+        self::assertDirectoryDoesNotExist($this->tempDir . '/x');
+    }
+
     public function testEnsureCreatesDirectoryIfMissing(): void
     {
         $path = $this->tempDir . '/ensure/nested';

@@ -295,19 +295,13 @@ final class File extends FileSystemNode
     }
 
     /**
-     * A path holding a NUL byte or a stream wrapper URL is never written, and a path whose last
-     * segment is empty, "." or ".." names a directory, never a file.
+     * A path must be local and end with a file name: a last segment that is empty, "." or ".." names a directory.
      *
      * @throws FileSystemException
      */
     private static function assertPlainFilePath(string $path): void
     {
-        if (str_contains($path, "\0")) {
-            throw FileSystemException::nulByteRefused($path);
-        }
-        if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
-            throw FileSystemException::streamWrapperRefused($path);
-        }
+        self::assertLocalPath($path);
         if (preg_match('~(?:^|/)\.{0,2}$~D', $path) === 1) {
             throw FileSystemException::notAFileName($path);
         }
