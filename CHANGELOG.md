@@ -33,17 +33,20 @@ changes are listed first, each with the change to make in your code.
 
 ### Added
 
+- `App::isDebug()` returns the effective debug flag that `build()` resolved (false in a production-like environment unless `withProductionDebugAcknowledged()` was called), with `App::setDebug()` beside `App::setConfiguration()`. `App::reset()` clears it. An application that calls `App::setConfiguration()` without `build()` (a tool, a CLI script, a test) gets no session or CSP debug warnings until it calls `App::setDebug(true)`.
 - `database.persistent` (default `false`) reuses the PostgreSQL connection across requests of one process. When a connection is taken from the pool, `fromConfig()` sends `ROLLBACK` if a transaction is open, then `DISCARD ALL`, then drops the notifications the client had already received. A connection whose reset fails is terminated and replaced once; a second failure throws `DatabaseException`.
 - The pool is per process (`zephyrus:<pid>`), and a persistent handle still held in the process is never handed out again: for the same DSN and user, a second `fromConfig()` opens a non-persistent connection instead.
 
 ### Changed
 
-- The debug warning about a nonce policy that is replaced now comes from `SecureHeadersMiddleware`, when its `csp` is about to overwrite the policy of an outer `ContentSecurityPolicyMiddleware` with nonces (a per-route `SecureHeadersMiddleware` registered inside it). `ContentSecurityPolicyMiddleware` no longer warns when the response already carries the header, so a route that sets its own `Content-Security-Policy` gets no false warning.
+- The debug warning about a policy that is replaced now comes from `SecureHeadersMiddleware`, when its `csp` is about to overwrite the policy of an outer `ContentSecurityPolicyMiddleware`, static or with nonces (a per-route `SecureHeadersMiddleware` registered inside it). `ContentSecurityPolicyMiddleware` no longer warns when the response already carries the header, so a route that sets its own `Content-Security-Policy` gets no false warning.
 - The default connection factory of `Database::fromConfig()` builds with `PDO::connect()`, so the handle is a `Pdo\Pgsql`. A factory you pass keeps working; on PHP 8.5 one used with `persistent: true` should build with `PDO::connect()` too, or each acquisition emits a deprecation.
 - A dotted key written flat under a section whose first part is a mapping of that section (`smtp.host: h` under `mailer:`) is refused with `... is written flat: nest it under 'smtp', such as smtp: { host: ... }.`, where it listed the accepted keys or suggested a spelling. The example shows the nested key written (or the closest one when it is misspelled) and is left out when that key is not a plain field name.
 
 ### Fixed
 
+- The debug warnings of `SessionManager` (idle timeout, strict mode) and of `ContentSecurityPolicyMiddleware` read the raw `application.debug` instead of the effective flag, so a production boot that refused `debug: true` still wrote them to the logs. They now read `App::isDebug()`. `ContentSecurityPolicyMiddleware::isDebug()` (internal) is removed.
+- A static `ContentSecurityPolicyMiddleware` policy replaced by a `SecureHeadersMiddleware` registered inside it now triggers the same debug warning as a nonce policy; it was overwritten silently. The warning says "the policy of this request" instead of "the nonce policy of this request".
 - An unreadable `config.yml` is reported as `Configuration file is not readable: config.yml`, where it was reported as invalid YAML.
 - `MailerConfig::toArray()` exports `smtp.port` as `587` when the key is written as null (an empty `!env`), as `smtpPort` holds, where it exported null.
 - `Entity::build()` refuses a readonly property its constructor already set (`Cannot hydrate property $id of A: it is readonly and its constructor already set it. Leave it unset in the constructor, or drop readonly.`) and a `private(set)` property (`Cannot hydrate property $id of D: its private(set) visibility keeps Entity from writing it. Use protected(set) instead.`), where PHP raised a bare `Error`; an uninitialized readonly and a `protected(set)` property are still hydrated.
