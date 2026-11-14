@@ -28,7 +28,7 @@ use Zephyrus\Core\Config\ConfigSection;
  *
  *   - listed by exact address in the allowlist passed as $allowedClients (a loopback address only when the request
  *     carries no forwarding header), or
- *   - presenting the `tracy-debug` cookie whose value matches a `secret@address` allowlist entry, or
+ *   - presenting the `tracy-debug` cookie whose value matches a `<secret>@address` allowlist entry, or
  *   - with no allowlist, the loopback address under PHP's built-in server (`cli-server`) only, and the request
  *     carries no X-Forwarded-For, Forwarded or X-Real-IP header.
  *
@@ -239,8 +239,8 @@ final class DebugIntegration
     }
 
     /**
-     * Whether the client is listed by exact address, or by a `secret@address` entry matching the `tracy-debug` cookie.
-     * A bare loopback entry does not admit a request carrying X-Forwarded-For, Forwarded or X-Real-IP.
+     * Whether the client is listed by exact address, or by a `<secret>@address` entry matching the `tracy-debug`
+     * cookie. A bare loopback entry does not admit a request carrying X-Forwarded-For, Forwarded or X-Real-IP.
      *
      * @param list<string> $clients
      */
