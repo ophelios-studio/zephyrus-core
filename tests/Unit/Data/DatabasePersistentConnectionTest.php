@@ -77,6 +77,21 @@ final class DatabasePersistentConnectionTest extends TestCase
         self::assertSame([self::processPool(), self::processPool()], $requested);
     }
 
+    public function testTwoDsnAndUserPairsThatConcatenateAlikeAreHeldSeparately(): void
+    {
+        $requested = [];
+        $factory = static function (string $dsn, string $user, string $password, array $options) use (&$requested): PDO {
+            $requested[] = $options[PDO::ATTR_PERSISTENT];
+
+            return $options[PDO::ATTR_PERSISTENT] === false ? new PDO('sqlite::memory:') : new ReusedSessionPdo();
+        };
+
+        $held = Database::fromConfig(self::config(persistent: true, sslMode: 'disable'), $factory);
+        Database::fromConfig(self::config(persistent: true, username: ';sslmode=disableapp'), $factory);
+
+        self::assertSame([self::processPool(), self::processPool()], $requested);
+    }
+
     public function testAReusedSessionIsRolledBackThenDiscardedBeforeAnyOtherStatement(): void
     {
         $pdo = new ReusedSessionPdo(openTransaction: true);
@@ -235,9 +250,11 @@ final class DatabasePersistentConnectionTest extends TestCase
         return 'zephyrus:' . getmypid();
     }
 
-    private static function config(bool $persistent, string $database = 'zephyrus', string $username = 'app'): DatabaseConfig
+    private static function config(bool $persistent, string $database = 'zephyrus', string $username = 'app', ?string $sslMode = null): DatabaseConfig
     {
-        return DatabaseConfig::fromArray(['database' => $database, 'username' => $username, 'persistent' => $persistent]);
+        return DatabaseConfig::fromArray(
+            ['database' => $database, 'username' => $username, 'persistent' => $persistent] + ($sslMode === null ? [] : ['sslMode' => $sslMode]),
+        );
     }
 }
 
