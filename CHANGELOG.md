@@ -68,6 +68,11 @@ changes are listed first, each with the change to make in your code.
 - `Directory::delete()` removes a directory written with a trailing `/.` or `/./`, recursive or not, where `rmdir()` refused it.
 - `File::create()`, `write()`, `append()` and `copy()` (its destination) refuse a path whose last segment is empty, `.` or `..` with `FileSystemException` (`Path does not end with a file name: <path>`), before creating any directory and without a PHP warning.
 - A write that `File::create()`, `write()`, `append()` or `copy()` cannot complete (a full disk, a file size limit) throws `FileSystemException` without a PHP notice, which an error handler that throws turned into an `ErrorException`.
+- `cache:warm` refuses two caches at the same path, such as `router.cache: var/zephyrus/config.yml.php`, before it writes anything (`Two caches would be written to <path>: give router.cache another path.`, exit 1). The routes cache used to overwrite the configuration cache, which the application then ignored as stale.
+- `cache:warm` runs the directory guards (mode, owner, link) and the regular-file check of every cache before it writes the first one, and `cache:clear` checks every file for the warm header before it deletes the first: a refusal in a later `--config` no longer leaves the caches of an earlier one written or removed.
+- `router.cache` refuses a NUL byte (`Configuration section 'router' field 'cache' must not contain a NUL byte.`), where `cache:warm` died with an uncaught `ValueError`.
+- `cache:warm`, `cache:clear` and the application read a `config.yml` that is a symbolic link under the directory of the link, as `ApplicationBuilder::fromConfigurationFile()` does for the application root, where they resolved the cache beside the link target: the cache of a linked `config.yml` is now `var/zephyrus/config.yml.php` beside the link. A cache written beside the target by an earlier `cache:warm` is no longer read: run `cache:warm` again.
+- `cache:warm` of a `router:` section that is read from a `config.yml` outside the project root ends its refusal with `Note that router: is cached only from config.yml at the application root, and its paths were resolved against <directory>.`
 
 ## [0.16.0] - 2026-11-13
 
