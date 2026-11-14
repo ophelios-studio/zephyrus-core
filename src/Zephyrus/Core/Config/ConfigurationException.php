@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Symfony\Component\Yaml\Exception\ParseException;
 use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
 
@@ -11,8 +12,8 @@ use Zephyrus\Exceptions\ZephyrusException;
  * Thrown when configuration loading, parsing, or validation fails.
  *
  * Use the named factory methods. Messages carry a file's basename, never its
- * absolute path, which is available from path(). The parser's message kept by
- * parseFailed() is the one exception.
+ * absolute path, which is available from path(). A parser's message is never kept,
+ * since it can quote a value from the file.
  */
 final class ConfigurationException extends ZephyrusException
 {
@@ -218,16 +219,18 @@ final class ConfigurationException extends ZephyrusException
     }
 
     /**
-     * Appends the parser's message unchanged for its line number, so it may name the absolute path.
+     * A YAML syntax error, naming the line when the parser reports one. The parser's message and the exception
+     * itself are dropped: both can quote a secret from the file.
      */
     public static function parseFailed(string $path, ?\Throwable $previous = null): self
     {
-        $message = sprintf('Failed to parse configuration file [%s]', basename($path));
-        if ($previous !== null) {
-            $message .= ': ' . $previous->getMessage();
-        }
+        $line = $previous instanceof ParseException ? $previous->getParsedLine() : -1;
 
-        return self::withPath($message, $path, $previous);
+        return self::withPath(sprintf(
+            "Failed to parse configuration file [%s]: invalid YAML%s (the parser's detail is withheld, since it can quote a secret from the file).",
+            basename($path),
+            $line >= 1 ? ' at line ' . $line : '',
+        ), $path);
     }
 
     public static function invalidFormat(string $path, string $reason = 'must return an array'): self

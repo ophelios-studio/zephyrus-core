@@ -221,33 +221,50 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertSame('/srv/app/config/config.php', $e->path());
     }
 
-    /**
-     * Our half names the file by basename. The parser's diagnostic is kept verbatim for its line
-     * number, and can still name the absolute path.
-     */
-    public function testParseFailedBasenamesOurHalfAndKeepsTheParserDiagnostic(): void
+    public function testParseFailedNamesTheFileAndTheLineAndWithholdsTheParserDetail(): void
     {
-        $previous = new \RuntimeException('syntax error');
+        $previous = new \Symfony\Component\Yaml\Exception\ParseException('near "password <s3cret>"', 3);
         $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', $previous);
 
-        self::assertStringContainsString('Failed to parse', $e->getMessage());
-        self::assertStringContainsString('config.yml', $e->getMessage());
-        self::assertStringContainsString('syntax error', $e->getMessage());
-        self::assertSame($previous, $e->getPrevious());
+        self::assertSame(
+            "Failed to parse configuration file [config.yml]: invalid YAML at line 3 (the parser's detail is withheld, since it can quote a secret from the file).",
+            $e->getMessage(),
+        );
+        self::assertNull($e->getPrevious());
         self::assertSame('/srv/app/config/config.yml', $e->path());
     }
 
-    /**
-     * Without a previous exception, the message must be path-free on its own.
-     */
+    public function testParseFailedWithAnUnknownLineOmitsTheLine(): void
+    {
+        $previous = new \Symfony\Component\Yaml\Exception\ParseException('near "password <s3cret>"');
+        $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', $previous);
+
+        self::assertSame(
+            "Failed to parse configuration file [config.yml]: invalid YAML (the parser's detail is withheld, since it can quote a secret from the file).",
+            $e->getMessage(),
+        );
+        self::assertNull($e->getPrevious());
+    }
+
+    public function testParseFailedFromAnotherThrowableQuotesNothingOfIt(): void
+    {
+        $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', new \RuntimeException('password <s3cret>'));
+
+        self::assertSame(
+            "Failed to parse configuration file [config.yml]: invalid YAML (the parser's detail is withheld, since it can quote a secret from the file).",
+            $e->getMessage(),
+        );
+        self::assertNull($e->getPrevious());
+    }
+
     public function testParseFailedWithoutPreviousIsEntirelyPathFree(): void
     {
         $e = ConfigurationException::parseFailed('/srv/app/config/config.yml');
 
-        self::assertStringContainsString('Failed to parse', $e->getMessage());
-        self::assertStringContainsString('config.yml', $e->getMessage());
-        self::assertStringNotContainsString('/srv/app/config/', $e->getMessage());
-        self::assertNull($e->getPrevious());
+        self::assertSame(
+            "Failed to parse configuration file [config.yml]: invalid YAML (the parser's detail is withheld, since it can quote a secret from the file).",
+            $e->getMessage(),
+        );
         self::assertSame('/srv/app/config/config.yml', $e->path());
     }
 

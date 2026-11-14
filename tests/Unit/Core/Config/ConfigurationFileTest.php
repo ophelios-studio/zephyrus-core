@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\ConfigurationFile;
 
@@ -130,5 +131,28 @@ final class ConfigurationFileTest extends TestCase
         $second = $file->toArray();
 
         self::assertSame($first, $second);
+    }
+
+    public function testASyntaxErrorNamesTheLineAndNeverQuotesTheFile(): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.yml';
+        file_put_contents($path, "application:\n  debug: false\nsmtp: { host: h, password <s3cret> }\n");
+
+        try {
+            Configuration::fromYamlFile($path);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Failed to parse configuration file [config.yml]: invalid YAML at line 3 (the parser's detail is withheld, since it can quote a secret from the file).",
+                $e->getMessage(),
+            );
+            self::assertNull($e->getPrevious());
+            self::assertStringNotContainsString('s3cret', (string) $e);
+        } finally {
+            @unlink($path);
+            @rmdir($directory);
+        }
     }
 }
