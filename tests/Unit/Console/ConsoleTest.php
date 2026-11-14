@@ -8,9 +8,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Console\Console;
 use Zephyrus\Core\Cache\ConfigurationCache;
-use Zephyrus\Core\Config\ConfigurationFile;
-use Zephyrus\Core\Config\RouterConfig;
-use Zephyrus\Routing\RouteCache;
+use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Routing\Router;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 use Zephyrus\Tests\Unit\Routing\ControllerTree;
 
@@ -458,20 +457,22 @@ final class ConsoleTest extends TestCase
 
     public function testAConfigYmlThatIsASymbolicLinkIsCachedWhereTheApplicationReadsIt(): void
     {
-        $this->elsewhere->file('config.yml', $this->routerSection());
+        $this->elsewhere->file('config.yml', "application:\n  environment: production\n" . $this->routerSection());
         $root = new CacheDirectory();
+        $log = $root->path . '/php.log';
+        $previousLog = ini_set('error_log', $log);
         symlink($this->elsewhere->path . '/config.yml', $root->path . '/config.yml');
 
         try {
             $exitCode = $this->console()->run(['cache:warm', '--config=' . $root->path . '/config.yml']);
+            $router = Router::fromConfiguration(Configuration::fromFile($root->path . '/config.yml'), $root->path);
 
             self::assertSame(Console::SUCCESS, $exitCode);
             self::assertSame(['config.yml'], $this->elsewhere->entries());
-            self::assertNotNull(ConfigurationCache::forSource($root->path . '/config.yml')->load());
-            $config = RouterConfig::fromArray(ConfigurationFile::parseYaml($root->path . '/config.yml')['router']);
-            $routes = (new RouteCache($config, (string) realpath(dirname($root->path . '/config.yml')), $root->path . '/config.yml'))->load();
-            self::assertNotNull($routes);
+            self::assertGreaterThan(0, $router->count());
+            self::assertFileDoesNotExist($log);
         } finally {
+            ini_set('error_log', (string) $previousLog);
             $root->remove();
         }
     }
