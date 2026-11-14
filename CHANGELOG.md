@@ -13,6 +13,7 @@ changes are listed first, each with the change to make in your code.
 #### Core
 
 - A debug client allowlist entry `secret@address` is refused when the secret is shorter than 16 characters: `withDebugClientAllowlist()` and the debug configuration throw `InvalidArgumentException` (`Debug client allowlist entry 1 has a secret shorter than 16 characters before "@": the tracy-debug cookie is all that guards the debugger at that address. Use a longer random secret.`), where any non-empty secret was accepted. To migrate: generate a random secret of 16 characters or more (`bin2hex(random_bytes(16))`), use it in the entry and as the `tracy-debug` cookie.
+- `Configuration::fromFile()`, `fromFiles()` and `fromOptionalFiles()` refuse a file whose extension is not `.yml`, `.yaml` or `.php` (`Configuration file <name>: must be YAML (.yml, .yaml) or PHP (.php)`), where they ran it as PHP: a `.json`, `.env` or extensionless file is no longer executed. A PHP configuration file is read only from a local path: a stream wrapper URL such as `phar://` or `file://` is refused (`Configuration file <name>: must be a local path, not a stream wrapper URL`). Rename a PHP configuration file to `.php`, and pass its plain path.
 
 #### Data
 
@@ -43,6 +44,7 @@ changes are listed first, each with the change to make in your code.
 - A file these methods create gets its mode on the temporary file before it is put in place, and only when the mode differs. PHP sets a mode only by path: a process that can write to the directory and swaps the temporary path for a link between the check and the `chmod` can still redirect that `chmod`.
 - `File::append()` never follows a symbolic link at the path. A new file is written as a temporary file, then hard linked to the path, which fails on a link planted there; it is renamed into place instead on a thread-safe PHP build (whose `link()` follows a link at its new path) and on a filesystem without hard links. An existing file is appended to through the same checks as `write()`, under an exclusive `flock()`, so concurrent `append()` calls never overwrite each other, except two that create the file at the same instant where it is renamed into place; they can overwrite and lose lines of a writer that does not take that lock (`file_put_contents()` with `FILE_APPEND`, `error_log()`, a default Monolog `StreamHandler`). The lock is awaited without limit, so a process that can open the file can hold `append()` back.
 - An existing file in a sticky directory such as `/tmp` that another user owns is no longer written in place: opening it that way escaped the Linux `fs.protected_regular` rule, which only guards an open that may create the file.
+- A PHP configuration file is loaded from its resolved path, so a directory on the `include_path` no longer replaces a relative path checked from the current directory.
 
 ### Added
 
