@@ -97,7 +97,8 @@ final class ConsoleTest extends TestCase
         self::assertSame(Console::REFUSED, $exitCode);
         self::assertSame(
             sprintf(
-                "cache:warm failed for %1\$s/config.yml: Cannot write the boot cache %1\$s/var/zephyrus/config.yml.php: %1\$s/var/zephyrus is writable by its group or by others.\n",
+                "cache:warm failed for %1\$s/config.yml: Cannot write the boot cache %1\$s/var/zephyrus/config.yml.php: "
+                . "%1\$s/var/zephyrus is writable by its group or by others: run chmod g-w,o-w %1\$s/var/zephyrus.\n",
                 $this->project->path,
             ),
             $this->printedErrors(),
@@ -153,7 +154,10 @@ final class ConsoleTest extends TestCase
             ),
             $this->printed(),
         );
-        self::assertSame(['config', 'config/tenant.yml', 'config.yml', 'var', 'var/zephyrus'], $this->project->entries());
+        self::assertSame(
+            ['config', 'config/tenant.yml', 'config.yml', 'var', 'var/zephyrus', 'var/zephyrus/.gitignore'],
+            $this->project->entries(),
+        );
     }
 
     public function testAnEnvTagInTheRouterSectionIsRefusedWithoutReadingTheEnvironment(): void
@@ -168,13 +172,53 @@ final class ConsoleTest extends TestCase
         self::assertSame(Console::REFUSED, $exitCode);
         self::assertSame(
             sprintf(
-                "cache:warm failed for %s/config.yml: Configuration section 'router' field \"controllers.App\\\\Controllers\" "
-                . 'is written under the !env tag, but vendor/bin/zephyrus cache:warm reads this section without the '
-                . "environment: write the value itself.\n",
+                "cache:warm failed for %s/config.yml: Configuration section 'router' field 'controllers' holds a value "
+                . 'under the !env tag, but vendor/bin/zephyrus cache:warm reads this section without the environment: '
+                . "write the value itself.\n",
                 $this->project->path,
             ),
             $this->printedErrors(),
         );
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
+    }
+
+    public function testAnEnvTagOnTheWholeRouterSectionIsRefusedWithoutReadingTheEnvironment(): void
+    {
+        $this->project->file('config.yml', "router: !env ROUTER_SECTION\n");
+
+        $exitCode = $this->console()->run(['cache:warm']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %s/config.yml: Configuration section 'router' is written under the !env tag, but "
+                . "vendor/bin/zephyrus cache:warm reads this section without the environment: write its values in the "
+                . "file.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
+    }
+
+    public function testARefusedConfigurationLeavesTheCachesOfEveryConfigurationUnwritten(): void
+    {
+        $this->project->file('config.yml', "router:\n  controllers:\n    App\\Controllers: app/Controllers\n");
+
+        $exitCode = $this->console(workingDirectory: $this->project->path)
+            ->run(['cache:warm', '--config=config/tenant.yml', '--config=config.yml']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config.yml: Configuration section 'router' field 'controllers' has invalid "
+                . 'value "app/Controllers": %1$s/app/Controllers, the directory of App\Controllers, is not a '
+                . "directory.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
         self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
     }
 
@@ -188,8 +232,8 @@ final class ConsoleTest extends TestCase
         self::assertSame(
             sprintf(
                 'cache:warm failed for %s/config/tenant.yml: Configuration file tenant.yml declares router:, but '
-                . 'Router::fromConfiguration() checks the routes cache against the config.yml of the application '
-                . "root: move the router: section to that file.\n",
+                . "router: is cached only from config.yml at the application root: move the router: section to that "
+                . "file.\n",
                 $this->project->path,
             ),
             $this->printedErrors(),
@@ -206,7 +250,7 @@ final class ConsoleTest extends TestCase
         try {
             $exitCode = (new Console($this->elsewhere->path, $root, $this->output, $this->errorOutput))
                 ->run(['cache:warm']);
-            $written = file_exists($root . '/var/zephyrus/routes.php');
+            $written = file_exists($root . '/var');
         } finally {
             $tree->remove();
         }
@@ -241,6 +285,7 @@ final class ConsoleTest extends TestCase
             'no command' => [[], 'No command given.'],
             'unknown command' => [['cache:purge'], 'Unknown command "cache:purge".'],
             'unknown option' => [['cache:warm', '--force'], 'Unknown option "--force".'],
+            'an option that only starts like config' => [['cache:warm', '--configuration=config.yml'], 'Unknown option "--configuration=config.yml".'],
             'config without a path' => [['cache:clear', '--config'], 'The --config option needs a path, as in --config=PATH.'],
             'config with an empty path' => [['cache:warm', '--config='], 'The --config option needs a path, as in --config=PATH.'],
         ];

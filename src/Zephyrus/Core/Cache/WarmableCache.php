@@ -19,12 +19,13 @@ interface WarmableCache
     public function path(): string;
 
     /**
-     * Write the cache from its source, without reading the environment.
+     * Read the source and check that the cache can be written, without writing it or reading the environment.
      *
-     * @return string The line cache:warm prints: the file written, never a cached value.
+     * @return \Closure(): string Writes the cache and returns the line cache:warm prints: the file written, never a
+     *                            cached value.
      * @throws ZephyrusException when the source cannot be read or the cache cannot be written safely.
      */
-    public function warm(): string;
+    public function prepare(): \Closure;
 
     /**
      * Delete the cache file.

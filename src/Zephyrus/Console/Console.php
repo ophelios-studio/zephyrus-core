@@ -6,7 +6,6 @@ namespace Zephyrus\Console;
 
 use Composer\InstalledVersions;
 use Zephyrus\Core\Cache\ConfigurationCache;
-use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationFile;
 use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Exceptions\MessageValue;
@@ -87,22 +86,33 @@ final readonly class Console
             $configurations[] = str_starts_with($path, '/') ? $path : $this->workingDirectory . '/' . $path;
         }
 
-        foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
-            try {
+        // Every file is read and checked before the first cache is written or removed; $configuration names the file
+        // being handled when a step throws.
+        $configuration = '';
+        $steps = [];
+        try {
+            foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
                 $configurationCache = ConfigurationCache::forSource($configuration);
                 $routeCache = $this->routeCacheOf($configuration);
                 foreach ([$configurationCache, ...($routeCache === null ? [] : [$routeCache])] as $cache) {
-                    $this->say($command === self::WARM ? $this->warm($cache) : $this->clear($cache));
+                    $steps[] = [$configuration, $command === self::WARM
+                        ? $cache->prepare()
+                        : static fn (): string => ($cache->clear() ? 'Removed ' : 'Nothing to remove at ') . $cache->path()];
                 }
 
                 if ($command === self::WARM && $routeCache === null) {
-                    $this->say(sprintf('No router: section in %s, so no routes cache was written', $configuration));
+                    $line = sprintf('No router: section in %s, so no routes cache was written', $configuration);
+                    $steps[] = [$configuration, static fn (): string => $line];
                 }
-            } catch (ZephyrusException $exception) {
-                fwrite($this->errorOutput, sprintf("%s failed for %s: %s\n", $command, $configuration, $exception->getMessage()));
-
-                return self::REFUSED;
             }
+
+            foreach ($steps as [$configuration, $step]) {
+                $this->say($step());
+            }
+        } catch (ZephyrusException $exception) {
+            fwrite($this->errorOutput, sprintf("%s failed for %s: %s\n", $command, $configuration, $exception->getMessage()));
+
+            return self::REFUSED;
         }
 
         return self::SUCCESS;
@@ -121,22 +131,7 @@ final readonly class Console
             return null;
         }
 
-        RouterConfig::refuseTags($values[RouterConfig::SECTION]);
-
-        return RouteCache::forConfigurationFile(
-            $source,
-            RouterConfig::fromArray((array) $values[RouterConfig::SECTION]),
-        );
-    }
-
-    private function warm(WarmableCache $cache): string
-    {
-        return $cache->warm();
-    }
-
-    private function clear(WarmableCache $cache): string
-    {
-        return ($cache->clear() ? 'Removed ' : 'Nothing to remove at ') . $cache->path();
+        return RouteCache::forConfigurationFile($source, RouterConfig::fromArray($values[RouterConfig::SECTION]));
     }
 
     /**

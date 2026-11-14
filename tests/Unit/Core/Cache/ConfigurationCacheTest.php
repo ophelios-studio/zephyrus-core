@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core\Cache;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Core\Config\ConfigurationException;
@@ -35,16 +36,61 @@ final class ConfigurationCacheTest extends TestCase
         self::assertSame($this->directory->path . '/var/zephyrus/config.yml.php', $cache->path());
     }
 
-    public function testWarmGivesTheCacheTheModeAndGroupOfItsSourceWithoutAnyWriteBit(): void
+    #[DataProvider('sourceModes')]
+    public function testWarmGivesTheCacheTheReadBitsOfItsSourceOnly(int $sourceMode, int $cacheMode): void
     {
-        $source = $this->directory->file('config.yml', "application: {}\n", 0o640);
+        $source = $this->directory->file('config.yml', "application: {}\n", $sourceMode);
 
         $cache = ConfigurationCache::forSource($source);
         $cache->warm();
 
         clearstatcache();
-        self::assertSame(0o440, fileperms($cache->path()) & 0o7777);
-        self::assertSame(filegroup($source), filegroup($cache->path()));
+        self::assertSame($cacheMode, fileperms($cache->path()) & 0o7777);
+    }
+
+    /**
+     * @return iterable<string, array{int, int}>
+     */
+    public static function sourceModes(): iterable
+    {
+        yield 'a source others cannot read' => [0o640, 0o440];
+        yield 'a source anyone may write and run' => [0o777, 0o444];
+    }
+
+    public function testWarmGivesTheCacheTheGroupOfItsSource(): void
+    {
+        $source = $this->directory->file('config.yml', "application: {}\n", 0o640);
+        $groups = function_exists('posix_getgroups') ? (posix_getgroups() ?: []) : [];
+        $otherGroups = array_values(array_diff($groups, [filegroup($source)]));
+        if ($otherGroups === []) {
+            self::markTestSkipped('This process belongs to no group other than the one its files get by default.');
+        }
+        chgrp($source, $otherGroups[0]);
+
+        $cache = ConfigurationCache::forSource($source);
+        $cache->warm();
+
+        clearstatcache();
+        self::assertSame($otherGroups[0], filegroup($cache->path()));
+    }
+
+    public function testWarmKeepsTheCacheDirectoryOutOfGit(): void
+    {
+        $source = $this->directory->file('config.yml', "application: {}\n");
+
+        ConfigurationCache::forSource($source)->warm();
+
+        self::assertSame("*\n", file_get_contents($this->directory->path . '/var/zephyrus/.gitignore'));
+    }
+
+    public function testWarmLeavesAGitignoreAlreadyThereAsItIs(): void
+    {
+        $source = $this->directory->file('config.yml', "application: {}\n");
+        $ignore = $this->directory->file('var/zephyrus/.gitignore', "/routes.php\n");
+
+        ConfigurationCache::forSource($source)->warm();
+
+        self::assertSame("/routes.php\n", file_get_contents($ignore));
     }
 
     public function testAMissingSourceIsRefused(): void
