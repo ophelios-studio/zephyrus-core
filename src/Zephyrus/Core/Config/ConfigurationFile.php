@@ -8,6 +8,7 @@ use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\Routing\RouterConfig;
 
 /**
  * Parses a YAML configuration file with support for the custom !env tag.
@@ -24,7 +25,7 @@ use Zephyrus\Exceptions\MessageValue;
  * parse time, so .env files must be loaded before this class is used. An unset
  * variable without a default resolves to null, and every !env value is a string
  * or null. Refused names raise a ConfigurationException, see
- * {@see EnvironmentVariable::read()}.
+ * {@see EnvironmentVariable::read()}. The router: section refuses every tag.
  *
  * When vendor/bin/zephyrus cache:warm has written var/zephyrus/<file name>.php
  * beside the file, the YAML is read from that cache while it matches the file and
@@ -142,6 +143,10 @@ final class ConfigurationFile
     {
         foreach ($config as $key => $value) {
             $path = $prefix === null ? (string) $key : $prefix . '.' . $key;
+
+            if ($prefix === null && $key === RouterConfig::SECTION) {
+                RouterConfig::refuseTags($value);
+            }
 
             if (is_array($value)) {
                 $config[$key] = $this->processYamlTags($value, $path);

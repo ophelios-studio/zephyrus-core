@@ -435,7 +435,7 @@ final class ConfigurationTest extends TestCase
     {
         $config = Configuration::fromArray(['database' => ['database' => 'zephyrus', 'username' => 'root']]);
 
-        foreach (['application', 'session', 'security', 'localization', 'database'] as $name) {
+        foreach (['application', 'session', 'security', 'localization', 'database', 'router'] as $name) {
             try {
                 $config->section($name);
                 self::fail("section('$name') should refuse a built-in name");

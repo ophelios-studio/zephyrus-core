@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
-
+use Zephyrus\Routing\RouterConfig;
 
 /**
  * Immutable top-level configuration tree.
  *
  * Aggregates the typed section objects built from one nested array. Every section
- * except `database` is always present with safe defaults; `database` is null when
- * no connection is configured. YAML files are read by ConfigurationFile, which
- * resolves the !env tag.
+ * except `database` and `router` is always present with safe defaults; `database` is
+ * null when no connection is configured, `router` when no router: section is written.
+ * YAML files are read by ConfigurationFile, which resolves the !env tag.
  *
  * Typical usage:
  *
@@ -24,7 +24,7 @@ namespace Zephyrus\Core\Config;
 final readonly class Configuration
 {
     /** Names of the sections read through the typed properties. */
-    public const array BUILT_IN_SECTIONS = ['application', 'session', 'security', 'localization', 'database'];
+    public const array BUILT_IN_SECTIONS = ['application', 'session', 'security', 'localization', 'database', 'router'];
 
     private const string CUSTOM_SECTION_ADVICE = 'A section of your own needs a factory registered under its name in '
         . 'the $sectionFactories argument of the Configuration factories.';
@@ -39,13 +39,14 @@ final readonly class Configuration
         public LocalizationConfig $localization,
         public ?DatabaseConfig    $database,
         private array $customSections = [],
+        public ?RouterConfig      $router = null,
     ) {
     }
 
     /**
      * Build a Configuration tree from a nested key-value array.
      *
-     * The built-in keys are listed in BUILT_IN_SECTIONS (omit database to leave it null).
+     * The built-in keys are listed in BUILT_IN_SECTIONS (omit database or router to leave it null).
      * A custom factory runs only when its key holds an array, and is read back with section().
      *
      * @param array<string, mixed> $config
@@ -111,6 +112,9 @@ final readonly class Configuration
                 ? DatabaseConfig::fromArray((array) $config['database'])
                 : null,
             customSections: $customSections,
+            router:         array_key_exists(RouterConfig::SECTION, $config)
+                ? RouterConfig::fromArray((array) $config[RouterConfig::SECTION])
+                : null,
         );
     }
 
@@ -489,6 +493,7 @@ final readonly class Configuration
                 'password'         => self::redact($this->database->password, $revealSecrets),
                 'charset'          => $this->database->charset,
             ],
+            'router' => $this->router?->toArray(),
         ];
 
         foreach ($this->customSections as $name => $section) {
