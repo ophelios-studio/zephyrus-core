@@ -200,7 +200,7 @@ final class File extends FileSystemNode
 
             self::replaceContent(
                 $destination,
-                static fn ($handle): bool => stream_copy_to_stream($source, $handle) !== false,
+                static fn ($handle): bool => @stream_copy_to_stream($source, $handle) !== false,
                 self::failure('copy', $this->path . ' to ' . $destination),
                 $sourceStat['mode'],
                 function (array $existing) use ($sourceStat, $destination): void {
@@ -297,7 +297,7 @@ final class File extends FileSystemNode
      */
     private static function contentWriter(string $content): \Closure
     {
-        return static fn ($handle): bool => fwrite($handle, $content) === strlen($content);
+        return static fn ($handle): bool => @fwrite($handle, $content) === strlen($content);
     }
 
     /**
@@ -384,7 +384,7 @@ final class File extends FileSystemNode
         }
         try {
             return fseek($handle, 0, SEEK_END) === 0
-                && fwrite($handle, $content) === strlen($content)
+                && @fwrite($handle, $content) === strlen($content)
                 && fflush($handle);
         } finally {
             flock($handle, LOCK_UN);

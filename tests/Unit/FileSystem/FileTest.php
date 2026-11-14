@@ -672,6 +672,41 @@ final class FileTest extends TestCase
         self::assertSame('new', (string) file_get_contents($path));
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function writesCutShort(): array
+    {
+        return [
+            'write' => ['write', 'Failed to write to: {path}'],
+            'append' => ['append', 'Failed to append to: {path}'],
+            'copy' => ['copy', 'Failed to copy: {source} to {path}'],
+        ];
+    }
+
+    #[DataProvider('writesCutShort')]
+    public function testAWriteCutShortIsAFileSystemExceptionUnderAThrowingErrorHandler(string $method, string $message): void
+    {
+        if (!function_exists('posix_setrlimit') || !function_exists('pcntl_signal')) {
+            self::markTestSkipped('Needs the posix and pcntl extensions.');
+        }
+        $path = $this->tempDir . '/capped.txt';
+        $source = $this->tempDir . '/source.txt';
+        file_put_contents($path, '');
+        file_put_contents($source, 'more than four bytes');
+
+        try {
+            self::underFileSizeLimit(4, match ($method) {
+                'write' => static fn () => (new File($path))->write('more than four bytes'),
+                'append' => static fn () => (new File($path))->append('more than four bytes'),
+                'copy' => static fn () => (new File($source))->copy($path),
+            });
+            self::fail('expected a failure');
+        } catch (FileSystemException $e) {
+            self::assertSame(strtr($message, ['{path}' => $path, '{source}' => $source]), $e->getMessage());
+        }
+    }
+
     public function testCopyOfADirectoryIsRefusedBeforeTouchingTheDestination(): void
     {
         $source = $this->tempDir . '/folder';
@@ -801,6 +836,34 @@ final class FileTest extends TestCase
         chmod($path, 0666);
 
         return $path;
+    }
+
+    /**
+     * Run `$operation` with every file it writes capped at `$bytes`, every error reported, and
+     * an error handler that throws on any not silenced with @.
+     */
+    private static function underFileSizeLimit(int $bytes, \Closure $operation): void
+    {
+        $toLimit = static fn (int|string $value): int => $value === 'unlimited' ? POSIX_RLIMIT_INFINITY : (int) $value;
+        [$soft, $hard] = array_map($toLimit, (array) posix_getrlimit(POSIX_RLIMIT_FSIZE));
+        $signalHandler = pcntl_signal_get_handler(SIGXFSZ);
+        pcntl_signal(SIGXFSZ, SIG_IGN);
+        $reporting = error_reporting(E_ALL);
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            if ((error_reporting() & $severity) === 0) {
+                return false;
+            }
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        posix_setrlimit(POSIX_RLIMIT_FSIZE, $bytes, $hard);
+        try {
+            $operation();
+        } finally {
+            posix_setrlimit(POSIX_RLIMIT_FSIZE, $soft, $hard);
+            restore_error_handler();
+            error_reporting($reporting);
+            pcntl_signal(SIGXFSZ, $signalHandler);
+        }
     }
 
     private function assertAppendRefusesTheLink(string $link): void
