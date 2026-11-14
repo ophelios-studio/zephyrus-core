@@ -60,6 +60,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Fixed
 
+- `EnvironmentVariable::read()` reads a `false` placed in `$_ENV` as `"0"`, where it read `""`, which a boolean setting refused; `true` still reads `"1"`. `env()`, a `!env` value and `#[RequiresEnv]` read it the same way, so `#[RequiresEnv('X', '0')]` now matches it and `#[RequiresEnv('X', '')]` no longer does.
 - The debug warnings of `SessionManager` (idle timeout, strict mode) and of `ContentSecurityPolicyMiddleware` read the raw `application.debug` instead of the effective flag, so a production boot that refused `debug: true` still wrote them to the logs. They now read `App::isDebug()`. `ContentSecurityPolicyMiddleware::isDebug()` (internal) is removed.
 - A static `ContentSecurityPolicyMiddleware` policy replaced by a `SecureHeadersMiddleware` registered inside it now triggers the same debug warning as a nonce policy; it was overwritten silently. The warning says "the policy of this request" instead of "the nonce policy of this request".
 - An unreadable `config.yml` is reported as `Configuration file is not readable: config.yml`, where it was reported as invalid YAML.

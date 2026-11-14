@@ -63,6 +63,10 @@ final class EnvironmentVariable
         if (array_key_exists($name, $_ENV)) {
             $value = $_ENV[$name];
 
+            if (is_bool($value)) {
+                return $value ? '1' : '0';
+            }
+
             return is_scalar($value) ? (string) $value : null;
         }
 

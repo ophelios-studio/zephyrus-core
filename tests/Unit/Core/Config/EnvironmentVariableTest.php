@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Core\Config;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\Config\ConfigBoolean;
 use Zephyrus\Core\Config\EnvironmentVariable;
 
 final class EnvironmentVariableTest extends TestCase
@@ -14,6 +15,9 @@ final class EnvironmentVariableTest extends TestCase
         'ZEPHYRUS_TEST_X',
         'ZEPHYRUS_TEST_ONLY_SERVER',
         'ZEPHYRUS_TEST_ZERO',
+        'ZEPHYRUS_TEST_INT_ZERO',
+        'ZEPHYRUS_TEST_TRUE',
+        'ZEPHYRUS_TEST_FALSE',
         'ZEPHYRUS_TEST_EMPTY',
         'ZEPHYRUS_TEST_NON_SCALAR',
         'PHP_AUTH_PW',
@@ -100,6 +104,34 @@ final class EnvironmentVariableTest extends TestCase
         $_ENV['ZEPHYRUS_TEST_ZERO'] = '0';
 
         self::assertSame('0', EnvironmentVariable::read('ZEPHYRUS_TEST_ZERO'));
+    }
+
+    public function testAnIntegerZeroEnvValueIsReturnedAsTheStringZero(): void
+    {
+        $_ENV['ZEPHYRUS_TEST_INT_ZERO'] = 0;
+
+        self::assertSame('0', EnvironmentVariable::read('ZEPHYRUS_TEST_INT_ZERO'));
+    }
+
+    public function testAFalseEnvValueIsReturnedAsTheStringZero(): void
+    {
+        $_ENV['ZEPHYRUS_TEST_FALSE'] = false;
+
+        self::assertSame('0', EnvironmentVariable::read('ZEPHYRUS_TEST_FALSE'));
+    }
+
+    public function testATrueEnvValueIsReturnedAsTheStringOne(): void
+    {
+        $_ENV['ZEPHYRUS_TEST_TRUE'] = true;
+
+        self::assertSame('1', EnvironmentVariable::read('ZEPHYRUS_TEST_TRUE'));
+    }
+
+    public function testAFalseEnvValueIsAcceptedByTheStrictBooleanReader(): void
+    {
+        $_ENV['ZEPHYRUS_TEST_FALSE'] = false;
+
+        self::assertFalse(ConfigBoolean::parse('application', 'debug', EnvironmentVariable::read('ZEPHYRUS_TEST_FALSE')));
     }
 
     public function testAnEmptyValueIsReturnedAsAnEmptyString(): void
