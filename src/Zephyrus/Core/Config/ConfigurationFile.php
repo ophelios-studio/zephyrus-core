@@ -6,6 +6,7 @@ namespace Zephyrus\Core\Config;
 
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
+use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Exceptions\MessageValue;
 
 /**
@@ -24,9 +25,16 @@ use Zephyrus\Exceptions\MessageValue;
  * variable without a default resolves to null, and every !env value is a string
  * or null. Refused names raise a ConfigurationException, see
  * {@see EnvironmentVariable::read()}.
+ *
+ * When vendor/bin/zephyrus cache:warm has written var/zephyrus/<file name>.php
+ * beside the file, the YAML is read from that cache while it matches the file and
+ * its owners and modes pass the checks; !env tags are still resolved on every read.
  */
 final class ConfigurationFile
 {
+    /** Shared by the runtime parse and cache:warm. Never add Yaml::PARSE_CONSTANT. */
+    private const int YAML_FLAGS = Yaml::PARSE_CUSTOM_TAGS;
+
     /** @var array<string, mixed>|null */
     private ?array $content = null;
 
@@ -85,7 +93,25 @@ final class ConfigurationFile
     }
 
     /**
-     * Parse the YAML file (cached after first call). A file that does not parse to an array reads as empty.
+     * Parse a YAML file with its tags left unresolved. A file that does not parse to an array reads as empty.
+     *
+     * @internal Shared with ConfigurationCache, which caches this result.
+     * @return array<string, mixed>
+     * @throws ConfigurationException when the file does not parse.
+     */
+    public static function parseYaml(string $path): array
+    {
+        try {
+            $parsed = Yaml::parseFile($path, self::YAML_FLAGS);
+        } catch (\Throwable $e) {
+            throw ConfigurationException::parseFailed($path, $e);
+        }
+
+        return is_array($parsed) ? $parsed : [];
+    }
+
+    /**
+     * Parse the YAML file, or read its warmed cache (cached after first call).
      *
      * @return array<string, mixed>
      */
@@ -99,16 +125,7 @@ final class ConfigurationFile
             throw ConfigurationException::fileNotFound($this->path);
         }
 
-        try {
-            $parsed = Yaml::parseFile($this->path, Yaml::PARSE_CUSTOM_TAGS);
-        } catch (\Throwable $e) {
-            throw ConfigurationException::parseFailed($this->path, $e);
-        }
-
-        if (!is_array($parsed)) {
-            $parsed = [];
-        }
-
+        $parsed = ConfigurationCache::forSource($this->path)->load() ?? self::parseYaml($this->path);
         $this->content = $this->processYamlTags($parsed);
 
         return $this->content;
