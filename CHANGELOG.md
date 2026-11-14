@@ -14,6 +14,10 @@ changes are listed first, each with the change to make in your code.
 
 - `Database` refuses a persistent PDO, and `Database::fromConfig()` refuses a factory that returns a persistent connection it did not ask for, because the session of a persistent connection (role, advisory locks, prepared statements, a transaction left open) used to reach the next request unchanged. `new Database($pdo)` with `PDO::ATTR_PERSISTENT` throws `DatabaseException` (`Database refuses a persistent PDO, whose session would carry over from an earlier request: remove PDO::ATTR_PERSISTENT from the PDO and set database.persistent: true in the configuration, so Database::fromConfig() resets the session each time it reuses the connection.`), and a factory that returns one while `database.persistent` is `false`, or while a persistent handle for the same DSN and user is still held, throws `DatabaseException` (`The PDO factory given to Database::fromConfig() returned a persistent connection it was not asked for, whose session would carry over from an earlier request: remove PDO::ATTR_PERSISTENT from the factory and set database.persistent: true in the configuration to reuse connections.`). To migrate: remove `PDO::ATTR_PERSISTENT` from the factory or the PDO, set `persistent: true` in the `database` section, and open the connection with `Database::fromConfig()`.
 
+### Security
+
+- A YAML syntax error in `config.yml` no longer quotes the file. `v0.16.0` appended the parser's message to `ConfigurationException` and chained the parser's exception, and both can quote a value of the file (a malformed `password` line shows it in the message and in the excerpt), which then reached traces, error pages, logs and `cache:warm`. The message is now `Failed to parse configuration file [config.yml]: invalid YAML at line 3 (the parser's detail is withheld, since it can quote a secret from the file).` (without `at line N` when the parser gives no line), and `getPrevious()` returns null: code that read the line from the cause finds it in the message.
+
 ### Added
 
 - `database.persistent` (default `false`) reuses the PostgreSQL connection across requests of one process. When a connection is taken from the pool, `fromConfig()` sends `ROLLBACK` if a transaction is open, then `DISCARD ALL`, then drops the notifications the client had already received. A connection whose reset fails is terminated and replaced once; a second failure throws `DatabaseException`.
@@ -22,6 +26,12 @@ changes are listed first, each with the change to make in your code.
 ### Changed
 
 - The default connection factory of `Database::fromConfig()` builds with `PDO::connect()`, so the handle is a `Pdo\Pgsql`. A factory you pass keeps working; on PHP 8.5 one used with `persistent: true` should build with `PDO::connect()` too, or each acquisition emits a deprecation.
+- A dotted key written flat under a section whose first part is a mapping of that section (`smtp.host: h` under `mailer:`) is refused with `... is written flat: nest it under 'smtp', such as smtp: { host: ... }.`, where it listed the accepted keys or suggested a spelling.
+
+### Fixed
+
+- `MailerConfig::toArray()` exports `smtp.port` as `587` when the key is written as null (an empty `!env`), as `smtpPort` holds, where it exported null.
+- A type refusal under `mailer:` or `render:` names the section by its key (`'mailer'`, `'render'`), as an unknown key does, where it named the class. `ConfigSection::sectionName()` (protected, defaults to the class name) supplies it: a section of your own may override it.
 
 ## [0.16.0] - 2026-11-13
 
