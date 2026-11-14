@@ -7,6 +7,10 @@ namespace Zephyrus\Tests\Unit\Console;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Console\Console;
+use Zephyrus\Core\Cache\ConfigurationCache;
+use Zephyrus\Core\Config\ConfigurationFile;
+use Zephyrus\Core\Config\RouterConfig;
+use Zephyrus\Routing\RouteCache;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
 use Zephyrus\Tests\Unit\Routing\ControllerTree;
 
@@ -331,6 +335,26 @@ final class ConsoleTest extends TestCase
         );
         self::assertFileExists($this->project->path . '/var/zephyrus/config.yml.php');
         self::assertFileExists($foreign);
+    }
+
+    public function testAConfigYmlThatIsASymbolicLinkIsCachedWhereTheApplicationReadsIt(): void
+    {
+        $this->elsewhere->file('config.yml', $this->routerSection());
+        $root = new CacheDirectory();
+        symlink($this->elsewhere->path . '/config.yml', $root->path . '/config.yml');
+
+        try {
+            $exitCode = $this->console()->run(['cache:warm', '--config=' . $root->path . '/config.yml']);
+
+            self::assertSame(Console::SUCCESS, $exitCode);
+            self::assertSame(['config.yml'], $this->elsewhere->entries());
+            self::assertNotNull(ConfigurationCache::forSource($root->path . '/config.yml')->load());
+            $config = RouterConfig::fromArray(ConfigurationFile::parseYaml($root->path . '/config.yml')['router']);
+            $routes = (new RouteCache($config, (string) realpath(dirname($root->path . '/config.yml')), $root->path . '/config.yml'))->load();
+            self::assertNotNull($routes);
+        } finally {
+            $root->remove();
+        }
     }
 
     private function routerSection(?string $cache = null): string

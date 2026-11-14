@@ -93,7 +93,7 @@ final readonly class Console
         foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
             try {
                 $configurationCache = ConfigurationCache::forSource($configuration);
-                $routeCache = $this->routeCacheOf($configuration);
+                $routeCache = $this->routeCacheOf($configurationCache->source());
                 foreach ([$configurationCache, ...($routeCache === null ? [] : [$routeCache])] as $cache) {
                     if ($command === self::WARM) {
                         if (isset($warmed[$cache->path()])) {
@@ -136,9 +136,8 @@ final readonly class Console
      *
      * @throws ZephyrusException when the file does not parse or its router: section is refused.
      */
-    private function routeCacheOf(string $configuration): ?RouteCache
+    private function routeCacheOf(string $source): ?RouteCache
     {
-        $source = (string) realpath($configuration);
         $values = ConfigurationFile::parseYaml($source);
         if (!array_key_exists(RouterConfig::SECTION, $values)) {
             return null;

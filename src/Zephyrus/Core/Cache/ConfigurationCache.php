@@ -27,17 +27,20 @@ final readonly class ConfigurationCache implements WarmableCache
     }
 
     /**
+     * The directory of the path given, with its links resolved, is the root of the cache; the file itself is not
+     * resolved, so a linked config.yml is cached beside the link, where the application root is.
+     *
      * @param (\Closure(string): (int|false))|null $ownerOf Reads the owner uid of a path, fileowner() by default.
      * @throws ConfigurationException when the source is not a file.
      */
     public static function forSource(string $sourcePath, ?\Closure $ownerOf = null): self
     {
-        $source = realpath($sourcePath);
-        if ($source === false || !is_file($source)) {
+        $baseDirectory = realpath(dirname($sourcePath));
+        $source = $baseDirectory === false ? '' : rtrim($baseDirectory, '/') . '/' . basename($sourcePath);
+        if ($baseDirectory === false || !is_file($source)) {
             throw ConfigurationException::fileNotFound($sourcePath);
         }
 
-        $baseDirectory = dirname($source);
         $path = sprintf('%s/%s/%s.php', rtrim($baseDirectory, '/'), self::DIRECTORY, basename($source));
 
         return new self($source, new BootCache($path, $baseDirectory, $source, $ownerOf));
@@ -46,6 +49,14 @@ final readonly class ConfigurationCache implements WarmableCache
     public function path(): string
     {
         return $this->cache->path();
+    }
+
+    /**
+     * The configuration file under the real path of its directory.
+     */
+    public function source(): string
+    {
+        return $this->source;
     }
 
     /**

@@ -26,14 +26,14 @@ final class ConfigurationCacheTest extends TestCase
         $this->outside->remove();
     }
 
-    public function testTheCacheIsNamedAfterTheSourceInVarZephyrusBesideItsRealPath(): void
+    public function testALinkedSourceIsCachedBesideTheLinkNotBesideItsTarget(): void
     {
         $source = $this->directory->file('config.yml', "application: {}\n");
         symlink($source, $this->outside->path . '/linked.yml');
 
         $cache = ConfigurationCache::forSource($this->outside->path . '/linked.yml');
 
-        self::assertSame($this->directory->path . '/var/zephyrus/config.yml.php', $cache->path());
+        self::assertSame($this->outside->path . '/var/zephyrus/linked.yml.php', $cache->path());
     }
 
     #[DataProvider('sourceModes')]
