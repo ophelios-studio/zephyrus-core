@@ -8,7 +8,7 @@ namespace Zephyrus\Core\Config;
  * Immutable configuration section for a single database connection.
  *
  * Required fields: database, username. Defaults: driver 'pgsql', host 'localhost', port 5432,
- * password '', charset 'utf8', sslMode and sslRootCert null, columnCacheVersion ''.
+ * password '', charset 'utf8', sslMode and sslRootCert null, columnCacheVersion '', persistent false.
  *
  * Validation (fromArray, and the constructor for host, database, charset, sslMode and sslRootCert):
  *   - database: non-empty; fromArray reports a blank one as missing.
@@ -17,6 +17,7 @@ namespace Zephyrus\Core\Config;
  *   - port: an integer or a string of digits, 1-65535 (fromArray only).
  *   - driver: 'pgsql' (fromArray only).
  *   - columnCacheVersion: a string or an integer, trimmed (fromArray only).
+ *   - persistent: a boolean, read strictly (fromArray only).
  *   - keys: a key no setting reads is refused (fromArray only).
  *   - sslMode, sslRootCert, columnCacheVersion: one spelling per setting (fromArray only).
  *   - charset: alphanumeric or underscore only, as it is interpolated into SET client_encoding.
@@ -75,6 +76,7 @@ final readonly class DatabaseConfig
         'sslMode' => ['sslMode', 'sslmode', 'ssl_mode'],
         'sslRootCert' => ['sslRootCert', 'sslrootcert', 'ssl_root_cert'],
         'columnCacheVersion' => ['columnCacheVersion', 'column_cache_version'],
+        'persistent' => ['persistent'],
     ];
 
     public function __construct(
@@ -88,6 +90,7 @@ final readonly class DatabaseConfig
         public ?string $sslMode = null,
         public ?string $sslRootCert = null,
         public string $columnCacheVersion = '',
+        public bool $persistent = false,
     ) {
         // The constructor re-checks these values, so a directly built config cannot carry a
         // value fromArray() would refuse. fromArray() normalises first (trim, lower-case,
@@ -196,6 +199,7 @@ final readonly class DatabaseConfig
             sslMode:         $sslMode,
             sslRootCert:     $sslRootCert,
             columnCacheVersion: $columnCacheVersion,
+            persistent:      $keys->boolean('persistent', false),
         );
     }
 

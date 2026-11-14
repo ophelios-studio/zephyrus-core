@@ -461,6 +461,49 @@ final class DatabaseConfigTest extends TestCase
         }
     }
 
+    public function testPersistentDefaultsToFalse(): void
+    {
+        $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u']);
+
+        self::assertFalse($config->persistent);
+    }
+
+    public function testPersistentIsReadAsABoolean(): void
+    {
+        $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'persistent' => 'true']);
+
+        self::assertTrue($config->persistent);
+    }
+
+    public function testANonBooleanPersistentIsRefused(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'persistent' => 'sometimes']);
+
+            self::fail('A non-boolean persistent value was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'database' field 'persistent' has invalid value \"sometimes\": is not a "
+                . 'boolean; use true/false, 1/0, on/off or yes/no.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAMisspelledPersistentKeyIsRefused(): void
+    {
+        try {
+            DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'persistant' => true]);
+
+            self::fail('A misspelled persistent key was accepted.');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'database' field 'persistant' is an unknown key: did you mean \"persistent\"?",
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testColumnCacheVersionDefaultsToEmptyString(): void
     {
         $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u']);
