@@ -11,6 +11,7 @@ use DateTimeInterface;
 use Exception;
 use InvalidArgumentException;
 use JsonSerializable;
+use PropertyHookType;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionProperty;
@@ -44,12 +45,13 @@ abstract class Entity implements JsonSerializable
     /**
      * Hydrate an entity from a database row, coercing values to the declared property types.
      *
-     * Private and static properties are skipped; a readonly property its constructor already set and a private(set)
-     * property are refused. Hydrates bool, int, float, string, array, object and mixed, stdClass, backed enums, nested
-     * entities (from a stdClass) and date strings (DateTimeImmutable, DateTimeInterface, DateTime; an ISO `YYYY-MM-DD`
-     * string with optional time, fraction and UTC offset). A date that does not fit, a value that is not a case of its
-     * backed enum (wrong type included), a pure enum, a nested entity that is not a stdClass or any other type is
-     * refused; native types are converted by settype(), not validated.
+     * Private and static properties are skipped; a readonly property its constructor already set, a private(set)
+     * property and a virtual property with no set hook are refused. Hydrates bool, int, float, string, array, object
+     * and mixed, stdClass, backed enums, nested entities (from a stdClass) and date strings (DateTimeImmutable,
+     * DateTimeInterface, DateTime; an ISO `YYYY-MM-DD` string with optional time, fraction and UTC offset). A date
+     * that does not fit, a value that is not a case of its backed enum (wrong type included), a pure enum, a nested
+     * entity that is not a stdClass or any other type is refused; native types are converted by settype(),
+     * not validated.
      *
      * @throws InvalidArgumentException When a value cannot be hydrated into its property.
      * @return static|null Returns null when $row is null.
@@ -94,6 +96,13 @@ abstract class Entity implements JsonSerializable
                     $instance,
                     $name,
                     'its private(set) visibility keeps Entity from writing it. Use protected(set) instead.'
+                );
+            }
+            if ($property->isVirtual() && !$property->hasHook(PropertyHookType::Set)) {
+                throw self::unwritableProperty(
+                    $instance,
+                    $name,
+                    'it is virtual with no set hook. Alias the column in the query, or give the property a set hook.'
                 );
             }
 
@@ -226,7 +235,8 @@ abstract class Entity implements JsonSerializable
     }
 
     /**
-     * Return the public properties as an array, excluding those marked #[JsonIgnore].
+     * Return the public properties as an array, excluding those marked #[JsonIgnore] and
+     * virtual properties with no get hook.
      *
      * @return array<string, mixed>
      */
@@ -243,6 +253,10 @@ abstract class Entity implements JsonSerializable
 
             // Uninitialized properties (absent from a partial SELECT) are omitted, not read.
             if (!$property->isInitialized($this)) {
+                continue;
+            }
+
+            if ($property->isVirtual() && !$property->hasHook(PropertyHookType::Get)) {
                 continue;
             }
 

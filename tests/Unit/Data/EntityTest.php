@@ -196,6 +196,31 @@ class ProtectedSetEntity extends Entity
     public protected(set) int $id = 0;
 }
 
+class VirtualGetOnlyEntity extends Entity
+{
+    public int $id {
+        get => 42;
+    }
+}
+
+class VirtualSetOnlyEntity extends Entity
+{
+    public int $id {
+        set {
+            $this->log[] = $value;
+        }
+    }
+
+    public array $log = [];
+}
+
+class HookBackedSetEntity extends Entity
+{
+    public int $id {
+        set => $value * 2;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -378,6 +403,42 @@ final class EntityTest extends TestCase
                 $e->getMessage()
             );
         }
+    }
+
+    public function testAVirtualPropertyWithOnlyAGetHookIsRefusedAtBuild(): void
+    {
+        try {
+            VirtualGetOnlyEntity::build((object) ['id' => '7']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Cannot hydrate property $id of ' . VirtualGetOnlyEntity::class
+                . ': it is virtual with no set hook. Alias the column in the query, or give the property a set hook.',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testAVirtualPropertyWithOnlyASetHookIsHydratedThroughItsSetHook(): void
+    {
+        $entity = VirtualSetOnlyEntity::build((object) ['id' => '7']);
+
+        self::assertSame([7], $entity->log);
+    }
+
+    public function testAVirtualPropertyWithOnlyASetHookIsOmittedFromJsonSerialize(): void
+    {
+        self::assertSame(['log' => []], (new VirtualSetOnlyEntity())->jsonSerialize());
+    }
+
+    public function testAVirtualPropertyWithOnlyAGetHookIsIncludedInJsonSerialize(): void
+    {
+        self::assertSame(['id' => 42], (new VirtualGetOnlyEntity())->jsonSerialize());
+    }
+
+    public function testAHookBackedSetPropertyIsHydratedThroughItsSetHook(): void
+    {
+        self::assertSame(14, HookBackedSetEntity::build((object) ['id' => '7'])->id);
     }
 
     public function testAnUninitializedReadonlyAndAProtectedSetPropertyAreHydrated(): void
