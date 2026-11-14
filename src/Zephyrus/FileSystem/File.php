@@ -299,7 +299,7 @@ final class File extends FileSystemNode
      */
     private static function assertWritablePath(string $path): void
     {
-        if (preg_match('~^[a-z][a-z0-9+.-]*://~i', $path) === 1) {
+        if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {
             throw FileSystemException::streamWrapperRefused($path);
         }
         if (preg_match('~(?:^|/)\.{0,2}$~D', $path) === 1) {

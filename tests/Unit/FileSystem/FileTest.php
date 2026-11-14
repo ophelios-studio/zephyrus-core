@@ -847,6 +847,49 @@ final class FileTest extends TestCase
         self::assertSame(['write-through-source.txt'], array_values(array_diff((array) scandir($this->tempDir), ['.', '..'])));
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function bareSchemePaths(): array
+    {
+        return [
+            'two-character scheme' => ['create', '9p://x/created.txt'],
+            'data URI' => ['append', 'data:,x'],
+        ];
+    }
+
+    #[DataProvider('bareSchemePaths')]
+    public function testAPathWithABareSchemeIsRefusedAsAStreamWrapper(string $method, string $path): void
+    {
+        $previous = (string) getcwd();
+        chdir($this->tempDir);
+        try {
+            $this->writeThrough($method, $path);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path is a stream wrapper URL, which is not written: ' . $path, $e->getMessage());
+        } finally {
+            chdir($previous);
+        }
+
+        self::assertSame(['write-through-source.txt'], array_values(array_diff((array) scandir($this->tempDir), ['.', '..'])));
+    }
+
+    public function testAPathThatOnlyResemblesAWrapperIsAPlainRelativePath(): void
+    {
+        $previous = (string) getcwd();
+        chdir($this->tempDir);
+        try {
+            File::create('c://n7/a.txt', 'drive');
+            File::create('DATA:,x', 'upper');
+        } finally {
+            chdir($previous);
+        }
+
+        self::assertSame('drive', (string) file_get_contents($this->tempDir . '/c:/n7/a.txt'));
+        self::assertSame('upper', (string) file_get_contents($this->tempDir . '/DATA:,x'));
+    }
+
     public function testADotFollowedByANewlineIsAFileName(): void
     {
         $path = $this->tempDir . "/.\n";
