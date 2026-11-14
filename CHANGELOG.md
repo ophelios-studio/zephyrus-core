@@ -32,6 +32,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Changed
 
+- The debug warning about a nonce policy that is replaced now comes from `SecureHeadersMiddleware`, when its `csp` is about to overwrite the policy of an outer `ContentSecurityPolicyMiddleware` with nonces (a per-route `SecureHeadersMiddleware` registered inside it). `ContentSecurityPolicyMiddleware` no longer warns when the response already carries the header, so a route that sets its own `Content-Security-Policy` gets no false warning.
 - The default connection factory of `Database::fromConfig()` builds with `PDO::connect()`, so the handle is a `Pdo\Pgsql`. A factory you pass keeps working; on PHP 8.5 one used with `persistent: true` should build with `PDO::connect()` too, or each acquisition emits a deprecation.
 - A dotted key written flat under a section whose first part is a mapping of that section (`smtp.host: h` under `mailer:`) is refused with `... is written flat: nest it under 'smtp', such as smtp: { host: ... }.`, where it listed the accepted keys or suggested a spelling. The example shows the nested key written (or the closest one when it is misspelled) and is left out when that key is not a plain field name.
 
