@@ -170,6 +170,14 @@ final class MailerConfigTest extends TestCase
         self::assertSame(587, $config->toArray()['smtp']['port']);
     }
 
+    public function testANullSmtpMappingReadsAsTheDefaultsAndExportsAsWritten(): void
+    {
+        $config = MailerConfig::fromArray(['smtp' => null]);
+
+        self::assertSame(587, $config->smtpPort);
+        self::assertNull($config->toArray()['smtp']);
+    }
+
     public function testADottedKeyWrittenFlatIsToldToNest(): void
     {
         try {

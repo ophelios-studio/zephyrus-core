@@ -110,7 +110,7 @@ final class MailerConfig extends ConfigSection
 
     /**
      * Mask the SMTP password in var_dump(). Not a security boundary: reflection-based
-     * debuggers ignore it, see DebugIntegration::SENSITIVE_KEYS.
+     * debuggers ignore it, see DebugIntegration::SENSITIVE_KEYS. var_export(), json_encode(), serialize() and reflection show smtpPassword.
      *
      * @return array<string, mixed>
      */
