@@ -109,28 +109,6 @@ final class DebugIntegrationExposureTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function testWithoutAnAllowlistLoopbackGetsTheDebuggerUnderTheBuiltInServer(): void
-    {
-        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-
-        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
-
-        self::assertFalse(Debugger::$productionMode);
-    }
-
-    #[RunInSeparateProcess]
-    #[PreserveGlobalState(false)]
-    public function testWithoutAnAllowlistARemoteClientDoesNotGetTheDebuggerUnderTheBuiltInServer(): void
-    {
-        $_SERVER['REMOTE_ADDR'] = '203.0.113.77';
-
-        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
-
-        self::assertTrue(Debugger::$productionMode);
-    }
-
-    #[RunInSeparateProcess]
-    #[PreserveGlobalState(false)]
     public function testALoopbackAllowlistGetsTheDebuggerUnderAWebServerApi(): void
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
@@ -238,36 +216,25 @@ final class DebugIntegrationExposureTest extends TestCase
         self::assertFalse(Debugger::$productionMode);
     }
 
-    #[RunInSeparateProcess]
-    #[PreserveGlobalState(false)]
-    public function testWithoutAnAllowlistLoopbackCarryingXRealIpDoesNotGetTheDebugger(): void
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function forwardingHeaderProvider(): array
     {
-        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-        $_SERVER['HTTP_X_REAL_IP'] = '198.51.100.20';
-
-        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
-
-        self::assertTrue(Debugger::$productionMode);
+        return [
+            'X-Real-IP'       => ['HTTP_X_REAL_IP', '198.51.100.20'],
+            'X-Forwarded-For' => ['HTTP_X_FORWARDED_FOR', '198.51.100.20'],
+            'Forwarded'       => ['HTTP_FORWARDED', 'for=198.51.100.20'],
+        ];
     }
 
+    #[DataProvider('forwardingHeaderProvider')]
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function testWithoutAnAllowlistLoopbackCarryingXForwardedForDoesNotGetTheDebugger(): void
+    public function testWithoutAnAllowlistLoopbackCarryingAForwardingHeaderDoesNotGetTheDebugger(string $header, string $value): void
     {
         $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-        $_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.20';
-
-        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
-
-        self::assertTrue(Debugger::$productionMode);
-    }
-
-    #[RunInSeparateProcess]
-    #[PreserveGlobalState(false)]
-    public function testWithoutAnAllowlistLoopbackCarryingForwardedDoesNotGetTheDebugger(): void
-    {
-        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-        $_SERVER['HTTP_FORWARDED'] = 'for=198.51.100.20';
+        $_SERVER[$header] = $value;
 
         DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
 
