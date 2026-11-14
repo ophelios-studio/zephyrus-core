@@ -52,7 +52,14 @@ final class ZephyrusBinaryTest extends TestCase
 
         $cache = (string) file_get_contents($this->project->path . '/var/zephyrus/config.yml.php');
         self::assertSame(Console::SUCCESS, $exitCode);
-        self::assertSame('Wrote ' . $this->project->path . "/var/zephyrus/config.yml.php\n", $output);
+        self::assertSame(
+            sprintf(
+                "Wrote %1\$s/var/zephyrus/config.yml.php\nNo router: section in %1\$s/config.yml, so no routes cache was "
+                . "written\n",
+                $this->project->path,
+            ),
+            $output,
+        );
         self::assertSame('', $errors);
         self::assertStringNotContainsString(self::CANARY, $cache . $output . $errors);
         self::assertStringContainsString('local-fallback', $cache);

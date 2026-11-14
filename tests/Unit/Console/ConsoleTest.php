@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Console\Console;
 use Zephyrus\Tests\Unit\Core\Cache\CacheDirectory;
+use Zephyrus\Tests\Unit\Routing\ControllerTree;
 
 final class ConsoleTest extends TestCase
 {
@@ -46,7 +47,14 @@ final class ConsoleTest extends TestCase
         $exitCode = $this->console()->run(['cache:warm']);
 
         self::assertSame(Console::SUCCESS, $exitCode);
-        self::assertSame('Wrote ' . $this->project->path . "/var/zephyrus/config.yml.php\n", $this->printed());
+        self::assertSame(
+            sprintf(
+                "Wrote %1\$s/var/zephyrus/config.yml.php\nNo router: section in %1\$s/config.yml, so no routes cache was "
+                . "written\n",
+                $this->project->path,
+            ),
+            $this->printed(),
+        );
         self::assertFileExists($this->project->path . '/var/zephyrus/config.yml.php');
     }
 
@@ -57,8 +65,13 @@ final class ConsoleTest extends TestCase
 
         self::assertSame(Console::SUCCESS, $exitCode);
         self::assertSame(
-            'Wrote ' . $this->project->path . "/config/var/zephyrus/tenant.yml.php\n"
-            . 'Wrote ' . $this->project->path . "/var/zephyrus/config.yml.php\n",
+            sprintf(
+                "Wrote %1\$s/config/var/zephyrus/tenant.yml.php\n"
+                . "No router: section in %1\$s/config/tenant.yml, so no routes cache was written\n"
+                . "Wrote %1\$s/var/zephyrus/config.yml.php\n"
+                . "No router: section in %1\$s/config.yml, so no routes cache was written\n",
+                $this->project->path,
+            ),
             $this->printed(),
         );
         self::assertSame('', $this->printedErrors());
@@ -100,8 +113,123 @@ final class ConsoleTest extends TestCase
         $second = $this->console()->run(['cache:clear']);
 
         self::assertSame([Console::SUCCESS, Console::SUCCESS], [$first, $second]);
-        self::assertSame("Wrote {$cache}\nRemoved {$cache}\nNothing to remove at {$cache}\n", $this->printed());
+        self::assertSame(
+            "Wrote {$cache}\nNo router: section in {$this->project->path}/config.yml, so no routes cache was written\n"
+            . "Removed {$cache}\nNothing to remove at {$cache}\n",
+            $this->printed(),
+        );
         self::assertFileDoesNotExist($cache);
+    }
+
+    public function testWarmWritesTheRoutesCacheOfTheRouterSectionAfterTheConfigurationCache(): void
+    {
+        $this->project->file('config.yml', $this->routerSection());
+
+        $exitCode = $this->console()->run(['cache:warm']);
+
+        self::assertSame(Console::SUCCESS, $exitCode);
+        self::assertSame(
+            sprintf(
+                "Wrote %1\$s/var/zephyrus/config.yml.php\nWrote %1\$s/var/zephyrus/routes.php (1 route)\n",
+                $this->project->path,
+            ),
+            $this->printed(),
+        );
+        self::assertFileExists($this->project->path . '/var/zephyrus/routes.php');
+    }
+
+    public function testClearRemovesTheRoutesCacheToo(): void
+    {
+        $this->project->file('config.yml', $this->routerSection());
+        $this->console()->run(['cache:warm']);
+
+        $exitCode = $this->console()->run(['cache:clear']);
+
+        self::assertSame(Console::SUCCESS, $exitCode);
+        self::assertStringEndsWith(
+            sprintf(
+                "Removed %1\$s/var/zephyrus/config.yml.php\nRemoved %1\$s/var/zephyrus/routes.php\n",
+                $this->project->path,
+            ),
+            $this->printed(),
+        );
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml', 'var', 'var/zephyrus'], $this->project->entries());
+    }
+
+    public function testAnEnvTagInTheRouterSectionIsRefusedWithoutReadingTheEnvironment(): void
+    {
+        $this->project->file(
+            'config.yml',
+            "router:\n  controllers:\n    App\\Controllers: !env CONTROLLERS_DIRECTORY\n",
+        );
+
+        $exitCode = $this->console()->run(['cache:warm']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %s/config.yml: Configuration section 'router' field \"controllers.App\\\\Controllers\" "
+                . 'is written under the !env tag, but vendor/bin/zephyrus cache:warm reads this section without the '
+                . "environment: write the value itself.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame(['config', 'config/tenant.yml', 'config.yml'], $this->project->entries());
+    }
+
+    public function testARouterSectionOutsideTheConfigYmlOfTheRootIsRefused(): void
+    {
+        $this->project->file('config/tenant.yml', $this->routerSection());
+
+        $exitCode = $this->console()->run(['cache:warm', '--config=' . $this->project->path . '/config/tenant.yml']);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                'cache:warm failed for %s/config/tenant.yml: Configuration file tenant.yml declares router:, but '
+                . 'Router::fromConfiguration() checks the routes cache against the config.yml of the application '
+                . "root: move the router: section to that file.\n",
+                $this->project->path,
+            ),
+            $this->printedErrors(),
+        );
+    }
+
+    public function testControllersWithoutAnyRouteFailTheWarm(): void
+    {
+        $tree = new ControllerTree();
+        $tree->configure();
+        $tree->controller('EmptyController', "final class EmptyController\n{\n}");
+        $root = $tree->root->path;
+
+        try {
+            $exitCode = (new Console($this->elsewhere->path, $root, $this->output, $this->errorOutput))
+                ->run(['cache:warm']);
+            $written = file_exists($root . '/var/zephyrus/routes.php');
+        } finally {
+            $tree->remove();
+        }
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                'cache:warm failed for %1$s/config.yml: The controllers of router.controllers declare no route, so the '
+                . 'routes cache %1$s/var/zephyrus/routes.php was not written: check that each namespace matches its '
+                . "directory.\n",
+                $root,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertFalse($written);
+    }
+
+    private function routerSection(): string
+    {
+        return sprintf(
+            "router:\n  controllers:\n    Zephyrus\\Tests\\Fixtures\\ConfiguredControllers: %s\n",
+            realpath(__DIR__ . '/../../Fixtures/ConfiguredControllers'),
+        );
     }
 
     /**

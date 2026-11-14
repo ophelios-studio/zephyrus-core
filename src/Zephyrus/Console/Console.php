@@ -7,11 +7,15 @@ namespace Zephyrus\Console;
 use Composer\InstalledVersions;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Core\Cache\WarmableCache;
+use Zephyrus\Core\Config\ConfigurationFile;
 use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
+use Zephyrus\Routing\RouteCache;
+use Zephyrus\Routing\RouterConfig;
 
 /**
- * The vendor/bin/zephyrus command line: cache:warm and cache:clear over one or more configuration files.
+ * The vendor/bin/zephyrus command line: cache:warm and cache:clear over one or more configuration files, each with
+ * the routes cache of its router: section when it declares one.
  *
  * @internal
  */
@@ -85,8 +89,14 @@ final readonly class Console
 
         foreach ($configurations ?: [$this->projectRoot . '/' . self::DEFAULT_CONFIG] as $configuration) {
             try {
-                foreach ($this->cachesOf($configuration) as $cache) {
+                $configurationCache = ConfigurationCache::forSource($configuration);
+                $routeCache = $this->routeCacheOf($configuration);
+                foreach ([$configurationCache, ...($routeCache === null ? [] : [$routeCache])] as $cache) {
                     $this->say($command === self::WARM ? $this->warm($cache) : $this->clear($cache));
+                }
+
+                if ($command === self::WARM && $routeCache === null) {
+                    $this->say(sprintf('No router: section in %s, so no routes cache was written', $configuration));
                 }
             } catch (ZephyrusException $exception) {
                 fwrite($this->errorOutput, sprintf("%s failed for %s: %s\n", $command, $configuration, $exception->getMessage()));
@@ -99,20 +109,29 @@ final readonly class Console
     }
 
     /**
-     * The caches built from one configuration file.
+     * The routes cache of a configuration file, read from its YAML with no tag resolved, or null without router:.
      *
-     * @return list<WarmableCache>
+     * @throws ZephyrusException when the file does not parse or its router: section is refused.
      */
-    private function cachesOf(string $configuration): array
+    private function routeCacheOf(string $configuration): ?RouteCache
     {
-        return [ConfigurationCache::forSource($configuration)];
+        $source = (string) realpath($configuration);
+        $values = ConfigurationFile::parseYaml($source);
+        if (!array_key_exists(RouterConfig::SECTION, $values)) {
+            return null;
+        }
+
+        RouterConfig::refuseTags($values[RouterConfig::SECTION]);
+
+        return RouteCache::forConfigurationFile(
+            $source,
+            RouterConfig::fromArray((array) $values[RouterConfig::SECTION]),
+        );
     }
 
     private function warm(WarmableCache $cache): string
     {
-        $cache->warm();
-
-        return 'Wrote ' . $cache->path();
+        return $cache->warm();
     }
 
     private function clear(WarmableCache $cache): string
