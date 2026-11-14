@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use Zephyrus\Core\App;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -74,7 +75,7 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
         }
 
         if ($this->hasContentSecurityPolicy()) {
-            $this->warnWhenReplacingNoncePolicy($request, $response);
+            $this->warnWhenReplacingPolicy($request, $response);
             $response = self::withDefault($response, 'Content-Security-Policy', $this->config->csp);
         }
 
@@ -91,18 +92,18 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
         return $response;
     }
 
-    /** Debug only: this csp is about to replace the policy of an outer nonced middleware. */
-    private function warnWhenReplacingNoncePolicy(Request $request, Response $response): void
+    /** Debug only: this csp is about to replace the policy of an outer ContentSecurityPolicyMiddleware. */
+    private function warnWhenReplacingPolicy(Request $request, Response $response): void
     {
         if ($response->hasNonBlankHeader('Content-Security-Policy')
             || !ContentSecurityPolicyMiddleware::announcesHeader($request, 'Content-Security-Policy')
-            || !ContentSecurityPolicyMiddleware::isDebug()
+            || !App::isDebug()
         ) {
             return;
         }
 
         trigger_error(
-            'Content-Security-Policy: the csp of this SecureHeadersMiddleware replaces the nonce policy of this '
+            'Content-Security-Policy: the csp of this SecureHeadersMiddleware replaces the policy of this '
             . 'request, because it is registered after (inside) ContentSecurityPolicyMiddleware. Leave its csp '
             . 'empty, or, when both are registered at the same level (global, group or route), register it '
             . 'before ContentSecurityPolicyMiddleware.',

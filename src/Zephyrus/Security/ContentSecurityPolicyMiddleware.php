@@ -45,7 +45,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
     private const string NONCE_ATTRIBUTE = 'zephyrus.csp_nonce';
 
     /** Request attribute listing the headers that outer nonced CSP middleware will write. */
-    private const string ANNOUNCED_HEADERS_ATTRIBUTE = 'zephyrus.csp_nonce_headers';
+    private const string ANNOUNCED_HEADERS_ATTRIBUTE = 'zephyrus.csp_headers';
 
     private string $policy;
 
@@ -101,7 +101,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
     }
 
     /**
-     * Whether a nonced middleware outside the caller will write this header on the response.
+     * Whether a middleware outside the caller will write this header on the response.
      *
      * @internal Read by SecureHeadersMiddleware only.
      */
@@ -112,18 +112,6 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         return is_array($announced) && in_array($header, $announced, true);
     }
 
-    /**
-     * Debug mode, as read by the CSP warnings.
-     *
-     * @internal Read by this class and SecureHeadersMiddleware only.
-     */
-    public static function isDebug(): bool
-    {
-        $configuration = App::getConfiguration();
-
-        return $configuration !== null && $configuration->application->debug;
-    }
-
     public function process(Request $request, callable $next): Response
     {
         if ($this->nonceTemplate !== null) {
@@ -132,6 +120,10 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
 
         if ($this->nonceDirectives === [] || $this->nonceTemplate === null) {
             // No nonce: the static policy is sent as configured.
+            if ($this->policy !== '') {
+                $request = $this->announcing($request);
+            }
+
             /** @var Response $response */
             $response = $next($request);
 
@@ -150,11 +142,7 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
             $request = $request->withAttribute(self::NONCE_ATTRIBUTE, $nonce);
         }
 
-        $announced = $request->attribute(self::ANNOUNCED_HEADERS_ATTRIBUTE);
-        $request = $request->withAttribute(
-            self::ANNOUNCED_HEADERS_ATTRIBUTE,
-            [...(is_array($announced) ? $announced : []), $this->headerName()],
-        );
+        $request = $this->announcing($request);
 
         $policy = $this->nonceTemplate;
         foreach ($this->nonceDirectives as $directive) {
@@ -176,10 +164,20 @@ final readonly class ContentSecurityPolicyMiddleware implements MiddlewareInterf
         return $response->withHeader($this->headerName(), $headerValue);
     }
 
+    private function announcing(Request $request): Request
+    {
+        $announced = $request->attribute(self::ANNOUNCED_HEADERS_ATTRIBUTE);
+
+        return $request->withAttribute(
+            self::ANNOUNCED_HEADERS_ATTRIBUTE,
+            [...(is_array($announced) ? $announced : []), $this->headerName()],
+        );
+    }
+
     /** Debug only: warns about 'unsafe-inline' beside a nonce or hash in the same directive. */
     private function warnOnUnsafeInline(ContentSecurityPolicy $policy): void
     {
-        if (!self::isDebug()) {
+        if (!App::isDebug()) {
             return;
         }
 

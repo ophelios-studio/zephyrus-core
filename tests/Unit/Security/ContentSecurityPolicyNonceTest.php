@@ -197,6 +197,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsWhenANonceMeetsUnsafeInline(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'"]);
@@ -227,6 +228,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testNoWarningWhenTheDirectiveHasNoUnsafeInline(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $warnings = $this->captureUserWarnings(fn () => $this->kernel(
             new ContentSecurityPolicyMiddleware($this->policy(), nonceDirectives: ['script-src']),
@@ -260,6 +262,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsWhenAHashMeetsUnsafeInlineWithoutAnyNonce(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE]);
@@ -276,6 +279,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsOnceWhenAHashedDirectiveIsAlsoNonced(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE]);
@@ -290,6 +294,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsForAHashedDirectiveWhileAnotherDirectiveIsNonced(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE])
@@ -306,6 +311,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsForAnUpperCaseHashSource(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'unsafe-inline'", "'SHA256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='"]);
@@ -319,6 +325,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsForAnUpperCaseUnsafeInline(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "'UNSAFE-INLINE'", self::HASH_SOURCE]);
@@ -332,6 +339,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeDoesNotWarnForAHashAloneWithoutUnsafeInline(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $policy = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", self::HASH_SOURCE]);
@@ -385,6 +393,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testDebugModeWarnsFromAnInnerSecureHeadersThatReplacesTheNoncePolicy(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $response = null;
         $warnings = $this->captureUserWarnings(function () use (&$response): void {
@@ -395,7 +404,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         });
 
         self::assertSame([
-            'Content-Security-Policy: the csp of this SecureHeadersMiddleware replaces the nonce policy of this '
+            'Content-Security-Policy: the csp of this SecureHeadersMiddleware replaces the policy of this '
             . 'request, because it is registered after (inside) ContentSecurityPolicyMiddleware. Leave its csp '
             . 'empty, or, when both are registered at the same level (global, group or route), register it '
             . 'before ContentSecurityPolicyMiddleware.',
@@ -403,9 +412,59 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         self::assertSame("default-src 'none'", $response?->headers['content-security-policy']);
     }
 
+    public function testDebugModeWarnsFromAnInnerSecureHeadersThatReplacesAStaticPolicy(): void
+    {
+        App::setDebug(true);
+
+        $response = null;
+        $warnings = $this->captureUserWarnings(function () use (&$response): void {
+            $response = $this->handleOutsideBuilder(
+                new ContentSecurityPolicyMiddleware("default-src 'self'"),
+                new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+            );
+        });
+
+        self::assertSame([
+            'Content-Security-Policy: the csp of this SecureHeadersMiddleware replaces the policy of this '
+            . 'request, because it is registered after (inside) ContentSecurityPolicyMiddleware. Leave its csp '
+            . 'empty, or, when both are registered at the same level (global, group or route), register it '
+            . 'before ContentSecurityPolicyMiddleware.',
+        ], $warnings);
+        self::assertSame("default-src 'none'", $response?->headers['content-security-policy']);
+    }
+
+    public function testNoWarningFromAnInnerSecureHeadersOverAnEmptyStaticPolicy(): void
+    {
+        App::setDebug(true);
+
+        $response = null;
+        $warnings = $this->captureUserWarnings(function () use (&$response): void {
+            $response = $this->handleOutsideBuilder(
+                new ContentSecurityPolicyMiddleware(''),
+                new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+            );
+        });
+
+        self::assertSame([], $warnings);
+        self::assertSame("default-src 'none'", $response?->headers['content-security-policy']);
+    }
+
+    public function testNoWarningFromAnInnerSecureHeadersOverAStaticPolicyWhenDebugIsOff(): void
+    {
+        $warnings = $this->captureUserWarnings(function (): void {
+            $this->handleOutsideBuilder(
+                new ContentSecurityPolicyMiddleware("default-src 'self'"),
+                new SecureHeadersMiddleware(SecureHeadersConfig::fromArray(['csp' => "default-src 'none'"])),
+            );
+        });
+
+        self::assertSame([], $warnings);
+    }
+
     public function testNoWarningWhenARouteSetsItsOwnPolicyUnderANoncedMiddleware(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $response = null;
         $warnings = $this->captureUserWarnings(function () use (&$response): void {
@@ -425,6 +484,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testNoWarningWhenTheNoncedMiddlewareIsReportOnly(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $response = null;
         $warnings = $this->captureUserWarnings(function () use (&$response): void {
@@ -442,6 +502,7 @@ final class ContentSecurityPolicyNonceTest extends TestCase
     public function testNoNonceWarningWhenTheNoncePolicyIsAppliedInDebugMode(): void
     {
         App::setConfiguration(Configuration::fromArray(['application' => ['debug' => true]]));
+        App::setDebug(true);
 
         $warnings = $this->captureUserWarnings(fn () => KernelBuilder::create()
             ->withRouter((new Router())->get('/p', CspNonceController::class . '@ping'))
