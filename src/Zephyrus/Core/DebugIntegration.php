@@ -120,8 +120,8 @@ final class DebugIntegration
      * When debug is false, Tracy is never enabled, so none of its ini_set() calls run. productionMode is still
      * set to true, because Tracy's dump() prints unless it is true, and it defaults to null.
      *
-     * An application Closure or ConfigSection exporter in Dumper::$objectExporters
-     * must be registered after this call, or it is replaced.
+     * An application exporter in Dumper::$objectExporters for a config section, closure, array iterator,
+     * array object or PHPMailer must be registered after this call, or it is replaced.
      * The allowlist is validated by allowedClientList() before Tracy is touched.
      *
      * @param bool                    $debug          Whether the application is in debug mode.
@@ -176,7 +176,7 @@ final class DebugIntegration
             Debugger::setLogger(new TracyErrorLogLogger());
         }
 
-        self::hideFrameworkSecrets($sessionName);
+        self::installSecretMasking($sessionName);
     }
 
     /**
@@ -384,11 +384,15 @@ final class DebugIntegration
     }
 
     /**
-     * Registers the framework's secret key names and the exporters for config sections, closures, array iterators and objects, and PHPMailer.
+     * Installs the secret masking: exporters for config sections, closures, array iterators, array objects
+     * and PHPMailer, the secret key names in both keysToHide registries, the composed Bluescreen scrubber,
+     * and showEnvironment off.
      *
-     * Both keysToHide registries are written: dump() and the debug bar read one, the Bluescreen keeps the other.
+     * Does not enable Tracy or install any handler. A second call does not compose the scrubber again.
+     * $sessionName is masked like SENSITIVE_KEYS. An application exporter for one of these classes must be
+     * registered after this call, or it is replaced.
      */
-    private static function hideFrameworkSecrets(?string $sessionName): void
+    public static function installSecretMasking(?string $sessionName = null): void
     {
         if ($sessionName !== null) {
             self::$applicationKeys = array_values(array_unique([...self::$applicationKeys, $sessionName]));

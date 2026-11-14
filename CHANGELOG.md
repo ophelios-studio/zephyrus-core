@@ -49,6 +49,7 @@ changes are listed first, each with the change to make in your code.
 - `App::isDebug()` returns the effective debug flag that `build()` resolved (false in a production-like environment unless `withProductionDebugAcknowledged()` was called), with `App::setDebug()` beside `App::setConfiguration()`. `App::reset()` clears it. An application that calls `App::setConfiguration()` without `build()` (a tool, a CLI script, a test) gets no session or CSP debug warnings until it calls `App::setDebug(true)`.
 - `database.persistent` (default `false`) reuses the PostgreSQL connection across requests of one process. When a connection is taken from the pool, `fromConfig()` sends `ROLLBACK` if a transaction is open, then `DISCARD ALL`, then drops the notifications the client had already received. A connection whose reset fails is terminated and replaced once; a second failure throws `DatabaseException`.
 - The pool is per process (`zephyrus:<pid>`), and a persistent handle still held in the process is never handed out again: for the same DSN and user, a second `fromConfig()` opens a non-persistent connection instead.
+- `DebugIntegration::installSecretMasking(?string $sessionName = null)` installs the masking of secrets in `dump()`, the debug bar and the Bluescreen without enabling Tracy or installing its handlers, as a test or a controlled `dump()` needs; `initialize()` calls it.
 
 ### Changed
 

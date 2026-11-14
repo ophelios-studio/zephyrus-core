@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Tracy\Debugger;
 use Tracy\Dumper;
 use Zephyrus\Core\ApplicationBuilder;
+use Zephyrus\Core\Config\ConfigSection;
 use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Http\Response;
 
@@ -337,6 +338,62 @@ final class DebugIntegrationExposureTest extends TestCase
             'sessionid0123456789',
             Dumper::toText($response, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]),
         );
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testInstallingTheSecretMaskingDoesNotEnableTracyNorTouchTheHandlers(): void
+    {
+        $errorHandler = static fn (int $no, string $str): bool => false;
+        $exceptionHandler = static function (\Throwable $e): void {
+        };
+        set_error_handler($errorHandler);
+        set_exception_handler($exceptionHandler);
+
+        DebugIntegration::installSecretMasking();
+
+        $currentError = set_error_handler(static fn (int $no, string $str): bool => false);
+        restore_error_handler();
+        $currentException = set_exception_handler(null);
+        restore_exception_handler();
+
+        self::assertFalse(Debugger::isEnabled());
+        self::assertSame($errorHandler, $currentError);
+        self::assertSame($exceptionHandler, $currentException);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTheMaskingHidesSecretsInADumpWithoutTracyEnabled(): void
+    {
+        $value = 'value-that-must-not-appear';
+        $section = new class(['api' => ['signing' => $value, 'host' => 'visible-host']]) extends ConfigSection {
+            protected array $secretKeys = ['api.signing'];
+        };
+
+        DebugIntegration::installSecretMasking('app_session_name');
+        $options = [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide];
+
+        $array = Dumper::toText(['password' => $value, 'app_session_name' => $value], $options);
+        $dumpedSection = Dumper::toText($section, $options);
+
+        self::assertFalse(Debugger::isEnabled());
+        self::assertStringNotContainsString($value, $array);
+        self::assertStringNotContainsString($value, $dumpedSection);
+        self::assertStringContainsString('visible-host', $dumpedSection);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testASecondInstallationDoesNotComposeTheScrubberAgain(): void
+    {
+        DebugIntegration::installSecretMasking();
+        $first = Debugger::getBlueScreen()->scrubber;
+
+        DebugIntegration::installSecretMasking();
+
+        self::assertNotNull($first);
+        self::assertSame($first, Debugger::getBlueScreen()->scrubber);
     }
 
     public function testDebugFalseStillInitializesNothing(): void
