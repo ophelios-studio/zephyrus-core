@@ -278,4 +278,29 @@ final class ConfigurationFileTest extends TestCase
             @rmdir($directory);
         }
     }
+
+    public function testAnUnreadableFileIsReportedAsUnreadableNotAsInvalidYaml(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('A superuser reads any file.');
+        }
+
+        $directory = sys_get_temp_dir() . '/zephyrus-yaml-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $path = $directory . '/config.yml';
+        file_put_contents($path, "a: 1\n");
+        chmod($path, 0);
+
+        try {
+            (new ConfigurationFile($path))->toArray();
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file is not readable: config.yml', $e->getMessage());
+            self::assertSame($path, $e->path());
+        } finally {
+            chmod($path, 0600);
+            @unlink($path);
+            @rmdir($directory);
+        }
+    }
 }

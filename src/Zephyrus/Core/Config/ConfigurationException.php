@@ -239,6 +239,11 @@ final class ConfigurationException extends ZephyrusException
         );
     }
 
+    public static function unreadable(string $path): self
+    {
+        return self::withPath(sprintf('Configuration file is not readable: %s', basename($path)), $path);
+    }
+
     /**
      * A YAML syntax error, naming the line when the parser reports one (1 or more). It takes no exception: the
      * parser's message and trace can quote a secret from the file, so none reaches a frame of this call.

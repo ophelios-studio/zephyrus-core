@@ -256,7 +256,7 @@ final class ConfigurationExceptionTest extends TestCase
 
     public function testParseFailedWithAnUnknownLineOmitsTheLine(): void
     {
-        $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', -1);
+        $e = ConfigurationException::parseFailed('/srv/app/config/config.yml', 0);
 
         self::assertSame(
             "Failed to parse configuration file [config.yml]: invalid YAML (the parser's detail is withheld, since it can quote a secret from the file).",

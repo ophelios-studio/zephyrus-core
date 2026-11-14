@@ -100,10 +100,14 @@ final class ConfigurationFile
      *
      * @internal Shared with ConfigurationCache, which caches this result.
      * @return array<string, mixed>
-     * @throws ConfigurationException when the file does not parse.
+     * @throws ConfigurationException when the file cannot be read or does not parse.
      */
     public static function parseYaml(string $path): array
     {
+        if (!is_readable($path)) {
+            throw ConfigurationException::unreadable($path);
+        }
+
         try {
             $parsed = Yaml::parseFile($path, self::YAML_FLAGS);
         } catch (ParseException $e) {

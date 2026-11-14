@@ -32,6 +32,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Fixed
 
+- An unreadable `config.yml` is reported as `Configuration file is not readable: config.yml`, where it was reported as invalid YAML.
 - `MailerConfig::toArray()` exports `smtp.port` as `587` when the key is written as null (an empty `!env`), as `smtpPort` holds, where it exported null.
 - A type refusal under `mailer:` or `render:` names the section by its key (`'mailer'`, `'render'`), as an unknown key does, where it named the class. `ConfigSection::sectionName()` (protected, defaults to the class name) supplies it: a section of your own may override it.
 
