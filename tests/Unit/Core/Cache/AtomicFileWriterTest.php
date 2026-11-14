@@ -144,6 +144,40 @@ final class AtomicFileWriterTest extends TestCase
         self::assertFileDoesNotExist($this->target);
     }
 
+    public function testRemoveRefusesADirectoryAtTheTarget(): void
+    {
+        $this->directory->directory('var/zephyrus/routes.php');
+
+        try {
+            $this->writer()->remove($this->target);
+            self::fail('expected a refusal');
+        } catch (BootCacheException $e) {
+            self::assertSame(
+                sprintf('Cannot remove the boot cache %1$s: %1$s is not a regular file.', $this->target),
+                $e->getMessage(),
+            );
+        }
+        self::assertDirectoryExists($this->target);
+    }
+
+    public function testRemoveDeletesALinkAtTheTargetAndNotTheFileItPointsTo(): void
+    {
+        $kept = $this->outside->file('routes.php', 'kept');
+        $this->directory->directory('var/zephyrus');
+        symlink($kept, $this->target);
+
+        self::assertTrue($this->writer()->remove($this->target));
+        self::assertFalse(is_link($this->target));
+        self::assertFileExists($kept);
+    }
+
+    public function testWriteRefusesADirectoryAtTheTarget(): void
+    {
+        $this->directory->directory('var/zephyrus/routes.php');
+
+        $this->assertRefused($this->target, $this->target . ' is not a regular file');
+    }
+
     public function testRemoveRefusesADirectoryThatIsASymbolicLink(): void
     {
         $kept = $this->outside->file('zephyrus/routes.php', 'kept');

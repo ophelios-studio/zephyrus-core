@@ -213,6 +213,7 @@ final class BootCacheTest extends TestCase
     public function testACacheWarmedByRootIsWrittenAndLoadedWhoeverOwnsTheSource(): void
     {
         $rootOwnsAllButTheSource = fn (string $path): int => $path === $this->source ? self::STRANGER : 0;
+        $this->directory->directory('var/zephyrus');
         $cache = new BootCache(
             $this->cachePath,
             $this->directory->path,

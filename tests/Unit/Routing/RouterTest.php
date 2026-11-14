@@ -1031,6 +1031,16 @@ final class RouterTest extends TestCase
         self::assertCount(4, $router->routes()->all());
     }
 
+    public function testDiscoverControllersAcceptsANamespaceWrittenWithATrailingBackslash(): void
+    {
+        $directory = __DIR__ . '/../../Fixtures/Controllers';
+
+        $paths = (new Router())->discoverControllers('Zephyrus\\Tests\\Fixtures\\Controllers\\', $directory)->routePaths();
+
+        self::assertNotSame([], $paths);
+        self::assertSame((new Router())->discoverControllers('Zephyrus\\Tests\\Fixtures\\Controllers', $directory)->routePaths(), $paths);
+    }
+
     public function testDiscoverControllersSkipsAbstractClasses(): void
     {
         $router = (new Router())->discoverControllers(
