@@ -106,7 +106,7 @@ final class ApplicationBuilder
 
     /**
      * Loads a root configuration file, with the real path of its directory as the application root (basePath).
-     * The file entries taking several files use the directory of the first one.
+     * The file entries taking several files use the directory of the first one that exists.
      *
      * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
      */
@@ -114,7 +114,7 @@ final class ApplicationBuilder
     {
         $configuration = Configuration::fromFile($path);
 
-        return self::create()->withConfiguration($configuration, self::rootOfFirst([$path]));
+        return self::create()->withConfiguration($configuration, self::rootOfFile($path));
     }
 
     /**
@@ -150,7 +150,10 @@ final class ApplicationBuilder
      */
     public static function fromConfigurationFiles(array $paths): self
     {
-        return self::create()->withConfiguration(Configuration::fromFiles($paths), self::rootOfFirst($paths));
+        return self::create()->withConfiguration(
+            Configuration::fromFiles($paths),
+            self::rootOfFirstFile($paths),
+        );
     }
 
     /**
@@ -160,7 +163,10 @@ final class ApplicationBuilder
      */
     public static function fromOptionalConfigurationFiles(array $paths): self
     {
-        return self::create()->withConfiguration(Configuration::fromOptionalFiles($paths), self::rootOfFirst($paths));
+        return self::create()->withConfiguration(
+            Configuration::fromOptionalFiles($paths),
+            self::rootOfFirstFile($paths),
+        );
     }
 
     /**
@@ -432,7 +438,7 @@ final class ApplicationBuilder
      */
     public function withConfigurationFile(string $path): self
     {
-        return $this->withConfiguration(Configuration::fromFile($path), self::rootOfFirst([$path]));
+        return $this->withConfiguration(Configuration::fromFile($path), self::rootOfFile($path));
     }
 
     /**
@@ -444,18 +450,19 @@ final class ApplicationBuilder
      */
     public function withConfigurationFiles(array $paths): self
     {
-        return $this->withConfiguration(Configuration::fromFiles($paths), self::rootOfFirst($paths));
+        return $this->withConfiguration(Configuration::fromFiles($paths), self::rootOfFirstFile($paths));
     }
 
     /**
-     * Like withConfigurationFiles(), but missing files are skipped (the root stays the directory of the first path).
+     * Like withConfigurationFiles(), but missing files are skipped (the root is the directory of the first
+     * file that exists).
      *
      * @param string[] $paths
      * @throws ConfigurationException when a path is invalid or an existing file is unreadable, invalid or holds an invalid value.
      */
     public function withOptionalConfigurationFiles(array $paths): self
     {
-        return $this->withConfiguration(Configuration::fromOptionalFiles($paths), self::rootOfFirst($paths));
+        return $this->withConfiguration(Configuration::fromOptionalFiles($paths), self::rootOfFirstFile($paths));
     }
 
     /**
@@ -487,17 +494,32 @@ final class ApplicationBuilder
     }
 
     /**
-     * The real path of the directory of the first file, or null when there is none or it does not exist.
+     * The root of the first path that is a file once trimmed, as Configuration::fromFiles() reads it, or null.
      *
      * @param string[] $paths
      */
-    private static function rootOfFirst(array $paths): ?string
+    private static function rootOfFirstFile(array $paths): ?string
     {
-        if ($paths === []) {
+        foreach ($paths as $path) {
+            $path = trim($path);
+            if (is_file($path)) {
+                return self::rootOfFile($path);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The real path of the directory of the file at $path, or null when it is not a file.
+     */
+    private static function rootOfFile(string $path): ?string
+    {
+        if (!is_file($path)) {
             return null;
         }
 
-        $root = realpath(dirname(reset($paths)));
+        $root = realpath(dirname($path));
 
         return $root === false ? null : $root;
     }
@@ -554,7 +576,7 @@ final class ApplicationBuilder
     /**
      * Name the clients allowed to receive the rendered debugger output.
      *
-     * Each entry is an exact address, or `secret@address` matched against the `tracy-debug` cookie.
+     * Each entry is an exact address, or `<secret>@address` matched against the `tracy-debug` cookie.
      * Tracy accepts no ranges. A bare gateway address admits anyone who can reach the published port.
      * Only the listed clients are admitted: loopback too must be listed, and behind a local proxy (a request carrying
      * a forwarding header) only as `<secret>@127.0.0.1`. Without an allowlist, only loopback under PHP's built-in
