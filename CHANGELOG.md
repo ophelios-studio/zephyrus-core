@@ -8,6 +8,21 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Breaking changes
+
+#### Data
+
+- `Database` refuses a persistent PDO, and `Database::fromConfig()` refuses a factory that returns a persistent connection it did not ask for, because the session of a persistent connection (role, advisory locks, prepared statements, a transaction left open) used to reach the next request unchanged. `new Database($pdo)` with `PDO::ATTR_PERSISTENT` throws `DatabaseException` (`Database refuses a persistent PDO, whose session would carry over from an earlier request: remove PDO::ATTR_PERSISTENT from the PDO and set database.persistent: true in the configuration, so Database::fromConfig() resets the session each time it reuses the connection.`), and a factory that returns one while `database.persistent` is `false`, or while a persistent handle for the same DSN and user is still held, throws `DatabaseException` (`The PDO factory given to Database::fromConfig() returned a persistent connection it was not asked for, whose session would carry over from an earlier request: remove PDO::ATTR_PERSISTENT from the factory and set database.persistent: true in the configuration to reuse connections.`). To migrate: remove `PDO::ATTR_PERSISTENT` from the factory or the PDO, set `persistent: true` in the `database` section, and open the connection with `Database::fromConfig()`.
+
+### Added
+
+- `database.persistent` (default `false`) reuses the PostgreSQL connection across requests of one process. When a connection is taken from the pool, `fromConfig()` sends `ROLLBACK` if a transaction is open, then `DISCARD ALL`, then drops the notifications the client had already received. A connection whose reset fails is terminated and replaced once; a second failure throws `DatabaseException`.
+- The pool is per process (`zephyrus:<pid>`), and a persistent handle still held in the process is never handed out again: for the same DSN and user, a second `fromConfig()` opens a non-persistent connection instead.
+
+### Changed
+
+- The default connection factory of `Database::fromConfig()` builds with `PDO::connect()`, so the handle is a `Pdo\Pgsql`. A factory you pass keeps working; on PHP 8.5 one used with `persistent: true` should build with `PDO::connect()` too, or each acquisition emits a deprecation.
+
 ## [0.16.0] - 2026-11-13
 
 ### Breaking changes
