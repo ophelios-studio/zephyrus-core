@@ -83,6 +83,9 @@ final class File extends FileSystemNode
     /**
      * Append content to the file, creating it when absent.
      *
+     * Each append holds an exclusive flock() on the file: concurrent append() calls never
+     * overwrite each other, but a writer that does not take that lock is not coordinated.
+     *
      * @throws FileSystemException if the path does not end with a file name, is a symbolic
      *         link, or appending fails.
      */
@@ -284,12 +287,31 @@ final class File extends FileSystemNode
             if ($created) {
                 self::applyDefaultPermissions($path, $handle);
             }
-            $positioned = $append ? fseek($handle, 0, SEEK_END) === 0 : ftruncate($handle, 0);
-            if (!$positioned || fwrite($handle, $content) !== strlen($content)) {
+            $written = $append
+                ? self::appendUnderLock($handle, $content)
+                : ftruncate($handle, 0) && fwrite($handle, $content) === strlen($content);
+            if (!$written) {
                 throw $failure();
             }
         } finally {
             fclose($handle);
+        }
+    }
+
+    /**
+     * @param resource $handle
+     */
+    private static function appendUnderLock($handle, string $content): bool
+    {
+        if (!flock($handle, LOCK_EX)) {
+            return false;
+        }
+        try {
+            return fseek($handle, 0, SEEK_END) === 0
+                && fwrite($handle, $content) === strlen($content)
+                && fflush($handle);
+        } finally {
+            flock($handle, LOCK_UN);
         }
     }
 

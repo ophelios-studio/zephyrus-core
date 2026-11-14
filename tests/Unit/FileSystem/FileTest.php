@@ -508,6 +508,27 @@ final class FileTest extends TestCase
         }
     }
 
+    public function testConcurrentAppendsKeepEveryLineWhole(): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs the pcntl and posix extensions.');
+        }
+        $path = $this->tempDir . '/journal.log';
+        $first = self::journalLines('first');
+        $second = self::journalLines('second');
+
+        $writers = [$this->forkAppender($path, $first), $this->forkAppender($path, $second)];
+        foreach ($writers as $writer) {
+            pcntl_waitpid($writer, $status);
+        }
+
+        $expected = [...$first, ...$second];
+        $written = (array) file($path, FILE_IGNORE_NEW_LINES);
+        sort($expected);
+        sort($written);
+        self::assertSame($expected, $written);
+    }
+
     public function testWriteNeverClobbersTheTargetOfALinkSwappedInDuringTheCall(): void
     {
         if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
@@ -616,6 +637,42 @@ final class FileTest extends TestCase
             'append' => (new File($path))->append('attacker content'),
             'copy' => (new File($source))->copy($path),
         };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function journalLines(string $writer): array
+    {
+        return array_map(
+            static fn (int $n): string => sprintf('%s-%05d-%s', $writer, $n, str_repeat('.', 48)),
+            range(1, 2000),
+        );
+    }
+
+    /**
+     * Fork a process that appends each of `$lines` to `$path`, then kills itself.
+     *
+     * @param list<string> $lines
+     */
+    private function forkAppender(string $path, array $lines): int
+    {
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            self::markTestSkipped('Could not fork.');
+        }
+        if ($pid > 0) {
+            return $pid;
+        }
+
+        try {
+            $file = new File($path);
+            foreach ($lines as $line) {
+                $file->append($line . "\n");
+            }
+        } finally {
+            posix_kill(posix_getpid(), SIGKILL);
+        }
     }
 
     /**
