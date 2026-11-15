@@ -27,7 +27,7 @@ abstract class FileSystemNode
      */
     public function exists(): bool
     {
-        return file_exists($this->path);
+        return !SafePath::holdsNulByte($this->path) && file_exists($this->path);
     }
 
     /**
@@ -77,7 +77,7 @@ abstract class FileSystemNode
      */
     public function isReadable(): bool
     {
-        return is_readable($this->path);
+        return !SafePath::holdsNulByte($this->path) && is_readable($this->path);
     }
 
     /**
@@ -85,7 +85,7 @@ abstract class FileSystemNode
      */
     public function isWritable(): bool
     {
-        return is_writable($this->path);
+        return !SafePath::holdsNulByte($this->path) && is_writable($this->path);
     }
 
     /**
@@ -95,7 +95,7 @@ abstract class FileSystemNode
      */
     protected static function assertLocalPath(string $path): void
     {
-        if (str_contains($path, "\0")) {
+        if (SafePath::holdsNulByte($path)) {
             throw FileSystemException::nulByteRefused($path);
         }
         if (preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1) {

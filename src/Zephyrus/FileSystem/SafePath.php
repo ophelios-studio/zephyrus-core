@@ -44,6 +44,38 @@ final class SafePath
     }
 
     /**
+     * Whether `$path` holds a NUL byte, which no file name can.
+     */
+    public static function holdsNulByte(string $path): bool
+    {
+        return str_contains($path, "\0");
+    }
+
+    /**
+     * Whether `$path` is a regular file; a path holding a NUL byte is not one.
+     */
+    public static function isFile(string $path): bool
+    {
+        return !self::holdsNulByte($path) && is_file($path);
+    }
+
+    /**
+     * Whether `$path` is a directory; a path holding a NUL byte is not one.
+     */
+    public static function isDirectory(string $path): bool
+    {
+        return !self::holdsNulByte($path) && is_dir($path);
+    }
+
+    /**
+     * Whether `$path` is readable; a path holding a NUL byte is not.
+     */
+    public static function isReadable(string $path): bool
+    {
+        return !self::holdsNulByte($path) && is_readable($path);
+    }
+
+    /**
      * Whether a relative path is free of null bytes and of `..` segments.
      */
     public static function isSafeRelativePath(string $relativePath): bool

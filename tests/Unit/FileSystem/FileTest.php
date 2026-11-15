@@ -1252,4 +1252,13 @@ final class FileTest extends TestCase
         }
         @rmdir($dir);
     }
+
+    public function testAPathHoldingANulByteDoesNotExistAndIsNeitherReadableNorWritable(): void
+    {
+        $file = new File($this->tempDir . "/a\0b");
+
+        self::assertFalse($file->exists());
+        self::assertFalse($file->isReadable());
+        self::assertFalse($file->isWritable());
+    }
 }
