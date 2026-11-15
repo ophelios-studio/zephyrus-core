@@ -1166,6 +1166,34 @@ final class ConfigurationTest extends TestCase
 
         return $printing;
     }
+
+    public function testARequiredPhpFileHoldingANulByteIsNotFound(): void
+    {
+        try {
+            Configuration::fromFiles(["/x\0y/config.php"]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file not found: config.php', $e->getMessage());
+        }
+    }
+
+    public function testARequiredYamlFileHoldingANulByteIsNotFound(): void
+    {
+        try {
+            Configuration::fromYamlFile("/x\0y/config.yml");
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file not found: config.yml', $e->getMessage());
+        }
+    }
+
+    public function testAnOptionalFileHoldingANulByteIsSkipped(): void
+    {
+        $default = Configuration::fromArray([])->application->environment;
+
+        self::assertSame($default, Configuration::fromOptionalFiles(["/x\0y/config.php"])->application->environment);
+        self::assertSame($default, Configuration::fromOptionalYamlFiles(["/x\0y/config.yml"])->application->environment);
+    }
 }
 
 /**

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core\Config;
 
+use Zephyrus\FileSystem\SafePath;
+
 /**
  * Immutable top-level configuration tree.
  *
@@ -552,7 +554,7 @@ final readonly class Configuration
             throw ConfigurationException::invalidFormat($path, 'must be a local path, not a stream wrapper URL');
         }
 
-        $resolved = is_file($path) ? realpath($path) : false;
+        $resolved = SafePath::isFile($path) ? realpath($path) : false;
         if ($resolved === false) {
             throw ConfigurationException::fileNotFound($path);
         }
@@ -584,7 +586,7 @@ final readonly class Configuration
         $merged = [];
 
         foreach (self::normalizePaths($paths) as $path) {
-            if ($ignoreMissing && !self::isPhpStreamWrapperUrl($path) && !is_file($path)) {
+            if ($ignoreMissing && !self::isPhpStreamWrapperUrl($path) && !SafePath::isFile($path)) {
                 continue;
             }
 
@@ -645,7 +647,7 @@ final readonly class Configuration
         $merged = [];
 
         foreach (self::normalizePaths($paths) as $path) {
-            if ($ignoreMissing && !is_file($path)) {
+            if ($ignoreMissing && !SafePath::isFile($path)) {
                 continue;
             }
 

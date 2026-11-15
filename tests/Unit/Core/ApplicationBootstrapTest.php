@@ -105,6 +105,13 @@ final class ApplicationBootstrapTest extends TestCase
         }
     }
 
+    public function testFromConfigFilesSkipsAnOptionalPathHoldingANulByte(): void
+    {
+        $app = ApplicationBootstrap::fromConfigFiles([], ["/tmp/a\0b.php"]);
+
+        self::assertInstanceOf(Application::class, $app);
+    }
+
     public function testFromConfigurationArrayBuildsApplication(): void
     {
         $fixturePath = __DIR__ . '/../../Fixtures/locales';

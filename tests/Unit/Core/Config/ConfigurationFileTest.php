@@ -365,4 +365,14 @@ final class ConfigurationFileTest extends TestCase
             @rmdir($directory);
         }
     }
+
+    public function testParseYamlRefusesAPathHoldingANulByteAsUnreadable(): void
+    {
+        try {
+            ConfigurationFile::parseYaml("/tmp/a\0b.yml");
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame("Configuration file is not readable: a\0b.yml", $e->getMessage());
+        }
+    }
 }

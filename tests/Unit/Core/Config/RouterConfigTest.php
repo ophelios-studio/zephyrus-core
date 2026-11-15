@@ -228,4 +228,20 @@ final class RouterConfigTest extends TestCase
             );
         }
     }
+
+    public function testAControllerDirectoryHoldingANulByteIsRefused(): void
+    {
+        $config = RouterConfig::fromArray(['controllers' => ['App\Controllers' => "app/Con\0trollers"]]);
+
+        try {
+            $config->controllerDirectories('/srv/missing-application');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'router' field 'controllers' has invalid value \"app/Con\\u0000trollers\": "
+                . "/srv/missing-application/app/Con\0trollers, the directory of App\\Controllers, is not a directory.",
+                $exception->getMessage(),
+            );
+        }
+    }
 }

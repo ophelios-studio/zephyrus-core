@@ -8,6 +8,7 @@ use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\EnvironmentVariable;
+use Zephyrus\FileSystem\SafePath;
 
 final class ApplicationBootstrap
 {
@@ -28,7 +29,7 @@ final class ApplicationBootstrap
 
         $existingOptional = array_values(array_filter(
             $optionalConfigFiles,
-            static fn (mixed $path): bool => is_string($path) && is_file($path),
+            static fn (mixed $path): bool => is_string($path) && SafePath::isFile($path),
         ));
 
         return ApplicationBuilder::buildFromConfigurationFiles(array_merge($requiredConfigFiles, $existingOptional));

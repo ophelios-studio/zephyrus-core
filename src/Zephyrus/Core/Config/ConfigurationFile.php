@@ -9,6 +9,7 @@ use Symfony\Component\Yaml\Tag\TaggedValue;
 use Symfony\Component\Yaml\Yaml;
 use Zephyrus\Core\Cache\ConfigurationCache;
 use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\FileSystem\SafePath;
 
 /**
  * Parses a YAML configuration file with support for the custom !env tag.
@@ -105,7 +106,7 @@ final class ConfigurationFile
      */
     public static function parseYaml(string $path): array
     {
-        if (!is_readable($path)) {
+        if (!SafePath::isReadable($path)) {
             throw ConfigurationException::unreadable($path);
         }
 
@@ -138,7 +139,7 @@ final class ConfigurationFile
             return $this->content;
         }
 
-        if (!is_file($this->path)) {
+        if (!SafePath::isFile($this->path)) {
             throw ConfigurationException::fileNotFound($this->path);
         }
 

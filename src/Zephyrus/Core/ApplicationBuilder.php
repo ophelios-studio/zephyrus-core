@@ -13,6 +13,7 @@ use Zephyrus\Core\Config\LocalizationConfig;
 use Zephyrus\Core\Config\SecurityConfig;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\FileSystem\SafePath;
 use Zephyrus\Formatting\Formatter;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Localization\FallbackLocaleLoader;
@@ -502,7 +503,7 @@ final class ApplicationBuilder
     {
         foreach ($paths as $path) {
             $path = trim($path);
-            if (is_file($path)) {
+            if (SafePath::isFile($path)) {
                 return self::rootOfFile($path);
             }
         }
@@ -511,14 +512,10 @@ final class ApplicationBuilder
     }
 
     /**
-     * The real path of the directory of the file at $path, or null when it is not a file.
+     * The real path of the directory of the file at $path, or null when that directory cannot be resolved.
      */
     private static function rootOfFile(string $path): ?string
     {
-        if (!is_file($path)) {
-            return null;
-        }
-
         $root = realpath(dirname($path));
 
         return $root === false ? null : $root;

@@ -7,6 +7,7 @@ namespace Zephyrus\Core\Config;
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Zephyrus\Core\Cache\BootCache;
 use Zephyrus\Core\Cache\PathPrefix;
+use Zephyrus\FileSystem\SafePath;
 
 /**
  * The router: section, read by Router::fromConfiguration() and by vendor/bin/zephyrus cache:warm.
@@ -113,7 +114,7 @@ final readonly class RouterConfig
         $directories = [];
         foreach ($this->controllers as $namespace => $directory) {
             $resolved = self::resolve($directory, $basePath);
-            if (!is_dir($resolved)) {
+            if (!SafePath::isDirectory($resolved)) {
                 throw ConfigurationException::invalidValue(
                     self::SECTION,
                     'controllers',
