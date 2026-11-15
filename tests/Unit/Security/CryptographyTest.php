@@ -540,4 +540,14 @@ final class CryptographyTest extends TestCase
         self::assertSame('111 222 333', Cryptography::decrypt(Cryptography::encrypt('111 222 333', $key), $key));
         self::assertSame('111 222 333', Cryptography::decrypt(Cryptography::encrypt('111 222 333', $key, ''), $key));
     }
+
+    public function testHashFileOfAPathHoldingANulByteIsRefusedAsMissing(): void
+    {
+        try {
+            Cryptography::hashFile("/tmp/a\0b");
+            self::fail('expected a refusal');
+        } catch (CryptographyException $e) {
+            self::assertSame("Hashing failed: File not found or not readable: /tmp/a\0b", $e->getMessage());
+        }
+    }
 }

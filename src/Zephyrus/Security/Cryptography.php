@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Security;
 
+use Zephyrus\FileSystem\SafePath;
+
 /**
  * Stateless cryptographic helpers built on libsodium (ext-sodium).
  *
@@ -235,7 +237,7 @@ final class Cryptography
     ): string {
         self::validateHashKey($key);
 
-        if (!is_file($path) || !is_readable($path)) {
+        if (!SafePath::isFile($path) || !SafePath::isReadable($path)) {
             throw CryptographyException::hashFailed(sprintf('File not found or not readable: %s', $path));
         }
 
