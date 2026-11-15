@@ -12,12 +12,16 @@ final class Rule
         private readonly ?string $tag = null,
     ) {}
 
+    /**
+     * Builds a rule from a closure that returns true when the value is valid.
+     * Mark the closure's parameter #[\SensitiveParameter] when it receives a secret.
+     */
     public static function of(\Closure $test, string $errorMessage, ?string $tag = null): self
     {
         return new self($test, $errorMessage, $tag);
     }
 
-    public function test(mixed $value): bool
+    public function test(#[\SensitiveParameter] mixed $value): bool
     {
         return ($this->test)($value);
     }

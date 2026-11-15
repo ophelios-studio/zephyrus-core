@@ -71,7 +71,7 @@ final class FormValidator
      *
      * @param array<string, mixed> $data
      */
-    public function validate(array $data): ErrorBag
+    public function validate(#[\SensitiveParameter] array $data): ErrorBag
     {
         $bag = new ErrorBag();
         foreach ($this->fields as $field => $rules) {
@@ -99,7 +99,7 @@ final class FormValidator
      *
      * @throws ValidationException
      */
-    public function validateOrFail(array $data): ErrorBag
+    public function validateOrFail(#[\SensitiveParameter] array $data): ErrorBag
     {
         $bag = $this->validate($data);
 
@@ -138,7 +138,7 @@ final class FormValidator
      *
      * @param array<string, mixed> $data
      */
-    private function resolveDotPath(array $data, string $path): mixed
+    private function resolveDotPath(#[\SensitiveParameter] array $data, string $path): mixed
     {
         $keys    = explode('.', $path);
         $current = $data;

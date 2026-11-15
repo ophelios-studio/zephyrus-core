@@ -54,6 +54,7 @@ changes are listed first, each with the change to make in your code.
 - An existing file in a sticky directory such as `/tmp` that another user owns is no longer written in place: opening it that way escaped the Linux `fs.protected_regular` rule, which only guards an open that may create the file.
 - A PHP configuration file is loaded from its resolved path, so a directory on the `include_path` no longer replaces a relative path checked from the current directory.
 - `Response::withCookie()` hides the cookie value from the argument list of a stack trace (`#[\SensitiveParameter]`): a value is often a remember-me or session token.
+- The value under validation is hidden from the argument list of a stack trace (`#[\SensitiveParameter]`): `Rule::test()`, `FormValidator::validate()` and `validateOrFail()`, and every closure and helper of `Rules`, where an exception raised during a validation kept a password or token in `getTrace()` and `getTraceAsString()` (with `zend.exception_ignore_args` off). A closure given to `Rule::of()` is yours to mark.
 
 ### Added
 
@@ -107,6 +108,7 @@ Pages of zephyrus.ophelios.com that this version makes stale, each in English an
 - `fundamentals/routing.md`: on PHP 8.6, dropping the copy a `with*()` method or the router returns raises a warning.
 - `fundamentals/sessions.md`: `DatabaseSessionHandler` generates the session ids itself and checks `idPattern` against them.
 - `digging-deeper/filesystem.md`: the quoted paths in `FileSystemException` messages, the new refusals of `File` and `Directory`, and a path outside `open_basedir`.
+- `fundamentals/validation.md`: the closure given to `Rule::of()` should mark its parameter `#[\SensitiveParameter]` when it receives a secret, since core's rules hide the value from a stack trace.
 
 ## [0.16.0] - 2026-11-13
 

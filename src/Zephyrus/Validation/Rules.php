@@ -17,7 +17,7 @@ final class Rules
     public static function required(string $message = 'This field is required.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => $v !== null && $v !== '' && $v !== [],
+            fn (#[\SensitiveParameter] mixed $v) => $v !== null && $v !== '' && $v !== [],
             $message,
             'required',
         );
@@ -29,7 +29,7 @@ final class Rules
     public static function minLength(int $min, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && mb_strlen($v) >= $min,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && mb_strlen($v) >= $min,
             $message ?: "Must be at least {$min} characters.",
         );
     }
@@ -40,7 +40,7 @@ final class Rules
     public static function maxLength(int $max, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && mb_strlen($v) <= $max,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && mb_strlen($v) <= $max,
             $message ?: "Must be at most {$max} characters.",
         );
     }
@@ -51,7 +51,7 @@ final class Rules
     public static function email(string $message = 'Must be a valid email address.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_EMAIL) !== false,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_EMAIL) !== false,
             $message,
         );
     }
@@ -64,7 +64,7 @@ final class Rules
     public static function integer(string $message = 'Must be an integer.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => !is_bool($v) && filter_var($v, FILTER_VALIDATE_INT) !== false,
+            fn (#[\SensitiveParameter] mixed $v) => !is_bool($v) && filter_var($v, FILTER_VALIDATE_INT) !== false,
             $message,
         );
     }
@@ -75,7 +75,7 @@ final class Rules
     public static function numeric(string $message = 'Must be numeric.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v),
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v),
             $message,
         );
     }
@@ -86,7 +86,7 @@ final class Rules
     public static function integerString(string $message = 'Must be an integer string.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^-?\d+$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^-?\d+$/D', $v) === 1,
             $message,
         );
     }
@@ -102,7 +102,7 @@ final class Rules
             : '/^-?\d+(?:\.\d{1,' . $scale . '})?$/D';
 
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match($pattern, $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match($pattern, $v) === 1,
             $message ?: "Must be a decimal string with up to {$scale} decimal places.",
         );
     }
@@ -113,7 +113,7 @@ final class Rules
     public static function min(int|float $min, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v) && (float) $v >= $min,
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v) && (float) $v >= $min,
             $message ?: "Must be at least {$min}.",
         );
     }
@@ -124,7 +124,7 @@ final class Rules
     public static function greaterThan(int|float $min, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v) && (float) $v > $min,
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v) && (float) $v > $min,
             $message ?: "Must be greater than {$min}.",
         );
     }
@@ -135,7 +135,7 @@ final class Rules
     public static function max(int|float $max, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v) && (float) $v <= $max,
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v) && (float) $v <= $max,
             $message ?: "Must be at most {$max}.",
         );
     }
@@ -146,7 +146,7 @@ final class Rules
     public static function lessThan(int|float $max, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v) && (float) $v < $max,
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v) && (float) $v < $max,
             $message ?: "Must be less than {$max}.",
         );
     }
@@ -157,7 +157,7 @@ final class Rules
     public static function between(int|float $min, int|float $max, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v) && (float) $v >= $min && (float) $v <= $max,
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v) && (float) $v >= $min && (float) $v <= $max,
             $message ?: "Must be between {$min} and {$max}.",
         );
     }
@@ -168,7 +168,7 @@ final class Rules
     public static function betweenExclusive(int|float $min, int|float $max, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_numeric($v) && (float) $v > $min && (float) $v < $max,
+            fn (#[\SensitiveParameter] mixed $v) => is_numeric($v) && (float) $v > $min && (float) $v < $max,
             $message ?: "Must be strictly between {$min} and {$max}.",
         );
     }
@@ -180,7 +180,7 @@ final class Rules
     public static function regex(string $pattern, string $message): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match($pattern, $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match($pattern, $v) === 1,
             $message,
         );
     }
@@ -191,7 +191,7 @@ final class Rules
     public static function ascii(string $message = 'Must contain only ASCII characters.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[\x00-\x7F]*$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[\x00-\x7F]*$/D', $v) === 1,
             $message,
         );
     }
@@ -202,7 +202,7 @@ final class Rules
     public static function alphaNumeric(string $message = 'Must contain only letters and numbers.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-zA-Z0-9]+$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[a-zA-Z0-9]+$/D', $v) === 1,
             $message,
         );
     }
@@ -213,7 +213,7 @@ final class Rules
     public static function startsWith(string $prefix, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && str_starts_with($v, $prefix),
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && str_starts_with($v, $prefix),
             $message ?: "Must start with '{$prefix}'.",
         );
     }
@@ -224,7 +224,7 @@ final class Rules
     public static function endsWith(string $suffix, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && str_ends_with($v, $suffix),
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && str_ends_with($v, $suffix),
             $message ?: "Must end with '{$suffix}'.",
         );
     }
@@ -235,7 +235,7 @@ final class Rules
     public static function contains(string $needle, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && str_contains($v, $needle),
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && str_contains($v, $needle),
             $message ?: "Must contain '{$needle}'.",
         );
     }
@@ -248,7 +248,7 @@ final class Rules
     public static function in(array $allowed, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => in_array($v, $allowed, strict: true),
+            fn (#[\SensitiveParameter] mixed $v) => in_array($v, $allowed, strict: true),
             $message ?: 'Must be one of: ' . implode(', ', array_map('strval', $allowed)) . '.',
         );
     }
@@ -259,7 +259,7 @@ final class Rules
     public static function url(string $message = 'Must be a valid URL.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_URL) !== false,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_URL) !== false,
             $message,
         );
     }
@@ -270,7 +270,7 @@ final class Rules
     public static function httpUrl(string $message = 'Must be a valid HTTP/HTTPS URL.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v)) {
                     return false;
                 }
@@ -293,7 +293,7 @@ final class Rules
     public static function notBlank(string $message = 'Must not be blank.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && trim($v) !== '',
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && trim($v) !== '',
             $message,
         );
     }
@@ -304,7 +304,7 @@ final class Rules
     public static function boolean(string $message = 'Must be a boolean value.'): Rule
     {
         return Rule::of(
-            function (mixed $v): bool {
+            function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_bool($v) || $v === 1 || $v === 0) {
                     return true;
                 }
@@ -323,7 +323,7 @@ final class Rules
     public static function uuid(string $message = 'Must be a valid UUID.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match(
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match(
                 '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD',
                 $v,
             ) === 1,
@@ -337,7 +337,7 @@ final class Rules
     public static function date(string $format = 'Y-m-d', string $message = ''): Rule
     {
         return Rule::of(
-            function (mixed $v) use ($format): bool {
+            function (#[\SensitiveParameter] mixed $v) use ($format): bool {
                 if (!is_string($v) || str_contains($v, "\0")) {
                     return false;
                 }
@@ -354,7 +354,7 @@ final class Rules
     public static function dateTime(string $format = 'Y-m-d H:i:s', string $message = ''): Rule
     {
         return Rule::of(
-            function (mixed $v) use ($format): bool {
+            function (#[\SensitiveParameter] mixed $v) use ($format): bool {
                 if (!is_string($v) || str_contains($v, "\0")) {
                     return false;
                 }
@@ -373,7 +373,7 @@ final class Rules
     public static function rfc3339DateTime(string $message = 'Must be a valid RFC 3339 datetime.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v)) {
                     return false;
                 }
@@ -401,7 +401,7 @@ final class Rules
     public static function timezone(string $message = 'Must be a valid timezone identifier.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -418,7 +418,7 @@ final class Rules
     public static function time24(string $message = 'Must be a valid 24-hour time (HH:MM).'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D', $v) === 1,
             $message,
         );
     }
@@ -429,7 +429,7 @@ final class Rules
     public static function phoneE164(string $message = 'Must be a valid E.164 phone number.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^\+[1-9]\d{1,14}$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^\+[1-9]\d{1,14}$/D', $v) === 1,
             $message,
         );
     }
@@ -440,7 +440,7 @@ final class Rules
     public static function hexColor(string $message = 'Must be a valid hex color.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/D', $v) === 1,
             $message,
         );
     }
@@ -451,7 +451,7 @@ final class Rules
     public static function macAddress(string $message = 'Must be a valid MAC address.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v)
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v)
                 && preg_match('/^(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/D', $v) === 1,
             $message,
         );
@@ -464,7 +464,7 @@ final class Rules
     public static function cronExpression(string $message = 'Must be a valid cron expression.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || preg_match('/[\x00-\x08\x0A-\x1F\x7F]/', $v) === 1) {
                     return false;
                 }
@@ -473,7 +473,7 @@ final class Rules
 
                 return is_array($parts)
                     && count($parts) === 5
-                    && array_reduce($parts, static fn (bool $ok, string $part): bool => $ok && $part !== '', true);
+                    && array_reduce($parts, static fn (bool $ok, #[\SensitiveParameter] string $part): bool => $ok && $part !== '', true);
             },
             $message,
         );
@@ -485,7 +485,7 @@ final class Rules
     public static function postalCode(string $message = 'Must be a valid postal code.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9][A-Za-z0-9\- ]{1,11}[A-Za-z0-9]$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9][A-Za-z0-9\- ]{1,11}[A-Za-z0-9]$/D', $v) === 1,
             $message,
         );
     }
@@ -496,7 +496,7 @@ final class Rules
     public static function countMin(int $min, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_array($v) && count($v) >= $min,
+            fn (#[\SensitiveParameter] mixed $v) => is_array($v) && count($v) >= $min,
             $message ?: "Must have at least {$min} item(s).",
         );
     }
@@ -507,7 +507,7 @@ final class Rules
     public static function countMax(int $max, string $message = ''): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_array($v) && count($v) <= $max,
+            fn (#[\SensitiveParameter] mixed $v) => is_array($v) && count($v) <= $max,
             $message ?: "Must have at most {$max} item(s).",
         );
     }
@@ -518,7 +518,7 @@ final class Rules
     public static function ip(string $message = 'Must be a valid IP address.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP) !== false,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP) !== false,
             $message,
         );
     }
@@ -529,7 +529,7 @@ final class Rules
     public static function ipv4(string $message = 'Must be a valid IPv4 address.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false,
             $message,
         );
     }
@@ -540,7 +540,7 @@ final class Rules
     public static function ipv6(string $message = 'Must be a valid IPv6 address.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false,
             $message,
         );
     }
@@ -552,7 +552,7 @@ final class Rules
     public static function hostname(string $message = 'Must be a valid hostname.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v)) {
                     return false;
                 }
@@ -586,7 +586,7 @@ final class Rules
     public static function cidr(string $message = 'Must be a valid CIDR block.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 return is_string($v) && str_contains($v, '/') && IpRange::isValid($v);
             },
             $message,
@@ -599,7 +599,7 @@ final class Rules
     public static function port(string $message = 'Must be a valid port number.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_int($v)) {
                     return $v >= 1 && $v <= 65535;
                 }
@@ -622,7 +622,7 @@ final class Rules
     public static function host(string $message = 'Must be a valid host.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => self::hostname()->test($v) || self::ip()->test($v),
+            static fn (#[\SensitiveParameter] mixed $v): bool => self::hostname()->test($v) || self::ip()->test($v),
             $message,
         );
     }
@@ -634,7 +634,7 @@ final class Rules
     public static function privateIp(string $message = 'Must be a valid private IP address.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || filter_var($v, FILTER_VALIDATE_IP) === false) {
                     return false;
                 }
@@ -655,7 +655,7 @@ final class Rules
     public static function publicIp(string $message = 'Must be a valid public IP address.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && filter_var(
                     $v,
                     FILTER_VALIDATE_IP,
@@ -671,7 +671,7 @@ final class Rules
     public static function subnetMask(string $message = 'Must be a valid subnet mask.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || filter_var($v, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
                     return false;
                 }
@@ -695,7 +695,7 @@ final class Rules
     public static function portRange(string $message = 'Must be a valid port range.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || !str_contains($v, '-')) {
                     return false;
                 }
@@ -719,7 +719,7 @@ final class Rules
     public static function json(string $message = 'Must be valid JSON.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -738,7 +738,7 @@ final class Rules
     public static function jsonObject(string $message = 'Must be a valid JSON object.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -757,7 +757,7 @@ final class Rules
     public static function jsonArray(string $message = 'Must be a valid JSON array.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -776,7 +776,7 @@ final class Rules
     public static function slug(string $message = 'Must be a valid slug.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $v) === 1,
             $message,
         );
     }
@@ -787,7 +787,7 @@ final class Rules
     public static function lowercase(string $message = 'Must be lowercase.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && mb_strtolower($v) === $v,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && mb_strtolower($v) === $v,
             $message,
         );
     }
@@ -798,7 +798,7 @@ final class Rules
     public static function uppercase(string $message = 'Must be uppercase.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && mb_strtoupper($v) === $v,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && mb_strtoupper($v) === $v,
             $message,
         );
     }
@@ -809,7 +809,7 @@ final class Rules
     public static function noWhitespace(string $message = 'Must not contain whitespace.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^\S+$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^\S+$/D', $v) === 1,
             $message,
         );
     }
@@ -821,7 +821,7 @@ final class Rules
     public static function base64(string $message = 'Must be valid Base64.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -843,7 +843,7 @@ final class Rules
     public static function base64Url(string $message = 'Must be valid Base64URL.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -877,7 +877,7 @@ final class Rules
     public static function semver(string $message = 'Must be a valid semantic version.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match(
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match(
                 '/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
                 . '(?:-((?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-][0-9A-Za-z-]*))*))?'
                 . '(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/D',
@@ -893,7 +893,7 @@ final class Rules
     public static function ulid(string $message = 'Must be a valid ULID.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[0-9A-HJKMNP-TV-Z]{26}$/D', $v) === 1,
             $message,
         );
     }
@@ -904,7 +904,7 @@ final class Rules
     public static function sha256(string $message = 'Must be a valid SHA-256 hash.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-f0-9]{64}$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[a-f0-9]{64}$/D', $v) === 1,
             $message,
         );
     }
@@ -918,7 +918,7 @@ final class Rules
     public static function httpPath(string $message = 'Must be a valid HTTP path.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && !str_contains($v, ' ')
                 && Response::isLocalPath($v),
             $message,
@@ -931,7 +931,7 @@ final class Rules
     public static function pathSegment(string $message = 'Must be a valid path segment.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && $v !== ''
                 && !str_contains($v, '/')
                 && !str_contains($v, "\\")
@@ -948,7 +948,7 @@ final class Rules
     public static function safeFilename(string $message = 'Must be a safe filename.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/D', $v) === 1
                 && !str_contains($v, '..'),
             $message,
@@ -961,7 +961,7 @@ final class Rules
     public static function fileExtension(string $message = 'Must be a valid file extension.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Za-z0-9]{1,10}$/D', $v) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^[A-Za-z0-9]{1,10}$/D', $v) === 1,
             $message,
         );
     }
@@ -973,7 +973,7 @@ final class Rules
     public static function queryString(string $message = 'Must be a valid query string.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v)) {
                     return false;
                 }
@@ -1000,7 +1000,7 @@ final class Rules
     public static function percentEncoded(string $message = 'Must be a valid percent-encoded string.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -1017,7 +1017,7 @@ final class Rules
     public static function httpStatusCode(string $message = 'Must be a valid HTTP status code.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_string($v) && ctype_digit($v)) {
                     $v = (int) $v;
                 }
@@ -1034,7 +1034,7 @@ final class Rules
     public static function httpMethod(string $message = 'Must be a valid HTTP method.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -1055,7 +1055,7 @@ final class Rules
     public static function httpVersion(string $message = 'Must be a valid HTTP version.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^HTTP\/(?:1\.0|1\.1|2(?:\.0)?|3(?:\.0)?)$/iD', $v) === 1,
             $message,
         );
@@ -1067,7 +1067,7 @@ final class Rules
     public static function mimeType(string $message = 'Must be a valid MIME type.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/iD', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/iD', $v) === 1,
             $message,
         );
     }
@@ -1079,7 +1079,7 @@ final class Rules
     public static function bearerToken(string $message = 'Must be a valid bearer token.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9\-._~+\/]+=*$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9\-._~+\/]+=*$/D', $v) === 1,
             $message,
         );
     }
@@ -1090,7 +1090,7 @@ final class Rules
     public static function languageTag(string $message = 'Must be a valid language tag.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/D', $v) === 1,
             $message,
         );
     }
@@ -1101,7 +1101,7 @@ final class Rules
     public static function acceptLanguage(string $message = 'Must be a valid Accept-Language header value.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || trim($v, " \t") === '') {
                     return false;
                 }
@@ -1121,7 +1121,7 @@ final class Rules
     public static function httpHeaderName(string $message = 'Must be a valid HTTP header name.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[!#$%&\'\*+\-.\^_`\|~0-9A-Za-z]+$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[!#$%&\'\*+\-.\^_`\|~0-9A-Za-z]+$/D', $v) === 1,
             $message,
         );
     }
@@ -1133,7 +1133,7 @@ final class Rules
     public static function httpHeaderValue(string $message = 'Must be a valid HTTP header value.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^[\x09\x20-\x7E]*$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^[\x09\x20-\x7E]*$/D', $v) === 1,
             $message,
         );
     }
@@ -1145,7 +1145,7 @@ final class Rules
     public static function jwt(string $message = 'Must be a valid JWT token format.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v)
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v)
                 && preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/D', $v) === 1,
             $message,
         );
@@ -1157,7 +1157,7 @@ final class Rules
     public static function hostPort(string $message = 'Must be a valid host:port endpoint.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -1189,7 +1189,7 @@ final class Rules
     public static function countryCode(string $message = 'Must be a valid ISO country code.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{2}$/D', strtoupper($v)) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{2}$/D', strtoupper($v)) === 1,
             $message,
         );
     }
@@ -1200,7 +1200,7 @@ final class Rules
     public static function locale(string $message = 'Must be a valid locale (e.g. en_CA).'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[a-z]{2}_[A-Z]{2}$/D', $v) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^[a-z]{2}_[A-Z]{2}$/D', $v) === 1,
             $message,
         );
     }
@@ -1211,7 +1211,7 @@ final class Rules
     public static function uuidV1toV5(string $message = 'Must be a valid UUID v1-v5.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
@@ -1223,7 +1223,7 @@ final class Rules
     public static function uuidV4(string $message = 'Must be a valid UUID v4.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
@@ -1236,7 +1236,7 @@ final class Rules
     public static function uuidV6(string $message = 'Must be a valid UUID v6.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-6[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
@@ -1249,7 +1249,7 @@ final class Rules
     public static function uuidV7(string $message = 'Must be a valid UUID v7.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
@@ -1262,7 +1262,7 @@ final class Rules
     public static function uuidV8(string $message = 'Must be a valid UUID v8.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iD', $v) === 1,
             $message,
         );
@@ -1274,7 +1274,7 @@ final class Rules
     public static function currencyCode(string $message = 'Must be a valid ISO currency code.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{3}$/D', strtoupper($v)) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^[A-Z]{3}$/D', strtoupper($v)) === 1,
             $message,
         );
     }
@@ -1286,7 +1286,7 @@ final class Rules
     public static function iban(string $message = 'Must be a valid IBAN format.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{10,30}$/D', strtoupper(str_replace(' ', '', $v))) === 1,
             $message,
         );
@@ -1298,7 +1298,7 @@ final class Rules
     public static function bic(string $message = 'Must be a valid BIC/SWIFT code.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v)
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v)
                 && preg_match('/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/D', strtoupper($v)) === 1,
             $message,
         );
@@ -1310,7 +1310,7 @@ final class Rules
     public static function cardNumber(string $message = 'Must be a valid card number format.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -1332,7 +1332,7 @@ final class Rules
     public static function cardNumberLuhn(string $message = 'Must be a valid card number.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '') {
                     return false;
                 }
@@ -1368,7 +1368,7 @@ final class Rules
     public static function cardCvv(string $message = 'Must be a valid card CVV.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^\d{3,4}$/D', $v) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^\d{3,4}$/D', $v) === 1,
             $message,
         );
     }
@@ -1379,7 +1379,7 @@ final class Rules
     public static function cardExpiryMmyy(string $message = 'Must be a valid card expiry (MM/YY).'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{2}$/D', $v) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{2}$/D', $v) === 1,
             $message,
         );
     }
@@ -1390,7 +1390,7 @@ final class Rules
     public static function cardExpiryMmyyyy(string $message = 'Must be a valid card expiry (MM/YYYY).'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{4}$/D', $v) === 1,
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && preg_match('/^(0[1-9]|1[0-2])\/\d{4}$/D', $v) === 1,
             $message,
         );
     }
@@ -1401,7 +1401,7 @@ final class Rules
     public static function nonEmptyString(string $message = 'Must be a non-empty string.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && trim($v) !== '',
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && trim($v) !== '',
             $message,
         );
     }
@@ -1416,7 +1416,7 @@ final class Rules
         $normalized = array_map(static fn (string $v): string => mb_strtolower($v), $values);
 
         return Rule::of(
-            static fn (mixed $v): bool => is_string($v) && in_array(mb_strtolower($v), $normalized, true),
+            static fn (#[\SensitiveParameter] mixed $v): bool => is_string($v) && in_array(mb_strtolower($v), $normalized, true),
             $message,
         );
     }
@@ -1427,7 +1427,7 @@ final class Rules
     public static function jsonPointer(string $message = 'Must be a valid JSON Pointer.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v)) {
                     return false;
                 }
@@ -1452,7 +1452,7 @@ final class Rules
     public static function latitude(string $message = 'Must be a valid latitude.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_string($v) && is_numeric($v)) {
                     $v = (float) $v;
                 }
@@ -1469,7 +1469,7 @@ final class Rules
     public static function longitude(string $message = 'Must be a valid longitude.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_string($v) && is_numeric($v)) {
                     $v = (float) $v;
                 }
@@ -1486,7 +1486,7 @@ final class Rules
     public static function unixTimestamp(string $message = 'Must be a valid Unix timestamp.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_string($v) && ctype_digit($v)) {
                     $v = (int) $v;
                 }
@@ -1503,7 +1503,7 @@ final class Rules
     public static function epochMilliseconds(string $message = 'Must be a valid epoch-milliseconds value.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (is_string($v) && ctype_digit($v)) {
                     $v = (int) $v;
                 }
@@ -1520,7 +1520,7 @@ final class Rules
     public static function etag(string $message = 'Must be a valid HTTP ETag.'): Rule
     {
         return Rule::of(
-            fn (mixed $v) => is_string($v) && preg_match('/^(?:W\/)?"[\x21\x23-\x7E]*"$/D', $v) === 1,
+            fn (#[\SensitiveParameter] mixed $v) => is_string($v) && preg_match('/^(?:W\/)?"[\x21\x23-\x7E]*"$/D', $v) === 1,
             $message,
         );
     }
@@ -1531,7 +1531,7 @@ final class Rules
     public static function ifNoneMatch(string $message = 'Must be a valid If-None-Match header.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => self::isEtagListOrWildcard($v),
+            static fn (#[\SensitiveParameter] mixed $v): bool => self::isEtagListOrWildcard($v),
             $message,
         );
     }
@@ -1542,12 +1542,12 @@ final class Rules
     public static function ifMatch(string $message = 'Must be a valid If-Match header.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => self::isEtagListOrWildcard($v),
+            static fn (#[\SensitiveParameter] mixed $v): bool => self::isEtagListOrWildcard($v),
             $message,
         );
     }
 
-    private static function isEtagListOrWildcard(mixed $v): bool
+    private static function isEtagListOrWildcard(#[\SensitiveParameter] mixed $v): bool
     {
         if (!is_string($v) || $v === '') {
             return false;
@@ -1573,7 +1573,7 @@ final class Rules
     public static function httpDate(string $message = 'Must be a valid HTTP date.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || $v === '' || str_contains($v, "\0")) {
                     return false;
                 }
@@ -1612,7 +1612,7 @@ final class Rules
     public static function ifRange(string $message = 'Must be a valid If-Range header.'): Rule
     {
         return Rule::of(
-            static fn (mixed $v): bool => self::httpDate()->test($v) || self::etag()->test($v),
+            static fn (#[\SensitiveParameter] mixed $v): bool => self::httpDate()->test($v) || self::etag()->test($v),
             $message,
         );
     }
@@ -1624,7 +1624,7 @@ final class Rules
     public static function byteRange(string $message = 'Must be a valid byte range header.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || !str_starts_with($v, 'bytes=')) {
                     return false;
                 }
@@ -1663,7 +1663,7 @@ final class Rules
     public static function contentRange(string $message = 'Must be a valid Content-Range header.'): Rule
     {
         return Rule::of(
-            static function (mixed $v): bool {
+            static function (#[\SensitiveParameter] mixed $v): bool {
                 if (!is_string($v) || !str_starts_with($v, 'bytes ')) {
                     return false;
                 }
