@@ -355,7 +355,7 @@ final class File extends FileSystemNode
             return null;
         }
 
-        $prefix = '^([A-Za-z_][A-Za-z0-9_]*)\(.*\)(?: \[<a href=\'[^\']*\'>[^<]*<\/a>\])?: ';
+        $prefix = '^([A-Za-z_][A-Za-z0-9_]*)\(.*\)(?: \[<a href=\'.*\'>[^<]*<\/a>\])?: ';
         $reasons = [
             '(open_basedir restriction in effect\. .*File\(.*\) is not within the allowed path\(s\): \(.*\))$',
             '(.*)$',

@@ -1046,6 +1046,41 @@ final class FileTest extends TestCase
         self::assertSame('fwrite(): Write failed', (new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function manualLinksWithAnApostropheInTheAddress(): array
+    {
+        return [
+            'an apostrophe in the root' => [
+                'fwrite(Resource id #5, \'x\'): SECRET\') [<a href=\'/it\'s/function.fwrite\'>function.fwrite</a>]: '
+                . 'Write of 12 bytes failed with errno=27 File too large',
+                'fwrite(): Write of 12 bytes failed with errno=27 File too large',
+            ],
+            'an apostrophe in the extension' => [
+                'fwrite(Resource id #5, \'x\'): SECRET\') [<a href=\'/m/function.fwrite.ht\'m\'>function.fwrite</a>]: '
+                . 'Write failed',
+                'fwrite(): Write failed',
+            ],
+            'a link inside the arguments before the real one' => [
+                'fwrite(Resource id #5, \'x\') [<a href=\'y\'>z</a>]: SECRET\') '
+                . '[<a href=\'/it\'s/function.fwrite\'>function.fwrite</a>]: Write failed',
+                'fwrite(): Write failed',
+            ],
+        ];
+    }
+
+    #[DataProvider('manualLinksWithAnApostropheInTheAddress')]
+    public function testAManualLinkWhoseAddressHoldsAnApostropheLeavesNoContentInTheReason(
+        string $message,
+        string $expected,
+    ): void {
+        error_clear_last();
+        @trigger_error($message, E_USER_NOTICE);
+
+        self::assertSame($expected, (new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
+    }
+
     #[DataProvider('messagesOfAnotherShape')]
     public function testAnErrorMessageOfAnotherShapeGivesNoReason(string $message): void
     {
@@ -1094,6 +1129,51 @@ final class FileTest extends TestCase
             ini_set('error_include_args', (string) $previous[0]);
             ini_set('html_errors', (string) $previous[1]);
             ini_set('docref_root', (string) $previous[2]);
+        }
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function docrefSettingsWithAnApostrophe(): array
+    {
+        return [
+            'an apostrophe in docref_root' => ['docref_root', '/it\'s/'],
+            'an apostrophe in docref_ext' => ['docref_ext', '.ht\'m'],
+        ];
+    }
+
+    #[RequiresPhp('>= 8.6')]
+    #[DataProvider('docrefSettingsWithAnApostrophe')]
+    public function testAWriteCutShortLeaksNoContentWhenTheManualLinkHoldsAnApostrophe(
+        string $setting,
+        string $value,
+    ): void {
+        if (!function_exists('posix_setrlimit') || !function_exists('pcntl_signal')) {
+            self::markTestSkipped('Needs the posix and pcntl extensions.');
+        }
+        $path = $this->tempDir . '/apostrophe.txt';
+        file_put_contents($path, '');
+        $secret = 'DB_PASSWORD=' . bin2hex(random_bytes(8));
+        $names = ['error_include_args', 'html_errors', 'zend.exception_string_param_max_len', 'docref_root', $setting];
+        $previous = array_map(static fn (string $name): string => (string) ini_get($name), $names);
+        ini_set('error_include_args', '1');
+        ini_set('html_errors', '1');
+        ini_set('zend.exception_string_param_max_len', '1000');
+        ini_set('docref_root', '/phpmanual/');
+        ini_set($setting, $value);
+
+        try {
+            self::underFileSizeLimit(4, static fn () => (new File($path))->write("x'): " . $secret));
+            self::fail('expected a failure');
+        } catch (FileSystemException $e) {
+            self::assertStringStartsWith('Failed to write to: "' . $path . '" ("fwrite(): ', $e->getMessage());
+            self::assertStringNotContainsString($secret, $e->getMessage());
+            self::assertStringNotContainsString('<a ', $e->getMessage());
+        } finally {
+            foreach ($names as $i => $name) {
+                ini_set($name, $previous[$i]);
+            }
         }
     }
 
