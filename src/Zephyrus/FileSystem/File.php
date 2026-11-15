@@ -56,8 +56,8 @@ final class File extends FileSystemNode
     {
         self::assertPlainFilePath($path);
         $dir = dirname($path);
-        if (!is_dir($dir)) {
-            if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        if (!@is_dir($dir)) {
+            if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
                 throw FileSystemException::operationFailed('create directory for', $path);
             }
         }
@@ -187,7 +187,7 @@ final class File extends FileSystemNode
     {
         self::assertPlainFilePath($destination);
         $this->assertExists();
-        if (!is_file($this->path)) {
+        if (!@is_file($this->path)) {
             throw FileSystemException::notARegularFile($this->path);
         }
         $source = @fopen($this->path, 'r');
@@ -202,8 +202,8 @@ final class File extends FileSystemNode
             }
 
             $dir = dirname($destination);
-            if (!is_dir($dir)) {
-                if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
+            if (!@is_dir($dir)) {
+                if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
                     throw FileSystemException::operationFailed('create directory for', $destination);
                 }
             }
@@ -244,8 +244,8 @@ final class File extends FileSystemNode
         $this->assertExists();
 
         $dir = dirname($destination);
-        if (!is_dir($dir)) {
-            if (!@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        if (!@is_dir($dir)) {
+            if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
                 throw FileSystemException::operationFailed('create directory for', $destination);
             }
         }
@@ -523,7 +523,7 @@ final class File extends FileSystemNode
             clearstatcache(true, $path);
             $now = @lstat($path);
             if ($attempt === 2 || ($now !== false && self::isSameFile($named, $now))) {
-                throw is_readable($path) ? $failure($reason) : FileSystemException::notReadableForSafeWrite($path);
+                throw @is_readable($path) ? $failure($reason) : FileSystemException::notReadableForSafeWrite($path);
             }
         }
 
@@ -612,7 +612,7 @@ final class File extends FileSystemNode
         $temporaryLeft = true;
         try {
             // tempnam() falls back to the system directory when this one is unusable.
-            if (dirname($temporary) !== realpath($directory)) {
+            if (dirname($temporary) !== @realpath($directory)) {
                 throw $failure();
             }
             error_clear_last();

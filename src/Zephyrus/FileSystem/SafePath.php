@@ -28,13 +28,13 @@ final class SafePath
             return null;
         }
 
-        $realRoot = realpath(rtrim($root, '/\\'));
+        $realRoot = @realpath(rtrim($root, '/\\'));
         if ($realRoot === false) {
             return null;
         }
 
-        $realPath = realpath(rtrim($root, '/\\') . '/' . ltrim($relativePath, '/\\'));
-        if ($realPath === false || !is_readable($realPath)) {
+        $realPath = @realpath(rtrim($root, '/\\') . '/' . ltrim($relativePath, '/\\'));
+        if ($realPath === false || !@is_readable($realPath)) {
             return null;
         }
 
@@ -56,7 +56,7 @@ final class SafePath
      */
     public static function isFile(string $path): bool
     {
-        return !self::holdsNulByte($path) && is_file($path);
+        return !self::holdsNulByte($path) && @is_file($path);
     }
 
     /**
@@ -64,7 +64,7 @@ final class SafePath
      */
     public static function isDirectory(string $path): bool
     {
-        return !self::holdsNulByte($path) && is_dir($path);
+        return !self::holdsNulByte($path) && @is_dir($path);
     }
 
     /**
@@ -72,7 +72,7 @@ final class SafePath
      */
     public static function isReadable(string $path): bool
     {
-        return !self::holdsNulByte($path) && is_readable($path);
+        return !self::holdsNulByte($path) && @is_readable($path);
     }
 
     /**

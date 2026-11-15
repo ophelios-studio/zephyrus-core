@@ -27,8 +27,8 @@ final class Directory extends FileSystemNode
     {
         self::assertLocalPath($path);
 
-        if (!is_dir($path)) {
-            if (!@mkdir($path, $permissions, true) && !is_dir($path)) {
+        if (!@is_dir($path)) {
+            if (!@mkdir($path, $permissions, true) && !@is_dir($path)) {
                 throw FileSystemException::operationFailed('create directory', $path);
             }
         }
@@ -54,7 +54,7 @@ final class Directory extends FileSystemNode
 
         $files = [];
         foreach ($matches as $match) {
-            if (is_file($match)) {
+            if (@is_file($match)) {
                 $files[] = new File($match);
             }
         }
@@ -120,11 +120,11 @@ final class Directory extends FileSystemNode
     {
         self::assertLocalPath($this->path);
 
-        if (is_dir($this->path)) {
+        if (@is_dir($this->path)) {
             return;
         }
 
-        if (!@mkdir($this->path, $permissions, true) && !is_dir($this->path)) {
+        if (!@mkdir($this->path, $permissions, true) && !@is_dir($this->path)) {
             throw FileSystemException::operationFailed('create directory', $this->path);
         }
     }

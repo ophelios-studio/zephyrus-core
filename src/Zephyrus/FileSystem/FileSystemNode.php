@@ -27,7 +27,7 @@ abstract class FileSystemNode
      */
     public function exists(): bool
     {
-        return !SafePath::holdsNulByte($this->path) && file_exists($this->path);
+        return !SafePath::holdsNulByte($this->path) && @file_exists($this->path);
     }
 
     /**
@@ -54,7 +54,7 @@ abstract class FileSystemNode
     public function permissions(): int
     {
         $this->assertExists();
-        return fileperms($this->path) & 0o7777;
+        return @fileperms($this->path) & 0o7777;
     }
 
     /**
@@ -65,7 +65,7 @@ abstract class FileSystemNode
     public function lastModified(): int
     {
         $this->assertExists();
-        $mtime = filemtime($this->path);
+        $mtime = @filemtime($this->path);
         if ($mtime === false) {
             throw FileSystemException::operationFailed('read modification time of', $this->path);
         }
@@ -77,7 +77,7 @@ abstract class FileSystemNode
      */
     public function isReadable(): bool
     {
-        return !SafePath::holdsNulByte($this->path) && is_readable($this->path);
+        return !SafePath::holdsNulByte($this->path) && @is_readable($this->path);
     }
 
     /**
@@ -85,7 +85,7 @@ abstract class FileSystemNode
      */
     public function isWritable(): bool
     {
-        return !SafePath::holdsNulByte($this->path) && is_writable($this->path);
+        return !SafePath::holdsNulByte($this->path) && @is_writable($this->path);
     }
 
     /**
@@ -109,7 +109,7 @@ abstract class FileSystemNode
      */
     protected static function isSymlink(string $path): bool
     {
-        return is_link(self::withoutTrailingSegments($path));
+        return @is_link(self::withoutTrailingSegments($path));
     }
 
     protected static function withoutTrailingSegments(string $path): string
