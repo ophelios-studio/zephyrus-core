@@ -172,7 +172,7 @@ final class HandlerResolver
             throw HandlerResolverException::unresolvedParameter($class, $method, $name);
         }
 
-        return $reflection->invoke($controller, ...$args);
+        return $reflection->invoke($reflection->isStatic() ? null : $controller, ...$args);
     }
 
     /**

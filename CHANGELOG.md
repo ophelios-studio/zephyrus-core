@@ -75,6 +75,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Fixed
 
+- A route whose handler is a static method runs without PHP 8.6's deprecation (`ReflectionMethod::invoke()` for a static method does not need an object parameter): the resolver passes no object for a static method.
 - `EnvironmentVariable::read()` reads a `false` placed in `$_ENV` as `"0"`, where it read `""`, which a boolean setting refused; `true` still reads `"1"`. `env()`, a `!env` value and `#[RequiresEnv]` read it the same way, so `#[RequiresEnv('X', '0')]` now matches it and `#[RequiresEnv('X', '')]` no longer does.
 - The debug warnings of `SessionManager` (idle timeout, strict mode) and of `ContentSecurityPolicyMiddleware` read the raw `application.debug` instead of the effective flag, so a production boot that refused `debug: true` still wrote them to the logs. They now read `App::isDebug()`. `ContentSecurityPolicyMiddleware::isDebug()` (internal) is removed.
 - The strict-mode debug warning of `SessionManager::start()` is raised only for a save handler with no `validateId()` method, which PHP calls whether or not the handler implements `SessionUpdateTimestampHandlerInterface`; a handler with a plain `validateId()` got a false warning. It now reads `Session save handler <class> has no validateId() method, so PHP skips its session.use_strict_mode check and will ADOPT a client-supplied session id. Implement validateId() to reject an id that does not already exist.`

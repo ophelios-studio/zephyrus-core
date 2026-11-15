@@ -63,6 +63,11 @@ final class PlainHandlerController
         return Response::text($slug);
     }
 
+    public static function staticHello(): Response
+    {
+        return Response::text('static hello');
+    }
+
     public function withDefault(string $format = 'json'): Response
     {
         return Response::text($format);
@@ -360,6 +365,15 @@ final class HandlerResolverTest extends TestCase
 
         self::assertSame(200, $response->status);
         self::assertSame('hello', $response->body);
+    }
+
+    public function testResolvesAStaticMethodWithoutAnObject(): void
+    {
+        $match = $this->makeMatch('GET', '/static', PlainHandlerController::class . '@staticHello');
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/static'));
+
+        self::assertSame('static hello', $response->body);
     }
 
     // -- Request injection ----------------------------------------------------
