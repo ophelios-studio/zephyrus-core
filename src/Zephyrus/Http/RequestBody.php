@@ -12,7 +12,7 @@ final readonly class RequestBody
     /**
      * @param array<string, mixed> $data Parsed body parameters (form or JSON).
      * @param string $raw Raw body content (from php://input).
-     * @param bool $malformed True when a JSON body could not be decoded into an array.
+     * @param bool $malformed True when a JSON body could not be decoded into an array, or the body went over the size limit given to Request::fromGlobals().
      */
     public function __construct(
         private array $data = [],
@@ -45,7 +45,7 @@ final readonly class RequestBody
     }
 
     /**
-     * Check this before validating: a malformed JSON body reads as empty.
+     * Check this before validating: a malformed JSON body, or one over the size limit, reads as empty.
      */
     public function isMalformed(): bool
     {

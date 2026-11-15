@@ -147,6 +147,14 @@ final readonly class Request
      *                                                   the peer is a trusted proxy. Names are
      *                                                   case-insensitive. Defaults to the
      *                                                   X-Forwarded-* family; pass [] to read none.
+     * @param int                        $maxBodySize    0 reads the whole body. Above 0, a body is read at most
+     *                                                   one byte past that limit: pass the limit given to
+     *                                                   MaxBodySizeMiddleware. A body over it, or a declared
+     *                                                   Content-Length over it (raw body then empty), is left
+     *                                                   unparsed (empty, malformed, even on a GET) and the
+     *                                                   middleware refuses it.
+     *
+     * @throws \InvalidArgumentException When $maxBodySize is negative.
      */
     public static function fromGlobals(
         ?array $server = null,
@@ -157,7 +165,12 @@ final readonly class Request
         ?string $rawBody = null,
         array $trustedProxies = [],
         array $trustedHeaders = self::TRUSTED_HEADERS_DEFAULT,
+        int $maxBodySize = 0,
     ): self {
+        if ($maxBodySize < 0) {
+            throw new \InvalidArgumentException('Maximum body size must be 0 (unlimited) or a positive byte count.');
+        }
+
         $server = $server ?? $_SERVER;
         $get    = $get    ?? $_GET;
         $post   = $post   ?? $_POST;
@@ -173,9 +186,10 @@ final readonly class Request
         $uri     = self::buildUri($server, $trusted, $trustedProxies);
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
-        $raw = $rawBody ?? (string) file_get_contents('php://input');
-        $malformed  = false;
-        $parsedBody = self::parseBody($method, $headers, $post, $raw, $malformed);
+        $overBudget = false;
+        $raw = self::readBody($rawBody, $headers['content-length'] ?? null, $maxBodySize, $overBudget);
+        $malformed  = $overBudget;
+        $parsedBody = $overBudget ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
 
         return new self(
@@ -711,6 +725,36 @@ final readonly class Request
         $scheme = strtolower((string) $scheme);
 
         return in_array($scheme, ['http', 'https'], true) ? $scheme : null;
+    }
+
+    /** Reads the body, at most $maxBytes + 1 bytes when $maxBytes is positive. */
+    private static function readBody(?string $injected, mixed $declared, int $maxBytes, bool &$overBudget): string
+    {
+        if ($maxBytes === 0) {
+            return $injected ?? (string) file_get_contents('php://input');
+        }
+
+        if (is_string($declared) && preg_match('/^\d+$/D', trim($declared)) === 1 && (int) trim($declared) > $maxBytes) {
+            $overBudget = true;
+
+            return '';
+        }
+
+        $readLimit = min($maxBytes, PHP_INT_MAX - 1) + 1;
+
+        if ($injected === null) {
+            $handle = fopen('php://input', 'rb');
+            $raw = $handle === false ? '' : (string) stream_get_contents($handle, $readLimit);
+            if ($handle !== false) {
+                fclose($handle);
+            }
+        } else {
+            $raw = substr($injected, 0, $readLimit);
+        }
+
+        $overBudget = strlen($raw) > $maxBytes;
+
+        return $raw;
     }
 
     /**

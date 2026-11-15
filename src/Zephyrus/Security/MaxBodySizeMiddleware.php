@@ -29,6 +29,8 @@ use function trim;
  *
  * The measure is a valid declared Content-Length, otherwise the raw body. Multipart uploads are
  * already parsed into $_FILES, so their raw body is empty and only Content-Length counts.
+ * Pass the same limit to Request::fromGlobals(maxBodySize: ...) so the body is never read past it:
+ * without it the whole body is in memory before this middleware runs.
  * This is a budget, not a defence: a client that lies about its length is stopped by the web
  * server limit (client_max_body_size, LimitRequestBody) and by post_max_size, which must be set too.
  */

@@ -66,6 +66,7 @@ changes are listed first, each with the change to make in your code.
 - `DebugIntegration::installSecretMasking(?string $sessionName = null)` installs the masking of secrets in `dump()`, the debug bar and the Bluescreen without enabling Tracy or installing its handlers, as a test or a controlled `dump()` needs; `initialize()` calls it.
 - Zephyrus is tested on PHP 8.6: the CI matrix runs PHP 8.4, 8.5 and 8.6.
 - The public `with*()` methods that return a modified copy (`Request`, `Response`, `Route`, `Router`, `RouteCollection`, `FormValidator`, `MiddlewarePipeline::without()`, `PaginationRequest`, `KernelBuilder`, `ApplicationBuilder` and `ContentSecurityPolicy`) carry `#[\NoDiscard]`: on PHP 8.5 and later, calling one as a statement and dropping the result raises a warning (`$response->withHeader(...);` changes nothing). Keep the result: `$response = $response->withHeader(...)`. To drop it on purpose, such as in a test that expects the call to throw, assign it (`$ignored = ...`): `(void)` is PHP 8.5 syntax. PHP 8.4 ignores the attribute.
+- `Request::fromGlobals()` takes a last parameter `int $maxBodySize = 0` (0 reads the whole body, as before; a negative value throws `InvalidArgumentException` with `Maximum body size must be 0 (unlimited) or a positive byte count.`). Above 0, `php://input` is never read past that many bytes: a valid `Content-Length` over the limit leaves the raw body empty, and a body that runs over it is cut to the limit plus one byte, with an empty parsed body and `isMalformed()` true, so `MaxBodySizeMiddleware` given the same limit refuses it with a 413, where the whole body was in memory first. Pass `maxBodySize: $config->security->maxBodySize` to `fromGlobals()`.
 
 ### Changed
 
@@ -115,6 +116,7 @@ Pages of zephyrus.ophelios.com that this version makes stale, each in English an
 - `digging-deeper/filesystem.md`: the quoted paths in `FileSystemException` messages, the new refusals of `File` and `Directory`, and a path outside `open_basedir`, the `delete()` that throws there, and the reason that ends a `Failed to create directory` message.
 - `fundamentals/validation.md`: the closure given to `Rule::of()` should mark its parameter `#[\SensitiveParameter]` when it receives a secret, since core's rules hide the value from a stack trace.
 - `fundamentals/views.md`: `LatteEngine::addNamespace()`, `@namespace/page` templates for Composer packages, and the `{views}/vendor/{namespace}/` override.
+- `fundamentals/security.md`, `fundamentals/http.md`, `fundamentals/application.md`, `fundamentals/authentication.md` and `getting-started/first-application.md`: the `Request::fromGlobals()` bootstrap passes `maxBodySize: $config->security->maxBodySize`, and `MaxBodySizeMiddleware` is given the same limit so the body is never read past it.
 
 ## [0.16.0] - 2026-11-13
 
