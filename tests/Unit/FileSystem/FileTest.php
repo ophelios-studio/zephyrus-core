@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\FileSystem;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RequiresPhp;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\FileSystem\File;
 use Zephyrus\FileSystem\FileSystemException;
@@ -813,6 +814,11 @@ final class FileTest extends TestCase
             self::fail('expected a failure');
         } catch (FileSystemException $e) {
             $expected = strtr($message, ['{path}' => $path, '{source}' => $source]);
+            if ($method === 'copy' && PHP_VERSION_ID >= 80600) {
+                self::assertSame($expected, $e->getMessage());
+
+                return;
+            }
             self::assertStringStartsWith($expected . ' ("', $e->getMessage());
             self::assertStringContainsString('errno=27', $e->getMessage());
             self::assertStringEndsWith('")', $e->getMessage());
@@ -868,6 +874,151 @@ final class FileTest extends TestCase
         self::assertSame('content', (string) file_get_contents($path));
     }
 
+    public function testAMoveRefusalKeepsTheReasonAfterTheLastSeparatorWhenAPathHoldsOne(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root writes into a read-only directory.');
+        }
+        $source = $this->tempDir . '/move-source.txt';
+        $locked = $this->tempDir . '/locked): x';
+        $destination = $locked . '/dest.txt';
+        file_put_contents($source, 'content');
+        mkdir($locked, 0755);
+        chmod($locked, 0555);
+
+        try {
+            (new File($source))->move($destination);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame(
+                'Failed to move "' . $source . '" to "' . $destination . '" ("rename(): Permission denied")',
+                $e->getMessage(),
+            );
+        } finally {
+            chmod($locked, 0755);
+        }
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function messagesOfAnotherShape(): array
+    {
+        return [
+            'no function' => ['Something went wrong'],
+            'no reason separator' => ['rename(a, b) failed'],
+            'a method rather than a function' => ['SplFileObject::__construct(/x): Failed to open stream'],
+            'a name that is not an identifier' => ['re name(/x): No such file or directory'],
+            'an unknown decoration after the arguments' => ['fwrite(a, \'b\') [<b>x</b>]: Write failed'],
+        ];
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function openBasedirPhrasesInsideTheCallArguments(): array
+    {
+        return [
+            'the phrase inside a quoted argument' => [
+                'fwrite(r, \'a open_basedir restriction in effect. SECRET\'): Write failed',
+            ],
+            'a full reason phrase inside a quoted argument' => [
+                'fwrite(r, \'q): open_basedir restriction in effect. '
+                . 'File(a) is not within the allowed path(s): (SECRET)\'): Write failed',
+            ],
+            'a closing parenthesis and a colon inside a quoted argument' => [
+                'fwrite(r, \'x): SECRET\'): Write failed',
+            ],
+        ];
+    }
+
+    #[DataProvider('openBasedirPhrasesInsideTheCallArguments')]
+    public function testAnOpenBasedirPhraseInsideTheCallArgumentsIsNotTakenForTheReason(string $message): void
+    {
+        error_clear_last();
+        @trigger_error($message, E_USER_NOTICE);
+
+        self::assertSame('fwrite(): Write failed', (new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
+    }
+
+    #[DataProvider('messagesOfAnotherShape')]
+    public function testAnErrorMessageOfAnotherShapeGivesNoReason(string $message): void
+    {
+        error_clear_last();
+        @trigger_error($message, E_USER_NOTICE);
+
+        self::assertNull((new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
+    }
+
+    public function testAnOpenBasedirReasonKeepsItsExplanation(): void
+    {
+        error_clear_last();
+        @trigger_error(
+            'tempnam(): open_basedir restriction in effect. File(/x) is not within the allowed path(s): (/tmp:/home)',
+            E_USER_NOTICE,
+        );
+
+        self::assertSame(
+            'tempnam(): open_basedir restriction in effect. File(/x) is not within the allowed path(s): (/tmp:/home)',
+            (new \ReflectionMethod(File::class, 'lastError'))->invoke(null),
+        );
+    }
+
+    #[RequiresPhp('>= 8.6')]
+    public function testAWriteCutShortLeaksNoContentThroughTheCallArgumentsWithManualLinks(): void
+    {
+        if (!function_exists('posix_setrlimit') || !function_exists('pcntl_signal')) {
+            self::markTestSkipped('Needs the posix and pcntl extensions.');
+        }
+        $path = $this->tempDir . '/linked.txt';
+        file_put_contents($path, '');
+        $secret = 'DB_PASSWORD=' . bin2hex(random_bytes(8));
+        $previous = [ini_get('error_include_args'), ini_get('html_errors'), ini_get('docref_root')];
+        ini_set('error_include_args', '1');
+        ini_set('html_errors', '1');
+        ini_set('docref_root', '/phpmanual/');
+
+        try {
+            self::underFileSizeLimit(4, static fn () => (new File($path))->write($secret));
+            self::fail('expected a failure');
+        } catch (FileSystemException $e) {
+            self::assertStringStartsWith('Failed to write to: "' . $path . '" ("fwrite(): ', $e->getMessage());
+            self::assertStringNotContainsString($secret, $e->getMessage());
+            self::assertStringNotContainsString('<a ', $e->getMessage());
+        } finally {
+            ini_set('error_include_args', (string) $previous[0]);
+            ini_set('html_errors', (string) $previous[1]);
+            ini_set('docref_root', (string) $previous[2]);
+        }
+    }
+
+    #[RequiresPhp('>= 8.6')]
+    public function testAWriteCutShortLeaksNoContentAfterAnOpenBasedirPhraseInTheCallArguments(): void
+    {
+        if (!function_exists('posix_setrlimit') || !function_exists('pcntl_signal')) {
+            self::markTestSkipped('Needs the posix and pcntl extensions.');
+        }
+        $path = $this->tempDir . '/phrase.txt';
+        file_put_contents($path, '');
+        $secret = 'DB_PASSWORD=' . bin2hex(random_bytes(8));
+        $previous = [ini_get('error_include_args'), ini_get('zend.exception_string_param_max_len')];
+        ini_set('error_include_args', '1');
+        ini_set('zend.exception_string_param_max_len', '1000');
+
+        try {
+            self::underFileSizeLimit(4, static fn () => (new File($path))->write(
+                'open_basedir restriction in effect. ' . $secret,
+            ));
+            self::fail('expected a failure');
+        } catch (FileSystemException $e) {
+            self::assertStringStartsWith('Failed to write to: "' . $path . '" ("fwrite(): ', $e->getMessage());
+            self::assertStringNotContainsString($secret, $e->getMessage());
+        } finally {
+            ini_set('error_include_args', (string) $previous[0]);
+            ini_set('zend.exception_string_param_max_len', (string) $previous[1]);
+        }
+    }
+
     public function testAMoveThatCannotRenameNamesBothPathsQuoted(): void
     {
         if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
@@ -886,7 +1037,7 @@ final class FileTest extends TestCase
         } catch (FileSystemException $e) {
             self::assertSame(
                 'Failed to move "' . $source . '" to "' . $destination . '"'
-                . ' ("rename(' . $source . ',' . $destination . '): Permission denied")',
+                . ' ("rename(): Permission denied")',
                 $e->getMessage(),
             );
         } finally {
