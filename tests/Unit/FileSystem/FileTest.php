@@ -648,13 +648,15 @@ final class FileTest extends TestCase
         flock($directory, LOCK_EX);
 
         $appender = $this->forkAppender($path, ['child']);
+        $completed = false;
         try {
             self::waitUntilBlockedOnALockOrDone($appender, $path);
             self::assertFileDoesNotExist($path);
             file_put_contents($path, "parent\n");
+            $completed = true;
         } finally {
             flock($directory, LOCK_UN);
-            self::waitForChild($appender, 'append() waiting for the directory lock');
+            self::waitForChild($appender, 'append() waiting for the directory lock', failing: $completed);
             fclose($directory);
         }
 
@@ -692,12 +694,14 @@ final class FileTest extends TestCase
         flock($directory, LOCK_EX);
 
         $appender = $this->forkReportingAppender($path, $report);
+        $completed = false;
         try {
             self::waitUntilBlockedOnALockOrDone($appender, $path);
             symlink($target, $path);
+            $completed = true;
         } finally {
             flock($directory, LOCK_UN);
-            self::waitForChild($appender, 'append() waiting for the directory lock');
+            self::waitForChild($appender, 'append() waiting for the directory lock', failing: $completed);
             fclose($directory);
         }
 
@@ -1033,7 +1037,7 @@ final class FileTest extends TestCase
         error_clear_last();
         @trigger_error($message, E_USER_NOTICE);
 
-        self::assertSame('fwrite(): Write failed', (new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
+        self::assertSame('fwrite(): Write failed', FileSystemException::lastError());
     }
 
     /**
@@ -1068,7 +1072,7 @@ final class FileTest extends TestCase
         error_clear_last();
         @trigger_error($message, E_USER_NOTICE);
 
-        self::assertSame($expected, (new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
+        self::assertSame($expected, FileSystemException::lastError());
     }
 
     #[DataProvider('messagesOfAnotherShape')]
@@ -1077,7 +1081,7 @@ final class FileTest extends TestCase
         error_clear_last();
         @trigger_error($message, E_USER_NOTICE);
 
-        self::assertNull((new \ReflectionMethod(File::class, 'lastError'))->invoke(null));
+        self::assertNull(FileSystemException::lastError());
     }
 
     public function testAnOpenBasedirReasonKeepsItsExplanation(): void
@@ -1090,7 +1094,7 @@ final class FileTest extends TestCase
 
         self::assertSame(
             'tempnam(): open_basedir restriction in effect. File(/x) is not within the allowed path(s): (/tmp:/home)',
-            (new \ReflectionMethod(File::class, 'lastError'))->invoke(null),
+            FileSystemException::lastError(),
         );
     }
 
@@ -1542,14 +1546,20 @@ final class FileTest extends TestCase
         }
     }
 
-    private static function waitForChild(int $pid, string $what, float $seconds = 10.0): void
+    /**
+     * Wait for `$pid`, killing it on timeout; `$failing` false leaves the failure already in flight to be reported.
+     */
+    private static function waitForChild(int $pid, string $what, float $seconds = 10.0, bool $failing = true): void
     {
         $deadline = microtime(true) + $seconds;
         while (pcntl_waitpid($pid, $status, WNOHANG) === 0) {
             if (microtime(true) >= $deadline) {
                 posix_kill($pid, SIGKILL);
                 pcntl_waitpid($pid, $status);
-                self::fail($what . ' did not return');
+                if ($failing) {
+                    self::fail($what . ' did not return');
+                }
+                return;
             }
             usleep(10000);
         }
