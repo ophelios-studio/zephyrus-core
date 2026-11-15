@@ -7,6 +7,7 @@ namespace Zephyrus\Routing;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
+use Zephyrus\FileSystem\SafePath;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteAttributeException;
@@ -472,7 +473,7 @@ final class Router
         ?string $parentClass = null,
     ): self {
         $directory = rtrim($directory, '/\\');
-        if (!is_dir($directory)) {
+        if (!SafePath::isDirectory($directory)) {
             return $this;
         }
 

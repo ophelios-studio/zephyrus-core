@@ -1132,4 +1132,11 @@ final class RouterTest extends TestCase
 
         self::fail('Expected a RouteMiddlewareException.');
     }
+
+    public function testDiscoverControllersSkipsADirectoryHoldingANulByte(): void
+    {
+        $router = (new Router())->discoverControllers('Zephyrus\\Tests\\Fixtures\\Controllers', "/x\0y");
+
+        self::assertSame([], $router->routePaths());
+    }
 }
