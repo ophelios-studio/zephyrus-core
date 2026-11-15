@@ -621,7 +621,7 @@ final class FileTest extends TestCase
 
         $writers = [$this->forkAppender($path, $first), $this->forkAppender($path, $second)];
         foreach ($writers as $writer) {
-            pcntl_waitpid($writer, $status);
+            self::waitForChild($writer, 'a concurrent append()');
         }
 
         $expected = [...$first, ...$second];
@@ -654,7 +654,7 @@ final class FileTest extends TestCase
             file_put_contents($path, "parent\n");
         } finally {
             flock($directory, LOCK_UN);
-            pcntl_waitpid($appender, $status);
+            self::waitForChild($appender, 'append() waiting for the directory lock');
             fclose($directory);
         }
 
@@ -672,17 +672,7 @@ final class FileTest extends TestCase
         $report = $this->tempDir . '/fifo-report';
 
         $appender = $this->forkReportingAppender($path, $report);
-        $deadline = microtime(true) + 5;
-        $finished = false;
-        while (!$finished && microtime(true) < $deadline) {
-            $finished = pcntl_waitpid($appender, $status, WNOHANG) !== 0;
-            $finished || usleep(10000);
-        }
-        if (!$finished) {
-            posix_kill($appender, SIGKILL);
-            pcntl_waitpid($appender, $status);
-            self::fail('append() below a FIFO did not return');
-        }
+        self::waitForChild($appender, 'append() below a FIFO', 5.0);
 
         self::assertSame(
             FileSystemException::class . ': Failed to append to: "' . $path . '"',
@@ -707,7 +697,7 @@ final class FileTest extends TestCase
             symlink($target, $path);
         } finally {
             flock($directory, LOCK_UN);
-            pcntl_waitpid($appender, $status);
+            self::waitForChild($appender, 'append() waiting for the directory lock');
             fclose($directory);
         }
 
@@ -1549,6 +1539,19 @@ final class FileTest extends TestCase
             file_put_contents($report, $e::class . ': ' . $e->getMessage());
         } finally {
             posix_kill(posix_getpid(), SIGKILL);
+        }
+    }
+
+    private static function waitForChild(int $pid, string $what, float $seconds = 10.0): void
+    {
+        $deadline = microtime(true) + $seconds;
+        while (pcntl_waitpid($pid, $status, WNOHANG) === 0) {
+            if (microtime(true) >= $deadline) {
+                posix_kill($pid, SIGKILL);
+                pcntl_waitpid($pid, $status);
+                self::fail($what . ' did not return');
+            }
+            usleep(10000);
         }
     }
 
