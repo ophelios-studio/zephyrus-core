@@ -55,7 +55,10 @@ use Zephyrus\Data\DatabaseException;
  * session write aborts it and the lock stays held until the connection closes.
  * Behind transaction pooling (PgBouncer pool_mode=transaction), construct the handler with lockSessions: false.
  */
-final class DatabaseSessionHandler implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
+final class DatabaseSessionHandler implements
+    \SessionHandlerInterface,
+    \SessionIdInterface,
+    \SessionUpdateTimestampHandlerInterface
 {
     /**
      * Session ids PHP can produce: sid_bits_per_character 4 to 6, sid_length 22 to 256.
@@ -135,7 +138,8 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
 
     /**
      * @param Database|Closure(): Database $database
-     * @param string $idPattern Accepted session id shape. Override only for ids generated in another format.
+     * @param string $idPattern Accepted session id shape. Override only for ids generated in another format: a
+     *   pattern that refuses the ids create_sid() returns stores no new session.
      * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). Without the
      *   lock, of two concurrent requests that change one session, the second write is refused rather than
      *   overwriting the first. Pass false only behind
@@ -214,6 +218,15 @@ final class DatabaseSessionHandler implements \SessionHandlerInterface, \Session
         $this->releaseLock();
 
         return true;
+    }
+
+    /**
+     * Generate a new session id: 32 lowercase hexadecimal characters (128 random bits), the shape PHP generates
+     * with its default settings.
+     */
+    public function create_sid(): string
+    {
+        return bin2hex(random_bytes(16));
     }
 
     /**

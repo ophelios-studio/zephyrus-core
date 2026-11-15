@@ -216,6 +216,25 @@ final class DatabaseSessionHandlerTest extends TestCase
         self::assertInstanceOf(\SessionUpdateTimestampHandlerInterface::class, $this->handler);
     }
 
+    public function testANewSessionIdIsThirtyTwoLowercaseHexadecimalCharacters(): void
+    {
+        self::assertMatchesRegularExpression('/\A[0-9a-f]{32}\z/', $this->handler->create_sid());
+    }
+
+    public function testEachNewSessionIdIsDifferent(): void
+    {
+        self::assertNotSame($this->handler->create_sid(), $this->handler->create_sid());
+    }
+
+    public function testANewSessionIdIsStoredOnceTheSessionHoldsData(): void
+    {
+        $id = $this->handler->create_sid();
+        $this->handler->read($id);
+
+        self::assertTrue($this->handler->write($id, 'user_id|i:1;'));
+        self::assertSame(1, $this->database->count('SELECT COUNT(*) FROM session WHERE session_id = ?', [$id]));
+    }
+
     public function testValidateIdRejectsAnIdThatDoesNotAlreadyExist(): void
     {
         // Rejecting an unknown id makes PHP generate a fresh one instead of adopting the client's.
