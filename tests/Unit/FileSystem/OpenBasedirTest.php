@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\FileSystem;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\FileSystem\FileSystemException;
 
 final class OpenBasedirTest extends TestCase
 {
@@ -25,7 +26,7 @@ final class OpenBasedirTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->base = sys_get_temp_dir() . '/zephyrus-open-basedir-' . bin2hex(random_bytes(8));
+        $this->base = sys_get_temp_dir() . '/zob-' . bin2hex(random_bytes(4));
         $this->allowed = $this->base . '/allowed';
         $this->outside = $this->base . '/outside';
         mkdir($this->allowed, 0755, true);
@@ -72,15 +73,21 @@ final class OpenBasedirTest extends TestCase
             'SafePath within a root outside' => ["$safePath::within(\$outside, 'x')", 'NULL'],
             'File create outside' => [
                 "$file::create(\$outside . '/sub/b.txt')",
-                $refused . 'Failed to create directory for: "{outside}/sub/b.txt"',
+                $refused . 'Failed to create directory for: "{outside}/sub/b.txt" ('
+                    . '"mkdir(): open_basedir restriction in effect. '
+                    . 'File({outside}/sub) is not within the allowed path(s): ({allowed}:{root})")',
             ],
             'File copy to outside' => [
                 "(new $file(\$allowed . '/a.txt'))->copy(\$outside . '/sub/b.txt')",
-                $refused . 'Failed to create directory for: "{outside}/sub/b.txt"',
+                $refused . 'Failed to create directory for: "{outside}/sub/b.txt" ('
+                    . '"mkdir(): open_basedir restriction in effect. '
+                    . 'File({outside}/sub) is not within the allowed path(s): ({allowed}:{root})")',
             ],
             'File move to outside' => [
                 "(new $file(\$allowed . '/a.txt'))->move(\$outside . '/sub/b.txt')",
-                $refused . 'Failed to create directory for: "{outside}/sub/b.txt"',
+                $refused . 'Failed to create directory for: "{outside}/sub/b.txt" ('
+                    . '"mkdir(): open_basedir restriction in effect. '
+                    . 'File({outside}/sub) is not within the allowed path(s): ({allowed}:{root})")',
             ],
             'File write outside' => [
                 "(new $file(\$outside . '/b.txt'))->write('x')",
@@ -90,11 +97,38 @@ final class OpenBasedirTest extends TestCase
             ],
             'Directory ensure outside' => [
                 "$directory::ensure(\$outside . '/sub')",
-                $refused . 'Failed to create directory: "{outside}/sub"',
+                $refused . 'Failed to create directory: "{outside}/sub" ('
+                    . '"mkdir(): open_basedir restriction in effect. '
+                    . 'File({outside}/sub) is not within the allowed path(s): ({allowed}:{root})")',
             ],
             'Directory create outside' => [
                 "(new $directory(\$outside . '/sub'))->create()",
-                $refused . 'Failed to create directory: "{outside}/sub"',
+                $refused . 'Failed to create directory: "{outside}/sub" ('
+                    . '"mkdir(): open_basedir restriction in effect. '
+                    . 'File({outside}/sub) is not within the allowed path(s): ({allowed}:{root})")',
+            ],
+            'File delete outside' => [
+                "(new $file(\$outside . '/x'))->delete()",
+                $refused . 'Failed to delete: "{outside}/x" ('
+                    . '"is_link(): open_basedir restriction in effect. '
+                    . 'File({outside}/x) is not within the allowed path(s): ({allowed}:{root})")',
+            ],
+            'Directory delete outside' => [
+                "(new $directory(\$outside))->delete()",
+                $refused . 'Failed to delete: "{outside}" ('
+                    . '"is_link(): open_basedir restriction in effect. '
+                    . 'File({outside}) is not within the allowed path(s): ({allowed}:{root})")',
+            ],
+            'File delete of an absent path inside' => ["(new $file(\$allowed . '/x'))->delete()", 'NULL'],
+            'Directory delete of an absent path inside' => ["(new $directory(\$allowed . '/x'))->delete()", 'NULL'],
+            'File delete under a regular file inside' => ["(new $file(\$allowed . '/a.txt/x'))->delete()", 'NULL'],
+            'Directory delete under a regular file inside' => [
+                "(new $directory(\$allowed . '/a.txt/x'))->delete()",
+                'NULL',
+            ],
+            'File delete of a name holding the restriction phrase' => [
+                "(new $file(\$allowed . '/open_basedir restriction in effect. x'))->delete()",
+                'NULL',
             ],
             'Directory files outside' => [
                 "(new $directory(\$outside))->files()",
@@ -111,21 +145,131 @@ final class OpenBasedirTest extends TestCase
 
         self::assertSame('', $errors);
         self::assertSame(
-            strtr($expected, ['{allowed}' => $this->allowed, '{outside}' => $this->outside, '{root}' => $root]),
+            self::withTheReasonCutAsTheExceptionCutsIt(
+                strtr($expected, ['{allowed}' => $this->allowed, '{outside}' => $this->outside, '{root}' => $root]),
+            ),
+            $output,
+        );
+    }
+
+    private static function withTheReasonCutAsTheExceptionCutsIt(string $expected): string
+    {
+        $shape = '/^(' . preg_quote(FileSystemException::class, '/') . '): Failed to (.+?): "(.+?)" \("(.*)"\)$/s';
+        if (preg_match($shape, $expected, $parts) !== 1) {
+            return $expected;
+        }
+
+        return $parts[1] . ': ' . FileSystemException::operationFailed($parts[2], $parts[3], reason: $parts[4])
+            ->getMessage();
+    }
+
+    public function testARecursiveDeleteMeetingALinkOutsideOpenBasedirThrowsAFileSystemExceptionWithoutAWarning(): void
+    {
+        mkdir($this->allowed . '/tree');
+        symlink($this->outside, $this->allowed . '/tree/link');
+        $directory = '\Zephyrus\FileSystem\Directory';
+
+        [$output, $errors] = $this->runChild("(new $directory(\$allowed . '/tree'))->delete(true)");
+
+        @unlink($this->allowed . '/tree/link');
+        @rmdir($this->allowed . '/tree');
+        self::assertSame('', $errors);
+        self::assertSame(
+            'Zephyrus\FileSystem\FileSystemException: Failed to delete: "' . $this->allowed . '/tree"',
             $output,
         );
     }
 
     /**
+     * @return array<string, array{string}>
+     */
+    public static function absentPathsToDelete(): array
+    {
+        $file = '\Zephyrus\FileSystem\File';
+        $directory = '\Zephyrus\FileSystem\Directory';
+
+        return [
+            'a file' => ["(new $file(\$allowed . '/absent'))->delete()"],
+            'a directory' => ["(new $directory(\$allowed . '/absent'))->delete()"],
+            'a file named after the restriction phrase' => [
+                "(new $file(\$allowed . '/open_basedir restriction in effect. x'))->delete()",
+            ],
+        ];
+    }
+
+    #[DataProvider('absentPathsToDelete')]
+    public function testDeletingAnAbsentPathWithoutOpenBasedirIsSilentToAnErrorHandlerThatIgnoresTheSilenceOperator(
+        string $delete,
+    ): void {
+        $code = "(function () use (\$allowed): array { set_error_handler(static function (int \$n, string \$m): never {"
+            . " throw new \ErrorException(\$m, 0, \$n); }); \$r = $delete; restore_error_handler();"
+            . " return [\$r, error_get_last()]; })()";
+
+        [$output, $errors] = $this->runChild($code, restricted: false);
+
+        self::assertSame('', $errors);
+        self::assertSame("array (\n  0 => NULL,\n  1 => NULL,\n)", $output);
+    }
+
+    public function testAnErrorHandlerThatIgnoresTheSilenceOperatorSeesNothingWhenTheRestrictionIsProbed(): void
+    {
+        $code = "(function () use (\$allowed): array { set_error_handler(static function (int \$n, string \$m): never {"
+            . " throw new \ErrorException(\$m, 0, \$n); });"
+            . " \Zephyrus\FileSystem\FileSystemException::assertNotRestricted('delete', \$allowed);"
+            . " restore_error_handler(); return [error_get_last()]; })()";
+
+        [$output, $errors] = $this->runChild($code);
+
+        self::assertSame('', $errors);
+        self::assertSame("array (\n  0 => NULL,\n)", $output);
+    }
+
+    public function testADeleteOutsideOpenBasedirIsRefusedWhenPhpWritesItsErrorsAsHtmlWithAManualLink(): void
+    {
+        $file = '\Zephyrus\FileSystem\File';
+
+        [$output, $errors] = $this->runChild(
+            "(new $file(\$outside . '/x'))->delete()",
+            ini: ['html_errors' => '1', 'docref_root' => 'http://php.net/'],
+        );
+
+        self::assertSame('', $errors);
+        self::assertSame(
+            self::withTheReasonCutAsTheExceptionCutsIt(
+                FileSystemException::class . ': Failed to delete: "' . $this->outside . '/x" ("is_link(): '
+                . 'open_basedir restriction in effect. File(' . $this->outside . '/x) is not within the allowed '
+                . 'path(s): (' . $this->allowed . ':' . dirname(__DIR__, 3) . ')")',
+            ),
+            $output,
+        );
+    }
+
+    /**
+     * @param array<string, string> $ini
+     * @return list<string>
+     */
+    private static function iniArguments(array $ini): array
+    {
+        $arguments = [];
+        foreach ($ini as $key => $value) {
+            array_push($arguments, '-d', $key . '=' . $value);
+        }
+
+        return $arguments;
+    }
+
+    /**
+     * @param array<string, string> $ini
      * @return array{string, string} the child's standard output and standard error
      */
-    private function runChild(string $code): array
+    private function runChild(string $code, bool $restricted = true, array $ini = []): array
     {
         $root = dirname(__DIR__, 3);
         $process = proc_open(
             [
                 PHP_BINARY,
-                '-d', 'open_basedir=' . $this->allowed . ':' . $root,
+                '-d', 'open_basedir=' . ($restricted ? $this->allowed . ':' . $root : ''),
+                ...self::iniArguments($ini),
                 '-d', 'error_reporting=-1', '-d', 'display_errors=stderr', '-d', 'log_errors=0',
                 '-r', self::SCRIPT, '--', $root, $this->allowed, $this->outside, $code,
             ],

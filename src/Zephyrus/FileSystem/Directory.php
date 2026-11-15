@@ -28,8 +28,15 @@ final class Directory extends FileSystemNode
         self::assertLocalPath($path);
 
         if (!@is_dir($path)) {
-            if (!@mkdir($path, $permissions, true) && !@is_dir($path)) {
-                throw FileSystemException::operationFailed('create directory', $path);
+            error_clear_last();
+            $created = @mkdir($path, $permissions, true);
+            $reason = FileSystemException::lastError();
+            if (!$created && !@is_dir($path)) {
+                throw FileSystemException::operationFailed(
+                    'create directory',
+                    $path,
+                    reason: $reason,
+                );
             }
         }
 
@@ -124,8 +131,15 @@ final class Directory extends FileSystemNode
             return;
         }
 
-        if (!@mkdir($this->path, $permissions, true) && !@is_dir($this->path)) {
-            throw FileSystemException::operationFailed('create directory', $this->path);
+        error_clear_last();
+        $created = @mkdir($this->path, $permissions, true);
+        $reason = FileSystemException::lastError();
+        if (!$created && !@is_dir($this->path)) {
+            throw FileSystemException::operationFailed(
+                'create directory',
+                $this->path,
+                reason: $reason,
+            );
         }
     }
 
@@ -153,6 +167,7 @@ final class Directory extends FileSystemNode
         }
 
         if (!$this->exists()) {
+            FileSystemException::assertNotRestricted('delete', $this->path);
             return;
         }
 
@@ -210,6 +225,18 @@ final class Directory extends FileSystemNode
      * @throws FileSystemException naming the first entry that could not be removed.
      */
     private function deleteRecursive(string $dir): void
+    {
+        set_error_handler(static fn (): bool => true);
+        try {
+            $this->removeTree($dir);
+        } catch (\RuntimeException $e) {
+            throw FileSystemException::operationFailed('delete', $dir, $e);
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    private function removeTree(string $dir): void
     {
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),

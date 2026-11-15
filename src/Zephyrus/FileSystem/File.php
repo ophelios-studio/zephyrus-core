@@ -57,8 +57,15 @@ final class File extends FileSystemNode
         self::assertPlainFilePath($path);
         $dir = dirname($path);
         if (!@is_dir($dir)) {
-            if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
-                throw FileSystemException::operationFailed('create directory for', $path);
+            error_clear_last();
+            $created = @mkdir($dir, 0755, true);
+            $reason = FileSystemException::lastError();
+            if (!$created && !@is_dir($dir)) {
+                throw FileSystemException::operationFailed(
+                    'create directory for',
+                    $path,
+                    reason: $reason,
+                );
             }
         }
 
@@ -203,8 +210,15 @@ final class File extends FileSystemNode
 
             $dir = dirname($destination);
             if (!@is_dir($dir)) {
-                if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
-                    throw FileSystemException::operationFailed('create directory for', $destination);
+                error_clear_last();
+                $created = @mkdir($dir, 0755, true);
+                $reason = FileSystemException::lastError();
+                if (!$created && !@is_dir($dir)) {
+                    throw FileSystemException::operationFailed(
+                        'create directory for',
+                        $destination,
+                        reason: $reason,
+                    );
                 }
             }
 
@@ -245,14 +259,26 @@ final class File extends FileSystemNode
 
         $dir = dirname($destination);
         if (!@is_dir($dir)) {
-            if (!@mkdir($dir, 0755, true) && !@is_dir($dir)) {
-                throw FileSystemException::operationFailed('create directory for', $destination);
+            error_clear_last();
+            $created = @mkdir($dir, 0755, true);
+            $reason = FileSystemException::lastError();
+            if (!$created && !@is_dir($dir)) {
+                throw FileSystemException::operationFailed(
+                    'create directory for',
+                    $destination,
+                    reason: $reason,
+                );
             }
         }
 
         error_clear_last();
         if (!@rename($this->path, $destination)) {
-            throw FileSystemException::transferFailed('move', $this->path, $destination, self::lastError());
+            throw FileSystemException::transferFailed(
+                'move',
+                $this->path,
+                $destination,
+                FileSystemException::lastError(),
+            );
         }
 
         return new self($destination);
@@ -267,6 +293,7 @@ final class File extends FileSystemNode
     {
         self::assertLocalPath($this->path);
         if (!$this->exists()) {
+            FileSystemException::assertNotRestricted('delete', $this->path);
             return;
         }
 
@@ -343,33 +370,6 @@ final class File extends FileSystemNode
     }
 
     /**
-     * The function and the reason of the error raised since the last error_clear_last(), as
-     * `rename(): No such file or directory`, without the call's arguments that PHP may print in front of
-     * the reason. A message of another shape gives no reason (null), so the arguments never leak. Call
-     * error_clear_last() right before the silenced call whose failure is being explained.
-     */
-    private static function lastError(): ?string
-    {
-        $message = error_get_last()['message'] ?? null;
-        if ($message === null) {
-            return null;
-        }
-
-        $prefix = '^([A-Za-z_][A-Za-z0-9_]*)\(.*\)(?: \[<a href=\'.*\'>[^<]*<\/a>\])?: ';
-        $reasons = [
-            '(open_basedir restriction in effect\. .*File\(.*\) is not within the allowed path\(s\): \(.*\))$',
-            '(.*)$',
-        ];
-        foreach ($reasons as $reason) {
-            if (preg_match('/' . $prefix . $reason . '/s', $message, $parts) === 1) {
-                return $parts[1] . '(): ' . $parts[2];
-            }
-        }
-
-        return null;
-    }
-
-    /**
      * Replace the content of `$path` without following a symbolic link at it.
      *
      * @param \Closure(resource): bool $write Writes the new content into an empty file.
@@ -400,7 +400,7 @@ final class File extends FileSystemNode
             }
             error_clear_last();
             if (!ftruncate($handle, 0) || !$write($handle)) {
-                throw $failure(self::lastError());
+                throw $failure(FileSystemException::lastError());
             }
         } finally {
             fclose($handle);
@@ -438,7 +438,7 @@ final class File extends FileSystemNode
 
         try {
             if (!self::appendUnderLock($handle, $content)) {
-                throw $failure(self::lastError());
+                throw $failure(FileSystemException::lastError());
             }
         } finally {
             fclose($handle);
@@ -519,7 +519,7 @@ final class File extends FileSystemNode
             if ($handle !== false) {
                 break;
             }
-            $reason = self::lastError();
+            $reason = FileSystemException::lastError();
             clearstatcache(true, $path);
             $now = @lstat($path);
             if ($attempt === 2 || ($now !== false && self::isSameFile($named, $now))) {
@@ -606,7 +606,7 @@ final class File extends FileSystemNode
         error_clear_last();
         $temporary = @tempnam($directory, self::TEMPORARY_PREFIX);
         if ($temporary === false) {
-            throw $failure(self::lastError());
+            throw $failure(FileSystemException::lastError());
         }
 
         $temporaryLeft = true;
@@ -618,7 +618,7 @@ final class File extends FileSystemNode
             error_clear_last();
             $handle = @fopen($temporary, 'r+');
             if ($handle === false) {
-                throw $failure(self::lastError());
+                throw $failure(FileSystemException::lastError());
             }
             try {
                 if (!self::namesHandle($temporary, $handle)) {
@@ -628,7 +628,7 @@ final class File extends FileSystemNode
                     throw FileSystemException::operationFailed('set permissions on', $path);
                 }
                 if (!$write($handle)) {
-                    throw $failure(self::lastError());
+                    throw $failure(FileSystemException::lastError());
                 }
             } finally {
                 fclose($handle);
@@ -639,7 +639,7 @@ final class File extends FileSystemNode
             }
             error_clear_last();
             if (!@rename($temporary, $path)) {
-                throw $failure(self::lastError());
+                throw $failure(FileSystemException::lastError());
             }
             $temporaryLeft = false;
 
