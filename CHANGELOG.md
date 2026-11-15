@@ -49,6 +49,7 @@ changes are listed first, each with the change to make in your code.
 - `File::append()` never follows a symbolic link at the path. A new file is written as a temporary file, then hard linked to the path, which fails on a link planted there; it is renamed into place instead on a thread-safe PHP build (whose `link()` follows a link at its new path) and on a filesystem without hard links. An existing file is appended to through the same checks as `write()`, under an exclusive `flock()`, so concurrent `append()` calls never overwrite each other, except two that create the file at the same instant where it is renamed into place; they can overwrite and lose lines of a writer that does not take that lock (`file_put_contents()` with `FILE_APPEND`, `error_log()`, a default Monolog `StreamHandler`). The lock is awaited without limit, so a process that can open the file can hold `append()` back.
 - An existing file in a sticky directory such as `/tmp` that another user owns is no longer written in place: opening it that way escaped the Linux `fs.protected_regular` rule, which only guards an open that may create the file.
 - A PHP configuration file is loaded from its resolved path, so a directory on the `include_path` no longer replaces a relative path checked from the current directory.
+- `Response::withCookie()` hides the cookie value from the argument list of a stack trace (`#[\SensitiveParameter]`): a value is often a remember-me or session token.
 
 ### Added
 
@@ -56,6 +57,7 @@ changes are listed first, each with the change to make in your code.
 - `database.persistent` (default `false`) reuses the PostgreSQL connection across requests of one process. When a connection is taken from the pool, `fromConfig()` sends `ROLLBACK` if a transaction is open, then `DISCARD ALL`, then drops the notifications the client had already received. A connection whose reset fails is terminated and replaced once; a second failure throws `DatabaseException`.
 - The pool is per process (`zephyrus:<pid>`), and a persistent handle still held in the process is never handed out again: for the same DSN and user, a second `fromConfig()` opens a non-persistent connection instead.
 - `DebugIntegration::installSecretMasking(?string $sessionName = null)` installs the masking of secrets in `dump()`, the debug bar and the Bluescreen without enabling Tracy or installing its handlers, as a test or a controlled `dump()` needs; `initialize()` calls it.
+- Zephyrus is tested on PHP 8.6: the CI matrix runs PHP 8.4, 8.5 and 8.6.
 
 ### Changed
 
@@ -85,6 +87,7 @@ changes are listed first, each with the change to make in your code.
 - `cache:warm` of a `router:` section that is read from a `config.yml` outside the project root ends its refusal with `Note that router: is cached only from config.yml at the application root, and its paths were resolved against <directory>.`
 - `ApplicationBuilder::withConfigurationFile()`, `withConfigurationFiles()`, `withOptionalConfigurationFiles()`, `fromConfigurationFiles()`, `fromOptionalConfigurationFiles()` and the `buildFrom...Files()` entries take the real path of the directory of the file (of the first file that exists for several files, each path trimmed as the loader does) as the application root, like `fromConfigurationFile()`: a `router:` section now builds, and a relative `localization.locale_path` is resolved against that directory instead of the current directory. When no file exists, the root stays unset.
 - `Response::withCookie()` replaces an earlier `Set-Cookie` line of the same name, domain and path whatever the case and spacing of its attributes (`path=/`, `PATH=/`, `;Path=/`), as browsers read them, where only the exact `; Path=` and `; Domain=` spelling was recognised and the response sent both lines. A name spaced from its `=` and an empty `Domain=` are read as browsers read them (RFC 6265, 5.2), and a line marked `Partitioned` is kept, since browsers store a partitioned cookie apart from the one `withCookie()` sets.
+- Dumping an `ArrayIterator` with the debugger no longer calls `ArrayIterator::getFlags()` and `setFlags()`, which PHP 8.6 deprecates; the dump reads the same on PHP 8.4 and 8.6.
 
 ## [0.16.0] - 2026-11-13
 
