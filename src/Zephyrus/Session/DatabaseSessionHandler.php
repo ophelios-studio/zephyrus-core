@@ -80,12 +80,11 @@ final class DatabaseSessionHandler implements
      */
     public const ADVISORY_LOCK_NAMESPACE = 0x5A455048;
 
-    /** Ids of the shape create_sid() returns, from the lowest digit to the highest, that idPattern must accept. */
-    private const ISSUED_ID_SAMPLES = [
-        '00000000000000000000000000000000',
-        'ffffffffffffffffffffffffffffffff',
-        '0123456789abcdef0123456789abcdef',
-    ];
+    /** Hexadecimal digits create_sid() draws from; each one repeated 32 times is a sample id. */
+    private const ISSUED_ID_DIGITS = '0123456789abcdef';
+
+    /** A sample id mixing digits and letters, which the single-digit samples do not cover. */
+    private const MIXED_ISSUED_ID_SAMPLE = '0123456789abcdef0123456789abcdef';
 
     /**
      * Seconds a blocked read() waits for a contended session lock before going on without it.
@@ -153,8 +152,8 @@ final class DatabaseSessionHandler implements
      *   transaction or statement pooling: the lock would stay on a server connection after the request and fill the
      *   shared lock table until PostgreSQL runs out of shared memory.
      *
-     * @throws SessionException when $idPattern is not a valid regular expression or refuses one of the sample ids of
-     *   the shape create_sid() returns.
+     * @throws SessionException when $idPattern is not a valid regular expression, cannot be matched, or refuses one of
+     *   the sample ids of the shape create_sid() returns.
      */
     public function __construct(
         private readonly Database|Closure $database,
@@ -172,37 +171,49 @@ final class DatabaseSessionHandler implements
     }
 
     /**
-     * @throws SessionException when the idPattern is not a valid regular expression or refuses one of the sample ids of
-     *   the shape create_sid() returns.
+     * @throws SessionException when the idPattern is not a valid regular expression, cannot be matched, or refuses
+     *   one of the sample ids of the shape create_sid() returns.
      */
     private function checkIdPattern(): void
     {
-        foreach (self::ISSUED_ID_SAMPLES as $issued) {
-            error_clear_last();
-            $matched = @preg_match($this->idPattern, $issued);
+        $warning = null;
+        set_error_handler(static function (int $severity, string $message) use (&$warning): bool {
+            $prefix = 'preg_match(): ';
+            $warning = str_starts_with($message, $prefix) ? substr($message, strlen($prefix)) : $message;
 
-            if ($matched === false) {
-                throw SessionException::invalidIdPattern($this->idPattern, self::regexFailureReason());
-            }
+            return true;
+        });
 
-            if ($matched === 0) {
-                throw SessionException::idPatternRefusesIssuedIds($this->idPattern);
+        try {
+            foreach (self::issuedIdSamples() as $sample) {
+                $matched = preg_match($this->idPattern, $sample);
+
+                if ($matched === false) {
+                    throw $warning !== null
+                        ? SessionException::invalidIdPattern($this->idPattern, $warning)
+                        : SessionException::idPatternMatchFailed($this->idPattern, preg_last_error_msg());
+                }
+
+                if ($matched === 0) {
+                    throw SessionException::idPatternRefusesIssuedIds($this->idPattern);
+                }
             }
+        } finally {
+            restore_error_handler();
         }
     }
 
-    /** PHP's reason for the preg_match() call that just failed, without the function name it starts with. */
-    private static function regexFailureReason(): string
+    /**
+     * @return list<string>
+     */
+    private static function issuedIdSamples(): array
     {
-        $warning = error_get_last()['message'] ?? null;
+        $samples = array_map(
+            static fn (string $digit): string => str_repeat($digit, 32),
+            str_split(self::ISSUED_ID_DIGITS),
+        );
 
-        if ($warning === null) {
-            return preg_last_error_msg();
-        }
-
-        $prefix = 'preg_match(): ';
-
-        return str_starts_with($warning, $prefix) ? substr($warning, strlen($prefix)) : $warning;
+        return [...$samples, self::MIXED_ISSUED_ID_SAMPLE];
     }
 
     /**

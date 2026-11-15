@@ -94,6 +94,17 @@ final class SessionException extends ZephyrusException
         ));
     }
 
+    public static function idPatternMatchFailed(string $pattern, string $reason): self
+    {
+        return new self(sprintf(
+            'The idPattern %s could not be matched against a session id: %s. '
+            . 'Simplify the pattern (avoid nested quantifiers), or raise the PCRE limit it exhausted '
+            . '(pcre.backtrack_limit or pcre.recursion_limit).',
+            MessageValue::quote($pattern),
+            MessageValue::escapeControls($reason),
+        ));
+    }
+
     public static function databaseUnavailable(string $table, \Throwable $previous): self
     {
         return new self(

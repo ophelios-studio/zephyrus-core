@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Session;
 
+use ErrorException;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
@@ -421,6 +422,21 @@ final class DatabaseSessionHandlerTest extends TestCase
         }
     }
 
+    public function testAnIdPatternThatRefusesAMixedIssuedIdIsRefusedAtConstruction(): void
+    {
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', '/\A(?!.*ab)[0-9a-f]{32}\z/');
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'DatabaseSessionHandler issues session ids of 32 lowercase hexadecimal characters, and the idPattern '
+                . '"/\\\\A(?!.*ab)[0-9a-f]{32}\\\\z/" refuses them, so no new session could be stored. Pass a pattern '
+                . 'that also accepts them.',
+                $refusal->getMessage(),
+            );
+        }
+    }
+
     /**
      * @return iterable<string, array{string}> A pattern that refuses exactly one of the sample ids.
      */
@@ -477,9 +493,8 @@ final class DatabaseSessionHandlerTest extends TestCase
         }
     }
 
-    public function testAnInvalidIdPatternNeverReportsAnEarlierErrorAsItsReason(): void
+    public function testAnInvalidIdPatternKeepsPhpsReasonUnderAnErrorHandlerThatReturnsTrue(): void
     {
-        @trigger_error('an earlier error', E_USER_WARNING);
         set_error_handler(static fn (): bool => true);
 
         try {
@@ -487,11 +502,94 @@ final class DatabaseSessionHandlerTest extends TestCase
             self::fail('expected a refusal');
         } catch (SessionException $refusal) {
             self::assertSame(
-                'The idPattern "/unclosed" is not a valid regular expression: Internal error.',
+                'The idPattern "/unclosed" is not a valid regular expression: No ending delimiter \'/\' found.',
                 $refusal->getMessage(),
             );
         } finally {
             restore_error_handler();
+        }
+    }
+
+    public function testAnInvalidIdPatternIsRefusedWithASessionExceptionUnderAnErrorHandlerThatThrows(): void
+    {
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
+            throw new ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', '/unclosed');
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'The idPattern "/unclosed" is not a valid regular expression: No ending delimiter \'/\' found.',
+                $refusal->getMessage(),
+            );
+        } finally {
+            restore_error_handler();
+        }
+    }
+
+    public function testNoPhpWarningEscapesTheIdPatternCheck(): void
+    {
+        $received = [];
+        error_clear_last();
+        set_error_handler(static function (int $severity, string $message) use (&$received): bool {
+            $received[] = $message;
+
+            return true;
+        });
+
+        try {
+            try {
+                new DatabaseSessionHandler($this->database, 'session', 'session_id', '/unclosed');
+            } catch (SessionException) {
+            }
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertNull(error_get_last());
+        self::assertSame([], $received);
+    }
+
+    public function testAnIdPatternThatFailsAtRunTimeIsNotReportedAsInvalid(): void
+    {
+        $jit = ini_get('pcre.jit');
+        $limit = ini_get('pcre.backtrack_limit');
+        ini_set('pcre.jit', '0');
+        ini_set('pcre.backtrack_limit', '1');
+        @trigger_error('an earlier error', E_USER_WARNING);
+
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', '/\A(?:[0-9a-f]+)+\z/');
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'The idPattern "/\\\\A(?:[0-9a-f]+)+\\\\z/" could not be matched against a session id: '
+                . 'Backtrack limit exhausted. Simplify the pattern (avoid nested quantifiers), or raise the PCRE '
+                . 'limit it exhausted (pcre.backtrack_limit or pcre.recursion_limit).',
+                $refusal->getMessage(),
+            );
+        } finally {
+            ini_set('pcre.jit', (string) $jit);
+            ini_set('pcre.backtrack_limit', (string) $limit);
+        }
+    }
+
+    public function testAnIdPatternThatRefusesOneDigitAtOnePositionIsRefusedAtConstruction(): void
+    {
+        $pattern = '/\A[0-46-9a-f][0-9a-f]{31}\z/';
+
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', $pattern);
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'DatabaseSessionHandler issues session ids of 32 lowercase hexadecimal characters, and the idPattern "'
+                . '/\\\\A[0-46-9a-f][0-9a-f]{31}\\\\z/" refuses them, so no new session could be stored. Pass a pattern that also '
+                . 'accepts them.',
+                $refusal->getMessage(),
+            );
         }
     }
 
