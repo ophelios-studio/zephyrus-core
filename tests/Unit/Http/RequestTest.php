@@ -100,6 +100,13 @@ final class RequestTest extends TestCase
         self::assertSame('ftp://h/x', (new Request('GET', new Uri('ftp://h/x')))->uri()->full());
     }
 
+    public function testAQueryStringIsCutAtANulByteBeforeItIsParsed(): void
+    {
+        $request = new Request('GET', "http://h:99999/p?a=b\0c");
+
+        self::assertSame('b', $request->query('a'));
+    }
+
     public function testAttributeHelpersAreImmutable(): void
     {
         $request = Request::fromArray('GET', '/users', attributes: ['tenant' => 'acme']);

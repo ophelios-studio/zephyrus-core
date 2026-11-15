@@ -533,7 +533,7 @@ final readonly class Request
      */
     private static function parseQueryString(string $queryString): array
     {
-        parse_str($queryString, $query);
+        parse_str(explode("\0", $queryString, 2)[0], $query);
 
         return $query;
     }
