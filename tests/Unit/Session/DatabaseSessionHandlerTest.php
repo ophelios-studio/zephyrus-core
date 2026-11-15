@@ -6,8 +6,12 @@ namespace Zephyrus\Tests\Unit\Session;
 
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+use Tracy\Debugger;
+use Tracy\Dumper;
+use Zephyrus\Core\DebugIntegration;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Session\DatabaseSessionHandler;
@@ -284,6 +288,102 @@ final class DatabaseSessionHandlerTest extends TestCase
             $this->database->count('SELECT COUNT(*) FROM session', []),
             'no row may ever be stored under a malformed id',
         );
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> The callback, and the frame whose arguments hold the id.
+     */
+    public static function callbacksTakingTheId(): iterable
+    {
+        yield 'read' => ['read', 'DatabaseSessionHandler::read'];
+        yield 'read inside a transaction' => ['read inside a transaction', 'Database::transaction'];
+        yield 'write' => ['write', 'DatabaseSessionHandler::writeRow'];
+        yield 'updateTimestamp' => ['updateTimestamp', 'DatabaseSessionHandler::writeRow'];
+        yield 'destroy' => ['destroy', 'DatabaseSessionHandler::destroy'];
+        yield 'validateId' => ['validateId', 'DatabaseSessionHandler::validateId'];
+        yield 'read with an unavailable database' => ['read with an unavailable database', 'DatabaseSessionHandler::acquireLock'];
+    }
+
+    /** A debug page renders the arguments of every frame and the variables a closure captures. */
+    #[DataProvider('callbacksTakingTheId')]
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testAFailedCallbackKeepsTheSessionIdAndPayloadOffTheDebugPage(string $callback, string $frame): void
+    {
+        ini_set('zend.exception_ignore_args', '0');
+        DebugIntegration::installSecretMasking();
+        [$id, $secret, $payload] = $this->resumedSessionWithASecret($this->database, $this->handler);
+        $this->database->pdo()->exec('DROP TABLE session');
+        if ($callback === 'read inside a transaction') {
+            $this->database->pdo()->beginTransaction();
+        }
+        $handler = $callback === 'read with an unavailable database'
+            ? new DatabaseSessionHandler(static fn () => throw new \RuntimeException('down'), 'session')
+            : $this->handler;
+
+        try {
+            match ($callback) {
+                'read', 'read inside a transaction', 'read with an unavailable database' => $handler->read($id),
+                'write' => $handler->write($id, $payload),
+                'updateTimestamp' => $handler->updateTimestamp($id, $payload),
+                'destroy' => $handler->destroy($id),
+                'validateId' => $handler->validateId($id),
+            };
+            self::fail('expected the callback to fail');
+        } catch (DatabaseException|SessionException $failure) {
+            $page = self::debugPage($failure);
+        }
+
+        [$class, $method] = explode('::', $frame);
+        $renderedFrame = '/\b' . $class . '::(<[^>]+>)*' . $method . '\b/';
+        self::assertMatchesRegularExpression($renderedFrame, $page, 'Control: the frame is rendered.');
+        self::assertStringNotContainsString($id, $page);
+        self::assertStringNotContainsString($secret, $page);
+    }
+
+    public function testADumpOfTheHandlerShowsNoSessionIdOrPayload(): void
+    {
+        [, $handler, $database] = $this->recordingHandler();
+        [$id, $secret] = $this->resumedSessionWithASecret($database, $handler);
+
+        $dump = Dumper::toText($handler, [Dumper::DEPTH => 10, Dumper::TRUNCATE => PHP_INT_MAX]);
+
+        self::assertStringNotContainsString($id, $dump);
+        self::assertStringNotContainsString($secret, $dump);
+    }
+
+    /**
+     * Store a session whose payload holds a fresh secret and resume it, so the handler holds its id and payload.
+     *
+     * @return array{string, string, string} The id, the secret and the payload.
+     */
+    private function resumedSessionWithASecret(Database $database, DatabaseSessionHandler $handler): array
+    {
+        $id = $handler->create_sid();
+        $secret = bin2hex(random_bytes(8));
+        $payload = 'csrf_token|s:16:"' . $secret . '";';
+        $database->execute(
+            'INSERT INTO session (session_id, access, expire, data) VALUES (?, ?, ?, ?)',
+            [$id, time(), time() + 1440, $payload],
+        );
+        $handler->read($id);
+
+        return [$id, $secret, $payload];
+    }
+
+    private static function debugPage(\Throwable $failure): string
+    {
+        $file = sys_get_temp_dir() . '/zephyrus-bluescreen-' . bin2hex(random_bytes(8)) . '.html';
+
+        try {
+            Debugger::getBlueScreen()->renderToFile($failure, $file);
+
+            return (string) file_get_contents($file);
+        } finally {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
     }
 
     public function testDestroyToleratesAMalformedIdWithoutBreakingLogout(): void

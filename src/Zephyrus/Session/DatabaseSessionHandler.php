@@ -6,6 +6,7 @@ namespace Zephyrus\Session;
 
 use Closure;
 use PDO;
+use SensitiveParameterValue;
 use Throwable;
 use Zephyrus\Data\Database;
 use Zephyrus\Data\DatabaseException;
@@ -108,21 +109,19 @@ final class DatabaseSessionHandler implements
     private const STATE_READ_FAILED = 'read_failed';
 
     /**
-     * What this request knows about each session id it has handled. An absent id was never read.
+     * What this request knows about each session id it has handled, read through idStates(). An absent id was never
+     * read.
      *
-     * @var array<string, self::STATE_*>
+     * This property, $storedData and $lockedId hold session ids and payloads, so each is wrapped to keep them out of
+     * a dump of the handler.
      */
-    private array $idStates = [];
+    private SensitiveParameterValue $idStates;
 
-    /**
-     * The data column of each resumed id, as read() found it or write() last stored it.
-     *
-     * @var array<string, string>
-     */
-    private array $storedData = [];
+    /** The data column of each resumed id, as read() found it or write() last stored it, read through storedData(). */
+    private SensitiveParameterValue $storedData;
 
-    /** The id whose advisory lock this handler currently holds, if any. */
-    private ?string $lockedId = null;
+    /** The id whose advisory lock this handler currently holds, if any, read through lockedId(). */
+    private ?SensitiveParameterValue $lockedId = null;
 
     /** Whether read() takes the advisory lock. Turned off for the request once an unlock misses. */
     private bool $locking;
@@ -153,6 +152,8 @@ final class DatabaseSessionHandler implements
         private readonly string $idPattern = self::DEFAULT_ID_PATTERN,
         bool $lockSessions = true,
     ) {
+        $this->idStates = new SensitiveParameterValue([]);
+        $this->storedData = new SensitiveParameterValue([]);
         $this->locking = $lockSessions;
         self::forceStrictMode();
     }
@@ -237,7 +238,7 @@ final class DatabaseSessionHandler implements
      *
      * @throws SessionException when the database could not be resolved.
      */
-    public function validateId(string $id): bool
+    public function validateId(#[\SensitiveParameter] string $id): bool
     {
         if (!$this->isValidId($id)) {
             return false;
@@ -259,16 +260,19 @@ final class DatabaseSessionHandler implements
      * @throws SessionException when the database could not be resolved.
      * @throws DatabaseException when the statement fails.
      */
-    public function updateTimestamp(string $id, string $data): bool
+    public function updateTimestamp(#[\SensitiveParameter] string $id, #[\SensitiveParameter] string $data): bool
     {
-        return $this->writeRow($id, $data === '', function () use ($id): int {
+        // Captured wrapped: a debug page renders the variables a closure captures.
+        $maskedId = new SensitiveParameterValue($id);
+
+        return $this->writeRow($id, $data === '', function () use ($maskedId): int {
             $access = time();
 
             return $this->database()->execute(
                 "UPDATE {$this->table}
                     SET access = ?, expire = ?
                   WHERE {$this->idColumn} = ?",
-                [$access, $access + $this->maxLifetime(), $id],
+                [$access, $access + $this->maxLifetime(), $maskedId->getValue()],
             );
         });
     }
@@ -282,7 +286,7 @@ final class DatabaseSessionHandler implements
      *   other than text.
      * @throws DatabaseException when the SELECT fails.
      */
-    public function read(string $id): string
+    public function read(#[\SensitiveParameter] string $id): string
     {
         if (!$this->isValidId($id)) {
             return '';
@@ -290,9 +294,10 @@ final class DatabaseSessionHandler implements
 
         $this->acquireLock($id);
 
+        $maskedId = new SensitiveParameterValue($id);
         $select = fn (): ?\stdClass => $this->database()->selectOne(
             "SELECT data FROM {$this->table} WHERE {$this->idColumn} = ? AND " . self::LIVE_ROW,
-            [$id, ...$this->liveParameters()],
+            [$maskedId->getValue(), ...$this->liveParameters()],
         );
 
         try {
@@ -301,7 +306,7 @@ final class DatabaseSessionHandler implements
             $stored = $row === null ? null : $this->storedText($row->data);
         } catch (Throwable $failure) {
             // PHP does not call close() when read() throws out of session_start().
-            $this->idStates[$id] = self::STATE_READ_FAILED;
+            $this->setIdState($id, self::STATE_READ_FAILED);
             $this->releaseLock();
 
             throw $failure;
@@ -310,22 +315,54 @@ final class DatabaseSessionHandler implements
         if ($stored === null) {
             // The lock is not kept for a new session, so requests admitted before a logout
             // may race to recreate this id.
-            $this->idStates[$id] = self::STATE_CREATED;
+            $this->setIdState($id, self::STATE_CREATED);
             $this->releaseLock();
 
             return '';
         }
 
-        $this->idStates[$id] = self::STATE_RESUMED;
-        $this->storedData[$id] = $stored;
+        $this->setIdState($id, self::STATE_RESUMED);
+        $this->setStoredData($id, $stored);
 
         return self::decodePayload($stored);
+    }
+
+    /** @return array<string, self::STATE_*> */
+    private function idStates(): array
+    {
+        return $this->idStates->getValue();
+    }
+
+    /** @param self::STATE_* $state */
+    private function setIdState(#[\SensitiveParameter] string $id, string $state): void
+    {
+        $states = $this->idStates();
+        $states[$id] = $state;
+        $this->idStates = new SensitiveParameterValue($states);
+    }
+
+    /** @return array<string, string> */
+    private function storedData(): array
+    {
+        return $this->storedData->getValue();
+    }
+
+    private function setStoredData(#[\SensitiveParameter] string $id, #[\SensitiveParameter] string $data): void
+    {
+        $stored = $this->storedData();
+        $stored[$id] = $data;
+        $this->storedData = new SensitiveParameterValue($stored);
+    }
+
+    private function lockedId(): ?string
+    {
+        return $this->lockedId?->getValue();
     }
 
     /**
      * Whether an id has the shape of a session id. Checked on every entry point, because the id is a primary key.
      */
-    private function isValidId(string $id): bool
+    private function isValidId(#[\SensitiveParameter] string $id): bool
     {
         return preg_match($this->idPattern, $id) === 1;
     }
@@ -345,25 +382,30 @@ final class DatabaseSessionHandler implements
      * @throws SessionException when the database could not be resolved.
      * @throws DatabaseException when the statement fails.
      */
-    public function write(string $id, string $data): bool
+    public function write(#[\SensitiveParameter] string $id, #[\SensitiveParameter] string $data): bool
     {
-        return $this->writeRow($id, $data === '', function (bool $resumed) use ($id, $data): int {
-            $stored = self::encodePayload($data);
+        $maskedId = new SensitiveParameterValue($id);
+        $maskedData = new SensitiveParameterValue($data);
+
+        return $this->writeRow($id, $data === '', function (bool $resumed) use ($maskedId, $maskedData): int {
+            $id = $maskedId->getValue();
+            $stored = self::encodePayload($maskedData->getValue());
             $access = time();
             $expire = $access + $this->maxLifetime();
 
             if ($resumed) {
+                $previous = $this->storedData()[$id];
                 // Only a row written before payload encoding can hold a raw NUL, which cannot be bound.
-                $unbindable = str_contains($this->storedData[$id], "\0");
+                $unbindable = str_contains($previous, "\0");
                 $updated = $this->database()->execute(
                     "UPDATE {$this->table}
                         SET access = ?, expire = ?, data = ?
                       WHERE {$this->idColumn} = ?" . ($unbindable ? '' : ' AND data = ?'),
-                    [$access, $expire, $stored, $id, ...($unbindable ? [] : [$this->storedData[$id]])],
+                    [$access, $expire, $stored, $id, ...($unbindable ? [] : [$previous])],
                 );
 
                 if ($updated > 0) {
-                    $this->storedData[$id] = $stored;
+                    $this->setStoredData($id, $stored);
                 } else {
                     error_log('Zephyrus: session write refused, the session changed or was deleted since this request read it');
                 }
@@ -424,7 +466,7 @@ final class DatabaseSessionHandler implements
      * @param bool $nothingToStore A created session is not stored and the call succeeds without a statement.
      * @param callable(bool): int $statement Told whether read() resumed a stored session; returns the rows it touched.
      */
-    private function writeRow(string $id, bool $nothingToStore, callable $statement): bool
+    private function writeRow(#[\SensitiveParameter] string $id, bool $nothingToStore, callable $statement): bool
     {
         if (!$this->isValidId($id)) {
             return false;
@@ -434,7 +476,7 @@ final class DatabaseSessionHandler implements
             throw $this->unavailable;
         }
 
-        $state = $this->idStates[$id] ?? null;
+        $state = $this->idStates()[$id] ?? null;
 
         try {
             return match ($state) {
@@ -467,7 +509,7 @@ final class DatabaseSessionHandler implements
      * @throws SessionException when the database could not be resolved.
      * @throws DatabaseException when the statement fails.
      */
-    public function destroy(string $id): bool
+    public function destroy(#[\SensitiveParameter] string $id): bool
     {
         if (!$this->isValidId($id)) {
             // An invalid id cannot have been stored, so the session is already destroyed.
@@ -479,9 +521,9 @@ final class DatabaseSessionHandler implements
                 "DELETE FROM {$this->table} WHERE {$this->idColumn} = ?",
                 [$id],
             );
-            $this->idStates[$id] = self::STATE_DESTROYED;
+            $this->setIdState($id, self::STATE_DESTROYED);
         } finally {
-            if ($id === $this->lockedId) {
+            if ($id === $this->lockedId()) {
                 $this->releaseLock();
             }
         }
@@ -527,9 +569,9 @@ final class DatabaseSessionHandler implements
      * transactions, which a SELECT ... FOR UPDATE held across the request would not. Taken in read() because
      * open() is not told the id. Best-effort (see bestEffort() and waitForLock()); other drivers take no lock.
      */
-    private function acquireLock(string $id): void
+    private function acquireLock(#[\SensitiveParameter] string $id): void
     {
-        if (!$this->locking || $this->lockedId === $id || !$this->supportsAdvisoryLocks()) {
+        if (!$this->locking || $this->lockedId() === $id || !$this->supportsAdvisoryLocks()) {
             return;
         }
 
@@ -547,7 +589,7 @@ final class DatabaseSessionHandler implements
         );
 
         if ($granted === true || ($granted === false && $this->waitForLock($key))) {
-            $this->lockedId = $id;
+            $this->lockedId = new SensitiveParameterValue($id);
         }
     }
 
@@ -599,11 +641,13 @@ final class DatabaseSessionHandler implements
 
     private function releaseLock(): void
     {
-        if ($this->lockedId === null) {
+        $lockedId = $this->lockedId();
+
+        if ($lockedId === null) {
             return;
         }
 
-        $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($this->lockedId)];
+        $key = [self::ADVISORY_LOCK_NAMESPACE, self::advisoryLockKey($lockedId)];
         $released = $this->bestEffort(
             fn (): bool => $this->database()->selectBool('SELECT pg_advisory_unlock(?, ?)', $key),
         );
@@ -656,7 +700,7 @@ final class DatabaseSessionHandler implements
      *
      * A crc32 collision serializes two unrelated sessions for one short wait, which is an acceptable cost.
      */
-    private static function advisoryLockKey(string $id): int
+    private static function advisoryLockKey(#[\SensitiveParameter] string $id): int
     {
         $hash = crc32($id);
 
