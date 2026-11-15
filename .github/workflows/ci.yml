@@ -17,7 +17,7 @@ concurrency:
 jobs:
   tests:
     runs-on: ubuntu-24.04
-    name: PHP ${{ matrix.php }} (${{ matrix.deps }})
+    name: PHP ${{ matrix.php }}${{ matrix.zts && ' ZTS' || '' }} (${{ matrix.deps }})
 
     env:
       ZEPHYRUS_TEST_PGSQL_DSN: pgsql:host=127.0.0.1;port=5432;dbname=postgres;user=postgres;password=postgres
@@ -52,6 +52,11 @@ jobs:
             deps: locked
             coverage: false
             checks: false
+          - php: '8.6'
+            zts: true
+            deps: locked
+            coverage: false
+            checks: false
           - php: '8.4'
             deps: lowest
             coverage: false
@@ -68,6 +73,8 @@ jobs:
           extensions: mbstring, pdo, pdo_sqlite, pdo_pgsql, intl, sodium, fileinfo, apcu
           ini-values: apc.enable_cli=1
           coverage: ${{ matrix.coverage && 'xdebug' || 'none' }}
+        env:
+          phpts: ${{ matrix.zts && 'ts' || 'nts' }}
 
       - name: Validate composer.json
         if: matrix.checks
