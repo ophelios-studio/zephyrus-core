@@ -248,7 +248,8 @@ final readonly class Response
      *
      * Secure, HttpOnly, SameSite=Lax and the path "/" unless told otherwise; Secure is on even where the session
      * setting is "auto", so pass $secure = false explicitly for plain-HTTP development. The value is percent-encoded as
-     * setcookie() does. A null $maxAge makes a browser-session cookie; 0 expires the cookie.
+     * setcookie() does, and the value is hidden from a stack trace's arguments. A null $maxAge makes a browser-session
+     * cookie; 0 expires the cookie.
      *
      * @throws InvalidArgumentException When $name is not a token, or $maxAge, $path, $domain or $sameSite is invalid.
      * @throws InvalidArgumentException When browsers would discard the cookie: SameSite=None, or a __Secure- or
@@ -256,7 +257,7 @@ final readonly class Response
      */
     public function withCookie(
         string $name,
-        string $value,
+        #[\SensitiveParameter] string $value,
         ?int $maxAge = null,
         string $path = '/',
         ?string $domain = null,

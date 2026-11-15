@@ -416,6 +416,23 @@ final class ResponseTest extends TestCase
     // withCookie()
     // -------------------------------------------------------------------------
 
+    public function testTheCookieValueIsHiddenFromTheTraceOfARefusedCookie(): void
+    {
+        $value = 'remember-me-token-4f9c';
+        $ignoreArgs = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            Response::noContent()->withCookie('theme', $value, path: 'no-slash');
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $exception) {
+            $frame = array_find($exception->getTrace(), static fn (array $f): bool => ($f['function'] ?? '') === 'withCookie');
+            self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][1] ?? null);
+            self::assertNotContains($value, $frame['args']);
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $ignoreArgs);
+        }
+    }
+
     public function testWithCookieIsSecureHttpOnlyLaxAndSiteWideByDefault(): void
     {
         $response = Response::noContent()->withCookie('theme', 'dark');
