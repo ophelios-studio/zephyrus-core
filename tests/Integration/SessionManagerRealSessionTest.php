@@ -110,8 +110,9 @@ final class SessionManagerRealSessionTest extends TestCase
     {
         \Zephyrus\Core\App::setDebug(true);
 
+        $handler = $this->strictModeBlindHandler();
         $session = new SessionManager();
-        $session->setHandler($this->strictModeBlindHandler());
+        $session->setHandler($handler);
 
         $warnings = [];
         set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
@@ -126,9 +127,35 @@ final class SessionManagerRealSessionTest extends TestCase
             restore_error_handler();
         }
 
-        self::assertCount(1, $warnings);
-        self::assertStringContainsString('SessionUpdateTimestampHandlerInterface', $warnings[0]);
-        self::assertStringContainsString('ADOPT a client-supplied session id', $warnings[0]);
+        self::assertSame([
+            'Session save handler ' . $handler::class . ' has no validateId() method, so PHP skips its '
+            . 'session.use_strict_mode check and will ADOPT a client-supplied session id. Implement validateId() '
+            . 'to reject an id that does not already exist.',
+        ], $warnings);
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartDoesNotWarnForAHandlerWithAPlainValidateIdMethod(): void
+    {
+        \Zephyrus\Core\App::setDebug(true);
+
+        $session = new SessionManager();
+        $session->setHandler(new PlainValidateIdHandler());
+
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            $session->start(SessionConfig::fromArray([]));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings);
     }
 
     #[RunInSeparateProcess]
@@ -671,6 +698,19 @@ final class StrictModeAwareHandler implements
     public function create_sid(): string { return bin2hex(random_bytes(16)); }
     public function validateId(string $id): bool { return false; }
     public function updateTimestamp(string $id, string $data): bool { return true; }
+}
+
+/** Supplies validateId() without SessionUpdateTimestampHandlerInterface, which PHP honours just the same. */
+final class PlainValidateIdHandler implements \SessionHandlerInterface, \SessionIdInterface
+{
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false { return ''; }
+    public function write(string $id, string $data): bool { return true; }
+    public function destroy(string $id): bool { return true; }
+    public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
+    public function validateId(string $id): bool { return false; }
 }
 
 /** Records destroy() calls and succeeds, to prove a session was never destroyed. */

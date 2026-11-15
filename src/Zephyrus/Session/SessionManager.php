@@ -89,9 +89,8 @@ final class SessionManager
      *
      * Forces session.use_strict_mode on, because PHP otherwise adopts any id the client sends. This only
      * removes one step of session fixation: rotate the id on each privilege change with regenerate().
-     * The flag is inert unless the save handler implements SessionUpdateTimestampHandlerInterface (validateId()),
-     * and a configured idleTimeout is enforced on read only by DatabaseSessionHandler. In debug mode, start()
-     * warns about either gap.
+     * The flag is inert unless the save handler has a validateId() method, and a configured idleTimeout is
+     * enforced on read only by DatabaseSessionHandler. In debug mode, start() warns about either gap.
      *
      * @throws SessionException when output has already been sent or PHP refuses to start the session.
      */
@@ -190,7 +189,8 @@ final class SessionManager
     /** Warn, in debug only, when the registered save handler cannot honour the strict-mode flag. */
     private function warnIfHandlerCannotHonourStrictMode(): void
     {
-        if ($this->handler === null || $this->handler instanceof \SessionUpdateTimestampHandlerInterface) {
+        // PHP calls a validateId() method whether or not the handler declares an interface for it.
+        if ($this->handler === null || method_exists($this->handler, 'validateId')) {
             return;
         }
 
@@ -200,7 +200,7 @@ final class SessionManager
 
         trigger_error(
             sprintf(
-                'Session save handler %s does not implement SessionUpdateTimestampHandlerInterface, so PHP '
+                'Session save handler %s has no validateId() method, so PHP '
                 . 'skips its session.use_strict_mode check and will ADOPT a client-supplied session id. '
                 . 'Implement validateId() to reject an id that does not already exist.',
                 $this->handler::class,
