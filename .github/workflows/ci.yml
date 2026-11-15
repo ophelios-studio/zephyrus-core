@@ -48,6 +48,10 @@ jobs:
             deps: locked
             coverage: false
             checks: false
+          - php: '8.6'
+            deps: locked
+            coverage: false
+            checks: false
           - php: '8.4'
             deps: lowest
             coverage: false
