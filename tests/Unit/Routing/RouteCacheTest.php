@@ -22,7 +22,7 @@ final class RouteCacheTest extends TestCase
 {
     use CapturedErrorLog;
 
-    private const string NAMESPACE = 'Zephyrus\Tests\Fixtures\ConditionalControllers';
+    private const string CONTROLLER_NAMESPACE = 'Zephyrus\Tests\Fixtures\ConditionalControllers';
     private const array MIDDLEWARE_GROUPS = ['web' => ['session', 'csrf']];
     private const array VARIABLES = ['MODE', 'FLAG', 'APP_ENV', 'TENANT_APP'];
 
@@ -44,7 +44,7 @@ final class RouteCacheTest extends TestCase
         $this->root = new CacheDirectory();
         $this->root->file('config.yml', sprintf(
             "router:\n  controllers:\n    %s: %s\n  middleware_groups:\n    web: [session, csrf]\n",
-            self::NAMESPACE,
+            self::CONTROLLER_NAMESPACE,
             self::directory(),
         ));
         $this->captureErrorLog();
@@ -203,13 +203,13 @@ final class RouteCacheTest extends TestCase
                 $written,
             ),
             'a handler outside router.controllers' => str_replace(
-                "'" . substr(var_export(self::NAMESPACE, true), 1, -1),
+                "'" . substr(var_export(self::CONTROLLER_NAMESPACE, true), 1, -1),
                 "'Elsewhere",
                 $written,
             ),
             'a handler in a sibling namespace whose name extends router.controllers' => str_replace(
-                "'" . substr(var_export(self::NAMESPACE . '\\', true), 1, -1),
-                "'" . substr(var_export(self::NAMESPACE . 'X\\', true), 1, -1),
+                "'" . substr(var_export(self::CONTROLLER_NAMESPACE . '\\', true), 1, -1),
+                "'" . substr(var_export(self::CONTROLLER_NAMESPACE . 'X\\', true), 1, -1),
                 $written,
             ),
         });
@@ -654,7 +654,7 @@ final class RouteCacheTest extends TestCase
     private function routerConfig(): RouterConfig
     {
         return RouterConfig::fromArray([
-            'controllers' => [self::NAMESPACE => self::directory()],
+            'controllers' => [self::CONTROLLER_NAMESPACE => self::directory()],
             'middleware_groups' => self::MIDDLEWARE_GROUPS,
         ]);
     }
@@ -700,7 +700,7 @@ final class RouteCacheTest extends TestCase
             $router = $router->middlewareGroup($name, $middlewares);
         }
 
-        return $router->discoverControllers(self::NAMESPACE, self::directory());
+        return $router->discoverControllers(self::CONTROLLER_NAMESPACE, self::directory());
     }
 
     /**
