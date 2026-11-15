@@ -9,13 +9,14 @@ use ArrayObject;
 use Closure;
 use InvalidArgumentException;
 use PHPMailer\PHPMailer\PHPMailer;
+use ReflectionClass;
 use ReflectionFunction;
 use ReflectionMethod;
+use ReflectionProperty;
 use SensitiveParameterValue;
 use Tracy\Debugger;
 use Tracy\Dumper;
 use Tracy\Dumper\Describer;
-use Tracy\Dumper\Exposer;
 use Tracy\Dumper\Value;
 use Tracy\Logger;
 use Zephyrus\Core\Config\ConfigSection;
@@ -54,6 +55,9 @@ final class DebugIntegration
 
     /** Why the last initialize() left debug on but the client unadmitted; null otherwise. */
     private static ?string $refusalHint = null;
+
+    /** @var array<class-string, array<string, array{string, class-string, int}>> Cache of declaredProperties(). */
+    private static array $declaredProperties = [];
 
     /** Exact key names masked on dump(), the debug bar and the Bluescreen. dump() has no default list of its own. */
     public const array SENSITIVE_KEYS = [
@@ -513,15 +517,39 @@ final class DebugIntegration
     }
 
     /**
+     * List the properties as Tracy's Exposer::exposeObject() does, minus its (array) cast, which returns the storage
+     * of an ArrayIterator or ArrayObject without STD_PROP_LIST; then the storage and the count.
+     *
      * @param ArrayIterator<array-key, mixed>|ArrayObject<array-key, mixed> $container
      * @param class-string $storageClass
      */
     private static function exposeArrayContainer(ArrayIterator|ArrayObject $container, string $storageClass, Value $value, Describer $describer): void
     {
-        $flags = self::invokeSplMethod($container, $storageClass, 'getFlags');
-        self::invokeSplMethod($container, $storageClass, 'setFlags', ArrayObject::STD_PROP_LIST);
-        Exposer::exposeObject($container, $value, $describer);
-        self::invokeSplMethod($container, $storageClass, 'setFlags', $flags);
+        $values = get_mangled_object_vars($container);
+        $declared = self::declaredProperties($container::class);
+
+        foreach (array_diff_key($values, $declared) as $key => $property) {
+            $reference = $describer->getReferenceId($values, $key);
+            $describer->addPropertyTo($value, (string) $key, $property, Value::PropertyDynamic, $reference);
+        }
+
+        foreach ($declared as $key => [$name, $class, $visibility]) {
+            if (array_key_exists($key, $values)) {
+                $describer->addPropertyTo(
+                    $value,
+                    $name,
+                    $values[$key],
+                    $visibility,
+                    $describer->getReferenceId($values, $key),
+                    $class,
+                    $describer->describeEnumProperty($class, $name, $values[$key]),
+                );
+            } else {
+                $virtual = (new ReflectionProperty($class, $name))->isVirtual();
+                $state = new Value(Value::TypeText, $virtual ? '{virtual}' : 'unset');
+                $describer->addPropertyTo($value, $name, null, $visibility, null, $class, $state);
+            }
+        }
 
         // Index 1 is the storage: the wrapped object, the array, or null when the object wraps itself.
         $storage = self::invokeSplMethod($container, $storageClass, '__serialize')[1];
@@ -535,9 +563,45 @@ final class DebugIntegration
      * @param ArrayIterator<array-key, mixed>|ArrayObject<array-key, mixed> $container
      * @param class-string $storageClass
      */
-    private static function invokeSplMethod(ArrayIterator|ArrayObject $container, string $storageClass, string $method, mixed ...$arguments): mixed
+    private static function invokeSplMethod(ArrayIterator|ArrayObject $container, string $storageClass, string $method): mixed
     {
-        return (new ReflectionMethod($storageClass, $method))->invoke($container, ...$arguments);
+        return (new ReflectionMethod($storageClass, $method))->invoke($container);
+    }
+
+    /**
+     * The non-static properties of a class and its parents, keyed as get_mangled_object_vars() keys them, in the
+     * order Tracy lists them: the class's own first.
+     *
+     * @param class-string $class
+     * @return array<string, array{string, class-string, int}> The name, the declaring class and the visibility.
+     */
+    private static function declaredProperties(string $class): array
+    {
+        if (isset(self::$declaredProperties[$class])) {
+            return self::$declaredProperties[$class];
+        }
+
+        $reflection = new ReflectionClass($class);
+        $parent = $reflection->getParentClass();
+        $inherited = $parent === false ? [] : self::declaredProperties($parent->getName());
+        $own = [];
+        foreach ($reflection->getProperties() as $property) {
+            $name = $property->getName();
+            if ($property->isStatic() || $property->getDeclaringClass()->getName() !== $class) {
+                continue;
+            }
+
+            if ($property->isPrivate()) {
+                $own["\0" . $class . "\0" . $name] = [$name, $class, Value::PropertyPrivate];
+            } elseif ($property->isProtected()) {
+                $own["\0*\0" . $name] = [$name, $class, Value::PropertyProtected];
+            } else {
+                $own[$name] = [$name, $class, Value::PropertyPublic];
+                unset($inherited["\0*\0" . $name]);
+            }
+        }
+
+        return self::$declaredProperties[$class] = $own + $inherited;
     }
 
     /**

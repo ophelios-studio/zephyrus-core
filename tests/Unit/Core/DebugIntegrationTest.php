@@ -543,6 +543,120 @@ final class DebugIntegrationTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
+    public function testDumpingAnArrayIteratorRaisesNoDeprecationAndShowsItsPropertiesAndStorage(): void
+    {
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+        $raised = [];
+        set_error_handler(static function (int $level, string $message) use (&$raised): bool {
+            $raised[] = $message;
+
+            return true;
+        });
+
+        try {
+            $plain = Dumper::toText(new \ArrayIterator(['a' => 1, 'b' => 2]));
+            $subclass = Dumper::toText(new LabelledArrayIterator(['a' => 1]));
+            $object = Dumper::toText(new \ArrayObject(['a' => 1]));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $raised);
+        self::assertStringStartsWith('ArrayIterator (2)', $plain);
+        self::assertStringContainsString("   storage: array (2)\n   |  'a' => 1\n   |  'b' => 2", $plain);
+        self::assertStringContainsString("   label: 'lbl'\n   limit: 3\n   storage: array (1)", $subclass);
+        self::assertStringStartsWith('ArrayObject (1)', $object);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksAPrivatePropertyOfAnAnonymousArrayIteratorOrArrayObject(): void
+    {
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+        $secret = self::marker('password');
+        $wrappers = [
+            'ArrayIterator' => new class($secret) extends \ArrayIterator {
+                public function __construct(private string $password)
+                {
+                    parent::__construct(['a' => 1]);
+                }
+            },
+            'ArrayObject' => new class($secret) extends \ArrayObject {
+                public function __construct(private string $password)
+                {
+                    parent::__construct(['a' => 1]);
+                }
+            },
+        ];
+
+        foreach ($wrappers as $label => $wrapper) {
+            $text = Dumper::toText($wrapper, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+            self::assertStringContainsString('password: *****', $text, "Control: the dump lists the property of an anonymous $label.");
+            self::assertStringNotContainsString($secret, $text, "The dump rendered a private password of an anonymous $label.");
+            self::assertStringNotContainsString(__FILE__, $text, "The dump rendered the file of an anonymous $label.");
+        }
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpMasksPublicAndProtectedPropertiesTheApplicationListsOnTheParentOfAnArrayIterator(): void
+    {
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+        Debugger::$keysToHide[] = KeyedArrayIterator::class . '::$publicValue';
+        Debugger::$keysToHide[] = KeyedArrayIterator::class . '::$protectedValue';
+        $public = self::marker('public');
+        $protected = self::marker('protected');
+        $user = self::marker('user');
+
+        $text = Dumper::toText(new ChildKeyedArrayIterator($public, $protected, $user), [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        self::assertStringContainsString($user, $text, 'Control: the dump must show an unlisted property.');
+        self::assertStringNotContainsString($public, $text, 'The dump rendered a public property listed on its declaring class.');
+        self::assertStringNotContainsString($protected, $text, 'The dump rendered a protected property listed on its declaring class.');
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpListsATypedPropertyOfAnArrayIteratorNeverInitializedAsUnset(): void
+    {
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+
+        $text = Dumper::toText(new RankedArrayIterator(['a' => 1]));
+
+        self::assertStringContainsString("   limit: unset\n   storage: array (1)", $text);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpListsAPrivatePropertyAnArrayIteratorSubclassRedeclaresBeforeTheParentOne(): void
+    {
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+
+        $text = Dumper::toText(new ReRankedArrayIterator(['a' => 1]));
+
+        self::assertStringContainsString("   rank: 'child'\n   rank: 'parent'\n   limit: unset\n", $text);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDumpListsADynamicPropertyOfAnArrayIteratorWhoseNameHoldsANulByte(): void
+    {
+        DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
+        $iterator = new DynamicArrayIterator(['a' => 1]);
+        $token = 'DYN-' . bin2hex(random_bytes(4));
+        $iterator->token = $token;
+        $iterator->{"pass\0word"} = 'listed';
+
+        $text = Dumper::toText($iterator, [Dumper::KEYS_TO_HIDE => Debugger::$keysToHide]);
+
+        self::assertStringContainsString('token: *****', $text, 'The dump must mask a dynamic property named like a sensitive key.');
+        self::assertStringNotContainsString($token, $text, 'The dump rendered the value of a dynamic property named like a sensitive key.');
+        self::assertStringContainsString("   'pass\\x00word': 'listed'\n   storage: array (1)", $text);
+    }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
     public function testDumpMasksThePrivateAndProtectedPropertiesOfAnObjectInAnArrayIterator(): void
     {
         DebugIntegration::initialize(debug: true, serverApi: 'cli-server');
@@ -1290,6 +1404,40 @@ final class ApiVault
         private string $signingValue,
     ) {
     }
+}
+
+final class LabelledArrayIterator extends \ArrayIterator
+{
+    public string $label = 'lbl';
+    protected int $limit = 3;
+}
+
+class KeyedArrayIterator extends \ArrayIterator
+{
+    public function __construct(public string $publicValue, protected string $protectedValue, public string $username)
+    {
+        parent::__construct([]);
+    }
+}
+
+final class ChildKeyedArrayIterator extends KeyedArrayIterator
+{
+}
+
+class RankedArrayIterator extends \ArrayIterator
+{
+    private string $rank = 'parent';
+    public int $limit;
+}
+
+final class ReRankedArrayIterator extends RankedArrayIterator
+{
+    private string $rank = 'child';
+}
+
+#[\AllowDynamicProperties]
+final class DynamicArrayIterator extends \ArrayIterator
+{
 }
 
 final class RefusingArrayIterator extends \ArrayIterator
