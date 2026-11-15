@@ -99,6 +99,15 @@ changes are listed first, each with the change to make in your code.
 - On PHP 8.6, a NUL byte in a configuration file path, a controller directory, or the path given to `Cryptography::hashFile()`, `Router::discoverControllers()`, `File` or `Directory` no longer throws a `ValueError`: the path is not a file, not a directory, does not exist or is not readable, as on PHP 8.4. A `Request` built from a URL that `parse_url()` cannot parse cuts its query string at a NUL byte, as PHP 8.4 did, where PHP 8.6 threw a `ValueError`.
 - A path outside `open_basedir` no longer makes `File`, `Directory` or `SafePath` print PHP's `open_basedir restriction in effect` warning, which names the allowed paths. As before, `exists()`, `isReadable()`, `isWritable()`, `SafePath::isFile()`, `isDirectory()` and `isReadable()` return `false`, `SafePath::within()` returns `null`, the methods that need the path to exist (`read()`, `size()`, `lines()`, `permissions()`, `lastModified()`, `Directory::files()` and the others) throw `FileSystemException` (`Path not found: "<path>"`), `File::create()`, `copy()` and `move()` and `Directory::ensure()` and `create()` throw `FileSystemException` (`Failed to create directory for: "<path>"`, `Failed to create directory: "<path>"`), `Directory::files()` skips a link to a file outside it, and `File::delete()` and `Directory::delete()` return without deleting anything there. An error handler that turned that warning into an exception no longer sees it, so these calls now return or throw `FileSystemException` in that application too. Nothing to change in your code.
 
+### Documentation
+
+Pages of zephyrus.ophelios.com that this version makes stale, each in English and in French (`content/fr/`):
+
+- `getting-started/introduction.md`: Zephyrus is tested on PHP 8.4, 8.5 and 8.6.
+- `fundamentals/routing.md`: on PHP 8.6, dropping the copy a `with*()` method or the router returns raises a warning.
+- `fundamentals/sessions.md`: `DatabaseSessionHandler` generates the session ids itself and checks `idPattern` against them.
+- `digging-deeper/filesystem.md`: the quoted paths in `FileSystemException` messages, the new refusals of `File` and `Directory`, and a path outside `open_basedir`.
+
 ## [0.16.0] - 2026-11-13
 
 ### Breaking changes
