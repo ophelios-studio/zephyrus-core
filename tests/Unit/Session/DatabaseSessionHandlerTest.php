@@ -301,7 +301,10 @@ final class DatabaseSessionHandlerTest extends TestCase
         yield 'updateTimestamp' => ['updateTimestamp', 'DatabaseSessionHandler::writeRow'];
         yield 'destroy' => ['destroy', 'DatabaseSessionHandler::destroy'];
         yield 'validateId' => ['validateId', 'DatabaseSessionHandler::validateId'];
-        yield 'read with an unavailable database' => ['read with an unavailable database', 'DatabaseSessionHandler::acquireLock'];
+        yield 'read with an unavailable database' => [
+            'read with an unavailable database',
+            'DatabaseSessionHandler::acquireLock',
+        ];
     }
 
     /** A debug page renders the arguments of every frame and the variables a closure captures. */
@@ -394,12 +397,102 @@ final class DatabaseSessionHandlerTest extends TestCase
 
     public function testACustomIdPatternCanBeSuppliedForAnApplicationThatGeneratesItsOwn(): void
     {
-        $handler = new DatabaseSessionHandler($this->database, 'session', 'session_id', '/^tenant-[a-z0-9]{8}$/');
+        $pattern = '/\A(?:tenant-[a-z0-9]{8}|[0-9a-f]{32})\z/';
+        $handler = new DatabaseSessionHandler($this->database, 'session', 'session_id', $pattern);
 
         $handler->read('tenant-abcd1234');
         self::assertTrue($handler->write('tenant-abcd1234', 'payload'));
         self::assertSame('payload', $handler->read('tenant-abcd1234'));
-        self::assertFalse($handler->write('43e880c2447ca10d3092d51d258c050c', 'payload'));
+        self::assertFalse($handler->write('k3j5h2l6m8n9p0q1r2s3t4u5v6', 'payload'));
+    }
+
+    public function testAnIdPatternThatRefusesTheIdsTheHandlerIssuesIsRefusedAtConstruction(): void
+    {
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', '/^tenant-[a-z0-9]{8}$/');
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'DatabaseSessionHandler issues session ids of 32 lowercase hexadecimal characters, and the idPattern '
+                . '"/^tenant-[a-z0-9]{8}$/" refuses them, so no new session could be stored. Pass a pattern that '
+                . 'also accepts them.',
+                $refusal->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}> A pattern that refuses exactly one of the sample ids.
+     */
+    public static function idPatternsRefusingOneIssuedSample(): iterable
+    {
+        yield 'refuses ids starting with a digit' => ['/^[a-f][0-9a-f]{31}$/'];
+        yield 'refuses ids starting with a letter' => ['/^[0-9][0-9a-f]{31}$/'];
+        yield 'refuses the digit 9' => ['/^[0-8a-f]{32}$/'];
+        yield 'refuses ids ending with a digit' => ['/^[0-9a-f]{31}[a-f]$/'];
+    }
+
+    #[DataProvider('idPatternsRefusingOneIssuedSample')]
+    public function testAnIdPatternThatRefusesSomeOfTheIdsTheHandlerIssuesIsRefusedAtConstruction(string $pattern): void
+    {
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', $pattern);
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'DatabaseSessionHandler issues session ids of 32 lowercase hexadecimal characters, and the idPattern "'
+                . $pattern . '" refuses them, so no new session could be stored. Pass a pattern that also '
+                . 'accepts them.',
+                $refusal->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> The pattern, and the whole refusal.
+     */
+    public static function invalidIdPatterns(): iterable
+    {
+        yield 'no ending delimiter' => [
+            '/unclosed',
+            'The idPattern "/unclosed" is not a valid regular expression: No ending delimiter \'/\' found.',
+        ];
+        yield 'empty' => ['', 'The idPattern "" is not a valid regular expression: Empty regular expression.'];
+        yield 'a control byte as delimiter' => [
+            "\x01unclosed",
+            'The idPattern "\\u0001unclosed" is not a valid regular expression: No ending delimiter \'\\u0001\' found.',
+        ];
+    }
+
+    #[DataProvider('invalidIdPatterns')]
+    public function testAnIdPatternThatIsNotAValidRegularExpressionIsRefusedAtConstructionWithPhpsReason(
+        string $pattern,
+        string $message,
+    ): void {
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', $pattern);
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame($message, $refusal->getMessage());
+        }
+    }
+
+    public function testAnInvalidIdPatternNeverReportsAnEarlierErrorAsItsReason(): void
+    {
+        @trigger_error('an earlier error', E_USER_WARNING);
+        set_error_handler(static fn (): bool => true);
+
+        try {
+            new DatabaseSessionHandler($this->database, 'session', 'session_id', '/unclosed');
+            self::fail('expected a refusal');
+        } catch (SessionException $refusal) {
+            self::assertSame(
+                'The idPattern "/unclosed" is not a valid regular expression: Internal error.',
+                $refusal->getMessage(),
+            );
+        } finally {
+            restore_error_handler();
+        }
     }
 
     public function testUpdateTimestampRefreshesAccessWithoutAlteringThePayload(): void

@@ -11,8 +11,8 @@ use Zephyrus\Exceptions\ZephyrusException;
 /**
  * Thrown when PHP refuses a session operation or the session storage is misconfigured.
  *
- * The message never includes PHP's warning, which carries absolute server paths; it is chained as the
- * previous ErrorException, available through phpReason() for logging.
+ * The message of a refused operation never includes PHP's warning, which carries absolute server paths; it is
+ * chained as the previous ErrorException, available through phpReason() for logging.
  */
 final class SessionException extends ZephyrusException
 {
@@ -73,6 +73,24 @@ final class SessionException extends ZephyrusException
             . 'Declare it TEXT NOT NULL, as DatabaseSessionHandler documents.',
             $table,
             $type,
+        ));
+    }
+
+    public static function idPatternRefusesIssuedIds(string $pattern): self
+    {
+        return new self(sprintf(
+            'DatabaseSessionHandler issues session ids of 32 lowercase hexadecimal characters, and the idPattern %s '
+            . 'refuses them, so no new session could be stored. Pass a pattern that also accepts them.',
+            MessageValue::quote($pattern),
+        ));
+    }
+
+    public static function invalidIdPattern(string $pattern, string $reason): self
+    {
+        return new self(sprintf(
+            'The idPattern %s is not a valid regular expression: %s.',
+            MessageValue::quote($pattern),
+            MessageValue::escapeControls($reason),
         ));
     }
 

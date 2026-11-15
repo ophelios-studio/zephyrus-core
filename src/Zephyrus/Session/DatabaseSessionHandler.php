@@ -50,8 +50,8 @@ use Zephyrus\Data\DatabaseException;
  * then refuses the id of a session that was never stored, so an anonymous visitor gets a new id and a new
  * Set-Cookie on each request until something is stored.
  *
- * A wrapper must forward open() and close() as well as the data callbacks: close() releases the
- * advisory lock taken by read().
+ * A wrapper must forward open(), close(), create_sid() and validateId() as well as the data callbacks: close()
+ * releases the advisory lock taken by read(), and without validateId() PHP skips the session.use_strict_mode check.
  * Close, regenerate or destroy the session outside a Database transaction on the same connection: a failing
  * session write aborts it and the lock stays held until the connection closes.
  * Behind transaction pooling (PgBouncer pool_mode=transaction), construct the handler with lockSessions: false.
@@ -64,6 +64,7 @@ final class DatabaseSessionHandler implements
     /**
      * Session ids PHP can produce: sid_bits_per_character 4 to 6, sid_length 22 to 256.
      *
+     * Broader than what create_sid() issues, for ids issued before it and for wrappers that let PHP generate them.
      * Anchored with \A and \z: PCRE's `$` also matches before a final newline.
      */
     public const DEFAULT_ID_PATTERN = '/\A[A-Za-z0-9,-]{22,256}\z/';
@@ -78,6 +79,13 @@ final class DatabaseSessionHandler implements
      *    WHERE locktype = 'advisory' AND classid = 1514491976 AND objsubid = 2;
      */
     public const ADVISORY_LOCK_NAMESPACE = 0x5A455048;
+
+    /** Ids of the shape create_sid() returns, from the lowest digit to the highest, that idPattern must accept. */
+    private const ISSUED_ID_SAMPLES = [
+        '00000000000000000000000000000000',
+        'ffffffffffffffffffffffffffffffff',
+        '0123456789abcdef0123456789abcdef',
+    ];
 
     /**
      * Seconds a blocked read() waits for a contended session lock before going on without it.
@@ -137,13 +145,16 @@ final class DatabaseSessionHandler implements
 
     /**
      * @param Database|Closure(): Database $database
-     * @param string $idPattern Accepted session id shape. Override only for ids generated in another format: a
-     *   pattern that refuses the ids create_sid() returns stores no new session.
+     * @param string $idPattern Accepted session id shape. Override only for ids generated in another format; the
+     *   pattern must also accept the ids create_sid() returns.
      * @param bool $lockSessions Serialize the concurrent requests of one session (PostgreSQL only). Without the
      *   lock, of two concurrent requests that change one session, the second write is refused rather than
      *   overwriting the first. Pass false only behind
      *   transaction or statement pooling: the lock would stay on a server connection after the request and fill the
      *   shared lock table until PostgreSQL runs out of shared memory.
+     *
+     * @throws SessionException when $idPattern is not a valid regular expression or refuses one of the sample ids of
+     *   the shape create_sid() returns.
      */
     public function __construct(
         private readonly Database|Closure $database,
@@ -152,10 +163,46 @@ final class DatabaseSessionHandler implements
         private readonly string $idPattern = self::DEFAULT_ID_PATTERN,
         bool $lockSessions = true,
     ) {
+        $this->checkIdPattern();
+
         $this->idStates = new SensitiveParameterValue([]);
         $this->storedData = new SensitiveParameterValue([]);
         $this->locking = $lockSessions;
         self::forceStrictMode();
+    }
+
+    /**
+     * @throws SessionException when the idPattern is not a valid regular expression or refuses one of the sample ids of
+     *   the shape create_sid() returns.
+     */
+    private function checkIdPattern(): void
+    {
+        foreach (self::ISSUED_ID_SAMPLES as $issued) {
+            error_clear_last();
+            $matched = @preg_match($this->idPattern, $issued);
+
+            if ($matched === false) {
+                throw SessionException::invalidIdPattern($this->idPattern, self::regexFailureReason());
+            }
+
+            if ($matched === 0) {
+                throw SessionException::idPatternRefusesIssuedIds($this->idPattern);
+            }
+        }
+    }
+
+    /** PHP's reason for the preg_match() call that just failed, without the function name it starts with. */
+    private static function regexFailureReason(): string
+    {
+        $warning = error_get_last()['message'] ?? null;
+
+        if ($warning === null) {
+            return preg_last_error_msg();
+        }
+
+        $prefix = 'preg_match(): ';
+
+        return str_starts_with($warning, $prefix) ? substr($warning, strlen($prefix)) : $warning;
     }
 
     /**
