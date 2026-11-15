@@ -36,7 +36,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnEmptySecretBecauseItAdmitsEveryClientAtTheAddress(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('@172.17.0.1');
+            $ignored = ApplicationBuilder::create()->withDebugClientAllowlist('@172.17.0.1');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -50,7 +50,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesASecretShorterThanTheFloorBecauseTheCookieIsTheOnlyGuard(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(str_repeat('a', 15) . '@10.0.0.5');
+            $ignored = ApplicationBuilder::create()->withDebugClientAllowlist(str_repeat('a', 15) . '@10.0.0.5');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -64,7 +64,8 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnEmptySecretInASplitStringAtItsPosition(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('first-secret-0000001@1.1.1.1, @172.17.0.1');
+            $ignored = ApplicationBuilder::create()
+                ->withDebugClientAllowlist('first-secret-0000001@1.1.1.1, @172.17.0.1');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -78,7 +79,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnEntryWithNoAddressAfterTheAt(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('long-test-secret-1@');
+            $ignored = ApplicationBuilder::create()->withDebugClientAllowlist('long-test-secret-1@');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame('Debug client allowlist entry 1 has no address after "@".', $e->getMessage());
@@ -88,7 +89,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesARangeBecauseTracyMatchesExactAddresses(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('10.0.0.0/8');
+            $ignored = ApplicationBuilder::create()->withDebugClientAllowlist('10.0.0.0/8');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -101,7 +102,8 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnArrayEntryHoldingWhitespaceOrAComma(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1', '10.0.0.5 ', '10.0.0.6']);
+            $ignored = ApplicationBuilder::create()
+                ->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1', '10.0.0.5 ', '10.0.0.6']);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -114,7 +116,8 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesAnArrayEntryHoldingAComma(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1,second-secret-000002@2.2.2.2']);
+            $ignored = ApplicationBuilder::create()
+                ->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1,second-secret-000002@2.2.2.2']);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(
@@ -127,7 +130,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     public function testRefusesANonStringArrayEntry(): void
     {
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1', 42]);
+            $ignored = ApplicationBuilder::create()->withDebugClientAllowlist(['first-secret-0000001@1.1.1.1', 42]);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame('Debug client allowlist entry 2 is not a string.', $e->getMessage());
@@ -138,7 +141,7 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
     {
         foreach (['topsecretlonger1@', 'topsecretlonger1@10.0.0.0/8', '@topsecret'] as $entry) {
             try {
-                ApplicationBuilder::create()->withDebugClientAllowlist($entry);
+                $ignored = ApplicationBuilder::create()->withDebugClientAllowlist($entry);
                 self::fail('expected a refusal');
             } catch (InvalidArgumentException $e) {
                 self::assertStringNotContainsString('topsecret', $e->getMessage());
@@ -152,7 +155,8 @@ final class ApplicationBuilderDebugAllowlistTest extends TestCase
         ini_set('zend.exception_ignore_args', '0');
 
         try {
-            ApplicationBuilder::create()->withDebugClientAllowlist('goodsecret9longer@172.17.0.1, topsecretlonger1@10.0.0.0/8');
+            $ignored = ApplicationBuilder::create()
+                ->withDebugClientAllowlist('goodsecret9longer@172.17.0.1, topsecretlonger1@10.0.0.0/8');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame(

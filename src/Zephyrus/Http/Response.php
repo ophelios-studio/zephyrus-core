@@ -185,6 +185,7 @@ final readonly class Response
      * @throws InvalidArgumentException When $name is not a valid header name.
      * @throws InvalidArgumentException When $value holds a control character other than HTAB.
      */
+    #[\NoDiscard]
     public function withHeader(string $name, string $value): self
     {
         self::assertValidHeaderName($name);
@@ -210,6 +211,7 @@ final readonly class Response
      * @throws InvalidArgumentException When a value is not a string.
      * @throws InvalidArgumentException When any value holds a control character other than HTAB.
      */
+    #[\NoDiscard]
     public function withHeaders(array $headers): self
     {
         $normalized = $this->headers;
@@ -255,6 +257,7 @@ final readonly class Response
      * @throws InvalidArgumentException When browsers would discard the cookie: SameSite=None, or a __Secure- or
      *     __Host- name, without Secure; a __Host- name with a domain or a path other than "/".
      */
+    #[\NoDiscard]
     public function withCookie(
         string $name,
         #[\SensitiveParameter] string $value,
@@ -488,6 +491,7 @@ final readonly class Response
      * Returns a copy without a header. Removing "Set-Cookie" removes the cookies of withCookie() and the constructor;
      * those PHP queued itself (session_start(), setcookie()) are still sent.
      */
+    #[\NoDiscard]
     public function withoutHeader(string $name): self
     {
         $headers = $this->headers;
@@ -501,6 +505,7 @@ final readonly class Response
         );
     }
 
+    #[\NoDiscard]
     public function withStatus(int $status): self
     {
         return new self(

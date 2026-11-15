@@ -52,6 +52,7 @@ final class MiddlewarePipeline
      *
      * @param array<int, class-string> $classes
      */
+    #[\NoDiscard]
     public function without(array $classes): self
     {
         if ($classes === []) {

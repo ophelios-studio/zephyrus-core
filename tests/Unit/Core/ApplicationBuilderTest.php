@@ -33,7 +33,7 @@ final class ApplicationBuilderTest extends TestCase
     public function testAnUnknownAcknowledgedSecurityKeyIsRefused(string $name, string $expected): void
     {
         try {
-            ApplicationBuilder::create()->withAcknowledgedSecurityKeys(['csrf', $name]);
+            $ignored = ApplicationBuilder::create()->withAcknowledgedSecurityKeys(['csrf', $name]);
 
             self::fail('withAcknowledgedSecurityKeys() accepted an unknown name.');
         } catch (InvalidArgumentException $exception) {
@@ -774,7 +774,8 @@ final class ApplicationBuilderTest extends TestCase
     {
         $this->expectException(ConfigurationException::class);
 
-        ApplicationBuilder::create()->withConfigurationFile('/tmp/does-not-exist-' . bin2hex(random_bytes(8)) . '.php');
+        $ignored = ApplicationBuilder::create()
+            ->withConfigurationFile('/tmp/does-not-exist-' . bin2hex(random_bytes(8)) . '.php');
     }
 
     public function testWithConfigurationFileThrowsWhenFileDoesNotReturnArray(): void
@@ -784,7 +785,7 @@ final class ApplicationBuilderTest extends TestCase
 
         try {
             $this->expectException(ConfigurationException::class);
-            ApplicationBuilder::create()->withConfigurationFile($path);
+            $ignored = ApplicationBuilder::create()->withConfigurationFile($path);
         } finally {
             @unlink($path);
         }

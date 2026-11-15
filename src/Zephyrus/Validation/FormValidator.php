@@ -22,6 +22,7 @@ final class FormValidator
      *
      * @param Rule[] $rules
      */
+    #[\NoDiscard]
     public function withField(string $name, array $rules): self
     {
         $clone = clone $this;
@@ -34,6 +35,7 @@ final class FormValidator
      *
      * @param array<string, Rule[]> $fields
      */
+    #[\NoDiscard]
     public function withFields(array $fields): self
     {
         $clone = clone $this;
@@ -46,6 +48,7 @@ final class FormValidator
     /**
      * Merges the fields of $sub under "$prefix." (immutable): with prefix 'address', a 'city' field becomes 'address.city'.
      */
+    #[\NoDiscard]
     public function withNested(string $prefix, self $sub): self
     {
         $clone = clone $this;

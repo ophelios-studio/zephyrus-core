@@ -130,7 +130,7 @@ final class KernelBuilderTest extends TestCase
         $original = KernelBuilder::create();
 
         $router = (new Router())->get('/ping', 'PingController@index');
-        $original->withRouter($router); // result discarded
+        $modified = $original->withRouter($router);
 
         // Original builder still has no router → any request 404s.
         $kernel = $original->build();

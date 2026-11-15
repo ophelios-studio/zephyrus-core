@@ -129,7 +129,7 @@ final class MiddlewarePipelineTest extends TestCase
     public function testWithoutLeavesTheOriginalPipelineUntouched(): void
     {
         $pipeline = new MiddlewarePipeline([new PipelineStampMiddleware('first'), new PipelineTailMiddleware()]);
-        $pipeline->without([PipelineStampMiddleware::class]);
+        $ignored = $pipeline->without([PipelineStampMiddleware::class]);
 
         $response = $pipeline->handle(
             Request::fromArray('GET', '/'),

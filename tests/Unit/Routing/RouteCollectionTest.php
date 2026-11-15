@@ -186,7 +186,7 @@ final class RouteCollectionTest extends TestCase
         $this->expectException(\LogicException::class);
         $this->expectExceptionMessage('name("orphan") must follow a route: add one before naming it.');
 
-        $collection->withLastRouteName('orphan');
+        $ignored = $collection->withLastRouteName('orphan');
     }
 
     public function testFindByNameReturnsNullWhenNameNotFound(): void

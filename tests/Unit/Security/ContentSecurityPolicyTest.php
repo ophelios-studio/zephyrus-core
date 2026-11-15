@@ -129,14 +129,14 @@ final class ContentSecurityPolicyTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()->withDirective('default src', ["'self'"]);
+        $ignored = ContentSecurityPolicy::create()->withDirective('default src', ["'self'"]);
     }
 
     public function testInvalidDirectiveValueThrows(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()->withDirective('default-src', ["'self'; report-uri /csp"]);
+        $ignored = ContentSecurityPolicy::create()->withDirective('default-src', ["'self'; report-uri /csp"]);
     }
 
     /**
@@ -158,7 +158,7 @@ final class ContentSecurityPolicyTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()
+        $ignored = ContentSecurityPolicy::create()
             ->withDirective('script-src', ["'self'", "https://cdn.tenant.example 'unsafe-inline'"]);
     }
 
@@ -180,14 +180,14 @@ final class ContentSecurityPolicyTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()->withDirective('script-src', "'self'\r\nX-Injected: 1");
+        $ignored = ContentSecurityPolicy::create()->withDirective('script-src', "'self'\r\nX-Injected: 1");
     }
 
     public function testSemicolonIsRejectedOnTheStringPath(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()->withDirective('script-src', "'self' ; object-src 'none'");
+        $ignored = ContentSecurityPolicy::create()->withDirective('script-src', "'self' ; object-src 'none'");
     }
 
     #[DataProvider('controlCharacterValues')]
@@ -195,7 +195,7 @@ final class ContentSecurityPolicyTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()->withDirective('img-src', "https://a.example.com{$value}");
+        $ignored = ContentSecurityPolicy::create()->withDirective('img-src', "https://a.example.com{$value}");
     }
 
     #[DataProvider('controlCharacterValues')]
@@ -203,7 +203,7 @@ final class ContentSecurityPolicyTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ContentSecurityPolicy::create()->withDirective('img-src', ["https://a.example.com{$value}"]);
+        $ignored = ContentSecurityPolicy::create()->withDirective('img-src', ["https://a.example.com{$value}"]);
     }
 
     public function testControlCharacterRefusalNamesTheDirectiveButNotTheValue(): void
@@ -224,7 +224,7 @@ final class ContentSecurityPolicyTest extends TestCase
 
         foreach (['appendValue', 'withDirective'] as $method) {
             try {
-                ContentSecurityPolicy::create()->{$method}('img-src', $value);
+                $ignored = ContentSecurityPolicy::create()->{$method}('img-src', $value);
                 self::fail("A line break given to $method() must be refused.");
             } catch (InvalidArgumentException $exception) {
                 self::assertSame(

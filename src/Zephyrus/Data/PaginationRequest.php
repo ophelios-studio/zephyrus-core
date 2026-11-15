@@ -96,11 +96,13 @@ final class PaginationRequest implements \JsonSerializable
         );
     }
 
+    #[\NoDiscard]
     public function withPage(int $page): self
     {
         return new self(page: $page, perPage: $this->perPage);
     }
 
+    #[\NoDiscard]
     public function withPerPage(int $perPage): self
     {
         return new self(page: $this->page, perPage: $perPage);

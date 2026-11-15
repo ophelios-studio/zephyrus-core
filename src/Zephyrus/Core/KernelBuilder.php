@@ -78,6 +78,7 @@ final class KernelBuilder
      * Sets the router whose registered routes will be used for dispatch.
      * When omitted, an empty router is used (every request will 404).
      */
+    #[\NoDiscard]
     public function withRouter(Router $router): self
     {
         $clone = clone $this;
@@ -97,6 +98,7 @@ final class KernelBuilder
     /**
      * Appends a global middleware. Middlewares run in registration order.
      */
+    #[\NoDiscard]
     public function withMiddleware(MiddlewareInterface $middleware): self
     {
         $clone = clone $this;
@@ -121,6 +123,7 @@ final class KernelBuilder
      * Attaches the EventDispatcher receiving RequestEvent, ExceptionEvent and
      * ResponseEvent. Without one, the kernel fires no events.
      */
+    #[\NoDiscard]
     public function withEventDispatcher(EventDispatcher $dispatcher): self
     {
         $clone = clone $this;
@@ -134,6 +137,7 @@ final class KernelBuilder
      *
      * @param callable(class-string): object $factory
      */
+    #[\NoDiscard]
     public function withControllerFactory(callable $factory): self
     {
         $clone = clone $this;
@@ -147,6 +151,7 @@ final class KernelBuilder
      * through a parent class or another trait. Replaces an engine the factory
      * set, whatever the order of calls with withControllerFactory().
      */
+    #[\NoDiscard]
     public function withRenderEngine(RenderEngine $engine): self
     {
         $clone = clone $this;
@@ -161,6 +166,7 @@ final class KernelBuilder
      * Resolves controllers through ContainerInterface::get(), so auto-wiring and
      * explicit bindings both apply. A singleton binding reuses its controller across requests.
      */
+    #[\NoDiscard]
     public function withContainer(ContainerInterface $container): self
     {
         return $this->withControllerFactory(static fn (string $class): object => $container->get($class));
@@ -175,6 +181,7 @@ final class KernelBuilder
      * @param class-string<Throwable> $exceptionClass
      * @param callable(Throwable, Request): ?Response $handler
      */
+    #[\NoDiscard]
     public function withExceptionHandler(string $exceptionClass, callable $handler): self
     {
         $clone = clone $this;
@@ -190,6 +197,7 @@ final class KernelBuilder
      * With debug on, ApplicationBuilder::build() turns it on in the command line, or when the debugger renders errors
      * to this boot's client. It never turns it off.
      */
+    #[\NoDiscard]
     public function withUnhandledExceptionsRethrown(bool $rethrown = true): self
     {
         $clone = clone $this;

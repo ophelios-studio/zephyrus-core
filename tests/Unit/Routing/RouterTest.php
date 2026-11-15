@@ -180,7 +180,7 @@ final class RouterTest extends TestCase
         $this->expectException(\LogicException::class);
         $this->expectExceptionMessage('withoutMiddleware() must follow a route');
 
-        (new Router())->withoutMiddleware(SessionMiddleware::class);
+        $ignored = (new Router())->withoutMiddleware(SessionMiddleware::class);
     }
 
     public function testWithoutMiddlewareAppliesToTheMostRecentlyRegisteredRouteOnly(): void
@@ -213,14 +213,14 @@ final class RouterTest extends TestCase
         $this->expectException(RouteMiddlewareException::class);
         $this->expectExceptionMessage('security.csrf.exceptions');
 
-        (new Router())->post('/webhook', 'HookController@receive')->withoutMiddleware(CsrfMiddleware::class);
+        $ignored = (new Router())->post('/webhook', 'HookController@receive')->withoutMiddleware(CsrfMiddleware::class);
     }
 
     public function testWithoutMiddlewareRefusesAClassThatIsNotAMiddleware(): void
     {
         $this->expectException(RouteMiddlewareException::class);
 
-        (new Router())->get('/', 'HomeController@index')->withoutMiddleware('session');
+        $ignored = (new Router())->get('/', 'HomeController@index')->withoutMiddleware('session');
     }
 
     public function testGroupExcludedMiddlewaresApplyToEveryRoute(): void

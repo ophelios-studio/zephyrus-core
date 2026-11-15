@@ -46,14 +46,14 @@ final class HttpHardeningTest extends TestCase
     public function testWithHeaderRefusesANameOutsideTheTokenCharset(string $name): void
     {
         $this->expectException(InvalidArgumentException::class);
-        Response::text('body')->withHeader($name, 'v');
+        $ignored = Response::text('body')->withHeader($name, 'v');
     }
 
     #[DataProvider('invalidHeaderNameProvider')]
     public function testWithHeadersRefusesTheSameNames(string $name): void
     {
         $this->expectException(InvalidArgumentException::class);
-        Response::text('body')->withHeaders([$name => 'v']);
+        $ignored = Response::text('body')->withHeaders([$name => 'v']);
     }
 
     public function testOrdinaryHeaderNamesAreUnchanged(): void

@@ -195,6 +195,7 @@ final class ApplicationBuilder
      * declares router:, and every request is otherwise answered with 404. With router: declared, only a router
      * that Router::fromConfiguration() built, or one derived from it, is accepted.
      */
+    #[\NoDiscard]
     public function withRouter(Router $router): self
     {
         $clone = clone $this;
@@ -207,6 +208,7 @@ final class ApplicationBuilder
      * Appends a global middleware, run in registration order. The security middlewares must be mounted here
      * for build() to count them as enforced.
      */
+    #[\NoDiscard]
     public function withMiddleware(MiddlewareInterface $middleware): self
     {
         $clone = clone $this;
@@ -230,6 +232,7 @@ final class ApplicationBuilder
      * Sets the dispatcher that receives the kernel's RequestEvent, ExceptionEvent and ResponseEvent.
      * Without one, no events fire.
      */
+    #[\NoDiscard]
     public function withEventDispatcher(EventDispatcher $dispatcher): self
     {
         $clone = clone $this;
@@ -243,6 +246,7 @@ final class ApplicationBuilder
      *
      * @param callable(class-string): object $factory
      */
+    #[\NoDiscard]
     public function withControllerFactory(callable $factory): self
     {
         $clone = clone $this;
@@ -255,6 +259,7 @@ final class ApplicationBuilder
      * Shares an application-built engine with every controller using RenderResponses, in any order with withControllerFactory().
      * It replaces an engine the factory set.
      */
+    #[\NoDiscard]
     public function withRenderEngine(RenderEngine $engine): self
     {
         $clone = clone $this;
@@ -267,6 +272,7 @@ final class ApplicationBuilder
      * Resolves controllers through the container, so auto-wiring and explicit bindings both work.
      * Shorthand for withControllerFactory(): whichever of the two is called last wins.
      */
+    #[\NoDiscard]
     public function withContainer(ContainerInterface $container): self
     {
         $clone = clone $this;
@@ -287,6 +293,7 @@ final class ApplicationBuilder
      * @param class-string<\Throwable> $exceptionClass
      * @param callable(\Throwable, \Zephyrus\Http\Request): ?\Zephyrus\Http\Response $handler
      */
+    #[\NoDiscard]
     public function withExceptionHandler(string $exceptionClass, callable $handler): self
     {
         $clone = clone $this;
@@ -298,6 +305,7 @@ final class ApplicationBuilder
     /**
      * Sets the translation loader and default locale. The last loader-setting call wins, including withConfiguration().
      */
+    #[\NoDiscard]
     public function withLocaleLoader(LocaleLoaderInterface $loader, string $defaultLocale = 'en'): self
     {
         $clone = clone $this;
@@ -312,6 +320,7 @@ final class ApplicationBuilder
      * throws LocalizationException when its locale is loaded, not here. A missing directory or file
      * gives an empty catalog (keys are returned as is).
      */
+    #[\NoDiscard]
     public function withJsonLocales(string $basePath, string $defaultLocale = 'en'): self
     {
         return $this->withLocaleLoader(new JsonLocaleLoader($basePath), $defaultLocale);
@@ -323,6 +332,7 @@ final class ApplicationBuilder
      *
      * @param string[] $basePaths
      */
+    #[\NoDiscard]
     public function withJsonLocaleLayers(array $basePaths, string $defaultLocale = 'en'): self
     {
         $loaders = array_values(array_map(
@@ -348,6 +358,7 @@ final class ApplicationBuilder
      *
      * @param LocaleLoaderInterface[] $loaders
      */
+    #[\NoDiscard]
     public function withFallbackLoaders(array $loaders, string $defaultLocale = 'en'): self
     {
         return $this->withLocaleLoader(new FallbackLocaleLoader($loaders), $defaultLocale);
@@ -358,6 +369,7 @@ final class ApplicationBuilder
      *
      * @param string[] $locales
      */
+    #[\NoDiscard]
     public function withSupportedLocales(array $locales): self
     {
         $clone = clone $this;
@@ -372,6 +384,7 @@ final class ApplicationBuilder
      * @param LocalizationConfig $config
      * @param string|null        $basePath Prefixed to a relative locale_path when given.
      */
+    #[\NoDiscard]
     public function withLocalizationConfig(LocalizationConfig $config, ?string $basePath = null): self
     {
         $builder = $this;
@@ -410,6 +423,7 @@ final class ApplicationBuilder
      * @param string|null   $basePath      The application root: prefixed to a relative locale_path, and required
      *                                     when build() builds the router of a router: section.
      */
+    #[\NoDiscard]
     public function withConfiguration(
         #[\SensitiveParameter] Configuration $configuration,
         ?string $basePath = null,
@@ -427,6 +441,7 @@ final class ApplicationBuilder
      * @param array<string, mixed> $configuration
      * @throws ConfigurationException when a section value is invalid.
      */
+    #[\NoDiscard]
     public function withConfigurationArray(#[\SensitiveParameter] array $configuration): self
     {
         return $this->withConfiguration(Configuration::fromArray($configuration));
@@ -437,6 +452,7 @@ final class ApplicationBuilder
      *
      * @throws ConfigurationException when the file is missing, unreadable, invalid or holds an invalid value.
      */
+    #[\NoDiscard]
     public function withConfigurationFile(string $path): self
     {
         return $this->withConfiguration(Configuration::fromFile($path), self::rootOfFile($path));
@@ -449,6 +465,7 @@ final class ApplicationBuilder
      * @param string[] $paths
      * @throws ConfigurationException when a path is invalid or a file is missing, unreadable, invalid or holds an invalid value.
      */
+    #[\NoDiscard]
     public function withConfigurationFiles(array $paths): self
     {
         return $this->withConfiguration(Configuration::fromFiles($paths), self::rootOfFirstFile($paths));
@@ -461,6 +478,7 @@ final class ApplicationBuilder
      * @param string[] $paths
      * @throws ConfigurationException when a path is invalid or an existing file is unreadable, invalid or holds an invalid value.
      */
+    #[\NoDiscard]
     public function withOptionalConfigurationFiles(array $paths): self
     {
         return $this->withConfiguration(Configuration::fromOptionalFiles($paths), self::rootOfFirstFile($paths));
@@ -478,6 +496,7 @@ final class ApplicationBuilder
      * @param string[] $keys
      * @throws InvalidArgumentException when a name is not one of the accepted names.
      */
+    #[\NoDiscard]
     public function withAcknowledgedSecurityKeys(array $keys): self
     {
         $names = [];
@@ -562,6 +581,7 @@ final class ApplicationBuilder
      * not a config key: config is what gets flipped on a live tier and forgotten. Acknowledging does not broadcast
      * the debugger: remote clients still see nothing unless they are on withDebugClientAllowlist().
      */
+    #[\NoDiscard]
     public function withProductionDebugAcknowledged(bool $acknowledged = true): self
     {
         $clone = clone $this;
@@ -586,6 +606,7 @@ final class ApplicationBuilder
      *                                   a range in the address, or an array entry that is not a string or holds
      *                                   whitespace or a comma.
      */
+    #[\NoDiscard]
     public function withDebugClientAllowlist(#[\SensitiveParameter] string|array|null $clients): self
     {
         $clone = clone $this;
@@ -633,6 +654,7 @@ final class ApplicationBuilder
      * Turns the security wiring check off entirely. Prefer withAcknowledgedSecurityKeys(), which keeps the check
      * live for every other setting, including ones added to the framework later.
      */
+    #[\NoDiscard]
     public function withoutSecurityWiringCheck(): self
     {
         $clone = clone $this;

@@ -59,6 +59,7 @@ final readonly class ContentSecurityPolicy
     /**
      * @param string|array<int|string, mixed> $values
      */
+    #[\NoDiscard]
     public function withDirective(string $name, string|array $values = []): self
     {
         $normalizedName = self::normalizeDirectiveName($name);
@@ -95,6 +96,7 @@ final readonly class ContentSecurityPolicy
         return $this->appendValue($name, self::formatHashSource($algorithm, $hash));
     }
 
+    #[\NoDiscard]
     public function withoutDirective(string $name): self
     {
         $normalizedName = self::normalizeDirectiveName($name);

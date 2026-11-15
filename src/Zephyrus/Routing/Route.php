@@ -358,6 +358,7 @@ final readonly class Route
         return $this->method === strtoupper($method);
     }
 
+    #[\NoDiscard]
     public function withName(string $name): self
     {
         return new self(
@@ -378,6 +379,7 @@ final readonly class Route
      * @throws RouteMiddlewareException When a class is not a middleware or would skip a framework security
      *                                  middleware.
      */
+    #[\NoDiscard]
     public function withExcludedMiddlewares(array $excludedMiddlewares): self
     {
         return new self(

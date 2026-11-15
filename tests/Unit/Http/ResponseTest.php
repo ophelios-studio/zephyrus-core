@@ -422,7 +422,7 @@ final class ResponseTest extends TestCase
         $ignoreArgs = ini_set('zend.exception_ignore_args', '0');
 
         try {
-            Response::noContent()->withCookie('theme', $value, path: 'no-slash');
+            $ignored = Response::noContent()->withCookie('theme', $value, path: 'no-slash');
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $exception) {
             $frame = array_find($exception->getTrace(), static fn (array $f): bool => ($f['function'] ?? '') === 'withCookie');
@@ -754,7 +754,7 @@ final class ResponseTest extends TestCase
         string $message,
     ): void {
         try {
-            Response::noContent()->withCookie($name, 'v', ...$attributes);
+            $ignored = Response::noContent()->withCookie($name, 'v', ...$attributes);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $exception) {
             self::assertSame($message, $exception->getMessage());
@@ -1160,7 +1160,7 @@ final class ResponseTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        Response::text('ok')->withHeader('X-Test', $value);
+        $ignored = Response::text('ok')->withHeader('X-Test', $value);
     }
 
     #[DataProvider('controlCharacterValues')]
@@ -1168,7 +1168,7 @@ final class ResponseTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        Response::text('ok')->withHeaders(['X-Test' => $value]);
+        $ignored = Response::text('ok')->withHeaders(['X-Test' => $value]);
     }
 
     #[DataProvider('controlCharacterValues')]
@@ -1194,13 +1194,13 @@ final class ResponseTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid value for HTTP header "Retry-After": it must be a string.');
 
-        Response::text('ok')->withHeaders(['Retry-After' => 60]);
+        $ignored = Response::text('ok')->withHeaders(['Retry-After' => 60]);
     }
 
     public function testWithHeadersRefusesAnInvalidNameBeforeLookingAtItsValue(): void
     {
         try {
-            Response::text('ok')->withHeaders(["X\r\nY" => 1]);
+            $ignored = Response::text('ok')->withHeaders(["X\r\nY" => 1]);
             self::fail('A header name with a CRLF must be refused.');
         } catch (InvalidArgumentException $exception) {
             self::assertSame(
@@ -1213,7 +1213,7 @@ final class ResponseTest extends TestCase
     public function testWithHeadersNamesAListPassedByMistake(): void
     {
         try {
-            Response::text('ok')->withHeaders(['Cache-Control: no-store']);
+            $ignored = Response::text('ok')->withHeaders(['Cache-Control: no-store']);
             self::fail('A list must be refused.');
         } catch (InvalidArgumentException $exception) {
             self::assertSame(
@@ -1226,7 +1226,7 @@ final class ResponseTest extends TestCase
     public function testWithHeadersNamesANumericKeyThatPhpTurnedIntoAnInteger(): void
     {
         try {
-            Response::text('ok')->withHeaders(['123' => 'x']);
+            $ignored = Response::text('ok')->withHeaders(['123' => 'x']);
             self::fail('An integer key must be refused.');
         } catch (InvalidArgumentException $exception) {
             self::assertSame(
@@ -1239,7 +1239,7 @@ final class ResponseTest extends TestCase
     public function testControlCharacterRefusalNamesTheHeaderButNotTheValue(): void
     {
         try {
-            Response::text('ok')->withHeader('X-Injected', "a\r\nSet-Cookie: s=1");
+            $ignored = Response::text('ok')->withHeader('X-Injected', "a\r\nSet-Cookie: s=1");
             self::fail('A value with a CRLF must be refused.');
         } catch (InvalidArgumentException $exception) {
             self::assertStringContainsString('X-Injected', $exception->getMessage());
@@ -1251,7 +1251,7 @@ final class ResponseTest extends TestCase
     public function testHeaderNameRefusalQuotesTheNameWithItsControlCharactersEscaped(): void
     {
         try {
-            Response::text('ok')->withHeader("X-Test\r\nSet-Cookie: s=1", 'v');
+            $ignored = Response::text('ok')->withHeader("X-Test\r\nSet-Cookie: s=1", 'v');
             self::fail('A header name with a CRLF must be refused.');
         } catch (InvalidArgumentException $exception) {
             self::assertSame(

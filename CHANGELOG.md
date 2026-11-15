@@ -62,6 +62,7 @@ changes are listed first, each with the change to make in your code.
 - The pool is per process (`zephyrus:<pid>`), and a persistent handle still held in the process is never handed out again: for the same DSN and user, a second `fromConfig()` opens a non-persistent connection instead.
 - `DebugIntegration::installSecretMasking(?string $sessionName = null)` installs the masking of secrets in `dump()`, the debug bar and the Bluescreen without enabling Tracy or installing its handlers, as a test or a controlled `dump()` needs; `initialize()` calls it.
 - Zephyrus is tested on PHP 8.6: the CI matrix runs PHP 8.4, 8.5 and 8.6.
+- The public `with*()` methods that return a modified copy (`Request`, `Response`, `Route`, `Router`, `RouteCollection`, `FormValidator`, `MiddlewarePipeline::without()`, `PaginationRequest`, `KernelBuilder`, `ApplicationBuilder` and `ContentSecurityPolicy`) carry `#[\NoDiscard]`: on PHP 8.5 and later, calling one as a statement and dropping the result raises a warning (`$response->withHeader(...);` changes nothing). Keep the result: `$response = $response->withHeader(...)`. To drop it on purpose, such as in a test that expects the call to throw, assign it (`$ignored = ...`): `(void)` is PHP 8.5 syntax. PHP 8.4 ignores the attribute.
 
 ### Changed
 

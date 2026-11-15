@@ -391,6 +391,7 @@ final readonly class Request
     // Immutable attribute mutation
     // ------------------------------------------------------------------
 
+    #[\NoDiscard]
     public function withAttribute(string $key, mixed $value): self
     {
         $attributes = $this->attributes;
@@ -414,6 +415,7 @@ final readonly class Request
     /**
      * @param array<string, mixed> $attributes
      */
+    #[\NoDiscard]
     public function withAttributes(array $attributes): self
     {
         return new self(
@@ -436,6 +438,7 @@ final readonly class Request
      *
      * @param array<string, string> $parameters
      */
+    #[\NoDiscard]
     public function withRouteParameters(array $parameters): self
     {
         return $this->withPublishedParameters($parameters, $this->matchedRoute);
@@ -444,6 +447,7 @@ final readonly class Request
     /**
      * Record the matched route and publish its parameters, as withRouteParameters() does.
      */
+    #[\NoDiscard]
     public function withMatchedRoute(RouteMatch $match): self
     {
         return $this->withPublishedParameters($match->parameters, $match->route);

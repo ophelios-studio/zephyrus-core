@@ -156,7 +156,7 @@ final class RouteTest extends TestCase
     {
         $this->expectException(RouteMiddlewareException::class);
 
-        Route::define('GET', '/', 'HomeController@index')->withExcludedMiddlewares([CsrfMiddleware::class]);
+        $ignored = Route::define('GET', '/', 'HomeController@index')->withExcludedMiddlewares([CsrfMiddleware::class]);
     }
 
     public function testDefineNormalizesMethodAndPath(): void

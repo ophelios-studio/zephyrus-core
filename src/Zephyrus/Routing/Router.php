@@ -104,6 +104,7 @@ final class Router
     /**
      * Returns a copy with trailing-slash tolerance set; with false, `/users` and `/users/` are distinct.
      */
+    #[\NoDiscard]
     public function withTrailingSlashTolerance(bool $tolerant = true): self
     {
         $routes = new RouteCollection($tolerant);
@@ -184,6 +185,7 @@ final class Router
      *                                  framework security middleware, or when middleware groups reference each
      *                                  other in a cycle.
      */
+    #[\NoDiscard]
     public function withoutMiddleware(string ...$middlewares): self
     {
         $routes = $this->routes->all();

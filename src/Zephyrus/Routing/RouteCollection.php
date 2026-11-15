@@ -52,6 +52,7 @@ final class RouteCollection
         $this->routesInMatchOrderCache = null;
     }
 
+    #[\NoDiscard]
     public function withRoute(Route $route): self
     {
         $collection = new self($this->trailingSlashTolerant);
@@ -66,6 +67,7 @@ final class RouteCollection
      *
      * @throws \LogicException When the collection is empty.
      */
+    #[\NoDiscard]
     public function withLastRouteName(string $name): self
     {
         if ($this->routes === []) {
@@ -90,6 +92,7 @@ final class RouteCollection
      * @throws RouteMiddlewareException When a class is not a middleware or would skip a framework security
      *                                  middleware.
      */
+    #[\NoDiscard]
     public function withLastRouteExcludedMiddlewares(array $middlewares): self
     {
         if ($this->routes === []) {
