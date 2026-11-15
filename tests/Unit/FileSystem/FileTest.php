@@ -631,6 +631,111 @@ final class FileTest extends TestCase
         self::assertSame($expected, $written);
     }
 
+    public function testAppendCreatingTheFileWaitsForTheDirectoryLockAndAppendsToAFileCreatedMeanwhile(): void
+    {
+        if (!PHP_ZTS) {
+            self::markTestSkipped('Without thread safety, append() creates a file by link(), with no directory lock.');
+        }
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs the pcntl and posix extensions.');
+        }
+        if (!is_readable('/proc/locks')) {
+            self::markTestSkipped('Needs /proc/locks, to see the appender wait.');
+        }
+        $path = $this->tempDir . '/created-meanwhile.log';
+        $directory = fopen($this->tempDir, 'r');
+        self::assertNotFalse($directory);
+        flock($directory, LOCK_EX);
+
+        $appender = $this->forkAppender($path, ['child']);
+        try {
+            self::waitUntilBlockedOnALockOrDone($appender, $path);
+            self::assertFileDoesNotExist($path);
+            file_put_contents($path, "parent\n");
+        } finally {
+            flock($directory, LOCK_UN);
+            pcntl_waitpid($appender, $status);
+            fclose($directory);
+        }
+
+        self::assertSame("parent\nchild\n", (string) file_get_contents($path));
+    }
+
+    public function testAppendBelowAParentThatIsAFifoFailsAtOnceInsteadOfWaiting(): void
+    {
+        self::requireDirectoryLockTools();
+        $fifo = $this->tempDir . '/fifo';
+        if (!posix_mkfifo($fifo, 0600)) {
+            self::markTestSkipped('Could not create a FIFO.');
+        }
+        $path = $fifo . '/x.log';
+        $report = $this->tempDir . '/fifo-report';
+
+        $appender = $this->forkReportingAppender($path, $report);
+        $deadline = microtime(true) + 5;
+        $finished = false;
+        while (!$finished && microtime(true) < $deadline) {
+            $finished = pcntl_waitpid($appender, $status, WNOHANG) !== 0;
+            $finished || usleep(10000);
+        }
+        if (!$finished) {
+            posix_kill($appender, SIGKILL);
+            pcntl_waitpid($appender, $status);
+            self::fail('append() below a FIFO did not return');
+        }
+
+        self::assertSame(
+            FileSystemException::class . ': Failed to append to: "' . $path . '"',
+            (string) file_get_contents($report),
+        );
+    }
+
+    public function testALinkPlantedWhileAppendWaitsForTheDirectoryLockIsRefused(): void
+    {
+        self::requireDirectoryLockTools();
+        $path = $this->tempDir . '/planted.log';
+        $target = $this->tempDir . '/planted-target.log';
+        $report = $this->tempDir . '/planted-report';
+        file_put_contents($target, "original\n");
+        $directory = fopen($this->tempDir, 'r');
+        self::assertNotFalse($directory);
+        flock($directory, LOCK_EX);
+
+        $appender = $this->forkReportingAppender($path, $report);
+        try {
+            self::waitUntilBlockedOnALockOrDone($appender, $path);
+            symlink($target, $path);
+        } finally {
+            flock($directory, LOCK_UN);
+            pcntl_waitpid($appender, $status);
+            fclose($directory);
+        }
+
+        self::assertSame(
+            FileSystemException::class . ': Path is a symbolic link, which is not followed: "' . $path . '"',
+            (string) file_get_contents($report),
+        );
+        self::assertSame("original\n", (string) file_get_contents($target));
+    }
+
+    public function testAppendCreatesTheFileInADirectoryItCannotOpenForTheLock(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root opens any directory.');
+        }
+        $directory = $this->tempDir . '/write-only';
+        mkdir($directory, 0300);
+        $path = $directory . '/journal.log';
+
+        try {
+            (new File($path))->append('first line');
+        } finally {
+            chmod($directory, 0755);
+        }
+
+        self::assertSame('first line', (string) file_get_contents($path));
+    }
+
     public function testWriteNeverClobbersTheTargetOfALinkSwappedInDuringTheCall(): void
     {
         if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
@@ -1328,6 +1433,62 @@ final class FileTest extends TestCase
         } finally {
             posix_kill(posix_getpid(), SIGKILL);
         }
+    }
+
+    private static function requireDirectoryLockTools(): void
+    {
+        if (!PHP_ZTS) {
+            self::markTestSkipped('Without thread safety, append() creates a file by link(), with no directory lock.');
+        }
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs the pcntl and posix extensions.');
+        }
+        if (!is_readable('/proc/locks')) {
+            self::markTestSkipped('Needs /proc/locks, to see the appender wait.');
+        }
+    }
+
+    /**
+     * Fork a process that appends to `$path`, writes the class and message of its exception to `$report`,
+     * then kills itself.
+     */
+    private function forkReportingAppender(string $path, string $report): int
+    {
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            self::markTestSkipped('Could not fork.');
+        }
+        if ($pid > 0) {
+            return $pid;
+        }
+
+        try {
+            (new File($path))->append("child\n");
+            file_put_contents($report, 'no exception');
+        } catch (\Throwable $e) {
+            file_put_contents($report, $e::class . ': ' . $e->getMessage());
+        } finally {
+            posix_kill(posix_getpid(), SIGKILL);
+        }
+    }
+
+    /**
+     * Return once process `$pid` waits for an exclusive flock(), as /proc/locks lists it, has
+     * exited, or `$path` exists.
+     */
+    private static function waitUntilBlockedOnALockOrDone(int $pid, string $path): void
+    {
+        $waiting = '/^\d+: -> FLOCK\s+ADVISORY\s+WRITE\s+' . $pid . '\s/m';
+        for ($attempt = 0; $attempt < 10000; $attempt++) {
+            clearstatcache(true, $path);
+            if (file_exists($path)
+                || pcntl_waitpid($pid, $status, WNOHANG) !== 0
+                || preg_match($waiting, (string) file_get_contents('/proc/locks')) === 1) {
+                return;
+            }
+            usleep(1000);
+        }
+        self::fail('the appender neither waited nor finished');
     }
 
     /**

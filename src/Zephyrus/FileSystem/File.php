@@ -103,10 +103,12 @@ final class File extends FileSystemNode
      * overwrite each other, but they can overwrite and lose lines of a writer that does not
      * take that lock (file_put_contents() with FILE_APPEND, error_log(), a default Monolog
      * StreamHandler).
-     * On a thread-safe PHP build or a filesystem without hard links, two calls that create
-     * the file at the same instant may leave only one of their contents. The lock is awaited
-     * without limit, so any process that can open the file (one readable by other users
-     * included) can hold append() back.
+     * On a thread-safe PHP build or a filesystem without hard links, a call that creates the
+     * file holds an exclusive flock() on its directory, so two calls that create it at the
+     * same instant take turns; where the directory cannot be opened or locked, they may leave
+     * only one of their contents, or one of them may fail with FileSystemException. Both locks
+     * are awaited without limit, so any process that can open the file (one readable by other
+     * users included), or its directory while the file is missing, can hold append() back.
      *
      * @throws FileSystemException if the path holds a NUL byte, is a stream wrapper URL, does not
      *         end with a file name, is a symbolic link, or appending fails.
@@ -418,10 +420,19 @@ final class File extends FileSystemNode
             if (!PHP_ZTS && self::createThroughTemporary($path, $writer, $failure, replace: false)) {
                 return;
             }
-            $handle = self::openInPlace($path, $failure, refuseLink: true);
-            if ($handle === null) {
-                self::createThroughTemporary($path, $writer, $failure, replace: true);
-                return;
+            // Appenders that would replace a missing file take turns under the directory lock.
+            $directory = self::lockDirectory(dirname($path));
+            try {
+                $handle = self::openInPlace($path, $failure, refuseLink: true);
+                if ($handle === null) {
+                    self::createThroughTemporary($path, $writer, $failure, replace: true);
+                    return;
+                }
+            } finally {
+                if ($directory !== null) {
+                    flock($directory, LOCK_UN);
+                    fclose($directory);
+                }
             }
         }
 
@@ -432,6 +443,31 @@ final class File extends FileSystemNode
         } finally {
             fclose($handle);
         }
+    }
+
+    /**
+     * Open `$directory` and wait for an exclusive flock() on it: null when it is not a directory
+     * or cannot be opened or locked.
+     *
+     * @return resource|null
+     */
+    private static function lockDirectory(string $directory)
+    {
+        clearstatcache(true, $directory);
+        // Opening a FIFO for reading would block until a writer opens it.
+        if (!@is_dir($directory)) {
+            return null;
+        }
+        $handle = @fopen($directory, 'r');
+        if ($handle === false) {
+            return null;
+        }
+        if (!flock($handle, LOCK_EX)) {
+            fclose($handle);
+            return null;
+        }
+
+        return $handle;
     }
 
     /**
