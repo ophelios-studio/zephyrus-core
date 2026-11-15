@@ -438,7 +438,7 @@ final class SessionManagerTest extends TestCase
 }
 
 /** Minimal handler used to prove setHandler() records without registering. */
-final class OverrideModeHandler implements \SessionHandlerInterface
+final class OverrideModeHandler implements \SessionHandlerInterface, \SessionIdInterface
 {
     public function open(string $path, string $name): bool { return true; }
     public function close(): bool { return true; }
@@ -446,4 +446,6 @@ final class OverrideModeHandler implements \SessionHandlerInterface
     public function write(string $id, string $data): bool { return true; }
     public function destroy(string $id): bool { return true; }
     public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
+    public function validateId(string $id): bool { return false; }
 }

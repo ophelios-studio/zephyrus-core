@@ -111,7 +111,7 @@ final class SessionManagerRealSessionTest extends TestCase
         \Zephyrus\Core\App::setDebug(true);
 
         $session = new SessionManager();
-        $session->setHandler(new StrictModeBlindHandler());
+        $session->setHandler($this->strictModeBlindHandler());
 
         $warnings = [];
         set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
@@ -171,7 +171,7 @@ final class SessionManagerRealSessionTest extends TestCase
         }
 
         $session = new SessionManager();
-        $session->setHandler(new StrictModeBlindHandler());
+        $session->setHandler($this->strictModeBlindHandler());
 
         $warnings = [];
         set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
@@ -591,6 +591,43 @@ final class SessionManagerRealSessionTest extends TestCase
         $session->destroy();
     }
 
+    /**
+     * A handler without validateId(): PHP skips its strict-mode check. Declared at run time, because PHP 8.6
+     * warns when it declares such a class, and that warning must be the only one.
+     */
+    private function strictModeBlindHandler(): \SessionHandlerInterface
+    {
+        $warnings = [];
+        set_error_handler(static function (int $errno, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_WARNING);
+
+        try {
+            $handler = new class implements \SessionHandlerInterface, \SessionIdInterface {
+                public function open(string $path, string $name): bool { return true; }
+                public function close(): bool { return true; }
+                public function read(string $id): string|false { return ''; }
+                public function write(string $id, string $data): bool { return true; }
+                public function destroy(string $id): bool { return true; }
+                public function gc(int $maxLifetime): int|false { return 0; }
+                public function create_sid(): string { return bin2hex(random_bytes(16)); }
+            };
+        } finally {
+            restore_error_handler();
+        }
+
+        if (PHP_VERSION_ID >= 80600) {
+            self::assertCount(1, $warnings);
+            self::assertStringContainsString('validateId()', $warnings[0]);
+        } else {
+            self::assertSame([], $warnings);
+        }
+
+        return $handler;
+    }
+
     /** Flushes every output buffer so the headers count as sent, then reopens them, since PHPUnit flags tests that close a buffer. */
     private function sendOutputToBrowser(): void
     {
@@ -607,7 +644,7 @@ final class SessionManagerRealSessionTest extends TestCase
 }
 
 /** A handler whose destroy() always fails. */
-final class DestroyRefusingHandler implements \SessionHandlerInterface
+final class DestroyRefusingHandler implements \SessionHandlerInterface, \SessionIdInterface
 {
     public function open(string $path, string $name): bool { return true; }
     public function close(): bool { return true; }
@@ -615,21 +652,15 @@ final class DestroyRefusingHandler implements \SessionHandlerInterface
     public function write(string $id, string $data): bool { return true; }
     public function destroy(string $id): bool { return false; }
     public function gc(int $maxLifetime): int|false { return 0; }
-}
-
-/** A plain handler: PHP skips its strict-mode check for this shape. */
-final class StrictModeBlindHandler implements \SessionHandlerInterface
-{
-    public function open(string $path, string $name): bool { return true; }
-    public function close(): bool { return true; }
-    public function read(string $id): string|false { return ''; }
-    public function write(string $id, string $data): bool { return true; }
-    public function destroy(string $id): bool { return true; }
-    public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
+    public function validateId(string $id): bool { return false; }
 }
 
 /** Supplies validateId(), so use_strict_mode is actually honoured. */
-final class StrictModeAwareHandler implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
+final class StrictModeAwareHandler implements
+    \SessionHandlerInterface,
+    \SessionIdInterface,
+    \SessionUpdateTimestampHandlerInterface
 {
     public function open(string $path, string $name): bool { return true; }
     public function close(): bool { return true; }
@@ -637,12 +668,13 @@ final class StrictModeAwareHandler implements \SessionHandlerInterface, \Session
     public function write(string $id, string $data): bool { return true; }
     public function destroy(string $id): bool { return true; }
     public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
     public function validateId(string $id): bool { return false; }
     public function updateTimestamp(string $id, string $data): bool { return true; }
 }
 
 /** Records destroy() calls and succeeds, to prove a session was never destroyed. */
-final class RecordingDestroyHandler implements \SessionHandlerInterface
+final class RecordingDestroyHandler implements \SessionHandlerInterface, \SessionIdInterface
 {
     public int $destroyCalls = 0;
 
@@ -659,10 +691,12 @@ final class RecordingDestroyHandler implements \SessionHandlerInterface
     }
 
     public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
+    public function validateId(string $id): bool { return false; }
 }
 
 /** A handler whose write() always fails. */
-final class WriteRefusingHandler implements \SessionHandlerInterface
+final class WriteRefusingHandler implements \SessionHandlerInterface, \SessionIdInterface
 {
     public function open(string $path, string $name): bool { return true; }
     public function close(): bool { return true; }
@@ -670,10 +704,12 @@ final class WriteRefusingHandler implements \SessionHandlerInterface
     public function write(string $id, string $data): bool { return false; }
     public function destroy(string $id): bool { return true; }
     public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
+    public function validateId(string $id): bool { return false; }
 }
 
 /** A handler whose read() always fails, as when its database is unreachable. */
-final class ReadRefusingHandler implements \SessionHandlerInterface
+final class ReadRefusingHandler implements \SessionHandlerInterface, \SessionIdInterface
 {
     public function open(string $path, string $name): bool { return true; }
     public function close(): bool { return true; }
@@ -681,4 +717,6 @@ final class ReadRefusingHandler implements \SessionHandlerInterface
     public function write(string $id, string $data): bool { return true; }
     public function destroy(string $id): bool { return true; }
     public function gc(int $maxLifetime): int|false { return 0; }
+    public function create_sid(): string { return bin2hex(random_bytes(16)); }
+    public function validateId(string $id): bool { return false; }
 }
