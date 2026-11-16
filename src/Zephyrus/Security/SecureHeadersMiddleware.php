@@ -116,16 +116,9 @@ final class SecureHeadersMiddleware implements MiddlewareInterface
         return $response->hasNonBlankHeader($name) ? $response : $response->withHeader($name, $value);
     }
 
-    /**
-     * Whether the request is HTTPS. The raw "https://" prefix is checked too, so a malformed Host
-     * cannot drop HSTS silently; an extra HSTS header is harmless, browsers only honour it over TLS.
-     */
+    /** Whether the request is HTTPS. */
     private static function isSecure(Request $request): bool
     {
-        if ($request->uri()->isSecure()) {
-            return true;
-        }
-
-        return str_starts_with(strtolower($request->uri()->full()), 'https://');
+        return $request->uri()->isSecure();
     }
 }

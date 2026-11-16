@@ -126,10 +126,6 @@ final class CsrfMiddleware implements MiddlewareInterface
      */
     private function isPathExcluded(Request $request): bool
     {
-        if ($this->config->excludedPathPatterns === []) {
-            return false;
-        }
-
         // Match the canonical path the router dispatches, never the raw URI path.
         $path = $request->path();
         foreach ($this->config->excludedPathPatterns as $pattern) {

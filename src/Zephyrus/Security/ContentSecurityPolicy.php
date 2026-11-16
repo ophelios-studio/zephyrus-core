@@ -118,10 +118,6 @@ final readonly class ContentSecurityPolicy
 
     public function toHeaderValue(): string
     {
-        if ($this->directives === []) {
-            return '';
-        }
-
         $parts = [];
         foreach ($this->directives as $name => $values) {
             $parts[] = $values === [] ? $name : $name . ' ' . implode(' ', $values);

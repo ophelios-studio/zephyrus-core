@@ -262,8 +262,6 @@ final class Cryptography
             }
 
             $hash = sodium_crypto_generichash_final($state, $length);
-        } catch (CryptographyException $e) {
-            throw $e;
         } catch (\SodiumException $e) {
             throw CryptographyException::hashFailed('BLAKE2b file hashing failed.', $e);
         }
