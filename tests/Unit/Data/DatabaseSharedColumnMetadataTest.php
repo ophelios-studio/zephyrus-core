@@ -281,6 +281,33 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertSame(42, $afterRow->quantity, 'The new column must be converted, not left a raw string.');
     }
 
+    public function testAColumnAddedUnderTheSameSqlIsConvertedByTheSameInstance(): void
+    {
+        $sql = 'SELECT * FROM records';
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+        $db = $this->makeDatabase('widened', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db, '3.50');
+        $db->select($sql);
+
+        $db->query('ALTER TABLE records ADD COLUMN quantity TEXT');
+        $db->query("UPDATE records SET quantity = '42'");
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC', 'quantity' => 'INT4'];
+
+        self::assertSame(42, $db->select($sql)[0]->quantity);
+    }
+
+    public function testTwoStatementsOfTheSameWidthOnOneDatabaseKeepTheirOwnShape(): void
+    {
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC', 'label' => 'TEXT'];
+        $db = $this->makeDatabase('two_shapes', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db);
+
+        $db->selectOne('SELECT id, price AS label FROM records WHERE id = 1');
+        $row = $db->selectOne('SELECT id, price FROM records WHERE id = 1');
+
+        self::assertSame(12.5, $row->price);
+    }
+
     public function testDifferentDsnsDoNotShareAShape(): void
     {
         MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
