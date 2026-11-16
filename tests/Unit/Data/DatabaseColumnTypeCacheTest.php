@@ -271,6 +271,21 @@ final class DatabaseColumnTypeCacheTest extends TestCase
         self::assertSame($afterDistinct, SpyStatement::$metaCalls);
     }
 
+    public function testAStatementWhoseTextEndsInDigitsDoesNotShareTheShapeOfAWiderStatement(): void
+    {
+        $columns = implode(', ', array_map(static fn (int $i): string => "c$i TEXT", range(1, 10)));
+        $this->db->query('CREATE TABLE t1 (label TEXT)');
+        $this->db->query("CREATE TABLE t (price TEXT, $columns)");
+        $this->db->query("INSERT INTO t1 (label) VALUES ('x')");
+        $this->db->query("INSERT INTO t (price) VALUES ('1.5')");
+        SpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+
+        $this->db->selectOne('SELECT * FROM t1');
+        $row = $this->db->selectOne('SELECT * FROM t');
+
+        self::assertSame(1.5, $row->price);
+    }
+
     public function testRegisteringConversionInvalidatesCache(): void
     {
         SpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
