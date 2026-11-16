@@ -110,11 +110,38 @@ jobs:
         if: matrix.checks
         run: sudo "$(command -v php)" vendor/bin/phpunit --filter 'StickyDirectory' --do-not-cache-result --fail-on-skipped
 
-      - name: Upload coverage to Codecov
-        if: success() && matrix.coverage
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+      - name: Keep the coverage report for the upload job
+        if: matrix.coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          files: coverage.xml
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: error
+          retention-days: 1
+
+  # A secret's boundary is the job: this one runs no repository or dependency code.
+  codecov:
+    name: Codecov upload
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage
+          path: ${{ runner.temp }}/coverage
+
+      - uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+        with:
+          files: ${{ runner.temp }}/coverage/coverage.xml
+          disable_search: true
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
