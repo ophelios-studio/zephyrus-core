@@ -180,6 +180,15 @@ final class UriTest extends TestCase
     }
 
     #[Test]
+    public function highestValidPortIsReadFromAnUnparseableAuthority(): void
+    {
+        $uri = new Uri('http://:65535//evil.example.com/x');
+
+        self::assertSame(65535, $uri->port());
+        self::assertSame('localhost', $uri->host());
+    }
+
+    #[Test]
     #[DataProvider('unparseableAuthoritiesWithAnInvalidPort')]
     public function invalidPortStaysInTheHostOfAnUnparseableAuthority(string $url, string $host): void
     {
@@ -306,6 +315,9 @@ final class UriTest extends TestCase
             'absolute form' => ["http://example.com/a\x01", true],
             'absolute form, query only' => ["http://example.com/a?q=\x01", false],
             'no path' => ['http://example.com', false],
+            'in the authority only' => ["http://exa\x01mple.com/a", false],
+            'empty authority' => ["http:///a\x01", true],
+            'first byte of a relative path' => ["\x01/a", true],
         ];
     }
 
