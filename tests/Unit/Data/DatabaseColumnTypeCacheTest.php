@@ -112,6 +112,28 @@ final class DatabaseColumnTypeCacheTest extends TestCase
         self::assertSame([2, 3], $row->payload->b);
     }
 
+    public function testATypeConversionIsRegisteredWhateverTheCaseOfItsName(): void
+    {
+        $this->db->registerTypeConversion('numeric', static fn (string $v): string => 'converted:' . $v);
+        SpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+        $this->db->query("INSERT INTO records (id, price) VALUES (1, '1.5')");
+
+        $row = $this->db->selectOne('SELECT id, price FROM records WHERE id = 1');
+
+        self::assertSame('converted:1.5', $row->price);
+    }
+
+    public function testAColumnTheDriverAlreadyTypedIsNotPassedToItsConverter(): void
+    {
+        $this->db->registerTypeConversion('INT4', static fn (string $v): string => 'converted:' . $v);
+        SpyStatement::$nativeTypeByName = ['id' => 'INT4'];
+        $this->db->query('INSERT INTO records (id) VALUES (7)');
+
+        $row = $this->db->selectOne('SELECT id FROM records WHERE id = 7');
+
+        self::assertSame(7, $row->id);
+    }
+
     public function testUnregisteredTypeIsLeftUntouched(): void
     {
         SpyStatement::$nativeTypeByName = ['label' => 'TEXT'];
