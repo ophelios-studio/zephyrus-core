@@ -215,7 +215,7 @@ final class OpenBasedirTest extends TestCase
     {
         $code = "(function () use (\$allowed): array { set_error_handler(static function (int \$n, string \$m): never {"
             . " throw new \ErrorException(\$m, 0, \$n); });"
-            . " \Zephyrus\FileSystem\FileSystemException::assertNotRestricted('delete', \$allowed);"
+            . " \Zephyrus\FileSystem\NativeFileSystem::assertNotRestricted('delete', \$allowed);"
             . " restore_error_handler(); return [error_get_last()]; })()";
 
         [$output, $errors] = $this->runChild($code);

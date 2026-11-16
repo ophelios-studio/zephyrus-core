@@ -244,7 +244,7 @@ final class File extends FileSystemNode
                 'move',
                 $this->path,
                 $destination,
-                FileSystemException::lastError(),
+                NativeFileSystem::lastError(),
             );
         }
 
@@ -260,7 +260,7 @@ final class File extends FileSystemNode
     {
         self::assertLocalPath($this->path);
         if (!$this->exists()) {
-            FileSystemException::assertNotRestricted('delete', $this->path);
+            NativeFileSystem::assertNotRestricted('delete', $this->path);
             return;
         }
 
@@ -367,7 +367,7 @@ final class File extends FileSystemNode
             }
             error_clear_last();
             if (!ftruncate($handle, 0) || !$write($handle)) {
-                throw $failure(FileSystemException::lastError());
+                throw $failure(NativeFileSystem::lastError());
             }
         } finally {
             fclose($handle);
@@ -405,7 +405,7 @@ final class File extends FileSystemNode
 
         try {
             if (!self::appendUnderLock($handle, $content)) {
-                throw $failure(FileSystemException::lastError());
+                throw $failure(NativeFileSystem::lastError());
             }
         } finally {
             fclose($handle);
@@ -486,7 +486,7 @@ final class File extends FileSystemNode
             if ($handle !== false) {
                 break;
             }
-            $reason = FileSystemException::lastError();
+            $reason = NativeFileSystem::lastError();
             clearstatcache(true, $path);
             $now = @lstat($path);
             if ($attempt === 2 || ($now !== false && self::isSameFile($named, $now))) {
@@ -573,7 +573,7 @@ final class File extends FileSystemNode
         error_clear_last();
         $temporary = @tempnam($directory, self::TEMPORARY_PREFIX);
         if ($temporary === false) {
-            throw $failure(FileSystemException::lastError());
+            throw $failure(NativeFileSystem::lastError());
         }
 
         $temporaryLeft = true;
@@ -585,7 +585,7 @@ final class File extends FileSystemNode
             error_clear_last();
             $handle = @fopen($temporary, 'r+');
             if ($handle === false) {
-                throw $failure(FileSystemException::lastError());
+                throw $failure(NativeFileSystem::lastError());
             }
             try {
                 if (!self::namesHandle($temporary, $handle)) {
@@ -595,7 +595,7 @@ final class File extends FileSystemNode
                     throw FileSystemException::operationFailed('set permissions on', $path);
                 }
                 if (!$write($handle)) {
-                    throw $failure(FileSystemException::lastError());
+                    throw $failure(NativeFileSystem::lastError());
                 }
             } finally {
                 fclose($handle);
@@ -606,7 +606,7 @@ final class File extends FileSystemNode
             }
             error_clear_last();
             if (!@rename($temporary, $path)) {
-                throw $failure(FileSystemException::lastError());
+                throw $failure(NativeFileSystem::lastError());
             }
             $temporaryLeft = false;
 

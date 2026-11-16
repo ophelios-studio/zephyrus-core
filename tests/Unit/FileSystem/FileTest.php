@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\FileSystem\File;
 use Zephyrus\FileSystem\FileSystemException;
 use Zephyrus\FileSystem\FileSystemNode;
+use Zephyrus\FileSystem\NativeFileSystem;
 
 final class FileTest extends TestCase
 {
@@ -1037,7 +1038,7 @@ final class FileTest extends TestCase
         error_clear_last();
         @trigger_error($message, E_USER_NOTICE);
 
-        self::assertSame('fwrite(): Write failed', FileSystemException::lastError());
+        self::assertSame('fwrite(): Write failed', NativeFileSystem::lastError());
     }
 
     /**
@@ -1072,7 +1073,7 @@ final class FileTest extends TestCase
         error_clear_last();
         @trigger_error($message, E_USER_NOTICE);
 
-        self::assertSame($expected, FileSystemException::lastError());
+        self::assertSame($expected, NativeFileSystem::lastError());
     }
 
     #[DataProvider('messagesOfAnotherShape')]
@@ -1081,7 +1082,7 @@ final class FileTest extends TestCase
         error_clear_last();
         @trigger_error($message, E_USER_NOTICE);
 
-        self::assertNull(FileSystemException::lastError());
+        self::assertNull(NativeFileSystem::lastError());
     }
 
     public function testAnOpenBasedirReasonKeepsItsExplanation(): void
@@ -1094,7 +1095,7 @@ final class FileTest extends TestCase
 
         self::assertSame(
             'tempnam(): open_basedir restriction in effect. File(/x) is not within the allowed path(s): (/tmp:/home)',
-            FileSystemException::lastError(),
+            NativeFileSystem::lastError(),
         );
     }
 

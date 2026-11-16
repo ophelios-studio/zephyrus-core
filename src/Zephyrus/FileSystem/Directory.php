@@ -143,7 +143,7 @@ final class Directory extends FileSystemNode
         }
 
         if (!$this->exists()) {
-            FileSystemException::assertNotRestricted('delete', $this->path);
+            NativeFileSystem::assertNotRestricted('delete', $this->path);
             return;
         }
 
