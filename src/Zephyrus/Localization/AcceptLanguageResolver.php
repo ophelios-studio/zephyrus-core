@@ -172,31 +172,7 @@ final class AcceptLanguageResolver
             return '*';
         }
 
-        $parts = array_values(array_filter(explode('-', $locale), static fn (string $part): bool => $part !== ''));
-        if ($parts === []) {
-            return '';
-        }
-
-        $normalized   = [strtolower($parts[0])];
-        $subtagCount  = count($parts);
-
-        for ($index = 1; $index < $subtagCount; $index++) {
-            $subtag = $parts[$index];
-
-            if (strlen($subtag) === 4 && ctype_alpha($subtag)) {
-                $normalized[] = ucfirst(strtolower($subtag));
-                continue;
-            }
-
-            if ((strlen($subtag) === 2 && ctype_alpha($subtag)) || (strlen($subtag) === 3 && ctype_digit($subtag))) {
-                $normalized[] = strtoupper($subtag);
-                continue;
-            }
-
-            $normalized[] = strtolower($subtag);
-        }
-
-        return implode('-', $normalized);
+        return LocaleTag::canonical($locale);
     }
 
     private function isWellFormed(string $locale): bool

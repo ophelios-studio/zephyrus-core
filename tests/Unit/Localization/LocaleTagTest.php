@@ -40,4 +40,27 @@ final class LocaleTagTest extends TestCase
     {
         self::assertSame($expected, LocaleTag::isWellFormed($tag));
     }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function canonicalTags(): array
+    {
+        return [
+            'underscores and lowercase'  => ['zh_hant_tw', 'zh-Hant-TW'],
+            'uppercase'                  => ['ZH-HANT-TW', 'zh-Hant-TW'],
+            'lowercase region'           => ['fr-ca', 'fr-CA'],
+            'numeric region'             => ['es-419', 'es-419'],
+            'script only'                => ['sr-latn', 'sr-Latn'],
+            'variant'                    => ['de-ch-1996', 'de-CH-1996'],
+            'empty subtag'               => ['en--US', 'en-US'],
+            'empty'                      => ['', ''],
+        ];
+    }
+
+    #[DataProvider('canonicalTags')]
+    public function testATagIsCasedAsBcp47Does(string $tag, string $expected): void
+    {
+        self::assertSame($expected, LocaleTag::canonical($tag));
+    }
 }

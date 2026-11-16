@@ -20,4 +20,38 @@ final class LocaleTag
     {
         return preg_match(self::PATTERN, $tag) === 1;
     }
+
+    /**
+     * BCP 47 casing: underscores become hyphens, language lowercase, script title case, region uppercase. '' when nothing remains.
+     *
+     * @internal
+     */
+    public static function canonical(string $tag): string
+    {
+        $parts = array_values(array_filter(explode('-', str_replace('_', '-', $tag)), static fn (string $part): bool => $part !== ''));
+        if ($parts === []) {
+            return '';
+        }
+
+        $normalized   = [strtolower($parts[0])];
+        $subtagCount  = count($parts);
+
+        for ($index = 1; $index < $subtagCount; $index++) {
+            $subtag = $parts[$index];
+
+            if (strlen($subtag) === 4 && ctype_alpha($subtag)) {
+                $normalized[] = ucfirst(strtolower($subtag));
+                continue;
+            }
+
+            if ((strlen($subtag) === 2 && ctype_alpha($subtag)) || (strlen($subtag) === 3 && ctype_digit($subtag))) {
+                $normalized[] = strtoupper($subtag);
+                continue;
+            }
+
+            $normalized[] = strtolower($subtag);
+        }
+
+        return implode('-', $normalized);
+    }
 }
