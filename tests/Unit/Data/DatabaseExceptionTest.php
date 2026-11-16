@@ -296,4 +296,14 @@ final class DatabaseExceptionTest extends TestCase
         );
         self::assertSame('25P02', $e->sqlState());
     }
+
+    public function testAQueryFailureMessageWithholdsTheStatementAndPointsToTheAccessors(): void
+    {
+        $e = DatabaseException::queryExecutionFailed('SELECT * FROM customer', $this->pdoException());
+
+        self::assertSame(
+            'Query failed [SQLSTATE 22P02]: statement and driver detail withheld, read sql() and driverMessage() to inspect them',
+            $e->getMessage(),
+        );
+    }
 }
