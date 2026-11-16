@@ -124,6 +124,20 @@ final class CsrfConfigTest extends TestCase
         }
     }
 
+    public function testControlCharactersOfTheBodyFieldAreEscapedInTheInjectionRefusal(): void
+    {
+        try {
+            new CsrfConfig(bodyField: "_t\r\nX", injectToken: true);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'Automatic token injection is not supported because it cannot follow the browser\'s HTML parsing and '
+                . 'could send the token to another site. Add a hidden "_t\\r\\nX" field to your form templates, filled '
+                . 'with the escaped value of CsrfTokenManagerInterface::getToken().',
+                $e->getMessage(),
+            );
+        }
+    }
 
     public function testControlCharactersOfAPatternKeyAreEscapedInTheRefusal(): void
     {

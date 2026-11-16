@@ -105,7 +105,9 @@ final class CsrfConfig
         public readonly bool   $enabled              = true,
     ) {
         if ($injectToken) {
-            throw new InvalidArgumentException(sprintf(self::INJECTION_REFUSAL, $bodyField) . '.');
+            throw new InvalidArgumentException(
+                sprintf(self::INJECTION_REFUSAL, MessageValue::escapeControls($bodyField)) . '.',
+            );
         }
 
         $this->excludedPathPatterns = self::normalizeExcludedPathPatterns($excludedPathPatterns);
