@@ -179,4 +179,41 @@ final class MailerEncryptionTest extends TestCase
 
         self::assertSame('', trim($written));
     }
+
+    public function testThePlaintextCredentialsWarningIsLoggedOnlyOncePerProcess(): void
+    {
+        $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-mailer-plaintext-');
+        self::assertIsString($logFile);
+
+        $previousLog = ini_get('error_log');
+        $previousLogErrors = ini_get('log_errors');
+        ini_set('error_log', $logFile);
+        ini_set('log_errors', '1');
+
+        (new \ReflectionProperty(Mailer::class, 'plaintextWarningEmitted'))->setValue(null, false);
+
+        $config = MailerConfig::fromArray([
+            'smtp' => [
+                'host' => 'localhost',
+                'port' => 1025,
+                'username' => 'app',
+                'password' => 'not-a-real-secret',
+                'encryption' => '',
+            ],
+        ]);
+
+        try {
+            new Mailer($config);
+            new Mailer($config);
+
+            $written = (string) file_get_contents($logFile);
+        } finally {
+            ini_set('error_log', $previousLog === false ? '' : $previousLog);
+            ini_set('log_errors', $previousLogErrors === false ? '0' : $previousLogErrors);
+            (new \ReflectionProperty(Mailer::class, 'plaintextWarningEmitted'))->setValue(null, false);
+            @unlink($logFile);
+        }
+
+        self::assertSame(1, substr_count($written, Mailer::PLAINTEXT_CREDENTIALS_WARNING));
+    }
 }

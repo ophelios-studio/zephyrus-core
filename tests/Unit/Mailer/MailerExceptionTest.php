@@ -327,4 +327,24 @@ final class MailerExceptionTest extends TestCase
         self::assertStringNotContainsString("\x1B", $exception->getMessage());
         self::assertStringContainsString('\\n', $exception->getMessage());
     }
+
+    public function testRecipientsRefusedKeepsTheRepliesOffTheMessage(): void
+    {
+        $exception = MailerException::recipientsRefused('550 jane@example.com mailbox unavailable');
+
+        self::assertSame(
+            'One or more recipients were refused and others may have received the message; the reason is withheld, '
+            . 'read transportMessage() (it may name recipients).',
+            $exception->getMessage(),
+        );
+        self::assertSame(MailerFailure::RecipientsRefused, $exception->failure);
+        self::assertSame('550 jane@example.com mailbox unavailable', $exception->transportMessage());
+    }
+
+    public function testAnExceptionWithoutATransportReplyHasNoTransportMessage(): void
+    {
+        $exception = new MailerException('test', MailerFailure::ConfigurationMissing);
+
+        self::assertNull($exception->transportMessage());
+    }
 }

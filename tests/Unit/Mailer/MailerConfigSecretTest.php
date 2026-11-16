@@ -64,4 +64,29 @@ final class MailerConfigSecretTest extends TestCase
 
         self::assertSame('', $debug['smtpPassword']);
     }
+
+    public function testTheDebugViewListsEveryFieldWithOnlyThePasswordMasked(): void
+    {
+        $config = MailerConfig::fromArray([
+            'smtp' => [
+                'host' => 'smtp.example.test',
+                'port' => 2525,
+                'username' => 'app',
+                'password' => 'super-secret-smtp',
+                'encryption' => 'tls',
+            ],
+            'from' => ['address' => 'noreply@example.test', 'name' => 'Example'],
+        ]);
+
+        self::assertSame([
+            'smtpHost' => 'smtp.example.test',
+            'smtpPort' => 2525,
+            'smtpUsername' => 'app',
+            'smtpPassword' => ConfigSection::REDACTED,
+            'smtpEncryption' => 'tls',
+            'fromAddress' => 'noreply@example.test',
+            'fromName' => 'Example',
+            'values' => $config->toArray(),
+        ], $config->__debugInfo());
+    }
 }
