@@ -9,15 +9,6 @@ use Zephyrus\Routing\Exception\RouteMiddlewareException;
 
 final class RouteMiddlewareExceptionTest extends TestCase
 {
-    public function testUndeclaredMiddlewareGroupRefusalEscapesControlCharactersOfTheHandler(): void
-    {
-        self::assertSame(
-            'Middleware group "admin", named by a #[MiddlewareGroup] of Ctrl@act\r\nFAKE, is not declared under '
-            . 'router.middleware_groups: declare it there, or the route would run without its middlewares.',
-            RouteMiddlewareException::undeclaredMiddlewareGroup('admin', "Ctrl@act\r\nFAKE")->getMessage(),
-        );
-    }
-
     public function testUndeclaredMiddlewareGroupRefusalEscapesControlCharactersOfTheGroupAndTheHandler(): void
     {
         self::assertSame(
