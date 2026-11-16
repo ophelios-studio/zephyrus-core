@@ -16,11 +16,20 @@ final class RouteUrlGenerationExceptionTest extends TestCase
         self::assertInstanceOf(ZephyrusRuntimeException::class, $e);
     }
 
-    public function testUnknownRoute(): void
+    public function testUnknownRouteQuotesTheName(): void
     {
         $e = RouteUrlGenerationException::unknownRoute('dashboard');
-        self::assertStringContainsString('Unknown route name', $e->getMessage());
-        self::assertStringContainsString('dashboard', $e->getMessage());
+        self::assertSame(RouteUrlGenerationException::class, $e::class);
+        self::assertSame('Unknown route name: "dashboard"', $e->getMessage());
+    }
+
+    public function testUnknownRouteCapsAThousandByteName(): void
+    {
+        $e = RouteUrlGenerationException::unknownRoute(str_repeat('a', 1000));
+        self::assertSame(
+            'Unknown route name: "' . str_repeat('a', 64) . '..." (1000 bytes)',
+            $e->getMessage(),
+        );
     }
 
     public function testMissingParameter(): void

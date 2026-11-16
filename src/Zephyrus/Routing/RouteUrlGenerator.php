@@ -40,7 +40,7 @@ final readonly class RouteUrlGenerator
         $route = $this->routes->findByName($routeName);
 
         if ($route === null) {
-            throw new RouteUrlGenerationException(sprintf('Unknown route name: %s', $routeName));
+            throw RouteUrlGenerationException::unknownRoute($routeName);
         }
 
         $placeholderNames = $this->extractPlaceholderNames($route->path);

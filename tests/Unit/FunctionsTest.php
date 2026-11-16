@@ -404,10 +404,12 @@ final class FunctionsTest extends TestCase
     {
         $this->useRoutes();
 
-        $this->expectException(RouteUrlGenerationException::class);
-        $this->expectExceptionMessage('Unknown route name: users.delete');
-
-        route('users.delete');
+        try {
+            route('users.delete');
+            self::fail('An unknown route name must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame('Unknown route name: "users.delete"', $e->getMessage());
+        }
     }
 
     public function testRouteRefusesAMissingParameter(): void

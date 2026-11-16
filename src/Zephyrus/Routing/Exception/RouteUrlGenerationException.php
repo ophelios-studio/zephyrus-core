@@ -14,7 +14,7 @@ final class RouteUrlGenerationException extends ZephyrusRuntimeException
 {
     public static function unknownRoute(string $name): self
     {
-        return new self(sprintf('Unknown route name: %s', $name));
+        return new self(sprintf('Unknown route name: %s', MessageValue::quote($name)));
     }
 
     public static function missingParameter(string $parameter, string $route): self

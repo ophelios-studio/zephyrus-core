@@ -59,10 +59,12 @@ final class RouteUrlGeneratorTest extends TestCase
     {
         $generator = new RouteUrlGenerator(new RouteCollection());
 
-        $this->expectException(RouteUrlGenerationException::class);
-        $this->expectExceptionMessage('Unknown route name: users.show');
-
-        $generator->generate('users.show');
+        try {
+            $generator->generate('users.show');
+            self::fail('An unknown route name must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame('Unknown route name: "users.show"', $e->getMessage());
+        }
     }
 
     public function testGenerateThrowsWhenParameterMissing(): void
@@ -443,6 +445,19 @@ final class RouteUrlGeneratorTest extends TestCase
         $url = $generator->generate('docs.show', ['slug' => 'routing'], fragment: '#');
 
         self::assertSame('/docs/routing', $url);
+    }
+
+    public function testAnUnknownRouteNameRefusalEscapesItsName(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', name: 'users.index'));
+
+        try {
+            (new RouteUrlGenerator($routes))->generate("users\r\nFAKE");
+            self::fail('An unknown route name must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame('Unknown route name: "users\\r\\nFAKE"', $e->getMessage());
+        }
     }
 
     public function testAConstraintRefusalEscapesTheValue(): void
