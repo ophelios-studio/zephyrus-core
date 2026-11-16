@@ -26,4 +26,12 @@ final class RouteMiddlewareExceptionTest extends TestCase
             RouteMiddlewareException::undeclaredMiddlewareGroup("admin\u{202E}", "Ctrl\u{202E}@act\r\nFAKE")->getMessage(),
         );
     }
+
+    public function testExcludedMiddlewareGroupRefusalEscapesControlCharactersOfTheListedClasses(): void
+    {
+        self::assertSame(
+            'Resource "/u" cannot skip "web": "web" is a middleware group: list its classes instead (Ctrl\r\nFAKE)',
+            RouteMiddlewareException::excludedMiddlewareGroup('Resource "/u"', 'web', ["Ctrl\r\nFAKE"])->getMessage(),
+        );
+    }
 }

@@ -16,4 +16,12 @@ final class RouteParameterExceptionTest extends TestCase
             (new RouteParameterException("No\r\nCtrl", "act\u{202E}", "id\r\n", 'int', 'abc'))->getMessage(),
         );
     }
+
+    public function testMessageEscapesControlCharactersOfTheExpectedType(): void
+    {
+        self::assertSame(
+            'Route parameter "$id" for "Ctrl::act" could not be resolved: expected int\u202e, got string.',
+            (new RouteParameterException('Ctrl', 'act', 'id', "int\u{202E}", 'abc'))->getMessage(),
+        );
+    }
 }

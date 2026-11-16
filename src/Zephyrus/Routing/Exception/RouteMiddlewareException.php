@@ -135,7 +135,10 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     {
         $hint = $classes === []
             ? ' with no class that can be skipped'
-            : sprintf(': list its classes instead (%s)', implode(', ', $classes));
+            : sprintf(
+                ': list its classes instead (%s)',
+                implode(', ', array_map(MessageValue::escapeControls(...), $classes)),
+            );
 
         $shown = MessageValue::escapeControls($name);
 

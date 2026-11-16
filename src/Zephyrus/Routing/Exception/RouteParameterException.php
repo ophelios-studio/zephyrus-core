@@ -29,8 +29,8 @@ final class RouteParameterException extends ZephyrusRuntimeException
             MessageValue::escapeControls($parameter),
             MessageValue::escapeControls($className),
             MessageValue::escapeControls($methodName),
-            $expectedType,
-            $actualType,
+            MessageValue::escapeControls($expectedType),
+            MessageValue::escapeControls($actualType),
         ));
     }
 }
