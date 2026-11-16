@@ -49,4 +49,31 @@ final class RegexCompilationTest extends TestCase
             restore_error_handler();
         }
     }
+
+    public function testAFailureWithoutAWarningGivesThePcreErrorMessage(): void
+    {
+        $matched = @preg_match('/(?R)/', '');
+        self::assertFalse($matched);
+        $expected = preg_last_error_msg();
+
+        self::assertSame($expected, RegexCompilation::error('/(?R)/'));
+    }
+
+    public function testTheOffsetOfAReasonIsStrippedForAWrappedPattern(): void
+    {
+        self::assertSame(
+            'Compilation failed: missing terminating ] for character class',
+            RegexCompilation::errorWithoutOffset('#[ab#'),
+        );
+    }
+
+    public function testAReasonWithoutAnOffsetIsKeptWhole(): void
+    {
+        self::assertSame("No ending delimiter '/' found", RegexCompilation::errorWithoutOffset('/unclosed'));
+    }
+
+    public function testAWrappedPatternThatCompilesHasNoError(): void
+    {
+        self::assertNull(RegexCompilation::errorWithoutOffset('#^/webhooks/#'));
+    }
 }
