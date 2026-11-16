@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\RouteDiscovery;
 
 final class RouteDiscoveryTest extends TestCase
@@ -44,6 +45,32 @@ final class RouteDiscoveryTest extends TestCase
                 . '"' . $this->basePath . '/ctl\r\nFAKE" holds no class of the namespace App\Ctl.',
                 $exception->getMessage(),
             );
+        }
+    }
+
+    public function testAControllerDeclaringARouteMethodThatIsNotATokenIsRefused(): void
+    {
+        $tree = new ControllerTree();
+
+        try {
+            $config = $tree->configure();
+            $tree->controller(
+                'SpacedMethodController',
+                "final class SpacedMethodController\n{\n"
+                . "    #[\\Zephyrus\\Routing\\Attribute\\Route('/x', 'GE T')]\n"
+                . "    public function index(): void\n    {\n    }\n}",
+            );
+
+            (new RouteDiscovery($config, $tree->root->path))->routes();
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route method "GE T" on route "/x": an HTTP method is a token of letters, digits and '
+                . '!#$%&\'*+-.^_`|~ (RFC 9110), such as GET or PROPFIND',
+                $exception->getMessage(),
+            );
+        } finally {
+            $tree->remove();
         }
     }
 }
