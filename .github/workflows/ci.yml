@@ -119,7 +119,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # A secret's boundary is the job: this one runs no repository or dependency code.
+  # Only this job references CODECOV_TOKEN, and it runs no repository or dependency code.
   codecov:
     name: Codecov upload
     needs: tests
@@ -142,6 +142,7 @@ jobs:
         with:
           files: ${{ runner.temp }}/coverage/coverage.xml
           disable_search: true
+          plugins: noop
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
