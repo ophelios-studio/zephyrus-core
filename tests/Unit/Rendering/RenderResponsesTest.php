@@ -79,9 +79,34 @@ final class RenderResponsesTest extends TestCase
     {
         $controller = $this->createTestController();
 
-        $this->expectException(RenderException::class);
-        $this->expectExceptionMessage('No render engine has been configured');
-        $controller->testRender('hello', ['name' => 'World']);
+        try {
+            $controller->testRender('hello', ['name' => 'World']);
+            self::fail('expected a refusal');
+        } catch (RenderException $e) {
+            self::assertSame(
+                'No render engine has been configured. Call withRenderEngine() on the builder, '
+                . 'or setRenderEngine() from your own controller factory.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testASubclassOfAControllerUsingTheTraitReachesTheResponseHelpers(): void
+    {
+        $controller = new ChildRenderController();
+        $controller->setRenderEngine(new PhpEngine($this->viewsDir));
+
+        $rendered = $controller->viaRender();
+        self::assertSame('Hello, A!', $rendered->body);
+        self::assertSame(200, $rendered->status);
+
+        $renderedWith = $controller->viaRenderWith(new PhpEngine($this->viewsDir));
+        self::assertSame('Hello, B!', $renderedWith->body);
+        self::assertSame(200, $renderedWith->status);
+
+        $html = $controller->viaHtml();
+        self::assertSame('<p>raw</p>', $html->body);
+        self::assertSame(200, $html->status);
     }
 
     /**
@@ -113,5 +138,28 @@ final class TestRenderController extends Controller
     public function testHtml(string $content, int $status = 200): Response
     {
         return $this->html($content, $status);
+    }
+}
+
+class BaseRenderController extends Controller
+{
+    use RenderResponses;
+}
+
+final class ChildRenderController extends BaseRenderController
+{
+    public function viaRender(): Response
+    {
+        return $this->render('hello', ['name' => 'A']);
+    }
+
+    public function viaRenderWith(RenderEngine $engine): Response
+    {
+        return $this->renderWith($engine, 'hello', ['name' => 'B']);
+    }
+
+    public function viaHtml(): Response
+    {
+        return $this->html('<p>raw</p>');
     }
 }

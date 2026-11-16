@@ -380,6 +380,36 @@ final class LatteNamespaceTest extends TestCase
         }
     }
 
+    public function testALongRejectedNamespaceDirectoryIsQuotedWholeUpToFiveHundredAndTwelveBytes(): void
+    {
+        $engine = new LatteEngine($this->plainViews(), $this->cacheDir);
+        $whole = '/' . str_repeat('a', 511);
+        $tooLong = '/' . str_repeat('a', 512);
+
+        try {
+            $engine->addNamespace('acme', $whole);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                sprintf('Template namespace "acme" needs an existing absolute directory, got "%s".', $whole),
+                $e->getMessage(),
+            );
+        }
+
+        try {
+            $engine->addNamespace('acme', $tooLong);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                sprintf(
+                    'Template namespace "acme" needs an existing absolute directory, got "...%s" (513 bytes).',
+                    substr($tooLong, 1),
+                ),
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testARelativeNamespaceDirectoryIsRefused(): void
     {
         $engine = new LatteEngine($this->plainViews(), $this->cacheDir);

@@ -95,6 +95,41 @@ final class RenderConfigTest extends TestCase
         self::assertTrue($engine->exists('hello'));
     }
 
+    public function testAnAbsoluteDirectoryIsNotPrefixedWithTheBasePath(): void
+    {
+        $config = RenderConfig::fromArray([
+            'engine' => 'php',
+            'directory' => __DIR__ . '/fixtures/views',
+        ]);
+
+        $engine = $config->createEngine('/nonexistent/base');
+
+        self::assertTrue($engine->exists('hello'));
+    }
+
+    public function testABasePathGivenWithATrailingSeparatorStillResolvesRelativePaths(): void
+    {
+        $config = RenderConfig::fromArray(['engine' => 'php', 'directory' => 'views']);
+
+        $engine = $config->createEngine(__DIR__ . '/fixtures/');
+
+        self::assertTrue($engine->exists('hello'));
+    }
+
+    public function testAMissingTemplateUnderABasePathWithATrailingSeparatorResolvesWithoutADoubledSeparator(): void
+    {
+        $config = RenderConfig::fromArray(['engine' => 'php', 'directory' => 'views']);
+        $engine = $config->createEngine(__DIR__ . '/fixtures/');
+
+        try {
+            $engine->render('nope');
+            self::fail('expected a refusal');
+        } catch (RenderException $e) {
+            self::assertSame('Template [nope] not found.', $e->getMessage());
+            self::assertSame(__DIR__ . '/fixtures/views/nope.php', $e->resolvedPath());
+        }
+    }
+
     public function testCreateEngineThrowsForUnknownEngine(): void
     {
         $config = RenderConfig::fromArray([

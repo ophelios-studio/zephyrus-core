@@ -117,6 +117,42 @@ final class PhpEngineTest extends TestCase
         self::assertSame('Hello, Bob!', $second);
     }
 
+    public function testARenderFailureKeepsItsCauseAndLeavesTheOutputBufferLevelUntouched(): void
+    {
+        $engine = new PhpEngine($this->viewsDir);
+        $level = ob_get_level();
+
+        try {
+            $engine->render('error');
+            self::fail('expected a refusal');
+        } catch (RenderException $e) {
+            self::assertSame('Failed to render template [error]: render failure fixture', $e->getMessage());
+            self::assertInstanceOf(\RuntimeException::class, $e->getPrevious());
+        }
+
+        self::assertSame($level, ob_get_level());
+    }
+
+    public function testAMissingTemplateReportsTheFileItWouldHaveLoadedWithoutADoubledSeparator(): void
+    {
+        $engine = new PhpEngine($this->viewsDir . '/');
+
+        try {
+            $engine->render('/nonexistent');
+            self::fail('expected a refusal');
+        } catch (RenderException $e) {
+            self::assertSame('Template [/nonexistent] not found.', $e->getMessage());
+            self::assertSame($this->viewsDir . '/nonexistent.php', $e->resolvedPath());
+        }
+    }
+
+    public function testADirectoryGivenWithATrailingSeparatorStillRendersItsTemplates(): void
+    {
+        $engine = new PhpEngine($this->viewsDir . '/');
+
+        self::assertSame('Hello, World!', $engine->render('hello', ['name' => 'World']));
+    }
+
     // ------------------------------------------------------------------
     // Path containment: the page identifier is include()d
     // ------------------------------------------------------------------

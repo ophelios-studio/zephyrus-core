@@ -217,6 +217,72 @@ final class LatteEngineTest extends TestCase
         }
     }
 
+    public function testAnExtensionGivenToTheConstructorIsActive(): void
+    {
+        $extension = new class extends \Latte\Extension {
+            public function getFilters(): array
+            {
+                return ['shout' => static fn (string $value): string => strtoupper($value) . '!'];
+            }
+        };
+        file_put_contents($this->cacheDir . '/shout.latte', '{$word|shout}');
+        $engine = new LatteEngine($this->cacheDir, $this->cacheDir . '/compiled', extensions: [$extension]);
+
+        self::assertSame('HEY!', $engine->render('shout', ['word' => 'hey']));
+    }
+
+    public function testADirectoryGivenWithATrailingSeparatorStillRendersItsTemplates(): void
+    {
+        $engine = new LatteEngine($this->viewsDir . '/', $this->cacheDir);
+
+        self::assertSame('Hello, World!', $engine->render('hello', ['name' => 'World']));
+    }
+
+    public function testAMissingTemplateReportsTheFileItWouldHaveLoadedWithoutADoubledSeparator(): void
+    {
+        $engine = new LatteEngine($this->viewsDir . '/', $this->cacheDir);
+
+        try {
+            $engine->render('/nonexistent');
+            self::fail('expected a refusal');
+        } catch (RenderException $e) {
+            self::assertSame('Template [/nonexistent] not found.', $e->getMessage());
+            self::assertSame($this->viewsDir . '/nonexistent.latte', $e->resolvedPath());
+        }
+    }
+
+    public function testCacheModeAlwaysWritesCompiledTemplatesToTheCacheDirectory(): void
+    {
+        mkdir($this->cacheDir . '/views');
+        file_put_contents($this->cacheDir . '/views/unique.latte', 'compiled {$word}');
+        $engine = new LatteEngine($this->cacheDir . '/views', $this->cacheDir . '/compiled');
+
+        self::assertSame('compiled x', $engine->render('unique', ['word' => 'x']));
+        self::assertNotSame([], glob($this->cacheDir . '/compiled/*.php'));
+    }
+
+    public function testACreatedCacheDirectoryIsNotWritableByOthers(): void
+    {
+        $tempCache = $this->cacheDir . '/created';
+
+        new LatteEngine($this->viewsDir, $tempCache);
+
+        self::assertSame(0755 & ~umask(), fileperms($tempCache) & 0777);
+    }
+
+    public function testACacheDirectoryThatCannotBeCreatedIsRefused(): void
+    {
+        $blocker = $this->cacheDir . '/blocker';
+        file_put_contents($blocker, 'a file');
+
+        try {
+            new LatteEngine($this->viewsDir, $blocker . '/cache/');
+            self::fail('expected a refusal');
+        } catch (RenderException $e) {
+            self::assertSame('Unable to create Latte cache directory: ' . $blocker . '/cache', $e->getMessage());
+        }
+    }
+
     public function testFormatterFiltersFollowAFormatterProviderOnEveryUse(): void
     {
         $current = new Formatter('en_US');
