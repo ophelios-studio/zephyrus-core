@@ -1145,4 +1145,156 @@ final class DriverNamePdo extends PDO
     {
         return $attribute === PDO::ATTR_DRIVER_NAME ? 'pgsql' : parent::getAttribute($attribute);
     }
+
+    private function seedUsers(int $count): void
+    {
+        for ($i = 1; $i <= $count; $i++) {
+            $this->db->insert('INSERT INTO users (name, email) VALUES (?, ?)', ["user{$i}", "user{$i}@example.com"]);
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function envelopeBuilders(): iterable
+    {
+        yield 'paginateWith' => ['paginateWith'];
+        yield 'paginateSortedWith' => ['paginateSortedWith'];
+    }
+
+    /**
+     * @return array{items: \stdClass[], total: int, page: int, per_page: int, total_pages: int, has_previous: bool, has_next: bool}
+     */
+    private function envelope(string $builder, int $page, int $perPage): array
+    {
+        $dataSql = 'SELECT * FROM users';
+        $countSql = 'SELECT COUNT(*) FROM users';
+        $pagination = new PaginationRequest($page, $perPage);
+
+        return $builder === 'paginateWith'
+            ? $this->db->paginateWith($dataSql . ' ORDER BY id', $countSql, $pagination)
+            : $this->db->paginateSortedWith($dataSql, $countSql, new SortRequest('id', 'ASC'), $pagination);
+    }
+
+    #[DataProvider('envelopeBuilders')]
+    public function testAnEnvelopeRoundsThePageCountUpAndFlagsTheMiddlePageBothWays(string $builder): void
+    {
+        $this->seedUsers(7);
+
+        $middle = $this->envelope($builder, 2, 3);
+
+        self::assertSame(3, $middle['total_pages']);
+        self::assertTrue($middle['has_previous']);
+        self::assertTrue($middle['has_next']);
+    }
+
+    #[DataProvider('envelopeBuilders')]
+    public function testTheFirstPageHasNoPreviousAndTheLastHasNoNext(string $builder): void
+    {
+        $this->seedUsers(7);
+
+        $first = $this->envelope($builder, 1, 3);
+        $last = $this->envelope($builder, 3, 3);
+
+        self::assertFalse($first['has_previous']);
+        self::assertTrue($first['has_next']);
+        self::assertTrue($last['has_previous']);
+        self::assertFalse($last['has_next']);
+    }
+
+    #[DataProvider('envelopeBuilders')]
+    public function testAnEmptyResultStillReportsOnePageWithNeighbours(string $builder): void
+    {
+        $empty = $this->envelope($builder, 1, 3);
+
+        self::assertSame(0, $empty['total']);
+        self::assertSame(1, $empty['total_pages']);
+        self::assertFalse($empty['has_previous']);
+        self::assertFalse($empty['has_next']);
+    }
+
+    #[DataProvider('envelopeBuilders')]
+    public function testAnExactMultipleOfThePageSizeDoesNotAddAPage(string $builder): void
+    {
+        $this->seedUsers(6);
+
+        self::assertSame(2, $this->envelope($builder, 2, 3)['total_pages']);
+    }
+
+    public function testFilteredQueriesBindTheCallerParametersBesideTheFilterOnes(): void
+    {
+        $this->seedUsers(4);
+        $base = 'SELECT * FROM (SELECT * FROM users WHERE id > :min_id) AS u';
+        $filter = new FilterRequest(['name' => 'user3']);
+        $map = ['name' => 'name'];
+
+        $plain = $this->db->selectFiltered($base, $filter, $map, [':min_id' => 1]);
+        $sorted = $this->db->selectFilteredSorted($base, $filter, $map, new SortRequest('id', 'ASC'), [':min_id' => 1]);
+
+        self::assertSame(['user3'], array_map(static fn (\stdClass $r): string => $r->name, $plain));
+        self::assertSame(['user3'], array_map(static fn (\stdClass $r): string => $r->name, $sorted));
+    }
+
+    public function testFilteredSortedQueriesApplyTheSortAfterTheFilter(): void
+    {
+        $this->seedUsers(3);
+
+        $rows = $this->db->selectFilteredSorted(
+            'SELECT * FROM users',
+            new FilterRequest(['name' => ['user1', 'user2', 'user3']]),
+            ['name' => 'name'],
+            new SortRequest('id', 'DESC'),
+        );
+
+        self::assertSame(['user3', 'user2', 'user1'], array_map(static fn (\stdClass $r): string => $r->name, $rows));
+    }
+
+    public function testFilteredSortedPaginationBindsTheCallerParametersBesideTheFilterOnes(): void
+    {
+        $this->seedUsers(4);
+
+        $result = $this->db->paginateFilteredSortedResultWith(
+            'SELECT * FROM (SELECT * FROM users WHERE id > :min_id) AS u',
+            'SELECT COUNT(*) FROM (SELECT * FROM users WHERE id > :min_id) AS u',
+            new FilterRequest(['name' => ['user2', 'user3']]),
+            ['name' => 'name'],
+            new SortRequest('id', 'ASC'),
+            new PaginationRequest(1, 10),
+            [':min_id' => 2],
+        );
+
+        self::assertSame(1, $result->total);
+        self::assertSame('user3', $result->firstItem()->name);
+    }
+
+    public function testPaginateResultFromQueryDefaultsToTwentyFiveItemsAndCapsAtOneHundred(): void
+    {
+        $this->seedUsers(130);
+        $items = 'SELECT * FROM users ORDER BY id';
+        $count = 'SELECT COUNT(*) FROM users';
+
+        $default = $this->db->paginateResultFromQuery($items, $count, []);
+        $capped = $this->db->paginateResultFromQuery($items, $count, ['per_page' => 500]);
+        $atCap = $this->db->paginateResultFromQuery($items, $count, ['per_page' => 100]);
+
+        self::assertSame(25, $default->perPage);
+        self::assertSame(100, $capped->perPage);
+        self::assertSame(100, $atCap->perPage);
+    }
+
+    public function testScalarReadsFallBackToAZeroFalseOrZeroPointZeroDefault(): void
+    {
+        $none = 'SELECT id FROM users WHERE id = -1';
+
+        self::assertSame(0, $this->db->selectInt($none));
+        self::assertSame(0, $this->db->count($none));
+        self::assertFalse($this->db->selectBool($none));
+        self::assertSame(0.0, $this->db->selectFloat($none));
+        self::assertFalse($this->db->exists($none));
+    }
+
+    public function testSelectStringCastsANumericColumnToAString(): void
+    {
+        self::assertSame('42', $this->db->selectString('SELECT 42'));
+    }
 }
