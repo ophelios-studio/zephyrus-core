@@ -378,4 +378,87 @@ final class AcceptLanguageResolverTest extends TestCase
             defaultLocale:        'zh-Hant-TW',
         ));
     }
+
+    // -- Header parameters, weights and tags ------------------------------------
+
+    public function testAnAllowlistEntryThatNormalizesToNothingIsDroppedBeforeTheFirstSupportedFallback(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('de', ['', 'fr'], 'en'));
+    }
+
+    public function testQualityParameterMayFollowASpace(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=0.9, en; q=0.5'));
+    }
+
+    public function testQualityParameterNameIsCaseInsensitive(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=0.9, en;Q=0.5'));
+    }
+
+    public function testTheFirstQualityParameterOfAnEntryWins(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=0.9, en;q=0.5;q=0.95'));
+    }
+
+    public function testAnUnrelatedParameterDoesNotHideTheQualityThatFollowsIt(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=0.9, en;level=1;q=0.5'));
+    }
+
+    public function testANonNumericQualityCountsAsOne(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=abc, en;q=0.9'));
+    }
+
+    public function testQualitiesAboveOneAreClampedBeforeTheyAreCompared(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('fr;q=1.2, en;q=1.5'));
+    }
+
+    public function testEqualQualitiesKeepHeaderOrderAcrossManyEntries(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('de;q=0.5, es;q=0.5, fr;q=0.5, en;q=0.5', ['en', 'fr']));
+        self::assertSame('en', $this->resolver->resolve('de, es, en, fr', ['en', 'fr'], 'fr'));
+        self::assertSame('en', $this->resolver->resolve('de;q=0.4, es;q=0.4, it;q=0.4, en;q=0.4, fr;q=0.4', ['en', 'fr']));
+    }
+
+    public function testEqualQualitiesKeepHeaderOrderWhenALowerQualityComesFirst(): void
+    {
+        self::assertSame('de', $this->resolver->resolve('fr;q=0.5, de;q=0.9, es;q=0.9', ['fr', 'de', 'es'], 'en'));
+    }
+
+    public function testARepeatedCandidateDoesNotHideTheOnesAfterIt(): void
+    {
+        self::assertSame('en', $this->resolver->resolve('fr, fr, en', ['en', 'de'], 'de'));
+    }
+
+    // -- Tag normalization --------------------------------------------------------
+
+    public function testADefaultLocaleIsTrimmed(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve('', [], ' fr '));
+    }
+
+    public function testATooLongDefaultLocaleBecomesEnglish(): void
+    {
+        self::assertSame('en', $this->resolver->resolve('', [], str_repeat('a', 36)));
+    }
+
+    public function testEmptyHyphenSegmentsAreDroppedFromATag(): void
+    {
+        self::assertSame('fr-CA', $this->resolver->resolve('', [], 'fr--ca'));
+        self::assertSame('fr', $this->resolver->resolve('', [], '-fr'));
+        self::assertSame('en', $this->resolver->resolve('', [], '--'));
+    }
+
+    public function testAThreeLetterSubtagIsLowercased(): void
+    {
+        self::assertSame('zh-yue', $this->resolver->resolve('', [], 'ZH_YUE'));
+    }
+
+    public function testSubtagsAfterTheRegionAreKeptAndLowercased(): void
+    {
+        self::assertSame('en-US-posix', $this->resolver->resolve('', [], 'en-us-POSIX'));
+    }
 }
