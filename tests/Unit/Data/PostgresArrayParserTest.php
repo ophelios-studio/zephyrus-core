@@ -46,6 +46,24 @@ final class PostgresArrayParserTest extends TestCase
         yield 'empty element is returned raw' => ['{a,,b}', '{a,,b}'];
         yield 'trailing text is returned raw' => ['{a}x', '{a}x'];
         yield 'not an array is returned raw' => ['plain', 'plain'];
+        yield 'closing brace without an opening one is returned raw' => ['x}', 'x}'];
+        yield 'lone opening brace is returned raw' => ['{', '{'];
+        yield 'opening brace and whitespace is returned raw' => ['{ ', '{ '];
+        yield 'trailing comma is returned raw' => ['{a,', '{a,'];
+        yield 'trailing comma and whitespace is returned raw' => ['{a, ', '{a, '];
+        yield 'whitespace after a quoted element is skipped' => ['{"a" }', ['a']];
+        yield 'whitespace around a quoted element and commas' => ['{ "a" , "b" }', ['a', 'b']];
+        yield 'whitespace after a nested array is skipped' => ['{{a} , {b} }', [['a'], ['b']]];
+        yield 'dangling backslash in a quoted element is returned raw' => ['{"a\\', '{"a\\'];
+        yield 'dangling backslash in an unquoted element is returned raw' => ['{a\\', '{a\\'];
+        yield 'escaped quote ending the literal is returned raw' => ['{"a\\"', '{"a\\"'];
+        yield 'escaped last byte of an unquoted element is returned raw' => ['{a\\}', '{a\\}'];
+        yield 'escaped NULL is the string' => ['{\\NULL}', ['NULL']];
+        yield 'escaped letter of NULL is the string' => ['{N\\ULL}', ['NULL']];
+        yield 'backslash escapes in a row' => ['{"a\\\\\\"b"}', ['a\\"b']];
+        yield 'lower bound prefix without an equals sign is returned raw' => ['[0:1]{a}', '[0:1]{a}'];
+        yield 'an opening bracket with no equals sign is returned raw' => ['[{a}', '[{a}'];
+        yield 'lower bound prefix then a non array is returned raw' => ['[0:1]=a}', '[0:1]=a}'];
     }
 
     #[DataProvider('arrayLiterals')]
