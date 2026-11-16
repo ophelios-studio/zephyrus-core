@@ -252,6 +252,8 @@ final class AllowedHostsMiddlewareTest extends TestCase
         yield 'leading space' => [' example.com', false];
         yield 'trailing space' => ['example.com ', false];
         yield 'other name' => ['evil.com', false];
+        yield 'one character prepended to an exact entry' => ['aexample.com', false];
+        yield 'one character prepended to the wildcard suffix' => ['myexample.com', false];
         yield 'suffix look-alike' => ['example.com.evil.com', false];
         yield 'wildcard subdomain' => ['api.example.com', true];
         yield 'wildcard subdomain with port' => ['api.example.com:8443', true];
@@ -354,6 +356,7 @@ final class AllowedHostsMiddlewareTest extends TestCase
      */
     public static function entriesWithADedicatedReason(): iterable
     {
+        yield 'empty entry' => ['', 'an empty entry matches nothing, remove it'];
         yield 'comma-separated list' => ['a.example.com,b.example.com', 'use list items, not a comma inside one item'];
         yield 'leading space' => [' example.com', 'remove the spaces around the host name'];
         yield 'trailing space' => ['example.com ', 'remove the spaces around the host name'];
@@ -487,5 +490,32 @@ final class AllowedHostsMiddlewareTest extends TestCase
                 $e->getMessage(),
             );
         }
+    }
+
+    public function testASingleDigitPortOnABracketedIpv6EntryIsUsable(): void
+    {
+        $mw = new AllowedHostsMiddleware(['[2001:db8::1]:9']);
+
+        self::assertTrue($mw->allows('[2001:db8::1]:9'));
+        self::assertFalse($mw->allows('[2001:db8::1]:8'));
+    }
+
+    public function testAHostNameOfExactlyTheMaximumLengthIsUsable(): void
+    {
+        $name = str_repeat('a', 63) . '.' . str_repeat('b', 63) . '.' . str_repeat('c', 63) . '.' . str_repeat('d', 61);
+        self::assertSame(253, strlen($name));
+
+        $mw = new AllowedHostsMiddleware([$name]);
+
+        self::assertTrue($mw->allows($name));
+        self::assertFalse($mw->allows($name . 'd'));
+    }
+
+    public function testAPortLongerThanAHostNameLabelIsRefusedAsAPort(): void
+    {
+        self::assertSame(
+            'the port must be a number from 1 to 65535 without a leading zero',
+            AllowedHostsMiddleware::invalidEntryReason('example.com:' . str_repeat('1', 64)),
+        );
     }
 }
