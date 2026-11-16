@@ -258,4 +258,64 @@ final class ContentSecurityPolicyTest extends TestCase
         yield 'NUL in the middle' => ["\0x"];
         yield 'unit separator' => ["\x1F"];
     }
+
+    public function testHashAlgorithmIsNormalizedForCaseAndPadding(): void
+    {
+        $policy = ContentSecurityPolicy::create()
+            ->appendHash('script-src', ' SHA256 ', 'abc123=');
+
+        self::assertSame("script-src 'sha256-abc123='", $policy->toHeaderValue());
+    }
+
+    public function testNonceAndHashValuesAreTrimmed(): void
+    {
+        $policy = ContentSecurityPolicy::create()
+            ->appendNonce('script-src', "  abc123 \n")
+            ->appendHash('script-src', 'sha384', ' def456 ');
+
+        self::assertSame("script-src 'nonce-abc123' 'sha384-def456'", $policy->toHeaderValue());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function malformedBase64Tokens(): iterable
+    {
+        yield 'foreign character before valid content' => ['!abc'];
+        yield 'foreign character after valid content' => ['abc!'];
+        yield 'three padding characters' => ['abc==='];
+        yield 'padding first' => ['=abc'];
+    }
+
+    #[DataProvider('malformedBase64Tokens')]
+    public function testAMalformedNonceIsRefusedWholeNotJustPartly(string $token): void
+    {
+        try {
+            $ignored = ContentSecurityPolicy::create()->appendNonce('script-src', $token);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame('CSP nonce/hash value must be valid base64 content.', $e->getMessage());
+        }
+    }
+
+    public function testADirectiveNameIsTrimmedBeforeItIsValidated(): void
+    {
+        $policy = ContentSecurityPolicy::create()->withDirective("  Default-Src \t", ["'self'"]);
+
+        self::assertSame("default-src 'self'", $policy->toHeaderValue());
+    }
+
+    public function testAPaddedStringValueListIsTrimmedBeforeItIsSplit(): void
+    {
+        $policy = ContentSecurityPolicy::create()->withDirective('img-src', "  'self'   data:  ");
+
+        self::assertSame("img-src 'self' data:", $policy->toHeaderValue());
+    }
+
+    public function testAnArrayValueIsTrimmed(): void
+    {
+        $policy = ContentSecurityPolicy::create()->withDirective('img-src', ["  'self' ", "\tdata:"]);
+
+        self::assertSame("img-src 'self' data:", $policy->toHeaderValue());
+    }
 }
