@@ -19,7 +19,8 @@ final class Route
 {
     /**
      * @param string                $path        Path pattern with {placeholder} segments.
-     * @param string                $method      HTTP method.
+     * @param string                $method      HTTP method, an RFC 9110 token such as GET or PROPFIND;
+     *                                           checked when the route is registered.
      * @param array<string, string> $constraints Regex per placeholder name; unlisted placeholders match "[^/]+".
      * @param array<int, string>    $middlewares Names of the middlewares or middleware groups applied to this route.
      * @param string                $name        Route name for URL generation; empty for none.

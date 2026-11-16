@@ -211,6 +211,62 @@ final class RouteTest extends TestCase
     /**
      * @return iterable<string, array{string, string}>
      */
+    public static function methodsThatAreNotTokens(): iterable
+    {
+        $tail = 'an HTTP method is a token of letters, digits and !#$%&\'*+-.^_`|~ (RFC 9110), such as GET or PROPFIND';
+
+        yield 'empty' => ['', 'Invalid route method "" on route "/x": ' . $tail];
+        yield 'space' => ['GE T', 'Invalid route method "GE T" on route "/x": ' . $tail];
+        yield 'CRLF' => ["GE\r\nT", 'Invalid route method "GE\\r\\nT" on route "/x": ' . $tail];
+        yield 'trailing newline' => ["GET\n", 'Invalid route method "GET\\n" on route "/x": ' . $tail];
+        yield 'non ASCII letter' => ['GÉT', 'Invalid route method "GÉT" on route "/x": ' . $tail];
+    }
+
+    #[DataProvider('methodsThatAreNotTokens')]
+    public function testConstructorRefusesAMethodThatIsNotAToken(string $method, string $message): void
+    {
+        try {
+            new Route($method, '/x', 'HomeController@index');
+            self::fail('A method that is not a token must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame($message, $exception->getMessage());
+        }
+    }
+
+    public function testDefineRefusesAMethodThatIsNotATokenWithTheNormalizedPath(): void
+    {
+        try {
+            Route::define('GE T', 'x/', 'HomeController@index');
+            self::fail('A method that is not a token must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route method "GE T" on route "/x": an HTTP method is a token of letters, digits and '
+                . '!#$%&\'*+-.^_`|~ (RFC 9110), such as GET or PROPFIND',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function methodsThatAreTokens(): iterable
+    {
+        yield 'extension method' => ['PROPFIND', 'PROPFIND'];
+        yield 'lower case' => ['get', 'GET'];
+        yield 'hyphen' => ['M-SEARCH', 'M-SEARCH'];
+        yield 'every token character' => ["A!#$%&'*+-.^_`|~9", "A!#$%&'*+-.^_`|~9"];
+    }
+
+    #[DataProvider('methodsThatAreTokens')]
+    public function testDefineAdmitsAMethodThatIsAToken(string $method, string $expected): void
+    {
+        self::assertSame($expected, Route::define($method, '/x', 'HomeController@index')->method);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
     public static function pathsHoldingAQueryOrFragmentMark(): iterable
     {
         yield 'query after a literal' => ['/a?b', 'Invalid route path "/a?b": the request path ends at "?", '

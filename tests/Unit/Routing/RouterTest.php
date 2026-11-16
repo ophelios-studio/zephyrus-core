@@ -12,6 +12,7 @@ use Zephyrus\Routing\Attribute\WithoutMiddleware as WithoutMiddlewareAttribute;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteNotFoundException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Router;
 use Zephyrus\Security\AuthGuardMiddleware;
 use Zephyrus\Security\CsrfMiddleware;
@@ -822,6 +823,20 @@ final class RouterTest extends TestCase
         // Unnamed route stays unnamed, merged middlewares apply
         self::assertNull($routes[1]->name);
         self::assertSame(['auth', 'audit'], $routes[1]->middlewares);
+    }
+
+    public function testAddRefusesAMethodThatIsNotAToken(): void
+    {
+        try {
+            (new Router())->add('GE T', '/x', 'PingController@ping');
+            self::fail('A method that is not a token must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route method "GE T" on route "/x": an HTTP method is a token of letters, digits and '
+                . '!#$%&\'*+-.^_`|~ (RFC 9110), such as GET or PROPFIND',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testAddAcceptsExplicitNameParameter(): void

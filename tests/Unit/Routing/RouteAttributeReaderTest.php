@@ -19,6 +19,7 @@ use Zephyrus\Routing\Attribute\Route as RouteAttribute;
 use Zephyrus\Routing\Attribute\WithoutMiddleware as WithoutMiddlewareAttribute;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
+use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\RouteAttributeReader;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -232,6 +233,12 @@ class RootTrailingSlashController
 {
     #[GetAttribute('/test')]
     public function test(): void {}
+}
+
+class InvalidMethodController
+{
+    #[RouteAttribute('/x', 'GE T')]
+    public function index(): void {}
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +506,20 @@ final class RouteAttributeReaderTest extends TestCase
             ['web', 'audit-group', 'auth'],
             $this->findByHandler($routes, MiddlewareGroupAttributedController::class . '@updateProfile')?->middlewares,
         );
+    }
+
+    public function testAnAttributeMethodThatIsNotATokenIsRefused(): void
+    {
+        try {
+            $this->reader->read(InvalidMethodController::class);
+            self::fail('A method that is not a token must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route method "GE T" on route "/x": an HTTP method is a token of letters, digits and '
+                . '!#$%&\'*+-.^_`|~ (RFC 9110), such as GET or PROPFIND',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testUnresolvableClassThrowsException(): void

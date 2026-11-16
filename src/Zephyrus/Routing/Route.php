@@ -24,6 +24,7 @@ final readonly class Route
      * and any name RouteUrlGenerator would leave unsubstituted, since it only replaces {[a-zA-Z0-9_]+}.
      */
     public const PARAMETER_NAME_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/D';
+    private const string METHOD_PATTERN = '/^[!#$%&\'*\-+.^_`|~0-9A-Za-z]+$/D';
 
     private const string WHOLE_PLACEHOLDER_PATTERN = '/^\{[^{}]+\}$/D';
     private const string PLACEHOLDER_PATTERN = '/\{[^{}]+\}/';
@@ -70,7 +71,8 @@ final readonly class Route
      * @param array<string, string> $constraints
      * @param array<int, string> $middlewares
      * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
-     * @throws RouteSignatureException When a path holds "?" or "#" outside braces, a placeholder is optional, malformed,
+     * @throws RouteSignatureException When the method is not an RFC 9110 token, a path holds "?" or "#" outside braces,
+     *                                  a placeholder is optional, malformed,
      *                                  duplicated or reserved, a placeholder shares its segment with text, or a segment
      *                                  wrapped in braces is not a valid placeholder.
      * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
@@ -85,6 +87,7 @@ final readonly class Route
         public ?string $name = null,
         array $excludedMiddlewares = [],
     ) {
+        self::assertValidMethod($method, $path);
         self::assertNoQueryOrFragmentMark($path);
         self::assertValidParameterNames($path);
         $this->excludedMiddlewares = self::skippableMiddlewares(
@@ -281,6 +284,20 @@ final readonly class Route
         ));
     }
 
+    private static function assertValidMethod(string $method, string $path): void
+    {
+        if (preg_match(self::METHOD_PATTERN, $method) === 1) {
+            return;
+        }
+
+        throw new RouteSignatureException(sprintf(
+            'Invalid route method "%s" on route "%s": an HTTP method is a token of letters, digits and '
+            . '!#$%%&\'*+-.^_`|~ (RFC 9110), such as GET or PROPFIND',
+            MessageValue::escapeControls($method),
+            MessageValue::escapeControls($path),
+        ));
+    }
+
     private static function invalidPlaceholder(string $path, string $segment): RouteSignatureException
     {
         return new RouteSignatureException(sprintf(
@@ -298,7 +315,8 @@ final readonly class Route
      * @param array<int, string> $middlewares
      * @param array<int, string> $excludedMiddlewares Global middleware classes or interfaces to skip.
      *
-     * @throws RouteSignatureException When a path holds "?" or "#" outside braces, a placeholder is optional, malformed,
+     * @throws RouteSignatureException When the method is not an RFC 9110 token, a path holds "?" or "#" outside braces,
+     *                                  a placeholder is optional, malformed,
      *                                  duplicated or reserved, a placeholder shares its segment with text, or a segment
      *                                  wrapped in braces is not a valid placeholder.
      * @throws RouteMiddlewareException When an excluded class is not a middleware or would skip a framework
