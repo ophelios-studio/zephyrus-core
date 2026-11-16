@@ -23,27 +23,28 @@ final class SafePath
      *
      * @return string|null The canonical absolute path, or null when the path
      *                     escapes the root, is unreadable, or does not exist,
-     *                     or when the root holds a NUL byte.
+     *                     or when the root is empty or holds a NUL byte.
      */
     public static function within(string $root, string $relativePath): ?string
     {
-        if (!self::isSafeRelativePath($relativePath) || self::holdsNulByte($root)) {
+        if (!self::isSafeRelativePath($relativePath) || $root === '' || self::holdsNulByte($root)) {
             return null;
         }
 
-        $realRoot = @realpath(rtrim($root, '/\\'));
+        $trimmedRoot = rtrim($root, '/\\');
+        $realRoot = @realpath($trimmedRoot === '' ? $root : $trimmedRoot);
         if ($realRoot === false) {
             return null;
         }
 
-        $realPath = @realpath(rtrim($root, '/\\') . '/' . ltrim($relativePath, '/\\'));
+        $realPath = @realpath($trimmedRoot . '/' . ltrim($relativePath, '/\\'));
         if ($realPath === false || !@is_readable($realPath)) {
             return null;
         }
 
-        $realRoot = rtrim($realRoot, DIRECTORY_SEPARATOR);
+        $prefix = rtrim($realRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
 
-        return str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR) ? $realPath : null;
+        return str_starts_with($realPath, $prefix) && $realPath !== $prefix ? $realPath : null;
     }
 
     /**

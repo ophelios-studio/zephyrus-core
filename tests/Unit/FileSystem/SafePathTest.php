@@ -107,6 +107,39 @@ final class SafePathTest extends TestCase
         self::assertNull(SafePath::within($this->root, '.'));
     }
 
+    public function testTheFilesystemRootIsAcceptedWhateverTheCurrentDirectory(): void
+    {
+        $target = realpath(sys_get_temp_dir());
+        $previous = getcwd();
+        self::assertIsString($previous);
+        chdir($this->root);
+
+        try {
+            self::assertSame($target, SafePath::within('/', ltrim($target, '/')));
+        } finally {
+            chdir($previous);
+        }
+    }
+
+    public function testTheFilesystemRootItselfIsRefused(): void
+    {
+        self::assertNull(SafePath::within('/', '.'));
+    }
+
+    public function testAnEmptyRootIsRefusedRatherThanResolvedAgainstTheCurrentDirectory(): void
+    {
+        $previous = getcwd();
+        self::assertIsString($previous);
+        chdir($this->root);
+
+        try {
+            self::assertNull(SafePath::within('', 'a.txt'));
+            self::assertNull(SafePath::within('', ltrim($this->root . '/a.txt', '/')));
+        } finally {
+            chdir($previous);
+        }
+    }
+
     public function testFileDirectoryAndReadableChecksRefuseMissingPathsAndNulBytes(): void
     {
         $file = $this->root . '/a.txt';

@@ -101,6 +101,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Fixed
 
+- `SafePath::within()` accepts `/` as its root: it used to resolve the empty string left by trimming `/` against the current directory, so `within('/', 'tmp/x')` returned `null` unless the current directory was `/`. An empty root is refused instead of being resolved against the current directory, and `within('/', '.')` returns `null`, as any root itself does.
 - The `Translator` falls back through every shorter prefix of a locale, as RFC 4647 lookup does: `zh-Hant-TW` now tries `zh-Hant` before `zh`, and `fr-CA-x-foo` tries `fr-CA`. A tag of a language and at most one other subtag (`fr-CA`, `fr`) keeps the same chain.
 - `Translator` and `JsonLocaleLoader` case a locale tag as BCP 47 does (language lowercase, script title case, region uppercase), so a catalog named `zh-Hant-TW.json` or `sr-Latn/` is found for `zh-hant-tw` or `zh_HANT_TW`; the `Translator` used to look for `zh-HANT-TW`. A custom `LocaleLoaderInterface` receives the tag in that casing too (`zh-Hant-TW`, `en-US-posix`), where it used to receive everything after the first hyphen in upper case. Catalogs named `fr-CA`, `fr_CA`, `fr-ca` or `fr_ca` are still found, and `fr_ca` now also finds a `fr-CA/` directory.
 - `Rules::byteRange()` and `Rules::contentRange()` compare their bounds as decimal strings, so a bound past `PHP_INT_MAX` no longer saturates: `bytes=99999999999999999999-9223372036854775807` is refused and `bytes 0-9223372036854775807/99999999999999999999` accepted.
