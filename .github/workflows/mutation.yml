@@ -1,0 +1,80 @@
+name: Mutation
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  infection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    name: ${{ github.event_name == 'pull_request' && 'Infection (changed lines)' || 'Infection (full)' }}
+
+    env:
+      ZEPHYRUS_TEST_PGSQL_DSN: pgsql:host=127.0.0.1;port=5432;dbname=postgres;user=postgres;password=postgres
+
+    services:
+      postgres:
+        # Dependabot does not update this digest. Refresh it with: docker buildx imagetools inspect postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # 16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo, pdo_sqlite, pdo_pgsql, intl, sodium, fileinfo, apcu
+          ini-values: apc.enable_cli=1
+          coverage: pcov
+
+      - name: Install locked dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Make sure the base branch exists
+        if: github.event_name == 'pull_request'
+        run: git rev-parse --verify --quiet refs/remotes/origin/dev
+
+      # A surviving mutant on a changed line fails the pull request.
+      - name: Mutation testing on the changed lines
+        if: github.event_name == 'pull_request'
+        run: >-
+          php vendor/bin/infection
+          --threads=max --no-progress
+          --git-diff-lines --git-diff-base=origin/dev
+          --min-msi=100 --min-covered-msi=100
+          --ignore-msi-with-no-mutations
+
+      - name: Mutation testing
+        if: github.event_name == 'push'
+        run: php vendor/bin/infection --threads=max --no-progress
+
+      - name: Upload the mutation report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: infection-report
+          path: build/infection/infection.log
+          if-no-files-found: ignore
