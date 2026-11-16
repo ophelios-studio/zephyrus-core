@@ -257,10 +257,9 @@ final class HandlerResolver
                     continue;
                 }
 
-                try {
-                    return $this->castToNamedType($value, $candidate, $class, $method, $parameter);
-                } catch (RouteParameterException) {
-                    continue;
+                $cast = $this->tryCastToNamedType($value, $candidate);
+                if ($cast !== self::uncastable()) {
+                    return $cast;
                 }
             }
 
@@ -304,23 +303,37 @@ final class HandlerResolver
         string $method,
         string $parameter,
     ): mixed {
-        $typeName = $type->getName();
-
-        if ($value === null) {
-            if ($type->allowsNull()) {
-                return null;
-            }
-
-            throw new RouteParameterException($class, $method, $parameter, $typeName, $value);
+        $cast = $this->tryCastToNamedType($value, $type);
+        if ($cast === self::uncastable()) {
+            throw new RouteParameterException($class, $method, $parameter, $type->getName(), $value);
         }
 
-        return match ($typeName) {
-            'int' => $this->toInt($value, $class, $method, $parameter),
-            'float' => $this->toFloat($value, $class, $method, $parameter),
-            'bool' => $this->toBool($value, $class, $method, $parameter),
-            'string' => $this->toString($value, $class, $method, $parameter),
+        return $cast;
+    }
+
+    /**
+     * Casts to a named type, or returns self::uncastable() when the value does not fit.
+     */
+    private function tryCastToNamedType(mixed $value, ReflectionNamedType $type): mixed
+    {
+        if ($value === null) {
+            return $type->allowsNull() ? null : self::uncastable();
+        }
+
+        return match ($type->getName()) {
+            'int' => $this->tryInt($value),
+            'float' => $this->tryFloat($value),
+            'bool' => $this->tryBool($value),
+            'string' => $this->tryString($value),
             default => $value,
         };
+    }
+
+    private static function uncastable(): object
+    {
+        static $marker = new \stdClass();
+
+        return $marker;
     }
 
     /**
@@ -328,7 +341,7 @@ final class HandlerResolver
      *
      * (int) saturates silently, so the canonical digits must survive a round trip: "007" passes, an out-of-range value fails.
      */
-    private function toInt(mixed $value, string $class, string $method, string $parameter): int
+    private function tryInt(mixed $value): int|object
     {
         if (is_int($value)) {
             return $value;
@@ -349,10 +362,10 @@ final class HandlerResolver
             }
         }
 
-        throw new RouteParameterException($class, $method, $parameter, 'int', $value);
+        return self::uncastable();
     }
 
-    private function toFloat(mixed $value, string $class, string $method, string $parameter): float
+    private function tryFloat(mixed $value): float|object
     {
         if (is_float($value) || is_int($value)) {
             return (float) $value;
@@ -362,10 +375,10 @@ final class HandlerResolver
             return (float) $value;
         }
 
-        throw new RouteParameterException($class, $method, $parameter, 'float', $value);
+        return self::uncastable();
     }
 
-    private function toBool(mixed $value, string $class, string $method, string $parameter): bool
+    private function tryBool(mixed $value): bool|object
     {
         if (is_bool($value)) {
             return $value;
@@ -382,10 +395,10 @@ final class HandlerResolver
             }
         }
 
-        throw new RouteParameterException($class, $method, $parameter, 'bool', $value);
+        return self::uncastable();
     }
 
-    private function toString(mixed $value, string $class, string $method, string $parameter): string
+    private function tryString(mixed $value): string|object
     {
         if (is_string($value)) {
             return $value;
@@ -395,7 +408,7 @@ final class HandlerResolver
             return (string) $value;
         }
 
-        throw new RouteParameterException($class, $method, $parameter, 'string', $value);
+        return self::uncastable();
     }
 
     private function describeType(ReflectionType $type): string
