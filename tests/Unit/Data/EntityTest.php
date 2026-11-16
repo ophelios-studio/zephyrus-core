@@ -221,6 +221,26 @@ class HookBackedSetEntity extends Entity
     }
 }
 
+class StaticSlotEntity extends Entity
+{
+    public static int $counter = 0;
+    public string $after = 'd';
+}
+
+class SkippedColumnsEntity extends Entity
+{
+    #[JsonIgnore]
+    public string $hidden = 'h';
+    public string $absent;
+    public ?string $nullable = 'd';
+    public $untyped = 'd';
+    public int|string $union = 'd';
+    public int|string|null $nullableUnion = 'd';
+    public int $required = 5;
+    public string $last = 'd';
+    private string $secret = 's';
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -982,5 +1002,82 @@ final class EntityTest extends TestCase
             self::assertStringNotContainsString("\0", $e->getMessage());
             self::assertStringNotContainsString('.php', $e->getMessage());
         }
+    }
+
+    public function testHydrationKeepsReadingColumnsAfterEverySkippedOne(): void
+    {
+        $row = new stdClass();
+        $row->rawData = 'ignored';
+        $row->unknown = 'ignored';
+        $row->secret = 'ignored';
+        $row->nullable = null;
+        $row->untyped = 'u';
+        $row->last = 'L';
+
+        $entity = SkippedColumnsEntity::build($row);
+
+        self::assertSame($row, $entity->getRawData());
+        self::assertNull($entity->nullable);
+        self::assertSame('u', $entity->untyped);
+        self::assertSame('L', $entity->last);
+    }
+
+    public function testAStaticPropertyIsNeverHydratedAndTheNextColumnStillIs(): void
+    {
+        $row = new stdClass();
+        $row->counter = 9;
+        $row->after = 'A';
+
+        $entity = StaticSlotEntity::build($row);
+
+        self::assertSame(0, StaticSlotEntity::$counter);
+        self::assertSame('A', $entity->after);
+    }
+
+    public function testANullColumnForAnUntypedPropertyIsAssigned(): void
+    {
+        $row = new stdClass();
+        $row->untyped = null;
+
+        self::assertNull(SkippedColumnsEntity::build($row)->untyped);
+    }
+
+    public function testANullColumnForANonNullableNamedTypeIsATypeError(): void
+    {
+        $row = new stdClass();
+        $row->required = null;
+
+        $this->expectException(\TypeError::class);
+
+        SkippedColumnsEntity::build($row);
+    }
+
+    public function testANullColumnForANonNullableUnionLeavesTheDefault(): void
+    {
+        $row = new stdClass();
+        $row->union = null;
+
+        self::assertSame('d', SkippedColumnsEntity::build($row)->union);
+    }
+
+    public function testANullColumnForANullableUnionIsAssigned(): void
+    {
+        $row = new stdClass();
+        $row->nullableUnion = null;
+
+        self::assertNull(SkippedColumnsEntity::build($row)->nullableUnion);
+    }
+
+    public function testJsonSerializeKeepsListingAfterAnIgnoredAndAnUninitializedProperty(): void
+    {
+        $row = new stdClass();
+        $row->last = 'L';
+
+        $data = SkippedColumnsEntity::build($row)->jsonSerialize();
+
+        self::assertSame(
+            ['nullable' => 'd', 'untyped' => 'd', 'union' => 'd', 'nullableUnion' => 'd', 'required' => 5, 'last' => 'L'],
+            $data,
+        );
     }
 }
