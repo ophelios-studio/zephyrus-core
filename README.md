@@ -39,7 +39,7 @@ Also in the package: [Latte views](https://zephyrus.ophelios.com/fundamentals/vi
 composer require zephyrus-framework/core
 ```
 
-Before 1.0 a minor version may break the API: read the [changelog](https://github.com/ophelios-studio/zephyrus-core/blob/dev/CHANGELOG.md) before moving to the next one.
+From 3.17.0 the API is stable and follows semantic versioning: minor and patch releases stay compatible, and a breaking change waits for the next major, announced first by a deprecation. Composer does not move from `^0.16` to `^3.17` on its own: change the constraint by hand, then read the [changelog](https://github.com/ophelios-studio/zephyrus-core/blob/dev/CHANGELOG.md), which lists each breaking change of 3.17.0 with the change to make in your code.
 
 | Requirement | Version |
 |---|---|

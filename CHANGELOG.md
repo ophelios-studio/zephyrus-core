@@ -3,7 +3,8 @@
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, a minor version may break the API: those
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html) from 3.17.0: minor and patch releases stay compatible, and
+a breaking change waits for the next major, deprecated first. Before 3.17.0, a minor version could break the API: those
 changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
