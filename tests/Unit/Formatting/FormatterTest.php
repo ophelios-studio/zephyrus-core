@@ -375,7 +375,41 @@ final class FormatterTest extends TestCase
         self::assertStringContainsString('ago', $result);
     }
 
+    /**
+     * @return array<string, array{int, string}>
+     */
+    public static function timeagoRoundingCases(): array
+    {
+        return [
+            'minutes rounded down' => [620, '10 minutes ago'],
+            'minutes rounded up' => [633, '11 minutes ago'],
+            'hours rounded down' => [37_790, '10 hours ago'],
+            'hours rounded up' => [37_803, '11 hours ago'],
+            'days rounded down' => [907_190, '10 days ago'],
+            'days rounded up' => [907_203, '11 days ago'],
+            'months rounded down' => [16_847_994, '6 months ago'],
+            'months rounded up' => [16_848_003, '7 months ago'],
+            'years rounded down' => [173_447_995, '5 years ago'],
+            'years rounded up' => [173_448_003, '6 years ago'],
+            'exactly one hour' => [3600, '1 hour ago'],
+            'exactly thirty days' => [2_592_000, '1 month ago'],
+            'exactly one year' => [31_536_000, '1 year ago'],
+        ];
+    }
+
+    #[DataProvider('timeagoRoundingCases')]
+    public function testTimeagoRoundsEachUnitToTheNearestWholeNumber(int $secondsAgo, string $expected): void
+    {
+        self::assertSame($expected, $this->formatter->timeago(time() - $secondsAgo));
+    }
+
     // ─── Duration ─────────────────────────────────────────────────────
+
+    public function testDurationJustUnderAnHourStaysInMinutes(): void
+    {
+        self::assertSame('59m 59s', $this->formatter->duration(3599));
+        self::assertSame('50m 0s', $this->formatter->duration(3000));
+    }
 
     public function testDurationFormatsHoursMinutesSeconds(): void
     {
@@ -437,6 +471,23 @@ final class FormatterTest extends TestCase
     public function testFilesizeFormatsZero(): void
     {
         self::assertSame('0 B', $this->formatter->filesize(0));
+    }
+
+    public function testFilesizeSwitchesUnitAtExactlyOneKibibyte(): void
+    {
+        self::assertSame('1023 B', $this->formatter->filesize(1023));
+        self::assertSame('1.0 KB', $this->formatter->filesize(1024));
+    }
+
+    public function testFilesizeStopsAtTheLargestUnit(): void
+    {
+        self::assertSame('4096.0 PB', $this->formatter->filesize(2 ** 62));
+    }
+
+    public function testFilesizeKeepsTheSignOfANegativeCount(): void
+    {
+        self::assertSame('-1.5 KB', $this->formatter->filesize(-1536));
+        self::assertSame('-500 B', $this->formatter->filesize(-500));
     }
 
     // ─── Precision bounds ─────────────────────────────────────────────
@@ -575,6 +626,13 @@ final class FormatterTest extends TestCase
                 'truncate() must never exceed the requested length: ' . $length,
             );
         }
+    }
+
+    public function testTruncateCountsCharactersNotBytes(): void
+    {
+        self::assertSame('éé', $this->formatter->truncate('éé', 2));
+        self::assertSame('…', $this->formatter->truncate('abcdef', 1, '…'));
+        self::assertSame('éé…', $this->formatter->truncate('ééééé', 3, '…'));
     }
 
     public function testTruncateClampsANegativeLength(): void
@@ -850,20 +908,22 @@ final class FormatterTest extends TestCase
         new Formatter('en_US', groupingSeparator: 'ABCDE');
     }
 
-    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsTheMonetarySeparatorOnly(): void
+    public function testGroupingSeparatorOptionIsRefusedWhenItEqualsADecimalOrMonetarySignOfTheLocale(): void
     {
         $symbols = new NumberFormatter('en_BE', NumberFormatter::DECIMAL);
         self::assertSame(',', $symbols->getSymbol(NumberFormatter::DECIMAL_SEPARATOR_SYMBOL));
         self::assertSame('.', $symbols->getSymbol(NumberFormatter::MONETARY_SEPARATOR_SYMBOL));
 
-        try {
-            new Formatter('en_BE', groupingSeparator: '.');
-            self::fail('The monetary decimal sign of the locale must be refused as a grouping separator.');
-        } catch (FormatterException $exception) {
-            self::assertSame(
-                'Invalid grouping separator: it is the decimal or monetary decimal sign of locale en_BE.',
-                $exception->getMessage(),
-            );
+        foreach (['.', ','] as $separator) {
+            try {
+                new Formatter('en_BE', groupingSeparator: $separator);
+                self::fail('expected a refusal');
+            } catch (FormatterException $exception) {
+                self::assertSame(
+                    'Invalid grouping separator: it is the decimal or monetary decimal sign of locale en_BE.',
+                    $exception->getMessage(),
+                );
+            }
         }
     }
 
@@ -1005,6 +1065,38 @@ final class FormatterTest extends TestCase
         $result = $formatter->time(new DateTime('2026-03-10 14:30:00'), 'medium');
         // Medium time includes seconds.
         self::assertStringContainsString('30', $result);
+    }
+
+    public function testExplicitPatternOverridesTheDefaultTimeAndDatetimePatterns(): void
+    {
+        $formatter = new Formatter('en_US', defaultTimePattern: 'HH:mm', defaultDatetimePattern: 'yyyy-MM-dd');
+        $moment = new DateTime('2026-03-10 14:30:45');
+
+        self::assertSame('14:30:45', $formatter->time($moment, 'HH:mm:ss'));
+        self::assertSame('2026-03-10 14:30', $formatter->datetime($moment, 'yyyy-MM-dd HH:mm'));
+    }
+
+    public function testDateShowsNoTimeAndTimeShowsNoDateForAPreset(): void
+    {
+        $moment = new DateTime('2026-03-10 14:30:45');
+
+        self::assertStringNotContainsString(':', $this->formatter->date($moment, 'short'));
+        self::assertStringNotContainsString(':', $this->formatter->date($moment));
+        self::assertStringNotContainsString('/', $this->formatter->time($moment, 'short'));
+        self::assertStringNotContainsString('Mar', $this->formatter->time($moment, 'medium'));
+    }
+
+    public function testDatetimeShowsBothTheDateAndTheTimeForAPreset(): void
+    {
+        $moment = new DateTime('2026-03-10 14:30:45');
+
+        $short = $this->formatter->datetime($moment, 'short');
+        self::assertStringContainsString('/', $short);
+        self::assertStringContainsString(':30', $short);
+
+        $default = $this->formatter->datetime($moment);
+        self::assertStringContainsString('Mar', $default);
+        self::assertStringContainsString(':30:45', $default);
     }
 
     public function testGetDefaultDatePatternReturnsConfiguredValue(): void
