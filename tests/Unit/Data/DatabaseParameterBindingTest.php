@@ -168,6 +168,7 @@ final class DatabaseParameterBindingTest extends TestCase
     {
         yield 'one third keeps all its digits' => [1 / 3, '0.3333333333333333'];
         yield 'binary rounding is kept' => [0.1 + 0.2, '0.30000000000000004'];
+        yield 'a double whose sixteen-digit form is noisy keeps its short form' => [0.683, '0.683'];
         yield 'integral float is spelled as an integer' => [45.0, '45'];
         yield 'negative integral float' => [-3.0, '-3'];
         yield 'negative zero' => [-0.0, '-0'];
