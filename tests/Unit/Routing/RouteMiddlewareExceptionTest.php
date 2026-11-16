@@ -14,7 +14,10 @@ final class RouteMiddlewareExceptionTest extends TestCase
         self::assertSame(
             'Middleware group "admin\u202e", named by a #[MiddlewareGroup] of Ctrl\u202e@act\r\nFAKE, is not declared '
             . 'under router.middleware_groups: declare it there, or the route would run without its middlewares.',
-            RouteMiddlewareException::undeclaredMiddlewareGroup("admin\u{202E}", "Ctrl\u{202E}@act\r\nFAKE")->getMessage(),
+            RouteMiddlewareException::undeclaredMiddlewareGroup(
+                "admin\u{202E}",
+                "Ctrl\u{202E}@act\r\nFAKE",
+            )->getMessage(),
         );
     }
 

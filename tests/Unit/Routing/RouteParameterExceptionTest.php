@@ -24,4 +24,17 @@ final class RouteParameterExceptionTest extends TestCase
             (new RouteParameterException('Ctrl', 'act', 'id', "int\u{202E}", 'abc'))->getMessage(),
         );
     }
+
+    public function testMessageEscapesControlCharactersOfTheActualType(): void
+    {
+        if (!class_exists("Actual\u{202E}Type", false)) {
+            eval("final class Actual\u{202E}Type {}");
+        }
+        $value = new ("Actual\u{202E}Type")();
+
+        self::assertSame(
+            'Route parameter "$id" for "Ctrl::act" could not be resolved: expected int, got Actual\u202eType.',
+            (new RouteParameterException('Ctrl', 'act', 'id', 'int', $value))->getMessage(),
+        );
+    }
 }
