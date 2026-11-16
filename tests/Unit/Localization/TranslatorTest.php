@@ -773,11 +773,12 @@ final class TranslatorTest extends TestCase
         self::assertSame('Bonjour', $translator->trans('greeting', locale: ' fr '));
     }
 
-    public function testTheWholeRegionOfARequestedLocaleIsUppercased(): void
+    public function testARequestedLocaleWithAScriptFindsItsCanonicalCatalog(): void
     {
-        $translator = $this->translatorWith(['zh-HANT-TW' => ['greeting' => 'Nihao']]);
+        $translator = $this->translatorWith(['zh-Hant-TW' => ['greeting' => 'Nihao']]);
 
         self::assertSame('Nihao', $translator->trans('greeting', locale: 'zh-hant-tw'));
+        self::assertSame('Nihao', $translator->trans('greeting', locale: 'zh_HANT_TW'));
     }
 
     public function testACatalogValueThatIsNotATextIsHandledByItsKind(): void

@@ -166,7 +166,8 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
             return [];
         }
 
-        $candidates = [$locale];
+        $canonical = LocaleTag::canonical($locale);
+        $candidates = [$locale, $canonical, str_replace('-', '_', $canonical)];
 
         if (str_contains($locale, '-')) {
             [$language, $region] = array_pad(explode('-', $locale, 2), 2, '');
@@ -174,13 +175,13 @@ final class JsonLocaleLoader implements LocaleLoaderInterface
             $regionUpper = strtoupper($region);
             $regionLower = strtolower($region);
 
-            $canonical = $region === '' ? $languageLower : $languageLower . '-' . $regionUpper;
-            $canonicalLowerRegion = $region === '' ? $languageLower : $languageLower . '-' . $regionLower;
+            $upperRegion = $region === '' ? $languageLower : $languageLower . '-' . $regionUpper;
+            $lowerRegion = $region === '' ? $languageLower : $languageLower . '-' . $regionLower;
 
-            $candidates[] = $canonical;
-            $candidates[] = str_replace('-', '_', $canonical);
-            $candidates[] = $canonicalLowerRegion;
-            $candidates[] = str_replace('-', '_', $canonicalLowerRegion);
+            $candidates[] = $upperRegion;
+            $candidates[] = str_replace('-', '_', $upperRegion);
+            $candidates[] = $lowerRegion;
+            $candidates[] = str_replace('-', '_', $lowerRegion);
         }
 
         return array_values(array_unique($candidates));

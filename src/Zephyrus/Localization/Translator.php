@@ -96,19 +96,7 @@ final class Translator
 
     private function normalizeLocale(string $locale): string
     {
-        $locale = trim(str_replace('_', '-', $locale));
-        if ($locale === '') {
-            return '';
-        }
-
-        $parts = explode('-', $locale, 2);
-        $normalized = strtolower($parts[0]);
-
-        if (isset($parts[1])) {
-            $normalized .= '-' . strtoupper($parts[1]);
-        }
-
-        return $normalized;
+        return LocaleTag::canonical(trim($locale));
     }
 
     private function baseLocale(string $locale): string

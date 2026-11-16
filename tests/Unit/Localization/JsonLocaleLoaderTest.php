@@ -227,6 +227,56 @@ final class JsonLocaleLoaderTest extends TestCase
         }
     }
 
+    public function testLoadFindsAFileNamedWithAScriptSubtag(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
+        mkdir($tempDir);
+        file_put_contents($tempDir . '/zh-Hant-TW.json', '{"greeting":"Nihao"}');
+
+        $loader = new JsonLocaleLoader($tempDir);
+
+        try {
+            self::assertSame('Nihao', $loader->load('zh-hant-tw')['greeting']);
+        } finally {
+            @unlink($tempDir . '/zh-Hant-TW.json');
+            @rmdir($tempDir);
+        }
+    }
+
+    public function testLoadFindsADirectoryNamedWithAScriptSubtag(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
+        mkdir($tempDir . '/sr-Latn', 0755, true);
+        file_put_contents($tempDir . '/sr-Latn/strings.json', '{"greeting":"Zdravo"}');
+
+        $loader = new JsonLocaleLoader($tempDir);
+
+        try {
+            self::assertSame('Zdravo', $loader->load('SR_LATN')['greeting']);
+        } finally {
+            @unlink($tempDir . '/sr-Latn/strings.json');
+            @rmdir($tempDir . '/sr-Latn');
+            @rmdir($tempDir);
+        }
+    }
+
+    public function testALowercaseUnderscoreTagFindsItsHyphenatedRegionDirectory(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
+        mkdir($tempDir . '/fr-CA', 0755, true);
+        file_put_contents($tempDir . '/fr-CA/strings.json', '{"greeting":"Bonjour"}');
+
+        $loader = new JsonLocaleLoader($tempDir);
+
+        try {
+            self::assertSame('Bonjour', $loader->load('fr_ca')['greeting']);
+        } finally {
+            @unlink($tempDir . '/fr-CA/strings.json');
+            @rmdir($tempDir . '/fr-CA');
+            @rmdir($tempDir);
+        }
+    }
+
     public function testLoadEmptyDirectoryReturnsEmptyCatalog(): void
     {
         $tempDir = sys_get_temp_dir() . '/zephyrus-locales-' . bin2hex(random_bytes(8));
