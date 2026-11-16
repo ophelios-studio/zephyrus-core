@@ -9,6 +9,7 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Security\BodyTooLarge;
 use Zephyrus\Security\MaxBodySizeMiddleware;
+use Zephyrus\Upload\FileUpload;
 
 final class MaxBodySizeMiddlewareTest extends TestCase
 {
@@ -26,6 +27,65 @@ final class MaxBodySizeMiddlewareTest extends TestCase
         $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
 
         self::assertSame(413, $response->status);
+    }
+
+    public function testMaxBodySizeMiddlewareMeasuresTheRawBodyWhenTheDeclaredLengthIsSmaller(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(4);
+        $request = Request::fromArray('POST', '/upload', headers: ['Content-Length' => '3'], rawBody: 'abcdefgh');
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(413, $response->status);
+    }
+
+    public function testMaxBodySizeMiddlewareMeasuresTheDeclaredLengthWhenItIsLargerThanANonEmptyRawBody(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(4);
+        $request = Request::fromArray('POST', '/upload', headers: ['Content-Length' => '9'], rawBody: 'abc');
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(413, $response->status);
+    }
+
+    public function testMaxBodySizeMiddlewareMeasuresUploadedFilesWhateverLengthIsDeclared(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(1_000);
+        $request = Request::fromArray('POST', '/upload', files: [
+            'doc' => new FileUpload('a.bin', 'application/octet-stream', '/tmp/phpA', 1_048_576),
+        ], headers: ['Content-Length' => '10']);
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(413, $response->status);
+    }
+
+    public function testMaxBodySizeMiddlewareAddsUpTheFilesOfAnArrayField(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(1_000);
+        $request = Request::fromArray('POST', '/upload', files: [
+            'docs' => [
+                new FileUpload('a.bin', 'application/octet-stream', '/tmp/phpA', 600),
+                new FileUpload('b.bin', 'application/octet-stream', '/tmp/phpB', 600),
+            ],
+        ]);
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(413, $response->status);
+    }
+
+    public function testMaxBodySizeMiddlewareLetsAnHonestMultipartThrough(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(1_000);
+        $request = Request::fromArray('POST', '/upload', files: [
+            'doc' => new FileUpload('a.bin', 'application/octet-stream', '/tmp/phpA', 600),
+        ], headers: ['Content-Length' => '700']);
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(200, $response->status);
     }
 
     public function testMaxBodySizeMiddlewareLetsAnAcceptableBodyThrough(): void

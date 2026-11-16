@@ -12,7 +12,10 @@ namespace Zephyrus\Security;
 final readonly class BodyTooLarge
 {
     public function __construct(
-        /** The declared Content-Length when valid (a client claim, possibly PHP_INT_MAX), otherwise the raw body length. */
+        /**
+         * The largest of the valid declared Content-Length (a client claim, possibly PHP_INT_MAX),
+         * the raw body length and the total size of the uploaded files.
+         */
         public int $bytes,
         public int $maxBytes,
     ) {

@@ -27,8 +27,10 @@ use function trim;
  *
  *   $builder->withMiddleware(new MaxBodySizeMiddleware($config->security->maxBodySize));
  *
- * The measure is a valid declared Content-Length, otherwise the raw body. Multipart uploads are
- * already parsed into $_FILES, so their raw body is empty and only Content-Length counts.
+ * The measure is the largest of a valid declared Content-Length, the raw body and the total size of the
+ * uploaded files, so a false length cannot hide a raw body or an uploaded file. A multipart body is already
+ * parsed into $_FILES and $_POST and its raw body is empty, which is why the files are counted; its text
+ * fields are not measured, and only post_max_size bounds them.
  * Pass the same limit to Request::fromGlobals(maxBodySize: ...) so the body is never read past it:
  * without it the whole body is in memory before this middleware runs.
  * This is a budget, not a defence: a client that lies about its length is stopped by the web
@@ -100,20 +102,34 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
         return Response::json(['error' => $this->message], 413);
     }
 
-    /** Null when there is neither a valid declared length nor a raw body. */
+    /** The largest of the declared length, the raw body and the uploaded files; null when all are absent. */
     private function bodyBytes(Request $request): ?int
     {
         $declared = $request->headers()->get('content-length');
+        $declaredBytes = null;
 
         if (is_string($declared)) {
             $declared = trim($declared);
             if (preg_match('/^\d+$/D', $declared) === 1) {
-                return (int) $declared;
+                $declaredBytes = (int) $declared;
             }
         }
 
-        $raw = $request->body()->raw();
+        $measured = max($declaredBytes ?? 0, strlen($request->body()->raw()), $this->uploadedBytes($request));
 
-        return $raw === '' ? null : strlen($raw);
+        return $measured === 0 ? $declaredBytes : $measured;
+    }
+
+    private function uploadedBytes(Request $request): int
+    {
+        $total = 0;
+
+        foreach ($request->files as $entry) {
+            foreach (is_array($entry) ? $entry : [$entry] as $file) {
+                $total += $file->sizeBytes;
+            }
+        }
+
+        return $total;
     }
 }
