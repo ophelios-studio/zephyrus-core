@@ -121,7 +121,7 @@ changes are listed first, each with the change to make in your code.
 Pages of zephyrus.ophelios.com that this version makes stale, each in English and in French (`content/fr/`):
 
 - `getting-started/introduction.md`: Zephyrus is tested on PHP 8.4, 8.5 and 8.6.
-- `fundamentals/routing.md`: on PHP 8.6, dropping the copy a `with*()` method or the router returns raises a warning.
+- `fundamentals/routing.md`: on PHP 8.5 and later, dropping the copy a `with*()` method returns raises a warning (`Router::withTrailingSlashTolerance()` and `withoutMiddleware()` included).
 - `fundamentals/sessions.md`: `DatabaseSessionHandler` generates the session ids itself and checks `idPattern` against them.
 - `fundamentals/data.md`: `DatabaseActor` publishes the actor of row level security policies for one transaction (`actAs()`, `publish()`).
 - `digging-deeper/filesystem.md`: the quoted paths in `FileSystemException` messages, the new refusals of `File` and `Directory`, and a path outside `open_basedir`, the `delete()` that throws there, and the reason that ends a `Failed to create directory` message.
