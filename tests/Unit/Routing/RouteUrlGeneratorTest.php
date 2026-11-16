@@ -461,6 +461,22 @@ final class RouteUrlGeneratorTest extends TestCase
         }
     }
 
+    public function testControlCharactersOfTheConstraintPatternAreEscapedInTheRefusal(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => "[0-9]+\r\nFAKE"], name: 'users.show'));
+
+        try {
+            (new RouteUrlGenerator($routes))->generate('users.show', ['id' => 'x']);
+            self::fail('A value outside the constraint must be refused.');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame(
+                'Route parameter "id" for route "users.show": value "x" does not satisfy constraint "[0-9]+\\r\\nFAKE"',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testAnUnexpectedParameterRefusalEscapesItsName(): void
     {
         $routes = new RouteCollection();

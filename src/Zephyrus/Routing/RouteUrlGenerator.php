@@ -128,7 +128,11 @@ final readonly class RouteUrlGenerator
             throw RouteUrlGenerationException::constraintViolation(
                 $name,
                 $routeName,
-                sprintf('value %s does not satisfy constraint "%s"', MessageValue::quote($value), $pattern),
+                sprintf(
+                    'value %s does not satisfy constraint "%s"',
+                    MessageValue::quote($value),
+                    MessageValue::escapeControls($pattern),
+                ),
             );
         }
     }
