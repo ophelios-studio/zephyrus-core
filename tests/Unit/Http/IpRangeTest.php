@@ -309,4 +309,80 @@ final class IpRangeTest extends TestCase
         self::assertNull(IpRange::invalidEntryReason('10.0.0.5/32'));
         self::assertNull(IpRange::invalidEntryReason('2001:db8::/32'));
     }
+
+    /**
+     * @return iterable<string, array{string, string}> The entry, then the exact reason.
+     */
+    public static function rangesWhoseHostBitsSitInAPartialOrLaterByte(): iterable
+    {
+        yield 'ipv4 partial byte with every host bit set in a /3' => [
+            '255.0.0.0/3',
+            '255.0.0.0/3 covers 224.0.0.0/3; write 255.0.0.0/32 or 224.0.0.0/3',
+        ];
+        yield 'ipv4 partial byte in a /12' => [
+            '255.255.0.0/12',
+            '255.255.0.0/12 covers 255.240.0.0/12; write 255.255.0.0/32 or 255.240.0.0/12',
+        ];
+        yield 'ipv4 prefix of 9 bits' => [
+            '10.255.0.0/9',
+            '10.255.0.0/9 covers 10.128.0.0/9; write 10.255.0.0/32 or 10.128.0.0/9',
+        ];
+        yield 'ipv4 prefix of 14 bits' => [
+            '10.255.0.0/14',
+            '10.255.0.0/14 covers 10.252.0.0/14; write 10.255.0.0/32 or 10.252.0.0/14',
+        ];
+        yield 'ipv4 host bit in the partial byte only' => [
+            '10.64.0.0/9',
+            '10.64.0.0/9 covers 10.0.0.0/9; write 10.64.0.0/32 or 10.0.0.0/9',
+        ];
+        yield 'ipv4 host bit two bytes after the prefix' => [
+            '10.0.1.0/8',
+            '10.0.1.0/8 covers 10.0.0.0/8; write 10.0.1.0/32 or 10.0.0.0/8',
+        ];
+        yield 'ipv4 range of the zero block' => [
+            '0.0.0.5/8',
+            '0.0.0.5/8 covers 0.0.0.0/8; write 0.0.0.5/32 or 0.0.0.0/8',
+        ];
+    }
+
+    #[DataProvider('rangesWhoseHostBitsSitInAPartialOrLaterByte')]
+    public function testTheReasonNamesTheCoveredRangeWhateverByteHoldsTheHostBits(string $range, string $reason): void
+    {
+        self::assertSame($reason, IpRange::invalidEntryReason($range));
+        self::assertFalse(IpRange::isValid($range));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> The entry, then the exact reason.
+     */
+    public static function embeddedIpv4RangesLongerThanSlash96(): iterable
+    {
+        yield 'ipv4 prefix of 24 bits' => [
+            '::ffff:10.0.0.1/120',
+            '::ffff:10.0.0.1/120 covers ::ffff:10.0.0.0/120; write 10.0.0.0/24 (IPv4 form) or ::ffff:10.0.0.0/120',
+        ];
+        yield 'ipv4 prefix of 8 bits' => [
+            '::ffff:10.0.0.1/104',
+            '::ffff:10.0.0.1/104 covers ::ffff:10.0.0.0/104; write 10.0.0.0/8 (IPv4 form) or ::ffff:10.0.0.0/104',
+        ];
+        yield 'ipv4 prefix of 20 bits' => [
+            '::ffff:10.0.0.1/116',
+            '::ffff:10.0.0.1/116 covers ::ffff:10.0.0.0/116; write 10.0.0.0/20 (IPv4 form) or ::ffff:10.0.0.0/116',
+        ];
+    }
+
+    #[DataProvider('embeddedIpv4RangesLongerThanSlash96')]
+    public function testTheReasonForEmbeddedIpv4HostBitsNamesBothFormsOfTheCoveredRange(string $range, string $reason): void
+    {
+        self::assertSame($reason, IpRange::invalidEntryReason($range));
+    }
+
+    public function testAPrefixWithATrailingNewlineIsRefused(): void
+    {
+        self::assertFalse(IpRange::isValid("10.0.0.0/8\n"));
+        self::assertSame(
+            'not an IP address or a CIDR range such as 10.0.0.0/8 or 2001:db8::/32',
+            IpRange::invalidEntryReason("10.0.0.0/8\n"),
+        );
+    }
 }
