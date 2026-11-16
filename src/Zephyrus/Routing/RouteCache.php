@@ -16,6 +16,7 @@ use Zephyrus\Core\Cache\PathPrefix;
 use Zephyrus\Core\Cache\WarmableCache;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteCacheException;
@@ -74,7 +75,7 @@ final readonly class RouteCache implements WarmableCache
         if (basename($source) !== self::CONFIGURATION_FILE) {
             throw new ConfigurationException(sprintf(
                 'Configuration file %s declares router:, but %s: move the router: section to that file.',
-                basename($source),
+                MessageValue::quote(basename($source)),
                 self::ROOT_ONLY,
             ));
         }

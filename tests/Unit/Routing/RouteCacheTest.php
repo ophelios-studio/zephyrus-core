@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Routing;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\Configuration;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteCacheException;
@@ -567,6 +568,22 @@ final class RouteCacheTest extends TestCase
                 }
             }
             PHP];
+    }
+
+    public function testARouterSectionInAnotherFileRefusalQuotesAndEscapesTheFileName(): void
+    {
+        $config = RouterConfig::fromArray(['controllers' => ['App' => 'app/Controllers']]);
+
+        try {
+            RouteCache::forConfigurationFile("app/cfg\r\nFAKE\u{202E}.yml", $config);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                'Configuration file "cfg\r\nFAKE\u202e.yml" declares router:, but router: is cached only from '
+                . 'config.yml at the application root: move the router: section to that file.',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testControllersWithoutRoutesAreNotCached(): void

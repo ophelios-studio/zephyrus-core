@@ -234,7 +234,7 @@ final class ConsoleTest extends TestCase
         self::assertSame(Console::REFUSED, $exitCode);
         self::assertSame(
             sprintf(
-                'cache:warm failed for %s/config/tenant.yml: Configuration file tenant.yml declares router:, but '
+                'cache:warm failed for %s/config/tenant.yml: Configuration file "tenant.yml" declares router:, but '
                 . "router: is cached only from config.yml at the application root: move the router: section to that "
                 . "file.\n",
                 $this->project->path,
