@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Data;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Data\SortRequest;
@@ -204,11 +205,113 @@ final class SortRequestTest extends TestCase
         new SortRequest("name\n");
     }
 
-    public function testInvalidDirectionThrows(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unsafeColumns(): iterable
     {
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Sort direction must be ASC or DESC');
+        yield 'leading digit' => ['1name'];
+        yield 'embedded space' => ['name desc'];
+        yield 'leading space' => [' name'];
+        yield 'leading dot' => ['.name'];
+        yield 'leading dash' => ['-name'];
+        yield 'trailing statement after an identifier' => ['id; DROP'];
+        yield 'quote breakout' => ['id" DESC, (SELECT 1) --x'];
+        yield 'empty' => [''];
+    }
 
-        new SortRequest('name', 'SIDEWAYS');
+    #[DataProvider('unsafeColumns')]
+    public function testAColumnThatIsNotAnIdentifierIsRefused(string $column): void
+    {
+        try {
+            new SortRequest($column);
+            self::fail('expected a refusal');
+        } catch (DatabaseException $e) {
+            self::assertSame('Query failed [sorting]: Invalid sort column', $e->getMessage());
+        }
+    }
+
+    public function testAnInvalidDirectionIsRefusedWithTheWholeMessage(): void
+    {
+        try {
+            new SortRequest('name', 'SIDEWAYS');
+            self::fail('expected a refusal');
+        } catch (DatabaseException $e) {
+            self::assertSame('Query failed [sorting]: Sort direction must be ASC or DESC', $e->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{array<string, string>, string}>
+     */
+    public static function columnKeyPrecedence(): iterable
+    {
+        yield 'sort_by over sortBy' => [['sort_by' => 'a', 'sortBy' => 'b'], 'a'];
+        yield 'sortBy over order_by' => [['sortBy' => 'b', 'order_by' => 'c'], 'b'];
+        yield 'order_by over orderBy' => [['order_by' => 'c', 'orderBy' => 'd'], 'c'];
+        yield 'orderBy alone' => [['orderBy' => 'd'], 'd'];
+    }
+
+    /**
+     * @param array<string, string> $data
+     */
+    #[DataProvider('columnKeyPrecedence')]
+    public function testTheColumnKeysAreReadInAFixedOrder(array $data, string $expected): void
+    {
+        self::assertSame($expected, SortRequest::fromArray($data, 'id')->column);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, string>, string}>
+     */
+    public static function directionKeyPrecedence(): iterable
+    {
+        yield 'sort_dir over sortDir' => [['sort_dir' => 'ASC', 'sortDir' => 'DESC'], 'ASC'];
+        yield 'sortDir over direction' => [['sortDir' => 'ASC', 'direction' => 'DESC'], 'ASC'];
+        yield 'direction over order' => [['direction' => 'ASC', 'order' => 'DESC'], 'ASC'];
+        yield 'order alone' => [['order' => 'DESC'], 'DESC'];
+    }
+
+    /**
+     * @param array<string, string> $data
+     */
+    #[DataProvider('directionKeyPrecedence')]
+    public function testTheDirectionKeysAreReadInAFixedOrder(array $data, string $expected): void
+    {
+        self::assertSame($expected, SortRequest::fromArray($data, 'id')->direction);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function explicitDirectionKeys(): iterable
+    {
+        yield 'sort_dir' => ['sort_dir'];
+        yield 'sortDir' => ['sortDir'];
+        yield 'direction' => ['direction'];
+        yield 'order' => ['order'];
+    }
+
+    #[DataProvider('explicitDirectionKeys')]
+    public function testAnExplicitDirectionKeyOverridesTheCompactSortSign(string $key): void
+    {
+        $sort = SortRequest::fromQuery(
+            ['sort' => '-name', $key => 'ASC'],
+            allowedColumns: ['id', 'name'],
+            defaultColumn: 'id',
+        );
+
+        self::assertSame('ASC', $sort->direction);
+    }
+
+    public function testTheCompactSortIsTrimmedBeforeItIsChecked(): void
+    {
+        $sort = SortRequest::fromQuery(
+            ['sort' => ' name '],
+            allowedColumns: ['id', 'name'],
+            defaultColumn: 'id',
+        );
+
+        self::assertSame('name', $sort->column);
     }
 }

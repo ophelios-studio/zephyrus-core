@@ -216,4 +216,87 @@ final class FilterRequestTest extends TestCase
 
         self::assertSame($filter->toArray(), $filter->jsonSerialize());
     }
+
+    public function testFromQueryKeepsReadingKeysAfterEverySkippedOrNormalizedOne(): void
+    {
+        $filter = FilterRequest::fromQuery([
+            'null' => null,
+            'blank' => '',
+            'csv_blank' => ' , ',
+            'csv' => ',a, b',
+            'list_blank' => ['', null],
+            'list' => [' x ', ''],
+            'scalar' => 'v',
+        ], ['absent', 'null', 'blank', 'csv_blank', 'csv', 'list_blank', 'list', 'scalar'], ['csv_blank', 'csv']);
+
+        self::assertSame([
+            'csv' => ['a', 'b'],
+            'list' => ['x'],
+            'scalar' => 'v',
+        ], $filter->toArray());
+    }
+
+    public function testToWhereClauseKeepsBuildingAfterEveryKindOfCondition(): void
+    {
+        $filter = new FilterRequest([
+            'unmapped' => 'x',
+            'is_null' => null,
+            'empty_list' => [],
+            'null_list' => [null],
+            'mixed' => ['a', null],
+            'in_list' => ['b', 'c'],
+            'last' => 'z',
+        ]);
+
+        $where = $filter->toWhereClause([
+            'is_null' => 'is_null',
+            'empty_list' => 'empty_list',
+            'null_list' => 'null_list',
+            'mixed' => 'mixed',
+            'in_list' => 'in_list',
+            'last' => 'last',
+        ]);
+
+        self::assertSame(
+            ' WHERE "is_null" IS NULL AND 1 = 0 AND "null_list" IS NULL'
+            . ' AND ("mixed" IN (:f_mixed_0) OR "mixed" IS NULL)'
+            . ' AND "in_list" IN (:f_in_list_0, :f_in_list_1) AND "last" = :f_last',
+            $where['sql'],
+        );
+        self::assertSame([
+            ':f_mixed_0' => 'a',
+            ':f_in_list_0' => 'b',
+            ':f_in_list_1' => 'c',
+            ':f_last' => 'z',
+        ], $where['params']);
+    }
+
+    public function testToWhereClauseSkipsArrayItemsAndKeepsTheScalarOnes(): void
+    {
+        $filter = new FilterRequest(['status' => [['nested'], null, 'a', 'b']]);
+
+        $where = $filter->toWhereClause(['status' => 'status']);
+
+        self::assertSame(' WHERE ("status" IN (:f_status_0, :f_status_1) OR "status" IS NULL)', $where['sql']);
+        self::assertSame([':f_status_0' => 'a', ':f_status_1' => 'b'], $where['params']);
+    }
+
+    public function testToWhereClauseDoublesAQuoteInTheMappedColumn(): void
+    {
+        $filter = new FilterRequest(['status' => 'a']);
+
+        $where = $filter->toWhereClause(['status' => 'x"y.z']);
+
+        self::assertSame(' WHERE "x""y"."z" = :f_status', $where['sql']);
+    }
+
+    public function testToWhereClauseTrimsUnderscoresFromTheParameterName(): void
+    {
+        $filter = new FilterRequest(['_a.' => 'x', '..' => 'y']);
+
+        $where = $filter->toWhereClause(['_a.' => 'a', '..' => 'b']);
+
+        self::assertSame(' WHERE "a" = :f_a AND "b" = :f_filter', $where['sql']);
+        self::assertSame([':f_a' => 'x', ':f_filter' => 'y'], $where['params']);
+    }
 }
