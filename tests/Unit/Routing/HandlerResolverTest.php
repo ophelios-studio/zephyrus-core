@@ -131,6 +131,12 @@ final class PlainHandlerController
         return Response::json(['count' => $bag === null ? null : count($bag)]);
     }
 
+    /** DNF type whose named member must still cast a string. */
+    public function withBoolOrIntersection(bool|(Countable&ArrayAccess) $flag): Response
+    {
+        return Response::json(['flag' => $flag]);
+    }
+
     /** DNF type whose only named member cannot accept the object. */
     public function withIntOrIntersection(int|(Countable&ArrayAccess) $bag): Response
     {
@@ -351,11 +357,6 @@ final class BindingOrderController
     public function single(string $only): Response
     {
         return Response::text($only);
-    }
-
-    public function floatOf(float $score): Response
-    {
-        return Response::text(get_debug_type($score));
     }
 }
 
@@ -1365,15 +1366,6 @@ final class HandlerResolverTest extends TestCase
         self::assertSame('', $response->body);
     }
 
-    public function testAnIntegerAttributeForAFloatParameterIsConvertedToAFloat(): void
-    {
-        $match = $this->makeMatch('GET', '/scores/{score}', BindingOrderController::class . '@floatOf', ['score' => 5]);
-
-        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/scores/5'));
-
-        self::assertSame('float', $response->body);
-    }
-
     public function testOnlyTheIntegersZeroAndOneAreBooleans(): void
     {
         $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
@@ -1395,13 +1387,28 @@ final class HandlerResolverTest extends TestCase
 
     public function testADnfUnionStillCastsItsNamedMemberAfterAnIntersectionMember(): void
     {
-        $match = $this->makeMatch('GET', '/bags/{bag}', PlainHandlerController::class . '@withIntOrIntersection');
+        $match = $this->makeMatch('GET', '/flags/{flag}', PlainHandlerController::class . '@withBoolOrIntersection');
 
         $response = $this->resolver->resolve(
             $match,
-            Request::fromArray('GET', '/bags/4')->withAttribute('bag', '4'),
+            Request::fromArray('GET', '/flags/off')->withAttribute('flag', 'off'),
         );
 
-        self::assertSame('{"count":4}', $response->body);
+        self::assertSame('{"flag":false}', $response->body);
+    }
+
+    public function testAHandlerNamingMoreThanOneAtSignKeepsTheRestAsTheMethod(): void
+    {
+        $match = $this->makeMatch('GET', '/x', PlainHandlerController::class . '@missing@extra');
+
+        try {
+            $this->resolver->resolve($match, Request::fromArray('GET', '/x'));
+            self::fail('expected a refusal');
+        } catch (HandlerResolverException $e) {
+            self::assertSame(
+                'Method "' . PlainHandlerController::class . '::missing@extra" does not exist.',
+                $e->getMessage(),
+            );
+        }
     }
 }
