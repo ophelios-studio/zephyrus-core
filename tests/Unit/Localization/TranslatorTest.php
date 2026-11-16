@@ -766,6 +766,38 @@ final class TranslatorTest extends TestCase
         self::assertSame('Bonjour', $translator->trans('greeting', locale: 'de'));
     }
 
+    /**
+     * @param array<string, string> $catalogs locale => value
+     */
+    #[DataProvider('truncationCases')]
+    public function testALocaleFallsBackThroughEveryShorterPrefix(
+        array $catalogs,
+        string $default,
+        string $requested,
+        string $expected,
+    ): void {
+        $translator = $this->translatorWith(
+            array_map(static fn (string $value): array => ['k' => $value], $catalogs),
+            $default,
+        );
+
+        self::assertSame($expected, $translator->trans('k', locale: $requested));
+    }
+
+    /**
+     * @return array<string, array{array<string, string>, string, string, string}>
+     */
+    public static function truncationCases(): array
+    {
+        return [
+            'script before language' => [['zh-Hant' => 'Hant', 'zh' => 'zh'], 'en', 'zh-Hant-TW', 'Hant'],
+            'language only' => [['zh' => 'zh'], 'en', 'zh-Hant-TW', 'zh'],
+            'singleton leaves with its subtag' => [['fr-CA' => 'CA'], 'en', 'fr-CA-x-foo', 'CA'],
+            'default locale is truncated too' => [['sr-Latn' => 'Latn'], 'sr-Latn-RS', 'de', 'Latn'],
+            'every trailing singleton leaves' => [['en-x' => 'X', 'en' => 'EN'], 'fr', 'en-x-a-b', 'EN'],
+        ];
+    }
+
     public function testARequestedLocaleIsTrimmed(): void
     {
         $translator = $this->translatorWith(['fr' => ['greeting' => 'Bonjour']]);

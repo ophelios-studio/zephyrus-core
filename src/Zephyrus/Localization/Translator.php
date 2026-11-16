@@ -11,8 +11,8 @@ use Zephyrus\Formatting\FormatterException;
 /**
  * Translates dot-notation keys from the catalogs of a LocaleLoaderInterface.
  *
- * Lookup order: the requested locale, its base language (fr-CA, then fr), the default locale, then the default's
- * base language. A missing key returns the key itself, interpolated like a value. Catalogs are cached per instance.
+ * Lookup order, as RFC 4647 lookup: the requested locale and each shorter prefix (zh-Hant-TW, zh-Hant, zh), then
+ * the default locale and its prefixes. A missing key returns the key itself. Catalogs are cached per instance.
  *
  * Placeholders are {name} or {name|pipe|pipe:argument}. A placeholder without a parameter stays verbatim.
  * Pipes, applied left to right: lower, upper, title, trim, ltrim, rtrim, number, truncate, plural, default, then
@@ -75,23 +75,10 @@ final class Translator
             $normalizedRequested = $normalizedDefault;
         }
 
-        $chain = [$normalizedRequested];
-
-        $requestedBase = $this->baseLocale($normalizedRequested);
-        if ($requestedBase !== $normalizedRequested) {
-            $chain[] = $requestedBase;
-        }
-
-        if (!in_array($normalizedDefault, $chain, true)) {
-            $chain[] = $normalizedDefault;
-        }
-
-        $defaultBase = $this->baseLocale($normalizedDefault);
-        if ($defaultBase !== $normalizedDefault && !in_array($defaultBase, $chain, true)) {
-            $chain[] = $defaultBase;
-        }
-
-        return $chain;
+        return array_values(array_unique([
+            ...$this->truncations($normalizedRequested),
+            ...$this->truncations($normalizedDefault),
+        ]));
     }
 
     private function normalizeLocale(string $locale): string
@@ -99,9 +86,24 @@ final class Translator
         return LocaleTag::canonical(trim($locale));
     }
 
-    private function baseLocale(string $locale): string
+    /**
+     * Returns the locale and its shorter prefixes, longest first (RFC 4647 lookup).
+     *
+     * @return list<string>
+     */
+    private function truncations(string $locale): array
     {
-        return explode('-', $locale, 2)[0];
+        $subtags = explode('-', $locale);
+        $prefixes = [];
+        while ($subtags !== []) {
+            $prefixes[] = implode('-', $subtags);
+            array_pop($subtags);
+            while ($subtags !== [] && strlen($subtags[array_key_last($subtags)]) === 1) {
+                array_pop($subtags);
+            }
+        }
+
+        return $prefixes;
     }
 
     /**
