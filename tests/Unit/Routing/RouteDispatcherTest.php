@@ -137,6 +137,27 @@ final class RouteDispatcherTest extends TestCase
         }
     }
 
+    public function testResolutionRefusalEscapesControlCharactersOfThePreviousMessage(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', middlewares: ["au\r\nth"]));
+        $missing = static fn (string $name): MiddlewareInterface => throw new \RuntimeException("No service \"$name\"");
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+            routeMiddlewareResolver: $missing,
+        );
+
+        try {
+            self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
+            self::fail('expected a refusal');
+        } catch (RouteMiddlewareException $e) {
+            self::assertSame('Unable to resolve route middleware "au\r\nth": No service "au\r\nth"', $e->getMessage());
+        }
+    }
+
     public function testDispatchWrapsUnexpectedResolverFailuresAsRouteMiddlewareException(): void
     {
         $routes = new RouteCollection();

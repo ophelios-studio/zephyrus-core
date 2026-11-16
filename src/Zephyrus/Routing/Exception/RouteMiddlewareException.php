@@ -97,7 +97,7 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
             sprintf(
                 'Unable to resolve route middleware "%s": %s',
                 MessageValue::escapeControls($name),
-                $previous->getMessage(),
+                MessageValue::escapeControls($previous->getMessage()),
             ),
             0,
             $previous,

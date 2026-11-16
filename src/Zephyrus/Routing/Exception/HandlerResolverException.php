@@ -32,7 +32,7 @@ final class HandlerResolverException extends ZephyrusRuntimeException
             sprintf(
                 'Cannot instantiate handler class "%s": %s',
                 MessageValue::escapeControls($className),
-                $previous->getMessage(),
+                MessageValue::escapeControls($previous->getMessage()),
             ),
             0,
             $previous,

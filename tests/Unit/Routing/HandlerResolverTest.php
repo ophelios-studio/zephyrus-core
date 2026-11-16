@@ -653,6 +653,17 @@ final class HandlerResolverTest extends TestCase
         );
     }
 
+    public function testUnresolvableClassRefusalEscapesControlCharactersOfThePreviousMessage(): void
+    {
+        self::assertSame(
+            'Cannot instantiate handler class "NoCtrl": No service "x"\r\nFAKE',
+            HandlerResolverException::unresolvableClass(
+                'NoCtrl',
+                new \RuntimeException("No service \"x\"\r\nFAKE"),
+            )->getMessage(),
+        );
+    }
+
     public function testUnresolvableMethodRefusalEscapesControlCharactersOfTheClassAndMethod(): void
     {
         self::assertSame(
