@@ -73,7 +73,10 @@ final class RouteCollection
     public function withLastRouteName(string $name): self
     {
         if ($this->routes === []) {
-            throw new \LogicException(sprintf('name("%s") must follow a route: add one before naming it.', $name));
+            throw new \LogicException(sprintf(
+                'name("%s") must follow a route: add one before naming it.',
+                MessageValue::escapeControls($name),
+            ));
         }
 
         $collection = new self($this->trailingSlashTolerant);

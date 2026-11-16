@@ -254,6 +254,21 @@ final class RouteCollectionTest extends TestCase
         }
     }
 
+    public function testNamingWithoutARouteEscapesControlCharactersOfTheName(): void
+    {
+        $collection = new RouteCollection();
+
+        try {
+            $collection->withLastRouteName("orphan\r\n\e");
+            self::fail('expected a refusal');
+        } catch (\LogicException $e) {
+            self::assertSame(
+                'name("orphan\r\n\u001b") must follow a route: add one before naming it.',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testWithLastRouteNameOnEmptyCollectionThrowsNamingTheRoute(): void
     {
         $collection = new RouteCollection();
