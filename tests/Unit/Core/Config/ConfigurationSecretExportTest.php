@@ -155,4 +155,25 @@ final class ConfigurationSecretExportTest extends TestCase
         self::assertArrayNotHasKey('token', $export['api']);
         self::assertArrayNotHasKey('missing', $export);
     }
+
+    public function testOnlyTheDeclaredSecretIsRedactedAmongSeveralValues(): void
+    {
+        $section = new class(['host' => 'example.test', 'token' => 'live-token', 'region' => 'eu']) extends ConfigSection {
+            protected array $secretKeys = ['token'];
+        };
+
+        self::assertSame(
+            ['host' => 'example.test', 'token' => ConfigSection::REDACTED, 'region' => 'eu'],
+            $section->toArray(),
+        );
+    }
+
+    public function testAnEmptyOrNullSecretStaysVisiblyAbsent(): void
+    {
+        $section = new class(['empty' => '', 'unset' => null, 'zero' => '0']) extends ConfigSection {
+            protected array $secretKeys = ['empty', 'unset', 'zero'];
+        };
+
+        self::assertSame(['empty' => '', 'unset' => null, 'zero' => ConfigSection::REDACTED], $section->toArray());
+    }
 }

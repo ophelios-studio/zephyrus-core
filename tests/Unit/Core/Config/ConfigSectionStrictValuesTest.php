@@ -73,6 +73,64 @@ final class ConfigSectionStrictValuesTest extends TestCase
         ));
     }
 
+    public function testAnObjectWithAStringConversionReadsAsItsString(): void
+    {
+        $value = new class {
+            public function __toString(): string
+            {
+                return 'rendered';
+            }
+        };
+
+        self::assertSame('rendered', $this->section(['label' => $value])->getString('label'));
+    }
+
+    /**
+     * @return array<string, array{string, float, string}>
+     */
+    public static function nonFiniteFloats(): array
+    {
+        return [
+            'not a number' => ['getInt', NAN, 'NAN'],
+            'positive infinity' => ['getInt', INF, 'INF'],
+            'negative infinity' => ['getInt', -INF, '-INF'],
+            'float slot, not a number' => ['getFloat', NAN, 'NAN'],
+            'float slot, infinity' => ['getFloat', INF, 'INF'],
+        ];
+    }
+
+    #[DataProvider('nonFiniteFloats')]
+    public function testANonFiniteFloatIsRefusedByTheNumericGetters(string $getter, float $value, string $shown): void
+    {
+        $section = $this->section(['rate' => $value]);
+
+        try {
+            $section->$getter('rate');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                sprintf("Configuration section '%s' field 'rate' has invalid value %s: is not a finite number.", $section::class, $shown),
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testASurroundingWhitespaceIsIgnoredByTheNumericGetters(): void
+    {
+        $section = $this->section(['port' => " 8080\t", 'rate' => ' 3.5 ']);
+
+        self::assertSame(8080, $section->getInt('port'));
+        self::assertSame(3.5, $section->getFloat('rate'));
+    }
+
+    public function testAnAbsentKeyReadsAsTheZeroValueOfItsType(): void
+    {
+        $section = $this->section([]);
+
+        self::assertSame(0.0, $section->getFloat('missing'));
+        self::assertFalse($section->getBool('missing'));
+    }
+
     /**
      * @return array<string, array{0: mixed, 1: bool}>
      */
