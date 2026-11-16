@@ -34,6 +34,33 @@ final class AssetTest extends TestCase
         self::assertMatchesRegularExpression('/\?v=[a-f0-9]{8}$/', $url);
     }
 
+    public function testUrlHashIsTheLeadingEightCharactersOfTheContentDigest(): void
+    {
+        $asset = new Asset($this->publicDir);
+
+        $expected = substr(md5('body { color: red; }'), 0, 8);
+
+        self::assertSame('/css/app.css?v=' . $expected, $asset->url('/css/app.css'));
+    }
+
+    public function testUrlKeepsTheFirstHashOfAPathForTheLifetimeOfTheInstance(): void
+    {
+        $asset = new Asset($this->publicDir);
+        $first = $asset->url('/css/app.css');
+
+        file_put_contents($this->publicDir . '/css/app.css', 'body { color: blue; }');
+
+        self::assertSame($first, $asset->url('/css/app.css'));
+    }
+
+    public function testADirectoryGivenWithATrailingSeparatorStillResolvesItsAssets(): void
+    {
+        $asset = new Asset($this->publicDir . '/');
+
+        self::assertTrue($asset->exists('/css/app.css'));
+        self::assertSame('body { color: red; }', $asset->embed('/css/app.css'));
+    }
+
     public function testUrlReturnsSameHashForSameContent(): void
     {
         $asset = new Asset($this->publicDir);
