@@ -20,11 +20,12 @@ final class SafePath
      * Resolve `$relativePath` under `$root`.
      *
      * @return string|null The canonical absolute path, or null when the path
-     *                     escapes the root, is unreadable, or does not exist.
+     *                     escapes the root, is unreadable, or does not exist,
+     *                     or when the root holds a NUL byte.
      */
     public static function within(string $root, string $relativePath): ?string
     {
-        if (!self::isSafeRelativePath($relativePath)) {
+        if (!self::isSafeRelativePath($relativePath) || self::holdsNulByte($root)) {
             return null;
         }
 
