@@ -11,8 +11,14 @@ use RuntimeException;
 use Throwable;
 use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
+use Zephyrus\Http\Error\HttpExceptionResponder;
+use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
+use Zephyrus\Routing\Route;
+use Zephyrus\Routing\RouteCollection;
+use Zephyrus\Routing\RouteDispatcher;
+use Zephyrus\Routing\RouteMatch;
 use Zephyrus\Routing\Router;
 use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
@@ -126,6 +132,21 @@ final class HttpKernelUnhandledExceptionTest extends TestCase
         $response = $kernel->handle(Request::fromArray('GET', '/boom'));
 
         self::assertSame('SAMEORIGIN', $response->headers['x-frame-options']);
+    }
+
+    public function testAKernelBuiltDirectlyAnswersAnUnhandledExceptionWithAGeneric500(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/boom', 'Boom@now'));
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => throw new RuntimeException('boom'),
+        );
+
+        $response = (new HttpKernel($dispatcher, new HttpExceptionResponder()))->handle(Request::fromArray('GET', '/boom'));
+
+        self::assertSame(500, $response->status);
     }
 
     public function testAFailingHandlerIsWrittenToTheErrorLogWithTheExceptionItWasAnswering(): void

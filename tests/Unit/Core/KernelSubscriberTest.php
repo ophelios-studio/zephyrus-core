@@ -35,6 +35,17 @@ final class KernelSubscriberTest extends TestCase
         );
     }
 
+    public function testAnOverriddenPriorityCanBuildOnTheInheritedOne(): void
+    {
+        self::assertSame(
+            [
+                RequestEvent::class => ['onRequest', 10],
+                ResponseEvent::class => ['onResponse', -10],
+            ],
+            RelativePrioritySubscriber::getSubscribedEvents()
+        );
+    }
+
     public function testDefaultHookMethodsAreNoOps(): void
     {
         $subscriber = new DefaultSubscriber();
@@ -65,5 +76,18 @@ final class PrioritySubscriber extends KernelSubscriber
     protected static function responsePriority(): int
     {
         return -20;
+    }
+}
+
+final class RelativePrioritySubscriber extends KernelSubscriber
+{
+    protected static function requestPriority(): int
+    {
+        return parent::requestPriority() + 10;
+    }
+
+    protected static function responsePriority(): int
+    {
+        return parent::responsePriority() - 10;
     }
 }
