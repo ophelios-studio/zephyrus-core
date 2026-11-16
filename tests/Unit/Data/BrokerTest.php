@@ -69,6 +69,30 @@ final class UserBroker extends Broker
         return $this->selectFloat('SELECT AVG(id) FROM users', default: $default);
     }
 
+    public function unmatchedInt(): int
+    {
+        return $this->selectInt('SELECT id FROM users WHERE id = -1');
+    }
+
+    public function unmatchedBool(): bool
+    {
+        return $this->selectBool('SELECT 1 FROM users WHERE id = -1');
+    }
+
+    public function unmatchedFloat(): float
+    {
+        return $this->selectFloat('SELECT id FROM users WHERE id = -1');
+    }
+
+    public function paginateUsersFromQueryWithDefaultBounds(array $query): PaginatedResult
+    {
+        return $this->paginateResultFromQuery(
+            'SELECT * FROM users ORDER BY id',
+            'SELECT COUNT(*) FROM users',
+            $query,
+        );
+    }
+
     public function hasAnyUsers(): bool
     {
         return $this->selectBool('SELECT EXISTS(SELECT 1 FROM users)');
@@ -538,5 +562,23 @@ final class BrokerTest extends TestCase
         }
 
         self::assertSame($countBefore, $this->broker->count());
+    }
+
+    public function testScalarReadsDefaultToZeroFalseAndZeroPointZeroWhenNoRowMatches(): void
+    {
+        self::assertSame(0, $this->broker->unmatchedInt());
+        self::assertFalse($this->broker->unmatchedBool());
+        self::assertSame(0.0, $this->broker->unmatchedFloat());
+    }
+
+    public function testPaginateFromQueryDefaultsToTwentyFiveItemsAndCapsAtOneHundred(): void
+    {
+        for ($i = 1; $i <= 130; $i++) {
+            $this->broker->insert("user{$i}", "user{$i}@example.com");
+        }
+
+        self::assertSame(25, $this->broker->paginateUsersFromQueryWithDefaultBounds([])->perPage);
+        self::assertSame(100, $this->broker->paginateUsersFromQueryWithDefaultBounds(['per_page' => 500])->perPage);
+        self::assertSame(100, $this->broker->paginateUsersFromQueryWithDefaultBounds(['per_page' => 100])->perPage);
     }
 }
