@@ -2747,6 +2747,18 @@ final class RequestTest extends TestCase
         self::assertSame('', $request->body()->raw());
     }
 
+    public function testADeclaredLengthSurroundedByWhitespaceCountsAgainstTheBodyBudget(): void
+    {
+        $request = self::globals(
+            ['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => ' 99 ', 'CONTENT_TYPE' => 'application/json'],
+            rawBody: '{}',
+            maxBodySize: 50,
+        );
+
+        self::assertTrue($request->body()->isMalformed());
+        self::assertSame('', $request->body()->raw());
+    }
+
     public function testADeclaredLengthWithTrailingGarbageIsNotTrustedAsANumber(): void
     {
         $request = self::globals(
