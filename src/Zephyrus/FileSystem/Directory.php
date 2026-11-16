@@ -27,18 +27,7 @@ final class Directory extends FileSystemNode
     {
         self::assertLocalPath($path);
 
-        if (!@is_dir($path)) {
-            error_clear_last();
-            $created = @mkdir($path, $permissions, true);
-            $reason = FileSystemException::lastError();
-            if (!$created && !@is_dir($path)) {
-                throw FileSystemException::operationFailed(
-                    'create directory',
-                    $path,
-                    reason: $reason,
-                );
-            }
-        }
+        NativeFileSystem::ensureDirectory($path, $permissions, 'create directory', $path);
 
         return new self($path);
     }
@@ -127,20 +116,7 @@ final class Directory extends FileSystemNode
     {
         self::assertLocalPath($this->path);
 
-        if (@is_dir($this->path)) {
-            return;
-        }
-
-        error_clear_last();
-        $created = @mkdir($this->path, $permissions, true);
-        $reason = FileSystemException::lastError();
-        if (!$created && !@is_dir($this->path)) {
-            throw FileSystemException::operationFailed(
-                'create directory',
-                $this->path,
-                reason: $reason,
-            );
-        }
+        NativeFileSystem::ensureDirectory($this->path, $permissions, 'create directory', $this->path);
     }
 
     /**

@@ -56,18 +56,7 @@ final class File extends FileSystemNode
     {
         self::assertPlainFilePath($path);
         $dir = dirname($path);
-        if (!@is_dir($dir)) {
-            error_clear_last();
-            $created = @mkdir($dir, 0755, true);
-            $reason = FileSystemException::lastError();
-            if (!$created && !@is_dir($dir)) {
-                throw FileSystemException::operationFailed(
-                    'create directory for',
-                    $path,
-                    reason: $reason,
-                );
-            }
-        }
+        NativeFileSystem::ensureDirectory($dir, 0755, 'create directory for', $path);
 
         self::replaceContent($path, self::contentWriter($content), self::failure('create file', $path));
 
@@ -209,18 +198,7 @@ final class File extends FileSystemNode
             }
 
             $dir = dirname($destination);
-            if (!@is_dir($dir)) {
-                error_clear_last();
-                $created = @mkdir($dir, 0755, true);
-                $reason = FileSystemException::lastError();
-                if (!$created && !@is_dir($dir)) {
-                    throw FileSystemException::operationFailed(
-                        'create directory for',
-                        $destination,
-                        reason: $reason,
-                    );
-                }
-            }
+            NativeFileSystem::ensureDirectory($dir, 0755, 'create directory for', $destination);
 
             self::replaceContent(
                 $destination,
@@ -258,18 +236,7 @@ final class File extends FileSystemNode
         $this->assertExists();
 
         $dir = dirname($destination);
-        if (!@is_dir($dir)) {
-            error_clear_last();
-            $created = @mkdir($dir, 0755, true);
-            $reason = FileSystemException::lastError();
-            if (!$created && !@is_dir($dir)) {
-                throw FileSystemException::operationFailed(
-                    'create directory for',
-                    $destination,
-                    reason: $reason,
-                );
-            }
-        }
+        NativeFileSystem::ensureDirectory($dir, 0755, 'create directory for', $destination);
 
         error_clear_last();
         if (!@rename($this->path, $destination)) {
