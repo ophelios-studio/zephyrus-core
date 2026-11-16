@@ -457,9 +457,15 @@ final class DatabaseParameterBindingTest extends TestCase
 
     public function testANamedKeyStartingWithAMinusSignIsNotReadAsANegativePosition(): void
     {
-        $this->expectException(DatabaseException::class);
-
-        $this->db->selectValue('SELECT 1', ['-x' => 'v']);
+        try {
+            $this->db->selectValue('SELECT 1', ['-x' => 'v']);
+            self::fail('expected a refusal');
+        } catch (DatabaseException $e) {
+            self::assertSame(
+                'Query failed [SQLSTATE HY000]: statement and driver detail withheld, read sql() and driverMessage() to inspect them',
+                $e->getMessage(),
+            );
+        }
     }
 
     /**
