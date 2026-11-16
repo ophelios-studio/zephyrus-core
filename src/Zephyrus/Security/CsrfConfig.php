@@ -172,7 +172,7 @@ final class CsrfConfig
 
         $normalized = [];
         foreach ($patterns as $index => $pattern) {
-            $where = sprintf($label, (string) $index);
+            $where = sprintf($label, MessageValue::escapeControls((string) $index));
 
             if (!is_string($pattern) || trim($pattern) === '') {
                 throw new InvalidArgumentException(sprintf('%s must be a non-empty string such as %s.', $where, self::EXAMPLE_PATTERN));
@@ -183,7 +183,7 @@ final class CsrfConfig
                 throw new InvalidArgumentException(sprintf(
                     '%s is not a valid regex: %s (%s; expected a shape such as %s).',
                     $where,
-                    $pattern,
+                    MessageValue::escapeControls($pattern),
                     MessageValue::escapeControls($compilationError),
                     self::EXAMPLE_PATTERN,
                 ));
@@ -212,7 +212,7 @@ final class CsrfConfig
             throw new InvalidArgumentException(sprintf(
                 '%s is not a delimited regex: %s (expected a shape such as %s).',
                 $where,
-                $pattern,
+                MessageValue::escapeControls($pattern),
                 self::EXAMPLE_PATTERN,
             ));
         }
@@ -223,7 +223,7 @@ final class CsrfConfig
             throw new InvalidArgumentException(sprintf(
                 '%s must start with "^" so it cannot match in the middle of a path: %s (expected a shape such as %s).',
                 $where,
-                $pattern,
+                MessageValue::escapeControls($pattern),
                 self::EXAMPLE_PATTERN,
             ));
         }
@@ -238,7 +238,7 @@ final class CsrfConfig
                 '%s must end with "/" (the route and everything under it) or "$" (that exact path), otherwise '
                 . 'it also exempts every sibling route sharing the prefix: %s (expected a shape such as %s).',
                 $where,
-                $pattern,
+                MessageValue::escapeControls($pattern),
                 self::EXAMPLE_PATTERN,
             ));
         }

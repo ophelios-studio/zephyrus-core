@@ -53,6 +53,93 @@ final class CsrfConfigTest extends TestCase
         }
     }
 
+    public function testTheReasonAndThePatternOfARefusedPatternAreEscaped(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ["#a#\x1b"]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                "CSRF excluded path pattern at index 0 is not a valid regex: #a#\\u001b "
+                . "(Unknown modifier '\\u001b'; expected a shape such as #^/webhooks/#).",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testControlCharactersOfARefusedPatternCannotForgeALogLine(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ["/a\e[2K\r\nFAKE"]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                "CSRF excluded path pattern at index 0 is not a valid regex: /a\\u001b[2K\\r\\nFAKE "
+                . "(No ending delimiter '/' found; expected a shape such as #^/webhooks/#).",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testControlCharactersOfAPatternRefusedAsNotDelimitedAreEscaped(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ["\r\n#^/a/#"]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index 0 is not a delimited regex: \\r\\n#^/a/# '
+                . '(expected a shape such as #^/webhooks/#).',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testControlCharactersOfAPatternRefusedAsUnanchoredAreEscaped(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ["#a\e\r\nFAKE#"]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index 0 must start with "^" so it cannot match in the middle of a path: '
+                . '#a\\u001b\\r\\nFAKE# (expected a shape such as #^/webhooks/#).',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testControlCharactersOfAPatternRefusedAsOpenEndedAreEscaped(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ["#^/a\e\r\nFAKE#"]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index 0 must end with "/" (the route and everything under it) or "$" '
+                . '(that exact path), otherwise it also exempts every sibling route sharing the prefix: '
+                . '#^/a\\u001b\\r\\nFAKE# (expected a shape such as #^/webhooks/#).',
+                $e->getMessage(),
+            );
+        }
+    }
+
+
+    public function testControlCharactersOfAPatternKeyAreEscapedInTheRefusal(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ["a\nb" => '#^/webhooks#']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index a\\nb must end with "/" (the route and everything under it) or "$" '
+                . '(that exact path), otherwise it also exempts every sibling route sharing the prefix: #^/webhooks# '
+                . '(expected a shape such as #^/webhooks/#).',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testFromSecurityConfigCopiesExclusionsAsRegexPatterns(): void
     {
         $config = CsrfConfig::fromSecurityConfig($this->security(true, ['#^/webhooks/#', '#^/logout$#']));
