@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing\Exception;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -25,9 +26,9 @@ final class RouteParameterException extends ZephyrusRuntimeException
 
         parent::__construct(sprintf(
             'Route parameter "$%s" for "%s::%s" could not be resolved: expected %s, got %s.',
-            $parameter,
-            $className,
-            $methodName,
+            MessageValue::escapeControls($parameter),
+            MessageValue::escapeControls($className),
+            MessageValue::escapeControls($methodName),
             $expectedType,
             $actualType,
         ));
