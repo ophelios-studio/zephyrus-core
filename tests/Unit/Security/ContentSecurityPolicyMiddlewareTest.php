@@ -219,4 +219,38 @@ final class ContentSecurityPolicyMiddlewareTest extends TestCase
             );
         }
     }
+
+    public function testAnEmptyPolicyAnnouncesNoHeaderToTheInnerMiddleware(): void
+    {
+        $announced = null;
+        $middleware = new ContentSecurityPolicyMiddleware(ContentSecurityPolicy::create());
+
+        $middleware->process($this->makeRequest(), function (Request $request) use (&$announced): Response {
+            $announced = ContentSecurityPolicyMiddleware::announcesHeader($request, 'Content-Security-Policy');
+
+            return Response::text('ok');
+        });
+
+        self::assertFalse($announced);
+    }
+
+    public function testNestedMiddlewaresAnnounceBothHeadersToTheHandler(): void
+    {
+        $seen = [];
+        $outer = new ContentSecurityPolicyMiddleware("default-src 'none'", reportOnly: true);
+        $inner = new ContentSecurityPolicyMiddleware("default-src 'self'");
+
+        $outer->process($this->makeRequest(), function (Request $request) use ($inner, &$seen): Response {
+            return $inner->process($request, function (Request $request) use (&$seen): Response {
+                $seen = [
+                    ContentSecurityPolicyMiddleware::announcesHeader($request, 'Content-Security-Policy-Report-Only'),
+                    ContentSecurityPolicyMiddleware::announcesHeader($request, 'Content-Security-Policy'),
+                ];
+
+                return Response::text('ok');
+            });
+        });
+
+        self::assertSame([true, true], $seen);
+    }
 }
