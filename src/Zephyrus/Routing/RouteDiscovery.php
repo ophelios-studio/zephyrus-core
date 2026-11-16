@@ -9,6 +9,7 @@ use RecursiveIteratorIterator;
 use ReflectionClass;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Routing\Exception\RouteAttributeException;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
@@ -53,7 +54,11 @@ final readonly class RouteDiscovery
                     RouterConfig::SECTION,
                     'controllers',
                     $this->config->controllers[$namespace],
-                    sprintf('%s holds no class of the namespace %s', $directory, $namespace),
+                    sprintf(
+                        '%s holds no class of the namespace %s',
+                        MessageValue::quote($directory, 512, keepEnd: true),
+                        MessageValue::escapeControls($namespace),
+                    ),
                 );
             }
 
