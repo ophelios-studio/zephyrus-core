@@ -259,7 +259,7 @@ final class RouteCollectionTest extends TestCase
         $collection = new RouteCollection();
 
         try {
-            $collection->withLastRouteName("orphan\r\n\e");
+            $ignored = $collection->withLastRouteName("orphan\r\n\e");
             self::fail('expected a refusal');
         } catch (\LogicException $e) {
             self::assertSame(
