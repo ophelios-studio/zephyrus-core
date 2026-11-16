@@ -163,6 +163,42 @@ final class FileUploadTest extends TestCase
         self::assertSame('/tmp/php-x', $files[0]->tmpPath);
     }
 
+    public function test_list_from_php_array_yields_nothing_when_tmp_name_is_a_scalar_and_error_is_a_list(): void
+    {
+        $files = FileUpload::listFromPhpArray([
+            'name' => 'a.txt',
+            'tmp_name' => '/tmp/php-a',
+            'error' => [UPLOAD_ERR_OK],
+            'size' => 1,
+        ]);
+
+        self::assertSame([], $files);
+    }
+
+    public function test_list_from_php_array_yields_nothing_when_tmp_name_is_a_list_and_error_is_a_scalar(): void
+    {
+        $files = FileUpload::listFromPhpArray([
+            'name' => ['a.txt'],
+            'tmp_name' => ['/tmp/php-a'],
+            'error' => UPLOAD_ERR_OK,
+            'size' => [1],
+        ]);
+
+        self::assertSame([], $files);
+    }
+
+    public function test_list_from_php_array_follows_the_order_of_the_tmp_name_keys(): void
+    {
+        $files = FileUpload::listFromPhpArray([
+            'name' => ['b' => 'b.txt', 'a' => 'a.txt'],
+            'tmp_name' => ['b' => '/tmp/php-b', 'a' => '/tmp/php-a'],
+            'error' => ['a' => UPLOAD_ERR_OK, 'b' => UPLOAD_ERR_OK],
+            'size' => ['a' => 1, 'b' => 2],
+        ]);
+
+        self::assertSame(['b.txt', 'a.txt'], array_map(static fn (FileUpload $f): string => $f->originalName, $files));
+    }
+
     // ------------------------------------------------------------------
     // extension()
     // ------------------------------------------------------------------
@@ -243,6 +279,20 @@ final class FileUploadTest extends TestCase
         $file = new FileUpload('../../etc/passwd.php.png', 'image/png', '/tmp/x', 0);
 
         self::assertSame(['php', 'png'], $file->extensions());
+    }
+
+    public function test_extensions_ignores_a_windows_style_directory_prefix(): void
+    {
+        $file = new FileUpload('C:\\fake.dir\\evil.php\\photo.png', 'image/png', '/tmp/x', 0);
+
+        self::assertSame(['png'], $file->extensions());
+    }
+
+    public function test_extensions_drops_empty_segments_and_returns_a_list(): void
+    {
+        $file = new FileUpload('archive..php.', 'application/octet-stream', '/tmp/x', 0);
+
+        self::assertSame(['php'], $file->extensions());
     }
 
     // ------------------------------------------------------------------
