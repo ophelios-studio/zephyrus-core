@@ -12,12 +12,14 @@ namespace Zephyrus\Formatting;
  * grouping off. In a right-to-left locale, or inside right-to-left text, only `,` `.` U+00A0 and U+202F
  * keep the groups in order; a space, U+2009, `'` or U+2019 can reverse them.
  *
- * A default date, time or datetime pattern is refused when it is empty or blank, or when it is `none`.
+ * A default date, time or datetime pattern is refused when it is empty or blank, or when it is `none` in any case,
+ * blanks around it ignored.
  *
  * @internal
  */
 final class FormatterInput
 {
+    /** A whole sentence: refusals append it after their own, unlike the lowercase rules below that follow a colon. */
     public const string DATE_PATTERN_RULE = 'Use short, medium, long, full or an ICU pattern';
 
     public const string CURRENCY_CODE_RULE = 'must be three ASCII letters, for example CAD';
