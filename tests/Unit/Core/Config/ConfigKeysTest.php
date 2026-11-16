@@ -281,6 +281,25 @@ final class ConfigKeysTest extends TestCase
         }
     }
 
+    public function testASuggestionIsOfferedForAKeyAtTheLongestComparedLengthAndNotBeyond(): void
+    {
+        $candidate = str_repeat('a', 63) . 'b';
+
+        self::assertSame($candidate, ConfigKeys::closest(str_repeat('a', 64), [$candidate]));
+        self::assertNull(ConfigKeys::closest(str_repeat('a', 65), [$candidate . 'a']));
+    }
+
+    public function testAKeyMadeOnlyOfSeparatorsSuggestsNothing(): void
+    {
+        self::assertNull(ConfigKeys::closest('-', ['_']));
+        self::assertNull(ConfigKeys::closest('_', ['']));
+    }
+
+    public function testATieBetweenSpellingsGoesToTheOneWrittenMostLikeTheKeyIgnoringCase(): void
+    {
+        self::assertSame('ab_c', ConfigKeys::closest('AB_C', ['abc', 'ab_c']));
+    }
+
     public function testAShortKeyIsNotMatchedToAnUnrelatedShortSpelling(): void
     {
         self::assertSame(
