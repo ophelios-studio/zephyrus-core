@@ -778,7 +778,7 @@ final class RouteCollection
             throw new RouteSignatureException(sprintf(
                 'Invalid route constraint pattern for parameter "%s" on route "%s": %s (%s)',
                 $parameterName,
-                $route->path,
+                MessageValue::escapeControls($route->path),
                 MessageValue::escapeControls($pattern),
                 MessageValue::escapeControls($compilationError),
             ));
