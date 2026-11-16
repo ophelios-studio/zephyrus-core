@@ -41,4 +41,18 @@ final class RequestAttributeGuardTest extends TestCase
 
         self::assertFalse($guard->isAuthorized($request));
     }
+
+    public function testRejectsAnAllowedValueThatCameFromTheUrl(): void
+    {
+        $guard = new RequestAttributeGuard('role', ['admin']);
+        $request = new Request(
+            'GET',
+            'https://app.example.test/admin/admin',
+            attributes: ['role' => 'admin'],
+            routeParameters: ['role' => 'admin'],
+        );
+
+        self::assertSame('admin', $request->attribute('role'));
+        self::assertFalse($guard->isAuthorized($request));
+    }
 }

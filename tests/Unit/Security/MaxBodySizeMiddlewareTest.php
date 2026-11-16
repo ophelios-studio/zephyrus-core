@@ -337,6 +337,14 @@ final class MaxBodySizeMiddlewareTest extends TestCase
         self::assertSame(413, self::statusOfParsedBody(['k' => str_repeat('a', 1_000)], $contentType));
     }
 
+    public function testAFieldWithoutATextValueCountsOnlyItsKeyToTheByte(): void
+    {
+        $contentType = 'multipart/form-data; boundary=x';
+
+        self::assertSame(200, self::statusOfParsedBody([str_repeat('o', 1_000) => new \stdClass()], $contentType));
+        self::assertSame(413, self::statusOfParsedBody([str_repeat('o', 1_001) => new \stdClass()], $contentType));
+    }
+
     public function testAnObjectFieldOfAParsedBodyIsNotMeasuredAsText(): void
     {
         $status = self::statusOfParsedBody(['o' => new \stdClass()], 'multipart/form-data; boundary=x');
@@ -391,5 +399,27 @@ final class MaxBodySizeMiddlewareTest extends TestCase
 
         self::assertSame(413, $response->status);
         self::assertSame([PHP_INT_MAX], $seen);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function contentLengthsThatAreNotPlainDigits(): iterable
+    {
+        yield 'digits after text' => ['x99999'];
+        yield 'text after digits' => ['99999x'];
+        yield 'signed' => ['+99999'];
+        yield 'decimal' => ['99999.0'];
+    }
+
+    #[DataProvider('contentLengthsThatAreNotPlainDigits')]
+    public function testAContentLengthThatIsNotPlainDigitsIsNotTakenAsADeclaredSize(string $declared): void
+    {
+        $middleware = new MaxBodySizeMiddleware(4);
+        $request = Request::fromArray('POST', '/upload', headers: ['Content-Length' => $declared], rawBody: 'abc');
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(200, $response->status);
     }
 }
