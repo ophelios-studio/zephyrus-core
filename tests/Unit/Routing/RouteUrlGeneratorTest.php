@@ -521,4 +521,32 @@ final class RouteUrlGeneratorTest extends TestCase
             self::assertSame("Unexpected route parameter \"x\\u202e\" for route \"users.show\"", $e->getMessage());
         }
     }
+
+    public function testGenerateSortsTopLevelQueryKeysWhateverTheirOrder(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/search', 'SearchController@index', name: 'search.index'));
+
+        $path = (new RouteUrlGenerator($routes))->generate('search.index', query: ['page' => 2, 'expand' => 'roles']);
+
+        self::assertSame('/search?expand=roles&page=2', $path);
+    }
+
+    public function testGenerateSortsAssociativeQueryKeysAtEveryDepth(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/search', 'SearchController@index', name: 'search.index'));
+
+        $path = (new RouteUrlGenerator($routes))->generate('search.index', query: [
+            'filters' => [
+                'range' => ['to' => 9, 'from' => 1],
+                'kind' => 'a',
+            ],
+        ]);
+
+        self::assertSame(
+            '/search?filters%5Bkind%5D=a&filters%5Brange%5D%5Bfrom%5D=1&filters%5Brange%5D%5Bto%5D=9',
+            $path,
+        );
+    }
 }
