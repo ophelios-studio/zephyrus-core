@@ -237,9 +237,22 @@ final class DatabaseConfigTest extends TestCase
             ]);
             self::fail('expected the removed key to be rejected');
         } catch (ConfigurationException $e) {
-            self::assertStringContainsString('REMOVED', $e->getMessage());
-            self::assertStringContainsString('emulate_prepares', $e->getMessage());
-            self::assertStringContainsString('delete this line', $e->getMessage());
+            self::assertSame(
+                "Configuration section 'database' field 'emulate_prepares' has been REMOVED from Zephyrus and is no "
+                . "longer honoured. Client-side parameter emulation (PDO::ATTR_EMULATE_PREPARES) was taken out because "
+                . "it is a security downgrade, not a tuning knob:\n"
+                . "  - binding invalid UTF-8 kills the worker process instead of raising;\n"
+                . "  - PDO::quote() truncates silently at a NUL byte, storing a value nobody typed;\n"
+                . "  - parameter values are interpolated into the statement the server parses, so they leak into "
+                . "driver error messages;\n"
+                . "  - client-side interpolation gives up the extended protocol's refusal of a second statement, "
+                . "which is a defence-in-depth layer against SQL injection.\n"
+                . "Connections now always use native server-side prepares.\n"
+                . "To fix: delete this line from the database section. There is no replacement setting, and setting "
+                . "it to false is not accepted either, because the line would keep documenting a knob that no longer "
+                . "exists.",
+                $e->getMessage(),
+            );
         }
     }
 
@@ -1361,4 +1374,53 @@ final class DatabaseConfigTest extends TestCase
 
         return $printing;
     }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function refusedSettings(): iterable
+    {
+        $field = "Configuration section 'database' ";
+
+        yield 'a blank database name' => [
+            ['database' => ''],
+            $field . "requires field 'database' but none was provided.",
+        ];
+        yield 'an unknown ssl mode' => [
+            ['sslMode' => 'bogus'],
+            $field . "field 'sslMode' has invalid value \"bogus\": must be null (leave the parameter out of the DSN) "
+                . 'or one of: disable, allow, prefer, require, verify-ca, verify-full.',
+        ];
+        yield 'an ssl mode that is neither a string nor an integer' => [
+            ['sslMode' => true],
+            $field . "field 'sslMode' has invalid value true: must be a string or an integer.",
+        ];
+        yield 'a column cache version that is an array' => [
+            ['columnCacheVersion' => [1]],
+            $field . "field 'columnCacheVersion' has invalid value array: must be a string or an integer: "
+                . "quote a number such as '1.10' to keep its digits.",
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('refusedSettings')]
+    public function testARefusedSettingIsExplainedInFull(array $values, string $message): void
+    {
+        try {
+            DatabaseConfig::fromArray($values + ['database' => 'db', 'username' => 'u']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame($message, $e->getMessage());
+        }
+    }
+
+    public function testAPaddedPortWithLeadingZerosIsReadAsTheNumber(): void
+    {
+        $config = DatabaseConfig::fromArray(['database' => 'db', 'username' => 'u', 'port' => " 0080 \t"]);
+
+        self::assertSame(80, $config->port);
+    }
+
 }
