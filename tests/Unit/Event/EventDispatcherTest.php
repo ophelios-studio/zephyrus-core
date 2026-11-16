@@ -377,4 +377,59 @@ final class EventDispatcherTest extends TestCase
         self::assertSame(['order'], $orderLog);
         self::assertSame([], $userLog);
     }
+
+    // -------------------------------------------------------------------------
+    // Default priority and autoloading
+    // -------------------------------------------------------------------------
+
+    public function testAListenerWithoutPriorityRunsBetweenPositiveAndNegativePriorities(): void
+    {
+        $dispatcher = new EventDispatcher();
+        $log        = [];
+
+        $dispatcher->addListener(OrderPlacedEvent::class, function () use (&$log): void { $log[] = 'negative'; }, priority: -1);
+        $dispatcher->addListener(OrderPlacedEvent::class, function () use (&$log): void { $log[] = 'default'; });
+        $dispatcher->addListener(OrderPlacedEvent::class, function () use (&$log): void { $log[] = 'positive'; }, priority: 1);
+
+        $dispatcher->dispatch(new OrderPlacedEvent(1));
+
+        self::assertSame(['positive', 'default', 'negative'], $log);
+    }
+
+    public function testASubscriberMethodDeclaredAsAStringHasTheDefaultPriority(): void
+    {
+        $dispatcher = new EventDispatcher();
+        $log        = [];
+        $subscriber = new TestSubscriber();
+
+        $dispatcher->addSubscriber($subscriber);
+        $dispatcher->addListener(OrderPlacedEvent::class, function () use (&$log, $subscriber): void { $log[] = 'above sees ' . count($subscriber->log); }, priority: 1);
+        $dispatcher->addListener(OrderPlacedEvent::class, function () use (&$log, $subscriber): void { $log[] = 'default sees ' . count($subscriber->log); });
+        $dispatcher->addListener(OrderPlacedEvent::class, function () use (&$log, $subscriber): void { $log[] = 'below sees ' . count($subscriber->log); }, priority: -1);
+
+        $dispatcher->dispatch(new OrderPlacedEvent(1));
+
+        self::assertSame(['above sees 0', 'default sees 1', 'below sees 1'], $log);
+    }
+
+    public function testResolvingListenersForAnUnloadedClassNameNeverAutoloadsIt(): void
+    {
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(OrderPlacedEvent::class, static function (): void {});
+        $name       = 'Zephyrus\\Tests\\Unloaded\\GhostEvent';
+        $requested  = [];
+        $autoloader = static function (string $class) use (&$requested): void {
+            $requested[] = $class;
+        };
+
+        spl_autoload_register($autoloader);
+        try {
+            $listeners = $dispatcher->applicableListeners($name);
+        } finally {
+            spl_autoload_unregister($autoloader);
+        }
+
+        self::assertSame([], $listeners);
+        self::assertSame([], $requested);
+    }
 }
