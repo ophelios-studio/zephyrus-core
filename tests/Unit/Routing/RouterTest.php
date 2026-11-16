@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Routing;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Routing\Attribute\Middleware as MiddlewareAttribute;
 use Zephyrus\Routing\Attribute\MiddlewareGroup as MiddlewareGroupAttribute;
@@ -1232,5 +1233,116 @@ final class RouterTest extends TestCase
         $router = (new Router())->discoverControllers('Zephyrus\\Tests\\Fixtures\\Controllers', "/x\0y");
 
         self::assertSame([], $router->routePaths());
+    }
+
+    public function testWithTrailingSlashToleranceDefaultsToTolerant(): void
+    {
+        $strict = (new Router())->strictTrailingSlashes();
+
+        $tolerant = $strict->withTrailingSlashTolerance();
+
+        self::assertFalse($strict->isTrailingSlashTolerant());
+        self::assertTrue($tolerant->isTrailingSlashTolerant());
+    }
+
+    public function testRegisteringAMiddlewareGroupLeavesTheOriginalRouterUntouched(): void
+    {
+        $original = new Router();
+
+        $withGroup = $original->middlewareGroup('web', [SessionMiddleware::class]);
+
+        self::assertSame(
+            ['web'],
+            $original->get('/home', 'HomeController@index', middlewares: ['web'])->routes()->all()[0]->middlewares,
+        );
+        self::assertSame(
+            [SessionMiddleware::class],
+            $withGroup->get('/home', 'HomeController@index', middlewares: ['web'])->routes()->all()[0]->middlewares,
+        );
+    }
+
+    public function testADuplicatedMiddlewareIsKeptOnceAndTheListStaysSequential(): void
+    {
+        $router = (new Router())->get('/home', 'HomeController@index', middlewares: ['auth', 'api', 'auth', 'csrf']);
+
+        self::assertSame(['auth', 'api', 'csrf'], $router->routes()->all()[0]->middlewares);
+    }
+
+    public function testExcludedMiddlewaresNamedByKeyAreStoredAsAList(): void
+    {
+        $router = (new Router())
+            ->get('/home', 'HomeController@index')
+            ->withoutMiddleware(...['first' => SessionMiddleware::class]);
+
+        self::assertSame([SessionMiddleware::class], $router->routes()->all()[0]->excludedMiddlewares);
+    }
+
+    #[DataProvider('writeVerbsOfAResource')]
+    public function testAResourceConstrainsTheIdOfItsWriteRoutesToDigits(string $method): void
+    {
+        $router = (new Router())->resource('/users', 'UserController');
+
+        self::assertSame('/users/{id}', $router->routes()->match($method, '/users/12')->route->path);
+
+        $this->expectException(RouteNotFoundException::class);
+
+        $router->routes()->match($method, '/users/abc');
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function writeVerbsOfAResource(): iterable
+    {
+        yield 'put' => ['PUT'];
+        yield 'patch' => ['PATCH'];
+        yield 'delete' => ['DELETE'];
+    }
+
+    public function testAResourcePathWrittenWithSurroundingSlashesRoutesItsMembers(): void
+    {
+        $router = (new Router())->resource('/users/', 'UserController');
+
+        self::assertSame(
+            'UserController@show',
+            $router->routes()->match('GET', '/users/12')->route->handler,
+        );
+    }
+
+    public function testDiscoverControllersAcceptsADirectoryWrittenWithATrailingSlash(): void
+    {
+        $directory = __DIR__ . '/../../Fixtures/Controllers';
+
+        $paths = (new Router())
+            ->discoverControllers('Zephyrus\\Tests\\Fixtures\\Controllers', $directory . '/')
+            ->routePaths();
+
+        self::assertContains('/alpha', $paths);
+        self::assertContains('/gamma', $paths);
+    }
+
+    public function testDiscoverControllersSkipsAClassOutsideTheParentWithoutStoppingTheScan(): void
+    {
+        $tree = new ControllerTree();
+
+        try {
+            $tree->configure();
+            $baseNamespace = substr($tree->namespace, 0, -strlen('\\Controllers'));
+            $tree->parent('BaseController', "abstract class BaseController\n{\n}");
+            $tree->controller('AlphaController', "final class AlphaController\n{\n    #[Get('/alpha')]\n"
+                . "    public function index(): void\n    {\n    }\n}");
+            $tree->controller('BetaController', "final class BetaController extends Base\\BaseController\n{\n"
+                . "    #[Get('/beta')]\n    public function index(): void\n    {\n    }\n}");
+
+            $router = (new Router())->discoverControllers(
+                $tree->namespace,
+                $tree->root->path . '/app/Controllers',
+                $baseNamespace . '\\Base\\BaseController',
+            );
+
+            self::assertSame(['/beta'], $router->routePaths());
+        } finally {
+            $tree->remove();
+        }
     }
 }
