@@ -498,6 +498,44 @@ final class ConsoleTest extends TestCase
         self::assertFileDoesNotExist($this->project->path . '/config/var');
     }
 
+    public function testADuplicateConfigDoesNotHideTheConfigsAfterIt(): void
+    {
+        $exitCode = $this->console($this->project->path)->run([
+            'cache:warm',
+            '--config=config.yml',
+            '--config=' . $this->project->path . '/config.yml',
+            '--config=config/tenant.yml',
+        ]);
+
+        self::assertSame(Console::SUCCESS, $exitCode);
+        self::assertFileExists($this->project->path . '/var/zephyrus/config.yml.php');
+        self::assertFileExists($this->project->path . '/config/var/zephyrus/tenant.yml.php');
+    }
+
+    public function testARoutesCacheUnderTheGitIgnoreOfALaterConfigIsRefused(): void
+    {
+        $gitIgnore = $this->project->path . '/config/var/zephyrus/.gitignore';
+        $this->project->file('config.yml', $this->routerSection($gitIgnore . '/routes.php'));
+
+        $exitCode = $this->console()->run([
+            'cache:warm',
+            '--config=' . $this->project->path . '/config.yml',
+            '--config=' . $this->project->path . '/config/tenant.yml',
+        ]);
+
+        self::assertSame(Console::REFUSED, $exitCode);
+        self::assertSame(
+            sprintf(
+                "cache:warm failed for %1\$s/config/tenant.yml: The cache %2\$s/routes.php would be written "
+                . "under the cache %2\$s: give router.cache another path.\n",
+                $this->project->path,
+                $gitIgnore,
+            ),
+            $this->printedErrors(),
+        );
+        self::assertSame('', $this->printed());
+    }
+
     private function routerSection(?string $cache = null): string
     {
         return sprintf(
