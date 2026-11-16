@@ -85,7 +85,7 @@ final readonly class RouterConfig
                 "Configuration section '%s' is written under the !%s tag, but %s reads this section without the "
                 . 'environment: write its values in the file.',
                 self::SECTION,
-                $section->getTag(),
+                MessageValue::escapeControls($section->getTag()),
                 BootCache::WARM_COMMAND,
             ));
         }
@@ -96,7 +96,7 @@ final readonly class RouterConfig
                 throw ConfigurationException::invalidType(self::SECTION, (string) $field, sprintf(
                     'holds a value under the !%s tag, but %s reads this section without the environment: write the '
                     . 'value itself',
-                    $tagged->getTag(),
+                    MessageValue::escapeControls($tagged->getTag()),
                     BootCache::WARM_COMMAND,
                 ));
             }
@@ -148,7 +148,10 @@ final readonly class RouterConfig
                 self::SECTION,
                 'cache',
                 $this->cache,
-                sprintf('it resolves outside the application root %s', $basePath),
+                sprintf(
+                    'it resolves outside the application root %s',
+                    MessageValue::quote($basePath, 512, keepEnd: true),
+                ),
             );
         }
 

@@ -165,8 +165,8 @@ final class RouterConfigTest extends TestCase
         ];
         yield 'a cache that is not a PHP file' => [
             ['controllers' => $controllers, 'cache' => 'config.yml'],
-            "Configuration section 'router' field 'cache' has invalid value \"config.yml\": the routes cache is PHP, so "
-            . 'its file name must end in .php.',
+            "Configuration section 'router' field 'cache' has invalid value \"config.yml\": the routes cache is PHP, "
+            . 'so its file name must end in .php.',
         ];
         yield 'an unknown key' => [
             ['controllers' => $controllers, 'routes' => []],
@@ -178,8 +178,21 @@ final class RouterConfigTest extends TestCase
             "Configuration section 'router' field 'controllers' " . $nestedTag,
         ];
         yield 'a tagged value deep in a list' => [
-            ['controllers' => $controllers, 'middleware_groups' => ['web' => ['session', new TaggedValue('env', 'MFA')]]],
+            [
+                'controllers' => $controllers,
+                'middleware_groups' => ['web' => ['session', new TaggedValue('env', 'MFA')]],
+            ],
             "Configuration section 'router' field 'middleware_groups' " . $nestedTag,
+        ];
+        yield 'a section tag holding control characters' => [
+            new TaggedValue("env\r\n\u{202E}", 'ROUTER_SECTION'),
+            "Configuration section 'router' is written under the !env\\r\\n\\u202e tag, but vendor/bin/zephyrus "
+            . 'cache:warm reads this section without the environment: write its values in the file.',
+        ];
+        yield 'a nested tag holding control characters' => [
+            ['controllers' => ['App\Controllers' => new TaggedValue("env\r\n\u{202E}", 'DIRECTORY')]],
+            "Configuration section 'router' field 'controllers' holds a value under the !env\\r\\n\\u202e tag, but "
+            . 'vendor/bin/zephyrus cache:warm reads this section without the environment: write the value itself.',
         ];
         yield 'a tagged value under a numeric key' => [
             ['controllers' => $controllers, 7 => new TaggedValue('env', 'EXTRA')],
@@ -190,15 +203,18 @@ final class RouterConfigTest extends TestCase
     #[DataProvider('cachePathsOutsideTheRoot')]
     public function testACachePathLeavingTheApplicationRootIsRefused(string $cache, string $shown): void
     {
-        $config = RouterConfig::fromArray(['controllers' => ['App\Controllers' => 'app/Controllers'], 'cache' => $cache]);
+        $config = RouterConfig::fromArray([
+            'controllers' => ['App\Controllers' => 'app/Controllers'],
+            'cache' => $cache,
+        ]);
 
         try {
             $config->cachePath('/srv/app');
             self::fail('expected a refusal');
         } catch (ConfigurationException $exception) {
             self::assertSame(
-                "Configuration section 'router' field 'cache' has invalid value " . $shown . ': it resolves outside the '
-                . 'application root /srv/app.',
+                "Configuration section 'router' field 'cache' has invalid value " . $shown
+                . ': it resolves outside the application root "/srv/app".',
                 $exception->getMessage(),
             );
         }
@@ -210,7 +226,29 @@ final class RouterConfigTest extends TestCase
     public static function cachePathsOutsideTheRoot(): iterable
     {
         yield 'dot-dot segments' => ['var/../../routes.php', '"var/../../routes.php"'];
-        yield 'a sibling whose name extends the root' => ['/srv/application/routes.php', '"/srv/application/routes.php"'];
+        yield 'a sibling whose name extends the root' => [
+            '/srv/application/routes.php',
+            '"/srv/application/routes.php"',
+        ];
+    }
+
+    public function testAnApplicationRootWithControlCharactersIsQuotedEscapedInTheCacheRefusal(): void
+    {
+        $config = RouterConfig::fromArray([
+            'controllers' => ['App\Controllers' => 'app/Controllers'],
+            'cache' => '../routes.php',
+        ]);
+
+        try {
+            $config->cachePath("/srv/app\r\n\u{202E}");
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'router' field 'cache' has invalid value \"../routes.php\": it resolves outside "
+                . 'the application root "/srv/app\r\n\u202e".',
+                $exception->getMessage(),
+            );
+        }
     }
 
     public function testAMissingControllerDirectoryIsRefused(): void
@@ -255,7 +293,8 @@ final class RouterConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertSame(
                 "Configuration section 'router' field 'controllers' has invalid value \"app/Con\\u0000trollers\": "
-                . '"/srv/missing-application/app/Con\u0000trollers", the directory of App\Controllers, is not a directory.',
+                . '"/srv/missing-application/app/Con\u0000trollers", the directory of App\Controllers, is not a '
+                . 'directory.',
                 $exception->getMessage(),
             );
         }
