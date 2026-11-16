@@ -2460,4 +2460,329 @@ final class RequestTest extends TestCase
         self::assertSame($route, $request->withRouteParameters(['k' => 'v'])->route());
         self::assertSame($route, $request->withAttribute('k', 'v')->withAttributes(['j' => 'w'])->route());
     }
+
+    /**
+     * @param array<string, mixed> $server
+     * @param array<string, mixed> $post
+     * @param list<string>         $trustedProxies
+     * @param list<mixed>          $trustedHeaders
+     */
+    private static function globals(
+        array $server = [],
+        array $post = [],
+        ?string $rawBody = null,
+        array $trustedProxies = [],
+        array $trustedHeaders = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port'],
+        int $maxBodySize = 0,
+    ): Request {
+        return Request::fromGlobals(
+            server: $server + ['REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 'example.com', 'REQUEST_URI' => '/'],
+            get: [],
+            post: $post,
+            cookie: [],
+            files: [],
+            rawBody: $rawBody ?? '',
+            trustedProxies: $trustedProxies,
+            trustedHeaders: $trustedHeaders,
+            maxBodySize: $maxBodySize,
+        );
+    }
+
+    public function testALowercaseServerMethodIsUppercased(): void
+    {
+        $request = self::globals(['REQUEST_METHOD' => 'post']);
+
+        self::assertSame('POST', $request->method);
+    }
+
+    public function testIsMethodIgnoresTheCaseOfTheArgument(): void
+    {
+        self::assertTrue(Request::fromArray('POST', '/')->isMethod('post'));
+    }
+
+    public function testARouteParameterBeatsItsDefault(): void
+    {
+        $request = Request::fromArray('GET', '/users/7')->withRouteParameters(['id' => '7']);
+
+        self::assertSame('7', $request->routeParameter('id', 'fallback'));
+    }
+
+    public function testRouteParametersAccumulateAcrossCalls(): void
+    {
+        $first = Request::fromArray('GET', '/')->withRouteParameters(['a' => '1']);
+        $second = $first->withRouteParameters(['b' => '2']);
+
+        self::assertSame('1', $second->routeParameter('a'));
+        self::assertSame('2', $second->routeParameter('b'));
+        self::assertSame('1', $second->attribute('a'));
+        self::assertSame('2', $second->attribute('b'));
+    }
+
+    public function testNumericServerValuesAreReadAsStrings(): void
+    {
+        $request = self::globals([
+            'HTTP_X_RETRY' => 3,
+            'CONTENT_LENGTH' => 5,
+            'SERVER_PORT' => 8080,
+            'REMOTE_ADDR' => 7,
+            'HTTP_FORWARDED' => 9,
+        ], trustedProxies: ['*']);
+
+        self::assertSame('3', $request->headers()->get('x-retry'));
+        self::assertSame('5', $request->headers()->get('content-length'));
+        self::assertSame('http://example.com:8080/', (string) $request->uri());
+        self::assertNull($request->clientIp());
+    }
+
+    public function testANumericRequestUriAndHostAreReadAsStrings(): void
+    {
+        $request = Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'GET', 'HTTP_HOST' => 8080, 'REQUEST_URI' => 5],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+        );
+
+        self::assertSame('http://8080/5', (string) $request->uri());
+    }
+
+    public function testAnAbsoluteTargetWithoutPathKeepsItsExactForm(): void
+    {
+        self::assertSame('https://example.com?x=1', (string) Request::fromArray('GET', 'https://example.com?x=1')->uri());
+        self::assertSame('https://example.com', (string) Request::fromArray('GET', 'https://example.com')->uri());
+    }
+
+    public function testAClosingBracketHostWithAPortIgnoresServerPort(): void
+    {
+        $request = self::globals(['HTTP_HOST' => '[::1]:8080', 'SERVER_PORT' => '8081']);
+
+        self::assertSame('http://[::1]:8080/', (string) $request->uri());
+    }
+
+    public function testABracketedHostWithoutAPortTakesTheServerPort(): void
+    {
+        self::assertSame('http://[1::]:8080/', (string) self::globals(['HTTP_HOST' => '[1::]', 'SERVER_PORT' => '8080'])->uri());
+        self::assertSame('http://[::1]:8080/', (string) self::globals(['HTTP_HOST' => '[::1]', 'SERVER_PORT' => '8080'])->uri());
+    }
+
+    public function testAHostWithATrailingNewlineIsPercentEncoded(): void
+    {
+        $request = self::globals(['HTTP_HOST' => "example.com\n"]);
+
+        self::assertSame('http://example.com%0A/', (string) $request->uri());
+    }
+
+    public function testAServerPortWithATrailingNewlineIsIgnored(): void
+    {
+        $request = self::globals(['SERVER_PORT' => "8080\n"]);
+
+        self::assertSame('http://example.com/', (string) $request->uri());
+    }
+
+    public function testAForwardedPortHeaderMayArriveAsANumber(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_PORT' => 8443],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['x-forwarded-port'],
+        );
+
+        self::assertSame('http://example.com:8443/', (string) $request->uri());
+    }
+
+    public function testTheNearestForwardedHostIsTheEntryAfterTheLastComma(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_HOST' => 'evil.example,app.example.test'],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['x-forwarded-host'],
+        );
+
+        self::assertSame('http://app.example.test/', (string) $request->uri());
+    }
+
+    public function testAForwardedHostIsLowercased(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_FORWARDED' => 'host=App.Example.Test'],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://app.example.test/', (string) $request->uri());
+    }
+
+    public function testAForwardedParameterWithoutAValueFallsBackToTheHostHeader(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_FORWARDED' => 'host='],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://example.com/', (string) $request->uri());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}> The Forwarded header, then the expected client address.
+     */
+    public static function forwardedHeadersWithOddSpelling(): iterable
+    {
+        yield 'a capitalised parameter name' => ['For=203.0.113.9', '203.0.113.9'];
+        yield 'a space before the equals sign' => ['for =203.0.113.9', '203.0.113.9'];
+        yield 'a pair without an equals sign before a valid one' => ['bogus;for=203.0.113.9', '203.0.113.9'];
+        yield 'a backslash outside quotes does not swallow the comma' => ['for=198.51.100.1\\,for=203.0.113.9', '203.0.113.9'];
+        yield 'a quoted escape keeps the comma inside the element' => ['for=203.0.113.9;by="a\\",b"', '203.0.113.9'];
+    }
+
+    #[DataProvider('forwardedHeadersWithOddSpelling')]
+    public function testTheForwardedHeaderIsReadDespiteItsSpelling(string $header, string $expected): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_FORWARDED' => $header],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame($expected, $request->clientIp());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function unterminatedForwardedHeaders(): iterable
+    {
+        yield 'an open quote' => ['for="203.0.113.9'];
+        yield 'an open quote closed only by an escaped one' => ['for="203.0.113.9\\"'];
+        yield 'an open quote ending in a backslash' => ['for="203.0.113.9\\'];
+    }
+
+    #[DataProvider('unterminatedForwardedHeaders')]
+    public function testAnUnterminatedForwardedHeaderResolvesNoClientAddress(string $header): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_FORWARDED' => $header],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertNull($request->clientIp());
+    }
+
+    public function testASingleValueVendorHeaderIsReadWhenAnEarlierOneIsNotTrusted(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_CF_CONNECTING_IP' => '203.0.113.9'],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['cf-connecting-ip'],
+        );
+
+        self::assertSame('203.0.113.9', $request->clientIp());
+    }
+
+    public function testInvalidTrustedHeaderEntriesAreSkippedNotFatal(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9'],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: [42, 'bogus', 'x-forwarded-for'],
+        );
+
+        self::assertSame('203.0.113.9', $request->clientIp());
+    }
+
+    public function testNoPeerAddressMeansNoProxyIsTrustedEvenWithAWildcard(): void
+    {
+        $request = Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'GET', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9'],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: '',
+            trustedProxies: ['*'],
+            trustedHeaders: ['x-forwarded-for'],
+        );
+
+        self::assertNull($request->clientIp());
+    }
+
+    public function testAFormBodyKeepsEveryFieldWhateverTheContentType(): void
+    {
+        $post = ['a' => '1', 'b' => '2'];
+
+        self::assertSame($post, self::globals(['REQUEST_METHOD' => 'POST'], post: $post)->body()->all());
+        self::assertSame($post, self::globals([
+            'REQUEST_METHOD' => 'POST',
+            'CONTENT_TYPE' => 'text/plain',
+        ], post: $post)->body()->all());
+    }
+
+    public function testAJsonContentTypeIsMatchedWithoutRegardToCase(): void
+    {
+        $request = self::globals(['REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'APPLICATION/JSON'], rawBody: '{"a":1}');
+
+        self::assertSame(['a' => 1], $request->body()->all());
+    }
+
+    public function testAJsonBodyMayNestFiveHundredAndElevenLevels(): void
+    {
+        $json = static fn (int $depth): string => str_repeat('[', $depth) . str_repeat(']', $depth);
+        $server = ['REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'application/json'];
+
+        self::assertFalse(self::globals($server, rawBody: $json(511))->body()->isMalformed());
+        self::assertTrue(self::globals($server, rawBody: $json(512))->body()->isMalformed());
+    }
+
+    public function testADeclaredLengthOverTheBudgetMarksTheBodyMalformed(): void
+    {
+        $request = self::globals(
+            ['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '11', 'CONTENT_TYPE' => 'application/json'],
+            rawBody: '{"a":1}',
+            maxBodySize: 10,
+        );
+
+        self::assertTrue($request->body()->isMalformed());
+        self::assertSame('', $request->body()->raw());
+    }
+
+    public function testADeclaredLengthWithTrailingGarbageIsNotTrustedAsANumber(): void
+    {
+        $request = self::globals(
+            ['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '99abc', 'CONTENT_TYPE' => 'application/json'],
+            rawBody: '{"a":1}',
+            maxBodySize: 10,
+        );
+
+        self::assertSame(['a' => 1], $request->body()->all());
+    }
+
+    public function testANumericMethodOverrideInTheBodyIsIgnored(): void
+    {
+        $request = self::globals(
+            ['REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'application/json'],
+            rawBody: '{"_method":5}',
+        );
+
+        self::assertSame('POST', $request->method);
+    }
+
+    public function testAMethodOverrideHeaderIsTrimmed(): void
+    {
+        $request = self::globals(['REQUEST_METHOD' => 'POST', 'HTTP_X_HTTP_METHOD_OVERRIDE' => ' put ']);
+
+        self::assertSame('PUT', $request->method);
+    }
+
+    public function testEveryNormalizedUploadFieldIsKeptAndUnreadableOnesAreSkipped(): void
+    {
+        $first = new FileUpload('a.png', 'image/png', '/tmp/phpA', 1);
+        $second = new FileUpload('b.png', 'image/png', '/tmp/phpB', 2);
+        $request = new Request('POST', '/upload', files: ['bad' => 'nope', 'a' => $first, 'b' => $second]);
+
+        self::assertEquals($first, $request->file('a'));
+        self::assertEquals($second, $request->file('b'));
+        self::assertNull($request->file('bad'));
+    }
 }
