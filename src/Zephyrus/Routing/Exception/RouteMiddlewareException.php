@@ -28,7 +28,7 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
             'Middleware group %s, named by a #[MiddlewareGroup] of %s, is not declared under '
             . 'router.middleware_groups: declare it there, or the route would run without its middlewares.',
             MessageValue::quote($group),
-            $handler,
+            MessageValue::escapeControls($handler),
         ));
     }
 
