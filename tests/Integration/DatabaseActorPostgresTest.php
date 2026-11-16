@@ -256,7 +256,7 @@ final class DatabaseActorPostgresTest extends TestCase
      */
     public static function invalidPublications(): iterable
     {
-        $notString = 'The actor value for "org_id" must be a string, %s given: cast it first, such as (string) $userId.';
+        $castAdvice = 'The actor value for "org_id" must be a string, %s given: cast it first, such as (string) $userId.';
 
         yield 'no value' => [[], 'An actor publication needs at least one value.'];
         yield 'empty string' => [
@@ -264,8 +264,16 @@ final class DatabaseActorPostgresTest extends TestCase
             'The actor value for "org_id" must be a non-empty string, an empty string given: an empty value reads as '
             . 'no actor, so leave the key out instead.',
         ];
-        yield 'null' => [['actor_id' => 'u1', 'org_id' => null], sprintf($notString, 'null')];
-        yield 'integer' => [['actor_id' => 'u1', 'org_id' => 42], sprintf($notString, 'int')];
+        yield 'null' => [
+            ['actor_id' => 'u1', 'org_id' => null],
+            'The actor value for "org_id" must be a string, null given: leave the key out to publish no value for it.',
+        ];
+        yield 'boolean' => [
+            ['actor_id' => 'u1', 'org_id' => true],
+            'The actor value for "org_id" must be a string, bool given.',
+        ];
+        yield 'integer' => [['actor_id' => 'u1', 'org_id' => 42], sprintf($castAdvice, 'int')];
+        yield 'float' => [['actor_id' => 'u1', 'org_id' => 1.5], sprintf($castAdvice, 'float')];
         yield 'undeclared key' => [
             ['actor_id' => 'u1', 'team_id' => 't1'],
             'The actor values key "team_id" names no declared key (declared: "actor_id", "org_id").',

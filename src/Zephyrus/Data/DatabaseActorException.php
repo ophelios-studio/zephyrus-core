@@ -67,11 +67,20 @@ final class DatabaseActorException extends ZephyrusRuntimeException
 
     public static function valueNotString(string $key, string $given): self
     {
-        return new self(sprintf(
-            'The actor value for %s must be a string, %s given: cast it first, such as (string) $userId.',
-            MessageValue::quote($key),
-            $given,
-        ));
+        $quoted = MessageValue::quote($key);
+
+        return new self(match ($given) {
+            'int', 'float' => sprintf(
+                'The actor value for %s must be a string, %s given: cast it first, such as (string) $userId.',
+                $quoted,
+                $given,
+            ),
+            'null' => sprintf(
+                'The actor value for %s must be a string, null given: leave the key out to publish no value for it.',
+                $quoted,
+            ),
+            default => sprintf('The actor value for %s must be a string, %s given.', $quoted, $given),
+        });
     }
 
     public static function emptyValue(string $key): self
