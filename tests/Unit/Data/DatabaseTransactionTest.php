@@ -263,6 +263,43 @@ final class DatabaseTransactionTest extends TestCase
         }
     }
 
+    public function testAFailedCommitLeavesNoTransactionOpen(): void
+    {
+        $db = new Database(new ScriptedTransactionPdo(['commit' => self::driverError('40001')]));
+
+        try {
+            $db->transaction(fn (): string => 'ok');
+            self::fail('expected a DatabaseException');
+        } catch (DatabaseException) {
+        }
+
+        self::assertFalse($db->inTransaction());
+    }
+
+    public function testASavepointThatCouldNotBeRolledBackKeepsItsRecordedFailureForTheOuterCommit(): void
+    {
+        $pdo = new ProbeFailingPdo();
+        $db = $this->database($pdo);
+
+        try {
+            $db->transaction(function (Database $db) use ($pdo): void {
+                try {
+                    $db->transaction(function (Database $db) use ($pdo): void {
+                        $this->swallowAFailedStatement($db);
+                        $pdo->breakProbe();
+                        $pdo->failSavepointRollback = true;
+
+                        throw new RuntimeException('nested failed');
+                    });
+                } catch (RuntimeException) {
+                }
+            });
+            self::fail('expected the commit to be refused');
+        } catch (DatabaseException $e) {
+            self::assertSame('08006', $e->sqlState());
+        }
+    }
+
     public function testAFailedSavepointKeepsTheDriverTextOffTheMessage(): void
     {
         $pdo = new StatementRecordingPdo();
@@ -704,11 +741,22 @@ final class ScriptedTransactionPdo extends PDO
  */
 final class ProbeFailingPdo extends PDO
 {
+    public bool $failSavepointRollback = false;
+
     private ?string $probeSqlState = null;
 
     public function __construct()
     {
         parent::__construct('sqlite::memory:');
+    }
+
+    public function exec(string $statement): int|false
+    {
+        if ($this->failSavepointRollback && str_starts_with($statement, 'ROLLBACK TO SAVEPOINT')) {
+            throw DatabaseTransactionTest::driverError('08006', 'connection lost');
+        }
+
+        return parent::exec($statement);
     }
 
     public function breakProbe(string $sqlState = '08006'): void
