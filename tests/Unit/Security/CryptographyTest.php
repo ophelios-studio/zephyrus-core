@@ -550,4 +550,129 @@ final class CryptographyTest extends TestCase
             self::assertSame("Hashing failed: File not found or not readable: /tmp/a\0b", $e->getMessage());
         }
     }
+
+    public function testAPayloadHoldingOnlyTheNonceIsRefusedAsTooShort(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+        $payload = rtrim(strtr(base64_encode(str_repeat('a', SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES)), '+/', '-_'), '=');
+
+        try {
+            Cryptography::decrypt($payload, $key);
+            self::fail('expected a refusal');
+        } catch (CryptographyException $e) {
+            self::assertSame('Invalid cryptographic payload: Ciphertext is too short or malformed.', $e->getMessage());
+        }
+    }
+
+    public function testAPayloadOneByteLongerThanTheNonceReachesAuthentication(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+        $payload = rtrim(strtr(base64_encode(str_repeat('a', SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES + 1)), '+/', '-_'), '=');
+
+        try {
+            Cryptography::decrypt($payload, $key);
+            self::fail('expected a refusal');
+        } catch (CryptographyException $e) {
+            self::assertSame(
+                'Decryption failed. The ciphertext may be corrupted or the key is incorrect.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testHashFileRefusesADirectoryEvenThoughItIsReadable(): void
+    {
+        $directory = sys_get_temp_dir();
+
+        try {
+            Cryptography::hashFile($directory);
+            self::fail('expected a refusal');
+        } catch (CryptographyException $e) {
+            self::assertSame('Hashing failed: File not found or not readable: ' . $directory, $e->getMessage());
+        }
+    }
+
+    public function testHashFileWrapsAnUnsupportedOutputLength(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'zephyrus-test-');
+        file_put_contents($path, 'file content');
+
+        try {
+            Cryptography::hashFile($path, null, 8);
+            self::fail('expected a refusal');
+        } catch (CryptographyException $e) {
+            self::assertSame('Hashing failed: BLAKE2b file hashing failed.', $e->getMessage());
+            self::assertInstanceOf(\SodiumException::class, $e->getPrevious());
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testHashFileWithAKeyMatchesTheKeyedHashOfTheContent(): void
+    {
+        $key = str_repeat('k', 32);
+        $path = tempnam(sys_get_temp_dir(), 'zephyrus-test-');
+        file_put_contents($path, 'file content');
+
+        try {
+            $fileHash = Cryptography::hashFile($path, $key);
+
+            self::assertSame(Cryptography::hash('file content', $key), $fileHash);
+            self::assertNotSame(Cryptography::hashFile($path), $fileHash);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testHashFileReadsAFileLargerThanOneChunk(): void
+    {
+        $content = str_repeat('0123456789', 2000);
+        $path = tempnam(sys_get_temp_dir(), 'zephyrus-test-');
+        file_put_contents($path, $content);
+
+        try {
+            self::assertSame(Cryptography::hash($content), Cryptography::hashFile($path));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testRandomBytesAcceptsASingleByte(): void
+    {
+        self::assertSame(1, strlen(Cryptography::randomBytes(1)));
+    }
+
+    public function testHashKeysAtBothBoundsOfTheAcceptedRangeAreUsable(): void
+    {
+        $min = str_repeat('k', SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MIN);
+        $max = str_repeat('k', SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MAX);
+
+        self::assertSame(64, strlen(Cryptography::hash('message', $min)));
+        self::assertSame(64, strlen(Cryptography::hash('message', $max)));
+    }
+
+    public function testAHashKeyLongerThanTheBlake2bMaximumIsRefusedWithTheBounds(): void
+    {
+        try {
+            Cryptography::hash('message', str_repeat('k', SODIUM_CRYPTO_GENERICHASH_KEYBYTES_MAX + 1));
+            self::fail('expected a refusal');
+        } catch (CryptographyException $e) {
+            self::assertSame(
+                'Invalid cryptographic key: Hash key must be between 16 and 64 bytes, got 65. Pass null for an unkeyed hash.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testCiphertextsAreUnpaddedWhateverThePlaintextLength(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+
+        for ($length = 0; $length < 6; $length++) {
+            $encrypted = Cryptography::encrypt(str_repeat('x', $length), $key);
+
+            self::assertStringNotContainsString('=', $encrypted);
+            self::assertSame(str_repeat('x', $length), Cryptography::decrypt($encrypted, $key));
+        }
+    }
 }
