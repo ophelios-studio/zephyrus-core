@@ -372,17 +372,17 @@ final class ConfigurationTest extends TestCase
 
         try {
             $loaders = [
-                fn () => Configuration::fromFile($url),
-                fn () => Configuration::fromFiles([$url]),
-                fn () => Configuration::fromOptionalFiles([$url]),
+                'fromFile' => fn () => Configuration::fromFile($url),
+                'fromFiles' => fn () => Configuration::fromFiles([$url]),
+                'fromOptionalFiles' => fn () => Configuration::fromOptionalFiles([$url]),
             ];
 
-            foreach ($loaders as $load) {
+            foreach ($loaders as $name => $load) {
                 try {
                     $load();
-                    self::fail('expected a refusal');
+                    self::fail($name . ' accepted ' . $url);
                 } catch (ConfigurationException $e) {
-                    self::assertSame($expected, $e->getMessage());
+                    self::assertSame($expected, $e->getMessage(), $name);
                 }
             }
             self::assertFileDoesNotExist($marker);
@@ -394,9 +394,9 @@ final class ConfigurationTest extends TestCase
     }
 
     /**
-     * @return array<string, array{string, string}>
+     * @return array<string, array{string, string}> File name, then the scheme of the URL given to the loaders.
      */
-    public static function yamlFileNames(): array
+    public static function yamlFileNamesAndSchemes(): array
     {
         return [
             'yml' => ['c.yml', 'file://'],
@@ -405,33 +405,33 @@ final class ConfigurationTest extends TestCase
         ];
     }
 
-    #[DataProvider('yamlFileNames')]
-    public function testAYamlFileGivenAsAStreamWrapperUrlIsRefusedFoundOrNot(string $name, string $prefix): void
+    #[DataProvider('yamlFileNamesAndSchemes')]
+    public function testAYamlFileGivenAsAStreamWrapperUrlIsRefusedFoundOrNot(string $name, string $scheme): void
     {
         $directory = sys_get_temp_dir() . '/zephyrus-config-yaml-url-' . bin2hex(random_bytes(8));
         mkdir($directory);
         $present = $directory . '/' . $name;
         file_put_contents($present, "localization:\n  locale: fr\n");
-        $expected = 'Configuration file must be a local path, not a stream wrapper URL (' . $prefix . ')';
+        $expected = 'Configuration file must be a local path, not a stream wrapper URL (' . $scheme . ')';
 
         try {
-            $urls = [$prefix . $present, $prefix . $directory . '/missing/' . $name];
             $loaders = [];
-            foreach ($urls as $url) {
-                $loaders[] = fn () => Configuration::fromFile($url);
-                $loaders[] = fn () => Configuration::fromFiles([$url]);
-                $loaders[] = fn () => Configuration::fromOptionalFiles([$url]);
-                $loaders[] = fn () => Configuration::fromYamlFile($url);
-                $loaders[] = fn () => Configuration::fromYamlFiles([$url]);
-                $loaders[] = fn () => Configuration::fromOptionalYamlFiles([$url]);
+            foreach (['present' => $present, 'missing' => $directory . '/missing/' . $name] as $kind => $file) {
+                $url = $scheme . $file;
+                $loaders[$kind . ' fromFile'] = fn () => Configuration::fromFile($url);
+                $loaders[$kind . ' fromFiles'] = fn () => Configuration::fromFiles([$url]);
+                $loaders[$kind . ' fromOptionalFiles'] = fn () => Configuration::fromOptionalFiles([$url]);
+                $loaders[$kind . ' fromYamlFile'] = fn () => Configuration::fromYamlFile($url);
+                $loaders[$kind . ' fromYamlFiles'] = fn () => Configuration::fromYamlFiles([$url]);
+                $loaders[$kind . ' fromOptionalYamlFiles'] = fn () => Configuration::fromOptionalYamlFiles([$url]);
             }
 
-            foreach ($loaders as $load) {
+            foreach ($loaders as $loader => $load) {
                 try {
                     $load();
-                    self::fail('expected a refusal');
+                    self::fail($loader . ' accepted a stream wrapper URL');
                 } catch (ConfigurationException $e) {
-                    self::assertSame($expected, $e->getMessage());
+                    self::assertSame($expected, $e->getMessage(), $loader);
                 }
             }
         } finally {
@@ -1268,6 +1268,210 @@ final class ConfigurationTest extends TestCase
         self::assertSame($default, Configuration::fromOptionalFiles(["/x\0y/config.php"])->application->environment);
         self::assertSame($default, Configuration::fromOptionalYamlFiles(["/x\0y/config.yml"])->application->environment);
     }
+
+    // -------------------------------------------------------------------------
+    // Loader edges
+    // -------------------------------------------------------------------------
+
+    public function testTheExportCarriesEveryBuiltInSettingUnderItsKeyWithSecretsRedacted(): void
+    {
+        $config = Configuration::fromArray([
+            'application' => ['environment' => 'dev', 'debug' => true],
+            'session' => [
+                'name' => 'S',
+                'lifetime' => 10,
+                'secure' => true,
+                'sameSite' => 'Strict',
+                'cookiePath' => '/a',
+                'httpOnly' => false,
+            ],
+            'security' => [
+                'allowedHosts' => ['example.com'],
+                'csrfExceptions' => ['#^/h#'],
+                'trustedProxies' => ['10.0.0.1'],
+                'encryptionKey' => 'k',
+            ],
+            'localization' => [
+                'supportedLocales' => ['en', 'fr'],
+                'localePath' => '/l',
+                'currency' => 'CAD',
+            ],
+            'database' => [
+                'database' => 'appdb',
+                'username' => 'u',
+                'password' => 'p',
+                'host' => 'db.example.test',
+                'port' => 5433,
+            ],
+        ]);
+
+        self::assertSame([
+            'application' => ['environment' => 'development', 'debug' => true],
+            'session' => [
+                'name' => 'S',
+                'lifetime' => 10,
+                'secure' => true,
+                'httpOnly' => false,
+                'sameSite' => 'Strict',
+                'cookiePath' => '/a',
+            ],
+            'security' => [
+                'forceHttps' => false,
+                'csrfEnabled' => true,
+                'csrfExceptions' => ['#^/h#'],
+                'allowedHosts' => ['example.com'],
+                'maxBodySize' => 2_097_152,
+                'trustedProxies' => ['10.0.0.1'],
+                'trustedHeaders' => ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port'],
+                'encryptionKey' => ConfigSection::REDACTED,
+            ],
+            'localization' => [
+                'locale' => 'en',
+                'supportedLocales' => ['en', 'fr'],
+                'localePath' => '/l',
+                'timezone' => 'UTC',
+                'currency' => 'CAD',
+            ],
+            'database' => [
+                'driver' => 'pgsql',
+                'host' => 'db.example.test',
+                'port' => 5433,
+                'database' => 'appdb',
+                'username' => 'u',
+                'password' => ConfigSection::REDACTED,
+                'charset' => 'utf8',
+            ],
+            'router' => null,
+        ], $config->toArray());
+    }
+
+    public function testACustomSectionNamedLikeABuiltInOneDoesNotHideTheNextCustomSection(): void
+    {
+        $defaults = Configuration::defaults();
+        $config = new Configuration(
+            $defaults->application,
+            $defaults->session,
+            $defaults->security,
+            $defaults->localization,
+            null,
+            ['application' => new MailerConfig([]), 'extra' => new MailerConfig(['host' => 'smtp.example.test'])],
+        );
+
+        $export = $config->toArray();
+
+        self::assertSame(['environment' => 'production', 'debug' => false], $export['application']);
+        self::assertSame('smtp.example.test', $export['extra']['host']);
+    }
+
+    public function testASectionFactoryIsSkippedWhenItsKeyDoesNotHoldAMapping(): void
+    {
+        $config = Configuration::fromArray(['mailer' => 'smtp', 'other' => null], [
+            'mailer' => MailerConfig::class,
+            'other' => MailerConfig::class,
+        ]);
+
+        self::assertFalse($config->hasSection('mailer'));
+        self::assertFalse($config->hasSection('other'));
+    }
+
+    public function testAMisspelledSectionIsRefusedWhateverComesBeforeIt(): void
+    {
+        $message = "Configuration key 'securty' is not a known section: did you mean \"security\"? "
+            . 'A section of your own needs a factory registered under its name in the $sectionFactories '
+            . 'argument of the Configuration factories.';
+
+        foreach ([['application' => []], ['zzzzzzzz' => 1], [7 => 'x']] as $before) {
+            try {
+                /** @phpstan-ignore argument.type */
+                Configuration::fromArray($before + ['securty' => []]);
+                self::fail('expected a refusal');
+            } catch (ConfigurationException $e) {
+                self::assertSame($message, $e->getMessage());
+            }
+        }
+    }
+
+    public function testAnIntegerTopLevelKeyIsIgnored(): void
+    {
+        /** @phpstan-ignore argument.type */
+        $config = Configuration::fromArray(['application' => ['debug' => true], 7 => 'x']);
+
+        self::assertTrue($config->application->debug);
+    }
+
+    public function testEveryRegisteredSectionNameIsCheckedForAMisspelling(): void
+    {
+        try {
+            Configuration::fromArray(['betagamma' => []], [
+                'alpha' => MailerConfig::class,
+                'beta_gamma' => MailerConfig::class,
+            ]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                "Configuration key 'betagamma' is not a known section: did you mean \"beta_gamma\"?",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testYamlFilesRefuseAMissingFileWhereTheOptionalLoaderSkipsIt(): void
+    {
+        $directory = new CacheDirectory();
+        $present = $directory->file('base.yml', "localization:\n  locale: fr\n");
+        $missing = $directory->path . '/missing.yml';
+
+        try {
+            Configuration::fromYamlFiles([$present, $missing]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file not found: missing.yml', $e->getMessage());
+        }
+
+        self::assertSame('fr', Configuration::fromOptionalYamlFiles([$missing, $present])->localization->locale);
+
+        $directory->remove();
+    }
+
+    public function testAPathThatIsNotAStringIsRefusedByTheYamlLoaders(): void
+    {
+        try {
+            /** @phpstan-ignore argument.type */
+            Configuration::fromYamlFiles(['base.yml', 5]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file path at index 1 must be a string.', $e->getMessage());
+        }
+    }
+
+    public function testADuplicatedYamlPathDoesNotStopTheFilesAfterIt(): void
+    {
+        $directory = new CacheDirectory();
+        $first = $directory->file('a.yml', "localization:\n  locale: fr\n");
+        $second = $directory->file('b.yml', "localization:\n  timezone: America/Toronto\n");
+
+        $config = Configuration::fromYamlFiles([$first, $first, $second]);
+        $directory->remove();
+
+        self::assertSame('fr', $config->localization->locale);
+        self::assertSame('America/Toronto', $config->localization->timezone);
+    }
+
+    public function testTheFileExtensionIsReadWhateverItsCase(): void
+    {
+        $directory = new CacheDirectory();
+        $yaml = $directory->file('config.YML', "localization:\n  locale: fr\n");
+        $php = $directory->file('config.PHP', "<?php\nreturn ['localization' => ['timezone' => 'America/Toronto']];\n");
+
+        $single = Configuration::fromFile($yaml);
+        $merged = Configuration::fromFiles([$yaml, $php]);
+        $directory->remove();
+
+        self::assertSame('fr', $single->localization->locale);
+        self::assertSame('fr', $merged->localization->locale);
+        self::assertSame('America/Toronto', $merged->localization->timezone);
+    }
+
 }
 
 /**
