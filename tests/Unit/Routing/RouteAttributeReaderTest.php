@@ -78,6 +78,15 @@ class DuplicateRouteNameController
     public function people(): void {}
 }
 
+class ControlCharacterNameController
+{
+    #[RouteAttribute('/a', 'GET', name: "dup\r\nFAKE\e")]
+    public function first(): void {}
+
+    #[RouteAttribute('/a', 'GET', name: "dup\r\nFAKE\e")]
+    public function second(): void {}
+}
+
 class VerbAttributesController
 {
     #[GetAttribute('/articles', name: 'articles.index')]
@@ -348,6 +357,55 @@ final class RouteAttributeReaderTest extends TestCase
         $this->expectExceptionMessage('Duplicate route name "users.index" discovered while reading attributes on class');
 
         $this->reader->read(DuplicateRouteNameController::class);
+    }
+
+    public function testDuplicateRouteNameRefusalEscapesControlCharactersOfTheName(): void
+    {
+        try {
+            $this->reader->read(ControlCharacterNameController::class);
+            self::fail('expected a refusal');
+        } catch (RouteAttributeException $e) {
+            self::assertSame(
+                'Duplicate route name "dup\r\nFAKE\u001b" discovered while reading attributes on class "'
+                . ControlCharacterNameController::class . '".',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testDuplicateRouteNameRefusalEscapesControlCharactersOfTheClassName(): void
+    {
+        $refusal = RouteAttributeException::duplicateRouteName("No\r\nCtrl", "dup\r\nFAKE\e");
+
+        self::assertInstanceOf(RouteAttributeException::class, $refusal);
+        self::assertSame(
+            'Duplicate route name "dup\r\nFAKE\u001b" discovered while reading attributes on class "No\r\nCtrl".',
+            $refusal->getMessage(),
+        );
+    }
+
+    public function testUnresolvableClassRefusalEscapesControlCharactersOfTheClassNameAndThePreviousMessage(): void
+    {
+        $refusal = RouteAttributeException::unresolvableClass("No\r\nCtrl", new \ReflectionException("bad\r\nFAKE"));
+
+        self::assertInstanceOf(RouteAttributeException::class, $refusal);
+        self::assertSame(
+            'Cannot read route attributes from class "No\r\nCtrl": bad\r\nFAKE',
+            $refusal->getMessage(),
+        );
+    }
+
+    public function testCoexistingRouteNamesRefusalEscapesControlCharactersOfTheNameAndBothHandlers(): void
+    {
+        $refusal = RouteAttributeException::coexistingRouteNames("dup\r\nFAKE", "First\r\n@one", "Second\r\n@two");
+
+        self::assertInstanceOf(RouteAttributeException::class, $refusal);
+        self::assertSame(
+            'Route name "dup\r\nFAKE" is declared by First\r\n@one and by Second\r\n@two, which can be registered '
+            . 'together: rename one, or require one environment variable at a different value on each with '
+            . '#[RequiresEnv].',
+            $refusal->getMessage(),
+        );
     }
 
     public function testVerbAttributesMapToExpectedHttpMethods(): void

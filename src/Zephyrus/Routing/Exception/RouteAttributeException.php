@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing\Exception;
 
 use ReflectionException;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 final class RouteAttributeException extends ZephyrusRuntimeException
@@ -12,7 +13,11 @@ final class RouteAttributeException extends ZephyrusRuntimeException
     public static function unresolvableClass(string $className, ReflectionException $previous): self
     {
         return new self(
-            sprintf('Cannot read route attributes from class "%s": %s', $className, $previous->getMessage()),
+            sprintf(
+                'Cannot read route attributes from class "%s": %s',
+                MessageValue::escapeControls($className),
+                MessageValue::escapeControls($previous->getMessage()),
+            ),
             0,
             $previous,
         );
@@ -22,8 +27,8 @@ final class RouteAttributeException extends ZephyrusRuntimeException
     {
         return new self(sprintf(
             'Duplicate route name "%s" discovered while reading attributes on class "%s".',
-            $routeName,
-            $className,
+            MessageValue::escapeControls($routeName),
+            MessageValue::escapeControls($className),
         ));
     }
 
@@ -35,9 +40,9 @@ final class RouteAttributeException extends ZephyrusRuntimeException
         return new self(sprintf(
             'Route name "%s" is declared by %s and by %s, which can be registered together: rename one, or require '
             . 'one environment variable at a different value on each with #[RequiresEnv].',
-            $routeName,
-            $firstHandler,
-            $secondHandler,
+            MessageValue::escapeControls($routeName),
+            MessageValue::escapeControls($firstHandler),
+            MessageValue::escapeControls($secondHandler),
         ));
     }
 
