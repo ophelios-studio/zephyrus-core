@@ -445,7 +445,11 @@ final class UploaderTest extends TestCase
             (new Uploader($dest))->store($file, null, 'leaked.txt');
             self::fail('A source that is not a genuine PHP upload must not be moved.');
         } catch (UploadException $exception) {
-            self::assertStringContainsString('not a genuine PHP upload', $exception->getMessage());
+            self::assertSame(
+                'Refusing to move "' . $source . '": it is not a genuine PHP upload. '
+                . 'Inject a $fileMover when storing files that did not arrive over HTTP.',
+                $exception->getMessage(),
+            );
         } finally {
             self::assertFileExists($source, 'The refused source must survive; rename() would have destroyed it.');
             self::assertFileDoesNotExist($dest . '/leaked.txt');
@@ -903,6 +907,15 @@ final class UploaderTest extends TestCase
             'superscript serial device' => ["COM\u{00B9}.png", $invalid("\"COM\u{00B9}.png\"")],
             'superscript printer device' => ["lpt\u{00B3}.png", $invalid("\"lpt\u{00B3}.png\"")],
             'device name before a space' => ['CON .png', $invalid('"CON .png"')],
+            'empty' => ['', $invalid('""')],
+            'forward slash' => [
+                'a/b.png',
+                'Path traversal attempt detected in upload path segment: "a/b.png".',
+            ],
+            'backslash' => [
+                'a\\b.png',
+                'Path traversal attempt detected in upload path segment: "a\\\\b.png".',
+            ],
             'dotfile' => ['.htaccess', $invalid('".htaccess"')],
             'padded dotfile' => [' .user.ini', $invalid('".user.ini"')],
         ];
@@ -921,6 +934,240 @@ final class UploaderTest extends TestCase
             self::assertSame($message, $e->getMessage());
         } finally {
             self::assertSame([], glob($dest . '/*') ?: []);
+        }
+    }
+
+    public function test_store_normalises_the_configured_allowlists(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader(
+            $dest,
+            allowedExtensions: [' .PNG '],
+            allowedMimeTypes: [' IMAGE/PNG '],
+            fileMover: $this->fileMover(),
+        ))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.png$#', $relative);
+    }
+
+    public function test_store_ignores_blank_entries_of_the_allowlists(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.exe', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        try {
+            (new Uploader($dest, allowedExtensions: ['', ' . ', 'png'], fileMover: $this->fileMover()))->store($file);
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame('Upload extension "exe" is not allowed. Allowed extensions: png', $e->getMessage());
+        }
+
+        $text = new FileUpload('a.txt', 'text/plain', $this->makeTempFile('hello'), 5);
+
+        try {
+            (new Uploader($dest, allowedMimeTypes: ['', ' ', 'image/png'], fileMover: $this->fileMover()))->store($text);
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload MIME type "text/plain" is not allowed. Allowed MIME types: image/png',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function test_store_normalises_the_mime_extension_map(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader(
+            $dest,
+            fileMover: $this->fileMover(),
+            mimeExtensionMap: [' IMAGE/PNG ' => ' .JPG '],
+        ))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.jpg$#', $relative);
+    }
+
+    public function test_store_lists_a_mapped_extension_once_when_it_is_also_an_alias(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.jpg', 'image/jpeg', $this->makeTempFile($this->jpegBytes()), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover(), mimeExtensionMap: ['image/jpeg' => 'jpeg']))
+                ->store($file, null, 'photo.png');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload target extension "png" does not match the detected MIME type "image/jpeg". '
+                . 'Expected extensions: jpeg, jpe.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function test_store_accepts_a_file_exactly_as_large_as_the_maximum(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.txt', 'text/plain', $this->makeTempFile('1234'), 4);
+
+        $relative = (new Uploader($dest, maxSizeBytes: 4, fileMover: $this->fileMover()))->store($file, null, 'a.txt');
+
+        self::assertSame('a.txt', $relative);
+    }
+
+    public function test_store_refuses_a_file_one_byte_over_the_maximum(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.txt', 'text/plain', $this->makeTempFile('12345'), 5);
+
+        try {
+            (new Uploader($dest, maxSizeBytes: 4, fileMover: $this->fileMover()))->store($file, null, 'a.txt');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame('Upload is too large (5 bytes). Maximum allowed size is 4 bytes.', $e->getMessage());
+        }
+    }
+
+    public function test_store_refuses_a_directory_as_the_temporary_source(): void
+    {
+        $dest = $this->makeTempDir();
+        $source = $this->makeTempDir();
+        $file = new FileUpload('a.txt', 'text/plain', $source, 0);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file);
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Upload temporary file "' . $source . '" is missing or unreadable.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function test_store_refuses_a_sub_directory_that_cannot_be_created(): void
+    {
+        $dest = $this->makeTempDir();
+        file_put_contents($dest . '/blocker', 'x');
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, 'blocker/inner');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                'Unable to create upload directory: "' . $dest . '/blocker/inner"',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function test_store_creates_directories_with_group_writable_permissions(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+        $previous = umask(0);
+
+        try {
+            (new Uploader($dest, fileMover: $this->fileMover()))->store($file, 'one/two');
+            clearstatcache();
+
+            self::assertSame(0775, fileperms($dest . '/one') & 0777);
+            self::assertSame(0775, fileperms($dest . '/one/two') & 0777);
+        } finally {
+            umask($previous);
+        }
+    }
+
+    public function test_store_trims_the_segments_of_a_sub_directory(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader($dest, fileMover: $this->fileMover()))->store($file, ' images / . / big ', 'a.png');
+
+        self::assertSame('images/big/a.png', $relative);
+        self::assertFileExists($dest . '/images/big/a.png');
+    }
+
+    public function test_store_applies_the_extension_allowlist_to_every_segment_of_a_target_name(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        try {
+            (new Uploader($dest, allowedExtensions: ['png'], fileMover: $this->fileMover()))
+                ->store($file, null, 'avatar.bak.png');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame('Upload extension "bak" is not allowed. Allowed extensions: png', $e->getMessage());
+        }
+    }
+
+    public function test_store_ignores_empty_segments_when_checking_a_target_name_against_the_allowlist(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('a.png', 'image/png', $this->makeTempFile($this->pngBytes()), 20);
+
+        $relative = (new Uploader($dest, allowedExtensions: ['png'], fileMover: $this->fileMover()))
+            ->store($file, null, 'avatar..png');
+
+        self::assertSame('avatar..png', $relative);
+    }
+
+    public function test_store_keeps_the_allowlisted_client_extension_when_the_detected_type_is_unmapped(): void
+    {
+        $dest = $this->makeTempDir();
+        $file = new FileUpload('page.dat', 'text/html', $this->makeTempFile('<?php echo 1; ?>'), 16);
+
+        $relative = (new Uploader($dest, allowedExtensions: ['dat'], fileMover: $this->fileMover()))->store($file);
+
+        self::assertMatchesRegularExpression('#^[a-f0-9]{32}\.dat$#', $relative);
+    }
+
+    public function test_store_names_the_refused_path_without_a_doubled_separator_for_a_root_with_a_trailing_slash(): void
+    {
+        $dest = $this->makeTempDir();
+        $outside = $this->makeTempDir();
+        symlink($outside, $dest . '/exports');
+        $file = $this->makeValidFile();
+
+        try {
+            (new Uploader($dest . '/'))->store($file, 'exports/2026');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                UploadException::destinationNotContained($dest . '/exports/2026')->getMessage(),
+                $e->getMessage(),
+            );
+        } finally {
+            @unlink($dest . '/exports');
+        }
+    }
+
+    public function test_store_creates_nothing_through_a_link_to_a_sibling_sharing_the_root_prefix(): void
+    {
+        $parent = $this->makeTempDir();
+        mkdir($parent . '/uploads');
+        mkdir($parent . '/uploads-evil');
+        symlink($parent . '/uploads-evil', $parent . '/uploads/link');
+        $file = $this->makeValidFile();
+
+        try {
+            (new Uploader($parent . '/uploads'))->store($file, 'link/inner');
+            self::fail('expected a refusal');
+        } catch (UploadException $e) {
+            self::assertSame(
+                UploadException::destinationNotContained($parent . '/uploads/link/inner')->getMessage(),
+                $e->getMessage(),
+            );
+            self::assertDirectoryDoesNotExist($parent . '/uploads-evil/inner');
+        } finally {
+            @unlink($parent . '/uploads/link');
         }
     }
 }
