@@ -8,6 +8,530 @@
     "logs": {
         "text": "build/infection/infection.log"
     },
-    "minMsi": 88,
-    "minCoveredMsi": 88
+    "minMsi": 97,
+    "minCoveredMsi": 97,
+    "mutators": {
+        "@default": true,
+        "ArrayOneItem": {
+            "ignore": [
+                "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::256", // at most one key at that point
+            ],
+        },
+        "AssignCoalesce": {
+            "ignore": [
+                "Zephyrus\\Formatting\\Formatter::plainNumber::632", // formatter cache is not observable
+            ],
+        },
+        "Assignment": {
+            "ignore": [
+                "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::183", // the elseif body only appends an empty string
+                "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::197", // the elseif body only appends an empty string
+            ],
+        },
+        "Break_": {
+            "ignore": [
+                "Zephyrus\\Event\\EventDispatcher::dispatch::171", // continue re-checks the stopped flag
+            ],
+        },
+        "CastArray": {
+            "ignore": [
+                "Zephyrus\\FileSystem\\SafePath::isSafeRelativePath::107", // type-only casts under strict_types
+                "Zephyrus\\Upload\\Uploader::normalizeSubDirectory::396", // preg_split never returns false here
+            ],
+        },
+        "CastFloat": {
+            "ignore": [
+                "Zephyrus\\Formatting\\Formatter::filesize::387", // float parameter coerces an int
+                "Zephyrus\\Routing\\HandlerResolver::tryFloat::371", // reflection invoke is weak-mode
+            ],
+        },
+        "CastInt": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\EnvironmentContract::checkBase64Bytes::304", // value already has that type
+                "Zephyrus\\Formatting\\Formatter::duration::349", // floor() float prints the same
+                "Zephyrus\\Formatting\\Formatter::duration::350", // floor() float prints the same
+                "Zephyrus\\Http\\Request::portNumber::713", // numeric strings compare numerically
+                "Zephyrus\\Http\\Request::readBody::739", // trim and int cast neutralise it
+                "Zephyrus\\Http\\Uri::__construct::45", // casts are redundant with each other
+                "Zephyrus\\Http\\Uri::decompose::84", // casts are redundant with each other
+                "Zephyrus\\Http\\Uri::isPortNumber::113", // casts are redundant with each other
+                "Zephyrus\\Routing\\RouteSignature::validationFailure::126", // clamped or overridden by the caller
+                "Zephyrus\\Security\\AllowedHostsMiddleware::portNumber::265", // digits only, above 5 digits exceeds 65535
+                "Zephyrus\\Validation\\Rules::cardNumberLuhn::1348", // Luhn arithmetic is unchanged mod 10
+                "Zephyrus\\Validation\\Rules::port::611", // digit-only values compare the same
+                "Zephyrus\\Validation\\Rules::portRange::709", // digit-only values compare the same
+            ],
+        },
+        "CastString": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\DatabaseConfig::port::260", // filter_var accepts an int
+                "Zephyrus\\Core\\Config\\EnvironmentContract::canonicaliseValidatedValues::342", // value already has that type
+                "Zephyrus\\Core\\Config\\EnvironmentContract::violations::112", // value already has that type
+                "Zephyrus\\FileSystem\\SafePath::isSafeRelativePath::108", // type-only casts under strict_types
+                "Zephyrus\\Formatting\\Formatter::replaceOrdinalGrouping::600", // grouping separator is never null
+                "Zephyrus\\Http\\Request::normalizeFileUploads::1223", // an array key casts a numeric string itself
+                "Zephyrus\\Http\\Request::readBody::736", // php://input always yields a string
+                "Zephyrus\\Http\\Request::readBody::749", // php://input always yields a string
+                "Zephyrus\\Routing\\Route::assertNoQueryOrFragmentMark::164", // only matters if PCRE fails
+                "Zephyrus\\Routing\\RouteCollection::constrainedParameterHistogram::278", // PHP normalises array keys
+                "Zephyrus\\Routing\\RouteCollection::parameterHistogram::259", // PHP normalises array keys
+                "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
+                "Zephyrus\\Security\\ContentSecurityPolicyMiddleware::warnOnUnsafeInline::190", // directive names are never integer keys
+                "Zephyrus\\Session\\DatabaseSessionHandler::supportsAdvisoryLocks::774", // PDO already returns a string
+            ],
+        },
+        "Coalesce": {
+            "ignore": [
+                "Zephyrus\\Routing\\Router::__construct::37", // stateless final class
+            ],
+        },
+        "Concat": {
+            "ignore": [
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::457", // Route::define normalises the path ends
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::461", // Route::define normalises the path ends
+                "Zephyrus\\Routing\\Router::joinPath::679", // Route::define normalises the path ends
+                "Zephyrus\\Session\\SessionManager::cookieSameSite::152", // SessionConfig refuses other SameSite values
+            ],
+        },
+        "ConcatOperandRemoval": {
+            "ignore": [
+                "Zephyrus\\Session\\SessionManager::cookieSameSite::152", // SessionConfig refuses other SameSite values
+                "Zephyrus\\Upload\\Uploader::assertContainedDirectory::383", // ancestor check refuses the same escapes first
+            ],
+        },
+        "Continue_": {
+            "ignore": [
+                "Zephyrus\\Console\\Console::refuseOverlap::150", // a cache path never equals a .gitignore
+                "Zephyrus\\Container\\Container::autoWire::248", // a variadic is always the last parameter
+                "Zephyrus\\Container\\Container::autoWire::258", // PHP fills in the skipped defaults
+                "Zephyrus\\Routing\\RouteAttributeReader::routesOf::138", // methods come in declaring-class order
+            ],
+        },
+        "DecrementInteger": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
+                "Zephyrus\\Data\\Database::transaction::943", // levels are never negative
+                "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
+                "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::159", // same result on an unterminated literal
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::188", // initial value is always overwritten
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::190", // initial value is always overwritten
+                "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\Request::hasPort::688", // the substring starts at a bracket
+                "Zephyrus\\Http\\Request::parseQueryString::556", // NUL never reaches the query parser
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::86", // only relative positions matter
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::98", // segment never matches q= on a valid tag
+                "Zephyrus\\Routing\\RouteSignature::assertValidAt::94", // clamped or overridden by the caller
+                "Zephyrus\\Routing\\RouteSignature::validationFailure::107", // clamped or overridden by the caller
+                "Zephyrus\\Routing\\RouteSignature::verifyAt::78", // clamped or overridden by the caller
+                "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::300", // extra-colon hosts are refused by port or label
+                "Zephyrus\\Security\\Cryptography::hashFile::254", // chunk size does not change the digest
+                "Zephyrus\\Security\\Cryptography::randomHex::324", // only changes surplus random bytes drawn
+                "Zephyrus\\Security\\MaxBodySizeMiddleware::bodyBytes::122", // sentinel never exceeds a limit of 1 or more
+                "Zephyrus\\Security\\MaxBodySizeMiddleware::bodyBytes::124", // sentinel never exceeds a limit of 1 or more
+                "Zephyrus\\Validation\\Rules::boolean::308", // the 0 and 1 shortcut is redundant
+            ],
+        },
+        "Division": {
+            "ignore": [
+                "Zephyrus\\Security\\Cryptography::randomHex::324", // only changes surplus random bytes drawn
+                "Zephyrus\\Security\\Cryptography::randomString::288", // only changes surplus random bytes drawn
+            ],
+        },
+        "FalseValue": {
+            "ignore": [
+                "Zephyrus\\Console\\Console::refuseOverlap::145", // a cache path never equals a .gitignore
+                "Zephyrus\\Console\\Console::run::113", // a cache path never equals a .gitignore
+                "Zephyrus\\Core\\Config\\SessionConfig::fromArray::140", // default of the secure key is never read
+                "Zephyrus\\Http\\Request::resolveClientIp::862", // every caller passes the value
+            ],
+        },
+        "Foreach_": {
+            "ignore": [
+                "Zephyrus\\Routing\\RouteCache::isUnderAny::384", // controller directory scan covers them
+            ],
+        },
+        "FunctionCallRemoval": {
+            "ignore": [
+                "Zephyrus\\Http\\SseEmitter::emit::41", // CLI records no headers and flush output
+                "Zephyrus\\Http\\SseEmitter::sendHeaders::51", // CLI records no headers and flush output
+                "Zephyrus\\Http\\SseEmitter::sendHeaders::52", // CLI records no headers and flush output
+                "Zephyrus\\Http\\SseEmitter::sendHeaders::53", // CLI records no headers and flush output
+                "Zephyrus\\Routing\\RouteCollection::uniqueMiddlewares::243", // keys of an already sorted histogram
+            ],
+        },
+        "GreaterThan": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::floatLiteral::1142", // INF and 1/0 are never 0
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::198", // same weights, same final choice
+                "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::223", // refused earlier by the mapped address check
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseQuality::152", // same effective weight
+                "Zephyrus\\Localization\\AcceptLanguageResolver::resolveAcceptedLocale::205", // the empty tag is never accepted
+                "Zephyrus\\Routing\\HandlerResolver::routeParameterNames::214", // an empty segment never matches a placeholder
+                "Zephyrus\\Routing\\RouteCollection::isParameterSegment::795", // empty segments never match a placeholder
+                "Zephyrus\\Routing\\RouteCollection::normalizePath::753", // a bare / returns before the flag is read
+                "Zephyrus\\Security\\AllowedHostsMiddleware::matchesHost::214", // empty label check refuses it earlier
+                "Zephyrus\\Security\\AllowedHostsMiddleware::normalizeEntry::242", // a parsed entry had its port stripped
+                "Zephyrus\\Security\\MaxBodySizeMiddleware::add::170", // both branches give PHP_INT_MAX at equality
+                "Zephyrus\\Validation\\Rules::cardNumberLuhn::1351", // Luhn arithmetic is unchanged mod 10
+            ],
+        },
+        "GreaterThanOrEqualTo": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::walkForwardedChain::960", // redundant with a later fallback
+            ],
+        },
+        "Identical": {
+            "ignore": [
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // same weights, same final choice
+            ],
+        },
+        "IncrementInteger": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\ConfigKeys::assertKnown::165", // limit and pad only test for null
+                "Zephyrus\\Data\\PostgresArrayParser::readQuotedElement::141", // same result on an unterminated literal
+                "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::174", // same result on an unterminated literal
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::212", // json wins ties either way
+                "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::204", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::211", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\Request::walkForwardedChain::960", // redundant with a later fallback
+                "Zephyrus\\Routing\\RouteCollection::controllerHistogram::296", // only the first element is read
+                "Zephyrus\\Routing\\RouteSignature::validationFailure::107", // clamped or overridden by the caller
+                "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::300", // extra-colon hosts are refused by port or label
+                "Zephyrus\\Security\\Cryptography::hashFile::254", // chunk size does not change the digest
+                "Zephyrus\\Security\\Cryptography::randomString::291", // only changes surplus random bytes drawn
+                "Zephyrus\\Security\\MaxBodySizeMiddleware::bodyBytes::122", // sentinel never exceeds a limit of 1 or more
+            ],
+        },
+        "LessThan": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::floatLiteral::1146", // INF and 1/0 are never 0
+                "Zephyrus\\Data\\Database::floatLiteral::1150", // same result for integral inputs
+                "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
+                "Zephyrus\\Http\\SapiEmitter::emitBody::68", // an empty body emits nothing either way
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseQuality::148", // same effective weight
+            ],
+        },
+        "LessThanOrEqualTo": {
+            "ignore": [
+                "Zephyrus\\Formatting\\Formatter::truncate::447", // keep of 0 returns the same string
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::193", // q of 0 is always overridden
+            ],
+        },
+        "LogicalAnd": {
+            "ignore": [
+                "Zephyrus\\Console\\Console::refuseOverlap::149", // a cache path never equals a .gitignore
+                "Zephyrus\\Core\\Config\\LocalizationConfig::fromArray::100", // resolveLocalePath never returns an empty string
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::198", // same weights, same final choice
+                "Zephyrus\\Rendering\\LatteEngine::configureCacheDirectory::242", // differs only on a mkdir race
+                "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
+                "Zephyrus\\Upload\\Uploader::ensureDirectory::529", // differs only on a mkdir race
+                "Zephyrus\\Upload\\Uploader::storedExtension::504", // the last segment is always in the allowlist
+            ],
+        },
+        "LogicalAndAllSubExprNegation": {
+            "ignore": [
+                "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
+                "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
+                "Zephyrus\\Upload\\Uploader::assertContainedDirectory::383", // ancestor check refuses the same escapes first
+            ],
+        },
+        "LogicalAndNegation": {
+            "ignore": [
+                "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
+            ],
+        },
+        "LogicalNot": {
+            "ignore": [
+                "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
+            ],
+        },
+        "LogicalOr": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::placeholder::1073", // earlier key range check refuses it
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::261", // a range with an empty part never matches
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // same weights, same final choice
+                "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::223", // refused earlier by the mapped address check
+                "Zephyrus\\Http\\Request::normalizeIp::977", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::parseBody::803", // dead duplicate of the fall-through return
+                "Zephyrus\\Security\\AllowedHostsMiddleware::__construct::73", // a reason always implies a null entry
+                "Zephyrus\\Upload\\Uploader::assertContainedDirectory::377", // ancestor check refuses the same escapes first
+                "Zephyrus\\Upload\\Uploader::validateTargetName::450", // refused earlier by the trailing dot rule
+                "Zephyrus\\Validation\\Rules::timezone::405", // strict in_array refuses empty and non-strings
+            ],
+        },
+        "LogicalOrAllSubExprNegation": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::parseBody::803", // dead duplicate of the fall-through return
+            ],
+        },
+        "LogicalOrNegation": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::parseBody::803", // dead duplicate of the fall-through return
+            ],
+        },
+        "LogicalOrSingleSubExprNegation": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::parseBody::803", // dead duplicate of the fall-through return
+            ],
+        },
+        "MethodCallRemoval": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::__construct::142", // exception mode is the PHP 8 default
+                "Zephyrus\\FileSystem\\Directory::delete::146", // only matters under open_basedir
+                "Zephyrus\\Formatting\\Formatter::percent::220", // ICU raises the max fraction digits
+                "Zephyrus\\Http\\SseEmitter::emit::37", // CLI records no headers and flush output
+                "Zephyrus\\Rendering\\LatteEngine::configureCache::222", // loaded class hides the refresh in-process
+                "Zephyrus\\Rendering\\LatteEngine::configureCache::234", // loaded class hides the refresh in-process
+            ],
+        },
+        "Modulus": {
+            "ignore": [
+                "Zephyrus\\Http\\IpRange::netmask::235", // netmask bytes never have the low bit set
+            ],
+        },
+        "NotIdentical": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::readBody::750", // php://input always yields a string
+                "Zephyrus\\Http\\Request::resolveClientIp::878", // redundant with a later fallback
+            ],
+        },
+        "PlusEqual": {
+            "ignore": [
+                "Zephyrus\\Validation\\Rules::cardNumberLuhn::1355", // Luhn arithmetic is unchanged mod 10
+            ],
+        },
+        "PregMatchRemoveCaret": {
+            "ignore": [
+                "Zephyrus\\Routing\\HandlerResolver::tryInt::350", // round-trip check refuses the value anyway
+                "Zephyrus\\Validation\\Rules::base64Url::851", // strict decode and re-encode refuse the same
+                "Zephyrus\\Validation\\Rules::hostPort::1166", // value already starts with a bracket
+                "Zephyrus\\Validation\\Rules::rfc3339DateTime::381", // round-trip refuses what the regex refuses
+            ],
+        },
+        "PregMatchRemoveDollar": {
+            "ignore": [
+                "Zephyrus\\Http\\Uri::isPortNumber::113", // the caller passes digits only
+                "Zephyrus\\Routing\\HandlerResolver::tryInt::350", // round-trip check refuses the value anyway
+                "Zephyrus\\Security\\AllowedHostsMiddleware::portNumber::265", // digits only, above 5 digits exceeds 65535
+                "Zephyrus\\Validation\\Rules::base64Url::851", // strict decode and re-encode refuse the same
+                "Zephyrus\\Validation\\Rules::rfc3339DateTime::381", // round-trip refuses what the regex refuses
+            ],
+        },
+        "PregMatchRemoveFlags": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::readBody::739", // trim and int cast neutralise it
+                "Zephyrus\\Http\\Uri::isPortNumber::113", // the caller passes digits only
+                "Zephyrus\\Routing\\HandlerResolver::tryInt::350", // round-trip check refuses the value anyway
+                "Zephyrus\\Security\\AllowedHostsMiddleware::portNumber::265", // digits only, above 5 digits exceeds 65535
+                "Zephyrus\\Security\\ContentSecurityPolicy::normalizeBase64Token::156", // values are trimmed before the pattern
+                "Zephyrus\\Security\\ContentSecurityPolicy::normalizeDirectiveName::166", // values are trimmed before the pattern
+                "Zephyrus\\Security\\MaxBodySizeMiddleware::bodyBytes::117", // value is trimmed, D is inert
+                "Zephyrus\\Validation\\Rules::base64Url::851", // strict decode and re-encode refuse the same
+                "Zephyrus\\Validation\\Rules::cardNumber::1323", // no trailing newline can occur here
+                "Zephyrus\\Validation\\Rules::cardNumberLuhn::1341", // no trailing newline can occur here
+                "Zephyrus\\Validation\\Rules::jsonPointer::1443", // no trailing newline can occur here
+                "Zephyrus\\Validation\\Rules::rfc3339DateTime::381", // round-trip refuses what the regex refuses
+                "Zephyrus\\Validation\\Rules::subnetMask::686", // no trailing newline can occur here
+            ],
+        },
+        "ReturnRemoval": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\Configuration::fromFile::360", // same YAML read either way
+                "Zephyrus\\Core\\Config\\SessionConfig::assertCookieCanBeStored::226", // __Host- and __Secure- are exclusive
+                "Zephyrus\\Data\\Database::floatLiteral::1138", // sprintf already prints NaN
+                "Zephyrus\\Data\\FilterRequest::toWhereClause::95", // duplicated by the empty parts return
+                "Zephyrus\\Event\\EventDispatcher::applicableListeners::233", // the empty path returns the same value
+                "Zephyrus\\Event\\EventDispatcher::dispatch::166", // the empty path returns the same value
+                "Zephyrus\\FileSystem\\Directory::delete::142", // exists() is false after unlink anyway
+                "Zephyrus\\FileSystem\\SafePath::within::37", // a missing root also fails the next realpath
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::184", // empty list falls through to the same result
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::231", // empty list falls through to the same result
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::resolveCustomHandler::109", // empty list falls through to the same result
+                "Zephyrus\\Http\\HeaderBag::bearerToken::56", // an empty prefix gives the same token
+                "Zephyrus\\Http\\HeaderBag::isJson::77", // an empty media type is not JSON either
+                "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::224", // refused earlier by the mapped address check
+                "Zephyrus\\Http\\Request::isJsonContentType::1193", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::nearestForwardedValue::1062", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::normalizeIp::978", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::parseBody::806", // dead duplicate of the fall-through return
+                "Zephyrus\\Http\\Request::resolveClientIp::869", // redundant with a later fallback
+                "Zephyrus\\Http\\SapiEmitter::emitBody::62", // an empty body emits nothing either way
+                "Zephyrus\\Localization\\AcceptLanguageResolver::normalize::172", // star falls through to the same star
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::82", // blank header parses to no entries
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseQuality::149", // same effective weight
+                "Zephyrus\\Localization\\Translator::interpolate::153", // no parameters leaves placeholders unchanged
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::453", // Route::define normalises the path ends
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::457", // Route::define normalises the path ends
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::461", // Route::define normalises the path ends
+                "Zephyrus\\Routing\\RouteCache::isUnderAny::386", // controller directory scan covers them
+                "Zephyrus\\Routing\\RouteCache::load::174", // load() returns null silently on a missing file
+                "Zephyrus\\Routing\\Router::joinPath::675", // Route::define normalises the path ends
+                "Zephyrus\\Routing\\Router::joinPath::679", // Route::define normalises the path ends
+                "Zephyrus\\Security\\AllowedHostsMiddleware::parseEntry::228", // bad port is refused by the reason check
+                "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::286", // unclosed bracket falls through to null
+                "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::302", // extra-colon hosts are refused by port or label
+                "Zephyrus\\Security\\SecureHeadersConfig::text::154", // empty falls through to the same return
+                "Zephyrus\\Session\\DatabaseSessionHandler::forceStrictMode::229", // strict mode is already on
+                "Zephyrus\\Session\\SessionCsrfTokenManager::isTokenValid::61", // storedToken() turns empty into null
+                "Zephyrus\\Session\\SessionManager::destroy::257", // session id is empty after destroy
+                "Zephyrus\\Upload\\FileUpload::listFromPhpArray::26", // flatten rebuilds the same single entry
+                "Zephyrus\\Upload\\Uploader::ensureDirectory::526", // mkdir on an existing directory fails silently
+                "Zephyrus\\Validation\\Rules::base64Url::852", // strict decode and re-encode refuse the same
+                "Zephyrus\\Validation\\Rules::jsonPointer::1440", // regex already requires a leading slash
+                "Zephyrus\\Validation\\Rules::rfc3339DateTime::382", // round-trip refuses what the regex refuses
+                "Zephyrus\\Validation\\Rules::timezone::406", // strict in_array refuses empty and non-strings
+            ],
+        },
+        "RoundingFamily": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::floatLiteral::1150", // same result for integral inputs
+                "Zephyrus\\Security\\Cryptography::randomString::288", // only changes surplus random bytes drawn
+            ],
+        },
+        "Throw_": {
+            "ignore": [
+                "Zephyrus\\Data\\Entity::fromRow::143", // parent type without a parent cannot compile
+            ],
+        },
+        "TrueValue": {
+            "ignore": [
+                "Zephyrus\\Console\\Console::run::102", // isset() is true for false too
+                "Zephyrus\\Container\\Container::get::91", // isset() is true for false too
+                "Zephyrus\\Data\\Database::markFailedLevel::994", // only the key existence is tested
+                "Zephyrus\\FileSystem\\Directory::deleteRecursive::205", // calls inside are suppressed
+                "Zephyrus\\Mailer\\Mailer::attachContent::242", // earlier checks refuse the same values
+                "Zephyrus\\Rendering\\LatteEngine::configureCache::222", // loaded class hides the refresh in-process
+                "Zephyrus\\Rendering\\LatteEngine::configureCache::234", // loaded class hides the refresh in-process
+                "Zephyrus\\Routing\\RouteAttributeReader::routesOf::168", // isset() is true for false too
+                "Zephyrus\\Routing\\RouteCache::isUnderAny::386", // controller directory scan covers them
+            ],
+        },
+        "UnwrapArrayFilter": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::filesOf::315", // files are already a list of uploads
+            ],
+        },
+        "UnwrapArrayMap": {
+            "ignore": [
+                "Zephyrus\\Http\\Response::isCookieScope::307", // a later trim covers it
+                "Zephyrus\\Rendering\\NamespacedLoader::assertDeclared::143", // array_map callback coerces back to string
+                "Zephyrus\\Routing\\HandlerResolver::describeType::422", // type string equals the type name
+                "Zephyrus\\Routing\\HandlerResolver::describeType::426", // type string equals the type name
+                "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
+                "Zephyrus\\Validation\\Rules::in::252", // implode casts like strval
+            ],
+        },
+        "UnwrapArraySlice": {
+            "ignore": [
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::98", // segment never matches q= on a valid tag
+            ],
+        },
+        "UnwrapArrayUnique": {
+            "ignore": [
+                "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
+                "Zephyrus\\Routing\\Router::group::255", // router re-expands and dedupes the middlewares
+            ],
+        },
+        "UnwrapArrayValues": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\Configuration::fromArray::95", // in_array ignores the keys
+                "Zephyrus\\Core\\Config\\Configuration::fromArray::96", // in_array ignores the keys
+                "Zephyrus\\Core\\Config\\EnvironmentContract::requireOneOf::80", // nothing reads the allowed list keys
+                "Zephyrus\\Core\\Config\\LocalizationConfig::resolveLocalePath::201", // end() returns the same last element
+                "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::259", // keys are never read
+                "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::265", // keys are never read
+                "Zephyrus\\Event\\EventDispatcher::removeListener::49", // keys are never read
+                "Zephyrus\\Http\\Request::filesOf::315", // files are already a list of uploads
+                "Zephyrus\\Http\\Request::uploadObjectsOf::1266", // files are already a list of uploads
+                "Zephyrus\\Localization\\Translator::validPipeNames::308", // implode ignores keys
+                "Zephyrus\\Routing\\RouteCollection::allowedMethodsForPath::433", // sort reindexes the list
+                "Zephyrus\\Routing\\RouteCollection::match::549", // sort reindexes the list
+                "Zephyrus\\Routing\\RouteCollection::methods::138", // sort reindexes the list
+                "Zephyrus\\Routing\\RouteDispatcher::resolveRouteMiddlewares::102", // router dedupes the middlewares
+                "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
+                "Zephyrus\\Routing\\Router::assertNoMiddlewareGroup::294", // router re-expands and dedupes the middlewares
+                "Zephyrus\\Routing\\Router::group::239", // router re-expands and dedupes the middlewares
+                "Zephyrus\\Routing\\Router::group::255", // router re-expands and dedupes the middlewares
+                "Zephyrus\\Routing\\Router::middlewareGroup::136", // router re-expands and dedupes the middlewares
+                "Zephyrus\\Routing\\Router::withoutMiddleware::197", // router re-expands and dedupes the middlewares
+                "Zephyrus\\Routing\\Router::withoutMiddleware::202", // router re-expands and dedupes the middlewares
+                "Zephyrus\\Security\\ContentSecurityPolicy::normalizeDirectiveValues::208", // the list is already sequential
+                "Zephyrus\\Security\\ContentSecurityPolicyMiddleware::__construct::82", // only iterated
+                "Zephyrus\\Upload\\FileUpload::flattenPhpEntry::133", // a key in one list only yields nothing
+                "Zephyrus\\Upload\\Uploader::__construct::128", // list only feeds in_array and implode
+                "Zephyrus\\Upload\\Uploader::__construct::132", // list only feeds in_array and implode
+                "Zephyrus\\Upload\\Uploader::acceptedTargetExtensions::299", // list only feeds in_array and implode
+                "Zephyrus\\Upload\\Uploader::extensionSegments::517", // list only feeds in_array and implode
+            ],
+        },
+        "UnwrapFinally": {
+            "ignore": [
+                "Zephyrus\\Exceptions\\RegexCompilation::error::27", // preg_match cannot throw here
+                "Zephyrus\\Security\\Cryptography::hashFile::252", // handle is freed on scope exit
+            ],
+        },
+        "UnwrapLtrim": {
+            "ignore": [
+                "Zephyrus\\FileSystem\\SafePath::within::40", // realpath normalises separators
+                "Zephyrus\\Localization\\Translator::interpolate::167", // empty leading segment is skipped anyway
+                "Zephyrus\\Routing\\RouteCollection::normalizePath::735", // empty segments never match a placeholder
+                "Zephyrus\\Routing\\RouteCollection::segments::639", // empty segments never match a placeholder
+            ],
+        },
+        "UnwrapRtrim": {
+            "ignore": [
+                "Zephyrus\\FileSystem\\SafePath::within::34", // realpath normalises separators
+                "Zephyrus\\Rendering\\Asset::__construct::39", // realpath normalises a doubled separator
+                "Zephyrus\\Rendering\\NamespacedLoader::__construct::31", // realpath normalises a doubled separator
+                "Zephyrus\\Upload\\Uploader::assertContainedAncestor::354", // realpath already strips the trailing slash
+                "Zephyrus\\Upload\\Uploader::assertContainedAncestor::360", // realpath already strips the trailing slash
+                "Zephyrus\\Upload\\Uploader::assertContainedDirectory::374", // realpath already strips the trailing slash
+                "Zephyrus\\Upload\\Uploader::assertContainedDirectory::381", // realpath already strips the trailing slash
+            ],
+        },
+        "UnwrapStrReplace": {
+            "ignore": [
+                "Zephyrus\\Data\\SortRequest::quoteIdentifier::99", // constructor regex forbids a quote
+                "Zephyrus\\Upload\\Uploader::resolveDirectory::335", // separator is a slash on Linux
+            ],
+        },
+        "UnwrapStrToLower": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\Configuration::fromFile::358", // extension is lowercased by the loader
+                "Zephyrus\\Http\\Request::httpScheme::727", // value is already lowercased upstream
+                "Zephyrus\\Http\\Request::isDefaultPortForScheme::1182", // value is already lowercased upstream
+                "Zephyrus\\Http\\Request::normalizeIp::977", // redundant with a later fallback
+                "Zephyrus\\Http\\Response::withHeader::195", // constructor lowercases the keys again
+                "Zephyrus\\Http\\Response::withHeaders::235", // constructor lowercases the keys again
+                "Zephyrus\\Upload\\Uploader::sniffMimeType::253", // finfo already returns trimmed lowercase
+            ],
+        },
+        "UnwrapStrToUpper": {
+            "ignore": [
+                "Zephyrus\\Data\\SortRequest::toArray::109", // constructor already uppercases
+            ],
+        },
+        "UnwrapTrim": {
+            "ignore": [
+                "Zephyrus\\Core\\Config\\ConfigSection::getFloat::195", // filter_var already trims
+                "Zephyrus\\Core\\Config\\ConfigSection::getInt::162", // filter_var already trims
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::249", // a later trim covers it
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::255", // a later trim covers it
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::272", // a later trim covers it
+                "Zephyrus\\Http\\HeaderBag::isJson::74", // a later trim covers it
+                "Zephyrus\\Http\\Request::isJsonContentType::1190", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::isJsonContentType::1196", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::parseForwardedElement::1163", // a later trim or lowercase compensates
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::81", // blank header parses to no entries
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::89", // a later trim covers it
+                "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::95", // a later trim covers it
+                "Zephyrus\\Routing\\HandlerResolver::routeParameterNames::213", // an empty segment never matches a placeholder
+                "Zephyrus\\Routing\\Route::assertValidParameterNames::205", // empty braces are refused by Route
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::449", // Route::define normalises the path ends
+                "Zephyrus\\Upload\\Uploader::sniffMimeType::253", // finfo already returns trimmed lowercase
+                "Zephyrus\\Validation\\Rules::acceptLanguage::1105", // blank string fails the regex anyway
+            ],
+        },
+    },
 }
