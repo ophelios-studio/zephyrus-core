@@ -201,6 +201,23 @@ final class RouteCollectionTest extends TestCase
         }
     }
 
+    public function testAPcreReasonHoldingAControlCharacterIsEscapedInTheConstraintRefusal(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => "a\\~\x1b"]));
+
+        try {
+            $collection->match('GET', '/users/42');
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $e) {
+            self::assertSame(
+                'Invalid route constraint pattern for parameter "id" on route "/users/{id}": '
+                . 'a\\~\\u001b (Unknown modifier \'\\u001b\')',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testControlCharactersOfTheRoutePathAreEscapedInAnInvalidConstraintRefusal(): void
     {
         $collection = new RouteCollection();
