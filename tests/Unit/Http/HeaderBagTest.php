@@ -129,6 +129,12 @@ final class HeaderBagTest extends TestCase
     }
 
     #[Test]
+    public function isJsonIgnoresSpacesBeforeTheParameters(): void
+    {
+        self::assertTrue((new HeaderBag(['content-type' => 'application/json ; charset=utf-8']))->isJson());
+    }
+
+    #[Test]
     public function isJsonDetectsJsonSuffix(): void
     {
         self::assertTrue((new HeaderBag(['content-type' => 'application/vnd.api+json']))->isJson());
