@@ -163,6 +163,21 @@ final class DatabaseActorPostgresTest extends TestCase
         self::assertSame(self::NO_ACTOR, self::rawSettings($this->db));
     }
 
+    public function testPublishInsideATransactionRefusesAnInvalidValueAndPublishesNothing(): void
+    {
+        $seen = $this->db->transaction(static function (Database $db): array {
+            self::assertRefused(
+                'The actor value for "org_id" must be a non-empty string, an empty string given: an empty value reads '
+                . 'as no actor, so leave the key out instead.',
+                static fn () => self::actor($db)->publish(['org_id' => '']),
+            );
+
+            return self::published($db);
+        });
+
+        self::assertSame(self::NO_ACTOR, $seen);
+    }
+
     public function testAPublicationInAFailedSavepointIsGoneForTheRestOfTheTransaction(): void
     {
         $failure = new RuntimeException();
