@@ -9,6 +9,7 @@
 
 [![CI](https://github.com/ophelios-studio/zephyrus-core/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/ophelios-studio/zephyrus-core/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ophelios-studio/zephyrus-core/graph/badge.svg)](https://codecov.io/gh/ophelios-studio/zephyrus-core)
+[![Mutation score](https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2Fophelios-studio%2Fzephyrus-core%2Fdev)](https://github.com/ophelios-studio/zephyrus-core/actions/workflows/mutation.yml)
 [![Packagist](https://img.shields.io/packagist/v/zephyrus-framework/core)](https://packagist.org/packages/zephyrus-framework/core)
 [![PHP](https://img.shields.io/packagist/dependency-v/zephyrus-framework/core/php)](https://packagist.org/packages/zephyrus-framework/core)
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-brightgreen)](phpstan.neon.dist)
