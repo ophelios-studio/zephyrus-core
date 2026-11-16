@@ -30,6 +30,7 @@
         },
         "Break_": {
             "ignore": [
+                "Zephyrus\\Core\\ApplicationBuilder::acknowledgedSecurityKeyName::565", // no input matches two accepted names
                 "Zephyrus\\Event\\EventDispatcher::dispatch::171", // continue re-checks the stopped flag
             ],
         },
@@ -109,6 +110,7 @@
         },
         "DecrementInteger": {
             "ignore": [
+                "Zephyrus\\Core\\DebugIntegration::assertAllowedClientEntry::365", // only the slash of the address is read
                 "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
                 "Zephyrus\\Data\\Database::transaction::943", // levels are never negative
                 "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
@@ -221,6 +223,7 @@
         "LogicalAnd": {
             "ignore": [
                 "Zephyrus\\Console\\Console::refuseOverlap::149", // a cache path never equals a .gitignore
+                "Zephyrus\\Core\\ApplicationBuilder::load::1003", // Formatter also reads '' as no currency
                 "Zephyrus\\Core\\Config\\LocalizationConfig::fromArray::100", // resolveLocalePath never returns an empty string
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::198", // same weights, same final choice
                 "Zephyrus\\Rendering\\LatteEngine::configureCacheDirectory::242", // differs only on a mkdir race
@@ -296,6 +299,13 @@
                 "Zephyrus\\Http\\Request::resolveClientIp::878", // redundant with a later fallback
             ],
         },
+        "NullSafePropertyCall": {
+            "ignore": [
+                "Zephyrus\\Core\\ApplicationBuilder::load::1004", // ?? silences a property read on null
+                "Zephyrus\\Core\\ApplicationBuilder::load::1005", // ?? silences a property read on null
+                "Zephyrus\\Core\\ApplicationBuilder::load::1006", // ?? silences a property read on null
+            ],
+        },
         "PlusEqual": {
             "ignore": [
                 "Zephyrus\\Validation\\Rules::cardNumberLuhn::1355", // Luhn arithmetic is unchanged mod 10
@@ -337,8 +347,12 @@
         },
         "ReturnRemoval": {
             "ignore": [
+                "Zephyrus\\Core\\ApplicationBuilder::withJsonLocaleLayers::344", // an empty fallback loader loads nothing
+                "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromConfigFiles::27", // no files builds the same default app
+                "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::normalizeEnvironmentName::201", // the fall-through returns '' too
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::360", // same YAML read either way
                 "Zephyrus\\Core\\Config\\SessionConfig::assertCookieCanBeStored::226", // __Host- and __Secure- are exclusive
+                "Zephyrus\\Core\\HttpKernel::fireExceptionEvent::245", // the Error is caught and swallowed
                 "Zephyrus\\Data\\Database::floatLiteral::1138", // sprintf already prints NaN
                 "Zephyrus\\Data\\FilterRequest::toWhereClause::95", // duplicated by the empty parts return
                 "Zephyrus\\Event\\EventDispatcher::applicableListeners::233", // the empty path returns the same value
@@ -391,6 +405,8 @@
         },
         "Throw_": {
             "ignore": [
+                "Zephyrus\\Core\\KernelBuilder::build::305", // unknown middlewares are refused earlier
+                "Zephyrus\\Core\\KernelBuilder::build::316", // the kernel always passes a request
                 "Zephyrus\\Data\\Entity::fromRow::143", // parent type without a parent cannot compile
             ],
         },
@@ -429,12 +445,22 @@
         },
         "UnwrapArrayUnique": {
             "ignore": [
+                "Zephyrus\\Core\\ApplicationBuilder::withAcknowledgedSecurityKeys::508", // the keys are only iterated
+                "Zephyrus\\Core\\KernelBuilder::assertRouteMiddlewaresAreRegistered::393", // Router already dedupes them
                 "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
                 "Zephyrus\\Routing\\Router::group::255", // router re-expands and dedupes the middlewares
             ],
         },
         "UnwrapArrayValues": {
             "ignore": [
+                "Zephyrus\\Core\\ApplicationBuilder::assertSecurityConfigurationIsWired::698", // the middleware ignores the keys
+                "Zephyrus\\Core\\ApplicationBuilder::assertSecurityConfigurationIsWired::723", // array_diff ignores the keys
+                "Zephyrus\\Core\\ApplicationBuilder::describeDisabledCsrf::920", // only implode and count read it
+                "Zephyrus\\Core\\ApplicationBuilder::describeListDifference::883", // only implode and count read it
+                "Zephyrus\\Core\\ApplicationBuilder::describeListDifference::884", // only implode and count read it
+                "Zephyrus\\Core\\ApplicationBuilder::withAcknowledgedSecurityKeys::508", // the keys are only iterated
+                "Zephyrus\\Core\\ApplicationBuilder::withJsonLocaleLayers::338", // array_map keeps list keys here
+                "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromConfigFiles::30", // the list is only iterated
                 "Zephyrus\\Core\\Config\\Configuration::fromArray::95", // in_array ignores the keys
                 "Zephyrus\\Core\\Config\\Configuration::fromArray::96", // in_array ignores the keys
                 "Zephyrus\\Core\\Config\\EnvironmentContract::requireOneOf::80", // nothing reads the allowed list keys
@@ -481,6 +507,8 @@
         },
         "UnwrapRtrim": {
             "ignore": [
+                "Zephyrus\\Core\\ApplicationBuilder::withLocalizationConfig::395", // the filesystem accepts a double slash
+                "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromEnvironment::73", // getcwd() ends in a slash only at /
                 "Zephyrus\\FileSystem\\SafePath::within::34", // realpath normalises separators
                 "Zephyrus\\Rendering\\Asset::__construct::39", // realpath normalises a doubled separator
                 "Zephyrus\\Rendering\\NamespacedLoader::__construct::31", // realpath normalises a doubled separator
@@ -514,6 +542,8 @@
         },
         "UnwrapTrim": {
             "ignore": [
+                "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromEnvironment::71", // each item is trimmed and filtered later
+                "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromResolvedPaths::140", // the loader trims the path
                 "Zephyrus\\Core\\Config\\ConfigSection::getFloat::195", // filter_var already trims
                 "Zephyrus\\Core\\Config\\ConfigSection::getInt::162", // filter_var already trims
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::249", // a later trim covers it
