@@ -36,4 +36,15 @@ final class RegexCompilation
 
         return $warning ?? preg_last_error_msg();
     }
+
+    /**
+     * Same as error() without the trailing " at offset N", for a pattern the caller
+     * wrapped (the offset points into the wrapper).
+     */
+    public static function errorWithoutOffset(string $regex): ?string
+    {
+        $error = self::error($regex);
+
+        return $error === null ? null : (preg_replace('/ at offset \d+$/', '', $error) ?? $error);
+    }
 }

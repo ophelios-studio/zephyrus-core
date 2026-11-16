@@ -114,13 +114,13 @@ final readonly class RouteUrlGenerator
 
         // The D modifier must match RouteCollection::compileConstraintRegex(): without it "$" accepts a trailing newline.
         $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
-        $compilationError = RegexCompilation::error($regex);
+        $compilationError = RegexCompilation::errorWithoutOffset($regex);
         if ($compilationError !== null) {
             throw RouteUrlGenerationException::constraintViolation(
                 $name,
                 $routeName,
                 'invalid constraint pattern ' . MessageValue::quote($pattern) . ' ('
-                . MessageValue::escapeControls(preg_replace('/ at offset \d+$/', '', $compilationError) ?? $compilationError) . ')',
+                . MessageValue::escapeControls($compilationError) . ')',
             );
         }
 

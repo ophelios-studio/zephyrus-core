@@ -773,14 +773,14 @@ final class RouteCollection
         // The D modifier is required: without it "$" accepts a trailing newline, so "123\n" satisfies "\d+".
         $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
 
-        $compilationError = RegexCompilation::error($regex);
+        $compilationError = RegexCompilation::errorWithoutOffset($regex);
         if ($compilationError !== null) {
             throw new RouteSignatureException(sprintf(
                 'Invalid route constraint pattern for parameter "%s" on route "%s": %s (%s)',
                 $parameterName,
                 $route->path,
-                $pattern,
-                MessageValue::escapeControls(preg_replace('/ at offset \d+$/', '', $compilationError) ?? $compilationError),
+                MessageValue::escapeControls($pattern),
+                MessageValue::escapeControls($compilationError),
             ));
         }
 

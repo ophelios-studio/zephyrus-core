@@ -184,6 +184,23 @@ final class RouteCollectionTest extends TestCase
         }
     }
 
+    public function testControlCharactersOfAnInvalidConstraintPatternAreEscaped(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => "[0-9+\e\nFAKE"]));
+
+        try {
+            $collection->match('GET', '/users/42');
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $e) {
+            self::assertSame(
+                'Invalid route constraint pattern for parameter "id" on route "/users/{id}": '
+                . '[0-9+\\u001b\\nFAKE (Compilation failed: missing terminating ] for character class)',
+                $e->getMessage(),
+            );
+        }
+    }
+
     public function testAnInvalidConstraintPatternIsRefusedWithTheFrameworkMessageUnderAThrowingErrorHandler(): void
     {
         $collection = new RouteCollection();
