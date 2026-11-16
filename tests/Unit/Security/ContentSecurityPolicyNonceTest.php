@@ -319,8 +319,11 @@ final class ContentSecurityPolicyNonceTest extends TestCase
             new ContentSecurityPolicyMiddleware($policy, nonceDirectives: [' Script-Src ']),
         )->handle(Request::fromArray('GET', '/p')));
 
-        self::assertCount(1, $warnings);
-        self::assertStringContainsString('a nonce was added to script-src', $warnings[0]);
+        self::assertSame([
+            "Content-Security-Policy: a nonce was added to script-src, which also contains 'unsafe-inline'. "
+            . "Browsers ignore 'unsafe-inline' when a nonce is present, so inline scripts without the "
+            . 'nonce attribute will stop running. Remove one of the two.',
+        ], $warnings);
     }
 
     public function testTheWarningIsRaisedForADirectiveListedAfterOneWithoutUnsafeInline(): void
@@ -334,8 +337,11 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
             ->handle(Request::fromArray('GET', '/p')));
 
-        self::assertCount(1, $warnings);
-        self::assertStringContainsString('script-src', $warnings[0]);
+        self::assertSame([
+            "Content-Security-Policy: script-src contains a hash and 'unsafe-inline'. "
+            . "Browsers ignore 'unsafe-inline' when a hash is present, so the keyword has no effect "
+            . 'today and silently activates the day the hash is removed. Remove one of the two.',
+        ], $warnings);
     }
 
     public function testTheWarningIsRaisedAfterAnUnsafeInlineDirectiveThatHasNeitherNonceNorHash(): void

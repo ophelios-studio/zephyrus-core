@@ -62,6 +62,16 @@ final class CryptographyTest extends TestCase
         Cryptography::decrypt('dG9vc2hvcnQ', $key); // "tooshort" in base64url
     }
 
+    public function testDecryptAcceptsACiphertextCarryingBase64urlPadding(): void
+    {
+        $key = Cryptography::generateEncryptionKey();
+        $encrypted = Cryptography::encrypt('abc', $key);
+        self::assertSame(2, strlen($encrypted) % 4);
+
+        self::assertSame('abc', Cryptography::decrypt($encrypted . '=', $key));
+        self::assertSame('abc', Cryptography::decrypt($encrypted . '==', $key));
+    }
+
     public function testEncryptWithInvalidKeyLengthThrows(): void
     {
         $this->expectException(CryptographyException::class);

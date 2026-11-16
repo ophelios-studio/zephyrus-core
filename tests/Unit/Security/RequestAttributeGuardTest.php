@@ -42,6 +42,15 @@ final class RequestAttributeGuardTest extends TestCase
         self::assertFalse($guard->isAuthorized($request));
     }
 
+    public function testRejectsAnArrayValueEvenWhenTheAllowListContainsThatArray(): void
+    {
+        /** @phpstan-ignore argument.type */
+        $guard = new RequestAttributeGuard('role', [['admin']]);
+        $request = Request::fromArray('GET', '/admin', attributes: ['role' => ['admin']]);
+
+        self::assertFalse($guard->isAuthorized($request));
+    }
+
     public function testRejectsAnAllowedValueThatCameFromTheUrl(): void
     {
         $guard = new RequestAttributeGuard('role', ['admin']);

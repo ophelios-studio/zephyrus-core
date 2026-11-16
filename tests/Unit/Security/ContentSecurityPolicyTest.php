@@ -291,7 +291,7 @@ final class ContentSecurityPolicyTest extends TestCase
     public function testAMalformedNonceIsRefusedWholeNotJustPartly(string $token): void
     {
         try {
-            $ignored = ContentSecurityPolicy::create()->appendNonce('script-src', $token);
+            ContentSecurityPolicy::create()->appendNonce('script-src', $token);
             self::fail('expected a refusal');
         } catch (InvalidArgumentException $e) {
             self::assertSame('CSP nonce/hash value must be valid base64 content.', $e->getMessage());

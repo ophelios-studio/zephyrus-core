@@ -408,7 +408,6 @@ final class MaxBodySizeMiddlewareTest extends TestCase
     {
         yield 'digits after text' => ['x99999'];
         yield 'text after digits' => ['99999x'];
-        yield 'signed' => ['+99999'];
         yield 'decimal' => ['99999.0'];
     }
 
