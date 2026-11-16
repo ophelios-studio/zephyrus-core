@@ -34,6 +34,12 @@ final class ResponseTest extends TestCase
         self::assertSame('text/html; charset=utf-8', $response->headers['content-type']);
     }
 
+    public function testAResponseIsOkByDefault(): void
+    {
+        self::assertSame(200, (new Response())->status);
+        self::assertSame(200, Response::html('x')->status);
+    }
+
     public function testJsonFactoryEncodesPayloadAndSetsContentTypeHeader(): void
     {
         $response = Response::json(['ok' => true], 201);
@@ -557,6 +563,22 @@ final class ResponseTest extends TestCase
             'space before the name' => [' remember=a; Path=/app; Domain=example.com'],
             'space before the equals sign' => ['remember =a; path=/app; domain=example.com'],
         ];
+    }
+
+    public function testWithCookieReplacesAConstructorCookieWhoseValueHoldsAnEqualsSign(): void
+    {
+        $response = (new Response(cookies: ['remember=a=b; Path=/']))
+            ->withCookie('remember', 'c');
+
+        self::assertSame(['remember=c; Path=/; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
+    }
+
+    public function testWithCookieReplacesAConstructorCookieWhosePathHoldsAnEqualsSign(): void
+    {
+        $response = (new Response(cookies: ['remember=a; Path=/a=b']))
+            ->withCookie('remember', 'c', path: '/a=b');
+
+        self::assertSame(['remember=c; Path=/a=b; Secure; HttpOnly; SameSite=Lax'], $response->cookies);
     }
 
     public function testWithCookieReplacesAConstructorCookieWithAnEmptyDomain(): void
