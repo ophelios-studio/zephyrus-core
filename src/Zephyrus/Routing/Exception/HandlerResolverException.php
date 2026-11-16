@@ -57,9 +57,9 @@ final class HandlerResolverException extends ZephyrusRuntimeException
         return new self(
             sprintf(
                 'Cannot resolve parameter "$%s" for "%s::%s": no matching request attribute, type hint, or default value.',
-                $parameter,
-                $className,
-                $method,
+                MessageValue::escapeControls($parameter),
+                MessageValue::escapeControls($className),
+                MessageValue::escapeControls($method),
             ),
         );
     }
@@ -75,9 +75,9 @@ final class HandlerResolverException extends ZephyrusRuntimeException
 
         return new self(sprintf(
             'Cannot resolve parameter "$%s" for "%s::%s": expected %s, got %s.',
-            $parameter,
-            $className,
-            $method,
+            MessageValue::escapeControls($parameter),
+            MessageValue::escapeControls($className),
+            MessageValue::escapeControls($method),
             $expectedType,
             $actualType,
         ));

@@ -676,6 +676,24 @@ final class HandlerResolverTest extends TestCase
         );
     }
 
+    public function testUnresolvedParameterRefusalEscapesControlCharactersOfTheClassMethodAndParameter(): void
+    {
+        self::assertSame(
+            'Cannot resolve parameter "$id\r\n" for "No\r\nCtrl::act\u202e": no matching request attribute, type hint, '
+            . 'or default value.',
+            HandlerResolverException::unresolvedParameter("No\r\nCtrl", "act\u{202E}", "id\r\n")->getMessage(),
+        );
+    }
+
+    public function testInvalidParameterValueRefusalEscapesControlCharactersOfTheClassMethodAndParameter(): void
+    {
+        self::assertSame(
+            'Cannot resolve parameter "$id\r\n" for "No\r\nCtrl::act\u202e": expected int, got string.',
+            HandlerResolverException::invalidParameterValue("No\r\nCtrl", "act\u{202E}", "id\r\n", 'int', 'abc')
+                ->getMessage(),
+        );
+    }
+
     public function testUnresolvedParameterThrows(): void
     {
         $this->expectException(HandlerResolverException::class);
