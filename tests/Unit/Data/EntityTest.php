@@ -1060,12 +1060,36 @@ final class EntityTest extends TestCase
         SkippedColumnsEntity::build($row);
     }
 
-    public function testANullColumnForANonNullableUnionLeavesTheDefault(): void
+    public function testANullColumnForANonNullableUnionIsATypeError(): void
     {
         $row = new stdClass();
         $row->union = null;
 
-        self::assertSame('d', SkippedColumnsEntity::build($row)->union);
+        try {
+            SkippedColumnsEntity::build($row);
+            self::fail('expected a TypeError');
+        } catch (\TypeError $e) {
+            self::assertSame(
+                'Cannot assign null to property Zephyrus\Tests\Unit\Data\SkippedColumnsEntity::$union of type string|int',
+                $e->getMessage()
+            );
+        }
+    }
+
+    public function testANullColumnForANonNullableIntersectionIsATypeError(): void
+    {
+        $row = new stdClass();
+        $row->bag = null;
+
+        try {
+            IntersectionTypeEntity::build($row);
+            self::fail('expected a TypeError');
+        } catch (\TypeError $e) {
+            self::assertSame(
+                'Cannot assign null to property Zephyrus\Tests\Unit\Data\IntersectionTypeEntity::$bag of type Countable&ArrayAccess',
+                $e->getMessage()
+            );
+        }
     }
 
     public function testANullColumnForANullableUnionIsAssigned(): void

@@ -109,10 +109,7 @@ abstract class Entity implements JsonSerializable
             $reflectionType = $property->getType();
 
             if ($value === null) {
-                if ($reflectionType === null || $reflectionType instanceof ReflectionNamedType
-                    || $reflectionType->allowsNull()) {
-                    $instance->$name = null;
-                }
+                $instance->$name = null;
                 continue;
             }
 
