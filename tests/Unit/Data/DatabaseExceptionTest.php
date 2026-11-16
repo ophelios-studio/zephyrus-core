@@ -259,4 +259,41 @@ final class DatabaseExceptionTest extends TestCase
         self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][0] ?? null);
         self::assertInstanceOf(\SensitiveParameterValue::class, $frame['args'][1] ?? null);
     }
+
+    public function testReturningRefusalsEndWithTheRollbackAdvice(): void
+    {
+        $hint = 'Inside a transaction, let this exception propagate so the row is rolled back.';
+
+        self::assertSame(
+            'The statement was executed, but it returned no column: RETURNING occurs only in a literal, comment or identifier. ' . $hint,
+            DatabaseException::returningYieldedNoColumn()->getMessage(),
+        );
+        self::assertSame(
+            'RETURNING must name exactly one column, found 3. The statement was executed. ' . $hint,
+            DatabaseException::returningNotSingleColumn(3)->getMessage(),
+        );
+    }
+
+    public function testATransactionStageFailureMessageIsWithheldAndPointsToTheDriverMessage(): void
+    {
+        $e = DatabaseException::transactionExecutionFailed('commit', $this->uniqueViolation());
+
+        self::assertSame(
+            'Transaction failed at commit [SQLSTATE 23505]: driver detail withheld, read driverMessage() to inspect it',
+            $e->getMessage(),
+        );
+    }
+
+    public function testAnAbortedTransactionExplainsHowToRecover(): void
+    {
+        $e = DatabaseException::transactionAborted('commit');
+
+        self::assertSame(
+            'Transaction failed at commit [SQLSTATE 25P02]: a statement inside it failed and its exception '
+            . 'was caught, so its writes were rolled back; let the exception propagate, or catch it around '
+            . 'a nested transaction()',
+            $e->getMessage(),
+        );
+        self::assertSame('25P02', $e->sqlState());
+    }
 }
