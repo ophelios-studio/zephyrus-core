@@ -12,6 +12,9 @@ use Zephyrus\Security\CsrfConfig;
 
 final class CsrfConfigTest extends TestCase
 {
+    private const string UNCLOSED_REFUSAL = "CSRF excluded path pattern at index 0 is not a valid regex: /unclosed "
+        . "(No ending delimiter '/' found; expected a shape such as #^/webhooks/#).";
+
     private function security(bool $csrfEnabled, array $csrfExceptions): SecurityConfig
     {
         return new SecurityConfig(
@@ -22,6 +25,32 @@ final class CsrfConfigTest extends TestCase
             allowedHosts: [],
             maxBodySize: 0,
         );
+    }
+
+    public function testAnUnclosedPatternIsRefusedWithTheFrameworkMessage(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ['/unclosed']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(self::UNCLOSED_REFUSAL, $e->getMessage());
+        }
+    }
+
+    public function testAnUnclosedPatternIsRefusedWithTheFrameworkMessageUnderAThrowingErrorHandler(): void
+    {
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        try {
+            new CsrfConfig(excludedPathPatterns: ['/unclosed']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(self::UNCLOSED_REFUSAL, $e->getMessage());
+        } finally {
+            restore_error_handler();
+        }
     }
 
     public function testFromSecurityConfigCopiesExclusionsAsRegexPatterns(): void

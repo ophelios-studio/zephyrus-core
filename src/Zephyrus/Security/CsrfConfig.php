@@ -8,6 +8,8 @@ use InvalidArgumentException;
 use Zephyrus\Core\Config\ConfigKeys;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
+use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\Exceptions\RegexCompilation;
 
 use function is_array;
 use function is_string;
@@ -176,8 +178,15 @@ final class CsrfConfig
                 throw new InvalidArgumentException(sprintf('%s must be a non-empty string such as %s.', $where, self::EXAMPLE_PATTERN));
             }
 
-            if (@preg_match($pattern, '') === false) {
-                throw new InvalidArgumentException(sprintf('%s is not a valid regex: %s (expected a shape such as %s).', $where, $pattern, self::EXAMPLE_PATTERN));
+            $compilationError = RegexCompilation::error($pattern);
+            if ($compilationError !== null) {
+                throw new InvalidArgumentException(sprintf(
+                    '%s is not a valid regex: %s (%s; expected a shape such as %s).',
+                    $where,
+                    $pattern,
+                    MessageValue::escapeControls($compilationError),
+                    self::EXAMPLE_PATTERN,
+                ));
             }
 
             self::assertPatternIsAnchored($pattern, $where);

@@ -472,12 +472,18 @@ final class CsrfMiddlewareTest extends TestCase
 
     public function testCsrfConfigFromArrayRejectsInvalidExcludedPathPatternRegex(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('not a valid regex');
-
-        CsrfConfig::fromArray([
-            'excludedPathPatterns' => ['#^/hooks/#', '#[invalid'],
-        ]);
+        try {
+            CsrfConfig::fromArray([
+                'excludedPathPatterns' => ['#^/hooks/#', '#[invalid'],
+            ]);
+            self::fail('expected a refusal');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index 1 is not a valid regex: #[invalid '
+                . "(No ending delimiter '#' found; expected a shape such as #^/webhooks/#).",
+                $e->getMessage(),
+            );
+        }
     }
 
     /**
