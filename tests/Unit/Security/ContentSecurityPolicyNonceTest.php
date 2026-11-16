@@ -338,6 +338,21 @@ final class ContentSecurityPolicyNonceTest extends TestCase
         self::assertStringContainsString('script-src', $warnings[0]);
     }
 
+    public function testTheWarningIsRaisedAfterAnUnsafeInlineDirectiveThatHasNeitherNonceNorHash(): void
+    {
+        App::setDebug(true);
+
+        $policy = ContentSecurityPolicy::create()
+            ->withDirective('style-src', ["'self'", "'unsafe-inline'"])
+            ->withDirective('script-src', ["'self'", "'unsafe-inline'", self::HASH_SOURCE]);
+
+        $warnings = $this->captureUserWarnings(fn () => $this->kernel(new ContentSecurityPolicyMiddleware($policy))
+            ->handle(Request::fromArray('GET', '/p')));
+
+        self::assertCount(1, $warnings);
+        self::assertStringContainsString('script-src', $warnings[0]);
+    }
+
     public function testASourceMerelyContainingAHashPrefixIsNotMistakenForAHash(): void
     {
         App::setDebug(true);
