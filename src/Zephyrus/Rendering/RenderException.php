@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Rendering;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -30,6 +31,20 @@ final class RenderException extends ZephyrusRuntimeException
         $exception->resolvedPath = $resolvedPath;
 
         return $exception;
+    }
+
+    /**
+     * A template name asked for a namespace that was never declared.
+     *
+     * @param list<string> $declared
+     */
+    public static function unknownTemplateNamespace(string $namespace, array $declared): self
+    {
+        return new self(sprintf(
+            'Template namespace %s is not declared (call LatteEngine::addNamespace() first). Declared namespaces: %s.',
+            MessageValue::quote($namespace),
+            $declared === [] ? 'none' : implode(', ', array_map(MessageValue::quote(...), $declared)),
+        ));
     }
 
     /**
