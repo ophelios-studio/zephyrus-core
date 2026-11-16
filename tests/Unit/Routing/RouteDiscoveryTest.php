@@ -30,7 +30,7 @@ final class RouteDiscoveryTest extends TestCase
         }
     }
 
-    public function testAControllerDirectoryHoldingNoClassIsRefusedWithItsNamespaceEscaped(): void
+    public function testAControllerDirectoryHoldingNoClassIsRefusedWithItsDirectoryEscaped(): void
     {
         mkdir($this->basePath . "/ctl\r\nFAKE");
         $config = RouterConfig::fromArray(['controllers' => ['App\Ctl' => "ctl\r\nFAKE"]]);
