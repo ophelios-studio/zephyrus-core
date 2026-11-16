@@ -487,6 +487,17 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     #[RunInSeparateProcess]
+    public function testStartingAnOverrideSessionNeverStartsPhpsOwnSession(): void
+    {
+        $session = new SessionManager([]);
+
+        $session->start(SessionConfig::fromArray([]));
+
+        self::assertSame(PHP_SESSION_NONE, session_status());
+        self::assertNotSame('', $session->id());
+    }
+
+    #[RunInSeparateProcess]
     public function testARefusedOperationLeavesNothingInPhpsErrorLog(): void
     {
         $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-session-log-');
