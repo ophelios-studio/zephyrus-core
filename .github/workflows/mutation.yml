@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     name: ${{ github.event_name == 'pull_request' && 'Infection (changed lines)' || 'Infection (full)' }}
+    outputs:
+      msi: ${{ steps.score.outputs.msi }}
 
     env:
       ZEPHYRUS_TEST_PGSQL_DSN: pgsql:host=127.0.0.1;port=5432;dbname=postgres;user=postgres;password=postgres
@@ -69,7 +71,12 @@ jobs:
 
       - name: Mutation testing
         if: github.event_name == 'push'
-        run: php vendor/bin/infection --threads=max --no-progress
+        run: php vendor/bin/infection --threads=max --no-progress --logger-summary-json=build/infection/summary.json
+
+      - name: Read the mutation score
+        id: score
+        if: github.event_name == 'push'
+        run: echo "msi=$(jq -r '.stats.msi' build/infection/summary.json)" >> "$GITHUB_OUTPUT"
 
       - name: Upload the mutation report
         if: ${{ !cancelled() }}
@@ -78,3 +85,25 @@ jobs:
           name: infection-report
           path: build/infection/infection.log
           if-no-files-found: ignore
+
+  stryker:
+    name: Stryker dashboard
+    needs: infection
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+
+    steps:
+      - name: Send the mutation score to the Stryker dashboard
+        shell: bash
+        env:
+          MSI: ${{ needs.infection.outputs.msi }}
+          STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+        run: |
+          [[ "$MSI" =~ ^[0-9]{1,3}(\.[0-9]+)?$ ]] || { echo 'The mutation score is not a number.'; exit 1; }
+          jq -n --argjson msi "$MSI" '{mutationScore: $msi}' \
+            | curl --fail-with-body --silent --show-error --max-time 30 --request PUT \
+              --header 'Content-Type: application/json' --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \
+              --data @- --write-out '\nHTTP %{http_code}\n' \
+              https://dashboard.stryker-mutator.io/api/reports/github.com/ophelios-studio/zephyrus-core/dev
