@@ -11,6 +11,10 @@ changes are listed first, each with the change to make in your code.
 
 ### Breaking changes
 
+#### Requirements
+
+- `latte/latte` must be `^3.1`, whose loader interface the template namespaces implement: Zephyrus no longer installs beside Latte 3.0. Run `composer update latte/latte`, and check a loader or extension of your own against the Latte 3.1 release notes.
+
 #### Core
 
 - A debug client allowlist entry `secret@address` is refused when the secret is shorter than 16 characters: `withDebugClientAllowlist()` and the debug configuration throw `InvalidArgumentException` (`Debug client allowlist entry 1 has a secret shorter than 16 characters before "@": the tracy-debug cookie is all that guards the debugger at that address. Use a longer random secret.`), where any non-empty secret was accepted. To migrate: generate a random secret of 16 characters or more (`bin2hex(random_bytes(16))`), use it in the entry and as the `tracy-debug` cookie.
