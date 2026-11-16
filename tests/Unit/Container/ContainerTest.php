@@ -48,6 +48,14 @@ final class ServiceWithMixedParams
     ) {}
 }
 
+final class ServiceWithTwoDependencies
+{
+    public function __construct(
+        public readonly SimpleService $first,
+        public readonly DependentService $second,
+    ) {}
+}
+
 interface SomeInterface {}
 
 abstract class AbstractService {}
@@ -481,6 +489,15 @@ final class ContainerTest extends TestCase
         self::assertInstanceOf(ServiceWithMixedParams::class, $service);
         self::assertSame(30, $service->timeout);
         self::assertSame('default', $service->label);
+    }
+
+    public function testAutoWireResolvesEveryClassDependencyOfAConstructor(): void
+    {
+        $service = $this->container->get(ServiceWithTwoDependencies::class);
+
+        self::assertInstanceOf(ServiceWithTwoDependencies::class, $service);
+        self::assertInstanceOf(SimpleService::class, $service->first);
+        self::assertInstanceOf(DependentService::class, $service->second);
     }
 
     public function testHasIsTrueForNonClassIdsRegisteredAsBindingOrSingleton(): void
