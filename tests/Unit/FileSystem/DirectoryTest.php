@@ -471,6 +471,90 @@ final class DirectoryTest extends TestCase
         self::assertDirectoryDoesNotExist($root);
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function directoryReaders(): array
+    {
+        return [
+            'files' => ['files'],
+            'directories' => ['directories'],
+            'glob' => ['glob'],
+            'recursiveGlob' => ['recursiveGlob'],
+            'size' => ['size'],
+            'isEmpty' => ['isEmpty'],
+        ];
+    }
+
+    #[DataProvider('directoryReaders')]
+    public function testReadingAMissingDirectoryIsRefusedWithItsPath(string $method): void
+    {
+        $path = $this->tempDir . '/missing';
+        $directory = new Directory($path);
+
+        try {
+            match ($method) {
+                'files' => $directory->files(),
+                'directories' => $directory->directories(),
+                'glob' => $directory->glob('*'),
+                'recursiveGlob' => $directory->recursiveGlob('*'),
+                'size' => $directory->size(),
+                'isEmpty' => $directory->isEmpty(),
+            };
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Path not found: "' . $path . '"', $e->getMessage());
+        }
+    }
+
+    #[DataProvider('creators')]
+    public function testADirectoryIsCreatedWithMode0755ByDefault(string $method): void
+    {
+        $path = $this->tempDir . '/modes';
+        $previous = umask(0);
+
+        try {
+            $this->createThrough($method, $path);
+        } finally {
+            umask($previous);
+        }
+
+        self::assertSame(0755, fileperms($path) & 0o777);
+    }
+
+    public function testDeleteIsNotRecursiveByDefault(): void
+    {
+        $path = $this->tempDir . '/kept';
+        mkdir($path);
+        file_put_contents($path . '/file.txt', 'content');
+
+        try {
+            (new Directory($path))->delete();
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Failed to delete directory: "' . $path . '"', $e->getMessage());
+        }
+        self::assertFileExists($path . '/file.txt');
+    }
+
+    public function testRecursiveGlobReturnsExactlyTheMatchingEntriesAtEveryDepth(): void
+    {
+        file_put_contents($this->tempDir . '/top.txt', 'top');
+        mkdir($this->tempDir . '/sub/deep', 0755, true);
+        file_put_contents($this->tempDir . '/sub/nested.txt', 'nested');
+        file_put_contents($this->tempDir . '/sub/deep/deep.txt', 'deep');
+        file_put_contents($this->tempDir . '/sub/skipped.php', 'skipped');
+
+        $matches = (new Directory($this->tempDir))->recursiveGlob('*.txt');
+        sort($matches);
+
+        self::assertSame([
+            $this->tempDir . '/sub/deep/deep.txt',
+            $this->tempDir . '/sub/nested.txt',
+            $this->tempDir . '/top.txt',
+        ], $matches);
+    }
+
     private function cleanDir(string $dir): void
     {
         if (!is_dir($dir)) {
