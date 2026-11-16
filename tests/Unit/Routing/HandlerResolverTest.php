@@ -324,6 +324,42 @@ final class LocaleAttributeMiddleware implements \Zephyrus\Http\MiddlewareInterf
 }
 
 /**
+ * Parameters that must each be resolved after an earlier one took a different binding path.
+ */
+final class BindingOrderController
+{
+    public function attributeThenRoute(string $locale, string $type): Response
+    {
+        return Response::json(['locale' => $locale, 'type' => $type]);
+    }
+
+    public function positionalThenRoute(string $anything, int $id): Response
+    {
+        return Response::json(['anything' => $anything, 'id' => $id]);
+    }
+
+    public function defaultThenAttribute(string $format = 'json', string $locale = 'en'): Response
+    {
+        return Response::json(['format' => $format, 'locale' => $locale]);
+    }
+
+    public function twoRenamed(string $first, string $second): Response
+    {
+        return Response::json(['first' => $first, 'second' => $second]);
+    }
+
+    public function single(string $only): Response
+    {
+        return Response::text($only);
+    }
+
+    public function floatOf(float $score): Response
+    {
+        return Response::text(get_debug_type($score));
+    }
+}
+
+/**
  * A Controller subclass that uses the base-class response helpers.
  */
 final class ExtendedHandlerController extends Controller
@@ -1238,5 +1274,134 @@ final class HandlerResolverTest extends TestCase
         self::assertSame(0, $instantiation->getCode());
         self::assertSame($reflection, $method->getPrevious());
         self::assertSame(0, $method->getCode());
+    }
+
+    public function testAParameterAfterOneBoundFromAnAttributeIsStillResolved(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/types/{type}',
+            BindingOrderController::class . '@attributeThenRoute',
+            ['type' => 'privacy'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/types/privacy')->withAttribute('locale', 'fr'),
+        );
+
+        self::assertSame('{"locale":"fr","type":"privacy"}', $response->body);
+    }
+
+    public function testAParameterAfterOneBoundByPositionIsStillResolved(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/items/{type}/{id}',
+            BindingOrderController::class . '@positionalThenRoute',
+            ['type' => 'book', 'id' => '7'],
+        );
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/items/book/7'));
+
+        self::assertSame('{"anything":"book","id":7}', $response->body);
+    }
+
+    public function testAParameterAfterOneLeftToItsDefaultIsStillResolved(): void
+    {
+        $match = $this->makeMatch('GET', '/files', BindingOrderController::class . '@defaultThenAttribute');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/files')->withAttribute('locale', 'fr'),
+        );
+
+        self::assertSame('{"format":"json","locale":"fr"}', $response->body);
+    }
+
+    public function testPlaceholdersCarriedOnlyByTheRequestAttributesStillFeedTheirPositions(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/pairs/{a}/{b}',
+            BindingOrderController::class . '@twoRenamed',
+            ['a' => 'A'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/pairs/A/B')->withAttribute('b', 'B'),
+        );
+
+        self::assertSame('{"first":"A","second":"B"}', $response->body);
+    }
+
+    public function testALiteralSegmentEndingWithABraceIsNotAPlaceholder(): void
+    {
+        $match = $this->makeMatch(
+            'GET',
+            '/abc}/{id}',
+            BindingOrderController::class . '@single',
+            ['id' => '7'],
+        );
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/abc}/7')->withAttribute('bc', 'forged'),
+        );
+
+        self::assertSame('7', $response->body);
+    }
+
+    public function testAnUntypedParameterReceivesANullAttributeAsIs(): void
+    {
+        $match = $this->makeMatch('GET', '/items/{value}', PlainHandlerController::class . '@withUntypedParam');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/items/x')->withAttribute('value', null),
+        );
+
+        self::assertSame('', $response->body);
+    }
+
+    public function testAnIntegerAttributeForAFloatParameterIsConvertedToAFloat(): void
+    {
+        $match = $this->makeMatch('GET', '/scores/{score}', BindingOrderController::class . '@floatOf', ['score' => 5]);
+
+        $response = $this->resolver->resolve($match, Request::fromArray('GET', '/scores/5'));
+
+        self::assertSame('float', $response->body);
+    }
+
+    public function testOnlyTheIntegersZeroAndOneAreBooleans(): void
+    {
+        $match = $this->makeMatch('GET', '/flags/{active}', PlainHandlerController::class . '@withBool');
+
+        try {
+            $this->resolver->resolve(
+                $match,
+                Request::fromArray('GET', '/flags/2')->withAttribute('active', 2),
+            );
+            self::fail('expected a refusal');
+        } catch (RouteParameterException $e) {
+            self::assertSame(
+                'Route parameter "$active" for "' . PlainHandlerController::class . '::withBool" could not be '
+                . 'resolved: expected bool, got int.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testADnfUnionStillCastsItsNamedMemberAfterAnIntersectionMember(): void
+    {
+        $match = $this->makeMatch('GET', '/bags/{bag}', PlainHandlerController::class . '@withIntOrIntersection');
+
+        $response = $this->resolver->resolve(
+            $match,
+            Request::fromArray('GET', '/bags/4')->withAttribute('bag', '4'),
+        );
+
+        self::assertSame('{"count":4}', $response->body);
     }
 }
