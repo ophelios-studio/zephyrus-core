@@ -16,7 +16,7 @@ final class HandlerResolverException extends ZephyrusRuntimeException
         return new self(
             sprintf(
                 'Handler "%s" is not a valid ClassName@method string.',
-                $handler,
+                MessageValue::escapeControls($handler),
             ),
         );
     }
@@ -29,7 +29,11 @@ final class HandlerResolverException extends ZephyrusRuntimeException
     public static function unresolvableClass(string $className, Throwable $previous): self
     {
         return new self(
-            sprintf('Cannot instantiate handler class "%s": %s', $className, $previous->getMessage()),
+            sprintf(
+                'Cannot instantiate handler class "%s": %s',
+                MessageValue::escapeControls($className),
+                $previous->getMessage(),
+            ),
             0,
             $previous,
         );
@@ -38,7 +42,11 @@ final class HandlerResolverException extends ZephyrusRuntimeException
     public static function unresolvableMethod(string $className, string $method, ReflectionException $previous): self
     {
         return new self(
-            sprintf('Method "%s::%s" does not exist.', $className, $method),
+            sprintf(
+                'Method "%s::%s" does not exist.',
+                MessageValue::escapeControls($className),
+                MessageValue::escapeControls($method),
+            ),
             0,
             $previous,
         );

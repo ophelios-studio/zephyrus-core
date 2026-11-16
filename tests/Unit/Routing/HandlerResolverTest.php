@@ -637,6 +637,34 @@ final class HandlerResolverTest extends TestCase
         $this->resolver->resolve($match, Request::fromArray('GET', '/'));
     }
 
+    public function testInvalidHandlerFormatRefusalEscapesControlCharactersOfTheHandler(): void
+    {
+        self::assertSame(
+            'Handler "bad\r\n\u001b" is not a valid ClassName@method string.',
+            HandlerResolverException::invalidHandlerFormat("bad\r\n\e")->getMessage(),
+        );
+    }
+
+    public function testUnresolvableClassRefusalEscapesControlCharactersOfTheClassName(): void
+    {
+        self::assertSame(
+            'Cannot instantiate handler class "No\r\n\u001bCtrl": x',
+            HandlerResolverException::unresolvableClass("No\r\n\eCtrl", new \RuntimeException('x'))->getMessage(),
+        );
+    }
+
+    public function testUnresolvableMethodRefusalEscapesControlCharactersOfTheClassAndMethod(): void
+    {
+        self::assertSame(
+            'Method "No\r\n\u001bCtrl::act\u001b" does not exist.',
+            HandlerResolverException::unresolvableMethod(
+                "No\r\n\eCtrl",
+                "act\e",
+                new \ReflectionException('x'),
+            )->getMessage(),
+        );
+    }
+
     public function testUnresolvedParameterThrows(): void
     {
         $this->expectException(HandlerResolverException::class);
