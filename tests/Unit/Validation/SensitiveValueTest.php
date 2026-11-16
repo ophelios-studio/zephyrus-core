@@ -6,9 +6,11 @@ namespace Zephyrus\Tests\Unit\Validation;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Controller\Controller;
 use Zephyrus\Validation\FormValidator;
 use Zephyrus\Validation\Rule;
 use Zephyrus\Validation\Rules;
+use Zephyrus\Validation\ValidationException;
 
 final class SensitiveValueTest extends TestCase
 {
@@ -37,6 +39,57 @@ final class SensitiveValueTest extends TestCase
         } finally {
             ini_set('zend.exception_ignore_args', $previous === false ? '' : $previous);
         }
+    }
+
+    public function testAControllerValidationKeepsTheInputOutOfTheTraceOfARefusal(): void
+    {
+        $form = new FormValidator(['password' => [Rules::minLength(100)]]);
+
+        $trace = self::traceOf(static fn (object $controller) => $controller->run($form, ['password' => self::SECRET]));
+
+        self::assertInstanceOf(ValidationException::class, $trace['exception']);
+        self::assertFalse(self::containsSecret($trace['trace']));
+    }
+
+    public function testAControllerValidationKeepsTheInputOutOfTheTraceOfARuleThatThrows(): void
+    {
+        $form = new FormValidator(['password' => [Rule::of(
+            static function (#[\SensitiveParameter] mixed $v): bool {
+                throw new \RuntimeException('rule failure');
+            },
+            'Invalid.',
+        )]]);
+
+        $trace = self::traceOf(static fn (object $controller) => $controller->run($form, ['password' => self::SECRET]));
+
+        self::assertInstanceOf(\RuntimeException::class, $trace['exception']);
+        self::assertFalse(self::containsSecret($trace['trace']));
+    }
+
+    /**
+     * @return array{exception: \Throwable, trace: array<int, mixed>}
+     */
+    private static function traceOf(\Closure $call): array
+    {
+        $controller = new class extends Controller {
+            /**
+             * @param array<string, mixed> $data
+             */
+            public function run(FormValidator $form, #[\SensitiveParameter] array $data): void
+            {
+                $this->validate($form, $data);
+            }
+        };
+
+        $previous = ini_set('zend.exception_ignore_args', '0');
+        try {
+            $call($controller);
+        } catch (\Throwable $e) {
+            return ['exception' => $e, 'trace' => $e->getTrace()];
+        } finally {
+            ini_set('zend.exception_ignore_args', $previous === false ? '' : $previous);
+        }
+        self::fail('expected an exception');
     }
 
     #[DataProvider('factories')]

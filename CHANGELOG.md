@@ -54,7 +54,7 @@ changes are listed first, each with the change to make in your code.
 - An existing file in a sticky directory such as `/tmp` that another user owns is no longer written in place: opening it that way escaped the Linux `fs.protected_regular` rule, which only guards an open that may create the file.
 - A PHP configuration file is loaded from its resolved path, so a directory on the `include_path` no longer replaces a relative path checked from the current directory.
 - `Response::withCookie()` hides the cookie value from the argument list of a stack trace (`#[\SensitiveParameter]`): a value is often a remember-me or session token.
-- The value under validation is hidden from the argument list of a stack trace (`#[\SensitiveParameter]`): `Rule::test()`, `FormValidator::validate()` and `validateOrFail()`, and every closure and helper of `Rules`, where an exception raised during a validation kept a password or token in `getTrace()` and `getTraceAsString()` (with `zend.exception_ignore_args` off). A closure given to `Rule::of()` is yours to mark.
+- The value under validation is hidden from the argument list of a stack trace (`#[\SensitiveParameter]`): `Rule::test()`, `FormValidator::validate()` and `validateOrFail()`, `Controller::validate()`, and every closure and helper of `Rules`, where an exception raised during a validation kept a password or token in `getTrace()` and `getTraceAsString()` (with `zend.exception_ignore_args` off). A closure given to `Rule::of()` is yours to mark.
 
 ### Added
 

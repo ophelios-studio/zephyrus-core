@@ -134,7 +134,7 @@ abstract class Controller implements ControllerLifecycleInterface
      *
      * @throws ValidationException when a field fails (a 422 unless caught)
      */
-    protected function validate(FormValidator $form, array $data): ErrorBag
+    protected function validate(FormValidator $form, #[\SensitiveParameter] array $data): ErrorBag
     {
         return $form->validateOrFail($data);
     }
