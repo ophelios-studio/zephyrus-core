@@ -407,6 +407,22 @@ final class RouteCollectionTest extends TestCase
         }
     }
 
+    public function testDuplicateRouteNameRefusalEscapesControlCharactersOfEveryName(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a', 'AController@show', name: "users\r\nshow"));
+        $collection->add(Route::define('GET', '/b', 'BController@show', name: "users\r\nshow"));
+        $collection->add(Route::define('GET', '/c', 'CController@show', name: "edit\e"));
+        $collection->add(Route::define('GET', '/d', 'DController@show', name: "edit\e"));
+
+        try {
+            $collection->assertNoDuplicateRouteNames();
+            self::fail('expected a refusal');
+        } catch (DuplicateRouteNameException $e) {
+            self::assertSame('Duplicate route names detected: edit\u001b, users\r\nshow', $e->getMessage());
+        }
+    }
+
     public function testRoutesByMethodFiltersCaseInsensitively(): void
     {
         $collection = new RouteCollection();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing\Exception;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 final class DuplicateRouteNameException extends ZephyrusRuntimeException
@@ -13,6 +14,8 @@ final class DuplicateRouteNameException extends ZephyrusRuntimeException
      */
     public static function forNames(array $names): self
     {
-        return new self(sprintf('Duplicate route names detected: %s', implode(', ', $names)));
+        $shown = array_map(static fn (int|string $name): string => MessageValue::escapeControls((string) $name), $names);
+
+        return new self(sprintf('Duplicate route names detected: %s', implode(', ', $shown)));
     }
 }
