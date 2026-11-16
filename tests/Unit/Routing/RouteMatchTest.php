@@ -20,4 +20,14 @@ final class RouteMatchTest extends TestCase
         self::assertSame('42', $match->parameter('id'));
         self::assertSame('fallback', $match->parameter('missing', 'fallback'));
     }
+
+    public function testAPresentParameterWinsOverTheDefault(): void
+    {
+        $match = new RouteMatch(
+            route: Route::define('GET', '/users/{id}', 'UserController@show'),
+            parameters: ['id' => '42'],
+        );
+
+        self::assertSame('42', $match->parameter('id', 'fallback'));
+    }
 }
