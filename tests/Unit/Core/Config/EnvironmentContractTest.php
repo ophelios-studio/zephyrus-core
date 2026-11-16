@@ -310,6 +310,77 @@ final class EnvironmentContractTest extends TestCase
         self::assertStringContainsString('- second reason', $text);
     }
 
+    public function testAnUnreadableVariableDoesNotHideTheRulesAfterIt(): void
+    {
+        $violations = EnvironmentContract::create()
+            ->requireSet('HTTP_CONTRACT_TEST_FIRST')
+            ->requireSet('CONTRACT_TEST_ABSENT')
+            ->violations();
+
+        self::assertCount(2, $violations);
+        self::assertSame('CONTRACT_TEST_ABSENT is not set.', $violations[1]);
+    }
+
+    public function testAServerOnlyVariableDoesNotHideTheRulesAfterIt(): void
+    {
+        $_SERVER['CONTRACT_TEST_FIRST_SERVER_ONLY'] = 'set';
+
+        try {
+            $violations = EnvironmentContract::create()
+                ->requireSet('CONTRACT_TEST_FIRST_SERVER_ONLY')
+                ->requireSet('CONTRACT_TEST_SECOND_ABSENT')
+                ->violations();
+        } finally {
+            unset($_SERVER['CONTRACT_TEST_FIRST_SERVER_ONLY']);
+        }
+
+        self::assertCount(2, $violations);
+        self::assertSame('CONTRACT_TEST_SECOND_ABSENT is not set.', $violations[1]);
+    }
+
+    public function testAVariableHeldByBothTheEnvironmentAndTheServerTableIsSatisfied(): void
+    {
+        $_ENV['CONTRACT_TEST_BOTH'] = 'set';
+        $_SERVER['CONTRACT_TEST_BOTH'] = 'set';
+
+        try {
+            $violations = EnvironmentContract::create()->requireSet('CONTRACT_TEST_BOTH')->violations();
+        } finally {
+            unset($_ENV['CONTRACT_TEST_BOTH'], $_SERVER['CONTRACT_TEST_BOTH']);
+        }
+
+        self::assertSame([], $violations);
+    }
+
+    public function testCanonicaliseReachesARuleThatFollowsAPlainRule(): void
+    {
+        unset($_ENV['CONTRACT_TEST_AFTER_PLAIN'], $_SERVER['CONTRACT_TEST_AFTER_PLAIN']);
+        putenv('CONTRACT_TEST_AFTER_PLAIN');
+
+        EnvironmentContract::create()
+            ->requireSet('CONTRACT_TEST_PLAIN_RULE')
+            ->requireOneOf('CONTRACT_TEST_AFTER_PLAIN', ['WEB'], canonicalise: true)
+            ->enforce(['CONTRACT_TEST_PLAIN_RULE' => 'x', 'CONTRACT_TEST_AFTER_PLAIN' => 'web']);
+
+        self::assertSame('WEB', $_ENV['CONTRACT_TEST_AFTER_PLAIN']);
+
+        unset($_ENV['CONTRACT_TEST_AFTER_PLAIN'], $_SERVER['CONTRACT_TEST_AFTER_PLAIN']);
+        putenv('CONTRACT_TEST_AFTER_PLAIN');
+    }
+
+    public function testRefusalResponseIsPlainText(): void
+    {
+        self::assertSame('text/plain; charset=utf-8', EnvironmentContract::refusalResponse()['headers']['Content-Type']);
+    }
+
+    public function testRefusalTextEndsWithANewline(): void
+    {
+        self::assertSame(
+            "Refusing to boot:\n  - first reason\n  - second reason\n",
+            EnvironmentContract::refusalText(['first reason', 'second reason']),
+        );
+    }
+
     // -- The real CLI path, in a subprocess -----------------------------------
 
     public function testCliEntryPointBootsWhenTheContractIsSatisfied(): void
