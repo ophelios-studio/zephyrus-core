@@ -377,7 +377,6 @@ final class RouteAttributeReaderTest extends TestCase
     {
         $refusal = RouteAttributeException::duplicateRouteName("No\r\nCtrl", "dup\r\nFAKE\e");
 
-        self::assertInstanceOf(RouteAttributeException::class, $refusal);
         self::assertSame(
             'Duplicate route name "dup\r\nFAKE\u001b" discovered while reading attributes on class "No\r\nCtrl".',
             $refusal->getMessage(),
@@ -388,9 +387,21 @@ final class RouteAttributeReaderTest extends TestCase
     {
         $refusal = RouteAttributeException::unresolvableClass("No\r\nCtrl", new \ReflectionException("bad\r\nFAKE"));
 
-        self::assertInstanceOf(RouteAttributeException::class, $refusal);
         self::assertSame(
             'Cannot read route attributes from class "No\r\nCtrl": bad\r\nFAKE',
+            $refusal->getMessage(),
+        );
+    }
+
+    public function testUnreadableRequirementRefusalEscapesControlCharactersOfTheClassNameAndThePreviousMessage(): void
+    {
+        $refusal = RouteAttributeException::unreadableRequirement(
+            "No\r\nCtrl\u{202E}",
+            new \InvalidArgumentException("bad\r\nFAKE\u{202E}"),
+        );
+
+        self::assertSame(
+            'Cannot read the #[RequiresEnv] of class "No\r\nCtrl\u202e": bad\r\nFAKE\u202e',
             $refusal->getMessage(),
         );
     }
@@ -399,7 +410,6 @@ final class RouteAttributeReaderTest extends TestCase
     {
         $refusal = RouteAttributeException::coexistingRouteNames("dup\r\nFAKE", "First\r\n@one", "Second\r\n@two");
 
-        self::assertInstanceOf(RouteAttributeException::class, $refusal);
         self::assertSame(
             'Route name "dup\r\nFAKE" is declared by First\r\n@one and by Second\r\n@two, which can be registered '
             . 'together: rename one, or require one environment variable at a different value on each with '

@@ -52,7 +52,11 @@ final class RouteAttributeException extends ZephyrusRuntimeException
     public static function unreadableRequirement(string $className, \InvalidArgumentException $previous): self
     {
         return new self(
-            sprintf('Cannot read the #[RequiresEnv] of class "%s": %s', $className, $previous->getMessage()),
+            sprintf(
+                'Cannot read the #[RequiresEnv] of class "%s": %s',
+                MessageValue::escapeControls($className),
+                MessageValue::escapeControls($previous->getMessage()),
+            ),
             previous: $previous,
         );
     }
