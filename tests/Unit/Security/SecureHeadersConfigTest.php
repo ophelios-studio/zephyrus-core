@@ -552,4 +552,26 @@ final class SecureHeadersConfigTest extends TestCase
         yield 'csp' => ['csp'];
         yield 'permissionsPolicy' => ['permissionsPolicy'];
     }
+
+    /**
+     * @return iterable<string, array{mixed, string}>
+     */
+    public static function nonTextHeaderValues(): iterable
+    {
+        yield 'null' => [null, "invalid value null: must be a string or a number; use '' to omit the header."];
+        yield 'false' => [false, "invalid value false: must be a string or a number; use '' to omit the header."];
+        yield 'true' => [true, 'invalid value true: must be a string or a number.'];
+        yield 'an array' => [['x'], 'invalid value array: must be a string or a number.'];
+    }
+
+    #[DataProvider('nonTextHeaderValues')]
+    public function testAHeaderValueThatIsNotTextIsRefusedWithTheWayToOmitIt(mixed $value, string $reason): void
+    {
+        try {
+            SecureHeadersConfig::fromArray(['csp' => $value]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame("Configuration section 'security.headers' field 'csp' has " . $reason, $e->getMessage());
+        }
+    }
 }

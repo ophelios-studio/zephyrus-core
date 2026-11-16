@@ -348,4 +348,13 @@ final class SecureHeadersMiddlewareTest extends TestCase
 
         self::assertArrayNotHasKey('content-security-policy', $response->headers);
     }
+
+    public function testAWhitespaceOnlyPolicyIsNotAContentSecurityPolicy(): void
+    {
+        $blank = new SecureHeadersConfig('SAMEORIGIN', 'nosniff', 'no-referrer', '0', 0, false, "  \t ", '');
+        $set = new SecureHeadersConfig('SAMEORIGIN', 'nosniff', 'no-referrer', '0', 0, false, "default-src 'none'", '');
+
+        self::assertFalse((new SecureHeadersMiddleware($blank))->hasContentSecurityPolicy());
+        self::assertTrue((new SecureHeadersMiddleware($set))->hasContentSecurityPolicy());
+    }
 }
