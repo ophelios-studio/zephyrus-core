@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Security;
 
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\SecurityConfig;
@@ -298,5 +299,64 @@ final class CsrfConfigTest extends TestCase
         $this->expectExceptionMessage("Configuration section 'csrf' field 'injectToken' has invalid value null: is not a boolean");
 
         CsrfConfig::fromArray(['injectToken' => null]);
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function patternsThatAreNotNonEmptyStrings(): iterable
+    {
+        yield 'empty string' => [''];
+        yield 'whitespace only' => ["  \t"];
+        yield 'an integer' => [123];
+        yield 'null' => [null];
+        yield 'an array' => [['#^/a/#']];
+    }
+
+    #[DataProvider('patternsThatAreNotNonEmptyStrings')]
+    public function testAnExclusionThatIsNotANonEmptyStringIsRefused(mixed $pattern): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: [$pattern]);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index 0 must be a non-empty string such as #^/webhooks/#.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testATwoCharacterPatternIsJudgedByItsBodyNotRefusedAsUndelimited(): void
+    {
+        try {
+            new CsrfConfig(excludedPathPatterns: ['##']);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(
+                'CSRF excluded path pattern at index 0 must start with "^" so it cannot match in the middle of a path: ## '
+                . '(expected a shape such as #^/webhooks/#).',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function bracketDelimitedPatterns(): iterable
+    {
+        yield 'parentheses' => ['(^/webhooks/)'];
+        yield 'square brackets' => ['[^/webhooks/]'];
+        yield 'braces' => ['{^/webhooks/}'];
+        yield 'angle brackets' => ['<^/webhooks/>'];
+    }
+
+    #[DataProvider('bracketDelimitedPatterns')]
+    public function testAnAnchoredPatternWithPairedDelimitersIsAccepted(string $pattern): void
+    {
+        $config = new CsrfConfig(excludedPathPatterns: [$pattern]);
+
+        self::assertSame([$pattern], $config->excludedPathPatterns);
     }
 }

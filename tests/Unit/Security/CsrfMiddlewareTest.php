@@ -596,6 +596,17 @@ final class CsrfMiddlewareTest extends TestCase
         self::assertSame([CsrfFailure::TokenMissing], $seen);
     }
 
+    public function testAnArrayTokenFieldCountsAsTokenMissing(): void
+    {
+        $seen    = [];
+        $mw      = $this->recordingMiddleware($seen);
+        $request = new Request('POST', 'https://example.com/submit', ['_csrf_token' => [self::VALID_TOKEN]]);
+
+        $mw->process($request, fn (Request $r): Response => Response::text('never'));
+
+        self::assertSame([CsrfFailure::TokenMissing], $seen);
+    }
+
     public function testEmptyTokenFieldCountsAsTokenMissing(): void
     {
         $seen    = [];
