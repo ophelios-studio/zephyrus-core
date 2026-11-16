@@ -16,7 +16,7 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
 
     public static function unknownMiddleware(string $name): self
     {
-        return new self(sprintf('Unknown route middleware: %s', $name));
+        return new self(sprintf('Unknown route middleware: %s', MessageValue::escapeControls($name)));
     }
 
     /**
@@ -94,7 +94,11 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     public static function resolutionFailed(string $name, Throwable $previous): self
     {
         return new self(
-            sprintf('Unable to resolve route middleware "%s": %s', $name, $previous->getMessage()),
+            sprintf(
+                'Unable to resolve route middleware "%s": %s',
+                MessageValue::escapeControls($name),
+                $previous->getMessage(),
+            ),
             0,
             $previous,
         );
@@ -107,7 +111,7 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
     {
         return new self(sprintf(
             'Circular middleware group reference detected: %s',
-            implode(' -> ', [...$stack, $name]),
+            implode(' -> ', array_map(MessageValue::escapeControls(...), [...$stack, $name])),
         ));
     }
 
@@ -116,8 +120,8 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
         return new self(sprintf(
             '%s cannot skip "%s": it does not exist or does not implement %s. '
             . 'Pass the class of a global middleware, for example SessionMiddleware::class',
-            $subject,
-            $class,
+            MessageValue::escapeControls($subject),
+            MessageValue::escapeControls($class),
             MiddlewareInterface::class,
         ));
     }
@@ -133,7 +137,15 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
             ? ' with no class that can be skipped'
             : sprintf(': list its classes instead (%s)', implode(', ', $classes));
 
-        return new self(sprintf('%s cannot skip "%s": "%s" is a middleware group%s', $subject, $name, $name, $hint));
+        $shown = MessageValue::escapeControls($name);
+
+        return new self(sprintf(
+            '%s cannot skip "%s": "%s" is a middleware group%s',
+            MessageValue::escapeControls($subject),
+            $shown,
+            $shown,
+            $hint,
+        ));
     }
 
     public static function excludedSecurityMiddleware(string $subject, string $class, string $security): self
@@ -141,7 +153,12 @@ final class RouteMiddlewareException extends ZephyrusRuntimeException
         $reason = $class === $security
             ? 'it is a framework security middleware'
             : sprintf('it would skip the framework security middleware %s', $security);
-        $message = sprintf('%s cannot skip "%s": %s', $subject, $class, $reason);
+        $message = sprintf(
+            '%s cannot skip "%s": %s',
+            MessageValue::escapeControls($subject),
+            MessageValue::escapeControls($class),
+            $reason,
+        );
 
         if ($security === CsrfMiddleware::class) {
             $message .= '. Exempt the path under security.csrf.exceptions instead';

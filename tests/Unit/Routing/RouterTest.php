@@ -331,6 +331,40 @@ final class RouterTest extends TestCase
         );
     }
 
+    public function testWithoutMiddlewareRefusalEscapesControlCharactersOfTheLastRoutePath(): void
+    {
+        self::assertSame(
+            'Route "GET /a\r\n\u001b" cannot skip "session": it does not exist or does not implement '
+            . 'Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->get("/a\r\n\e", 'PublicController@x')
+                ->withoutMiddleware('session')),
+        );
+    }
+
+    public function testGroupRefusalEscapesControlCharactersOfThePrefix(): void
+    {
+        self::assertSame(
+            'Group "/a\r\n\u001b" cannot skip "session": it does not exist or does not implement '
+            . 'Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            $this->refusalMessage(fn (): Router => (new Router())->group(
+                "/a\r\n\e",
+                fn (Router $scoped): Router => $scoped->get('/x', 'PublicController@x'),
+                excludedMiddlewares: ['session'],
+            )),
+        );
+    }
+
+    public function testResourceRefusalEscapesControlCharactersOfThePath(): void
+    {
+        self::assertSame(
+            'Resource "/u\r\n\u001b" cannot skip "session": it does not exist or does not implement '
+            . 'Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->resource("/u\r\n\e", 'UserController', excludedMiddlewares: ['session'])),
+        );
+    }
+
     public function testResourceNamesItselfWhenAnExcludedClassIsASecurityMiddleware(): void
     {
         self::assertSame(
@@ -394,6 +428,51 @@ final class RouterTest extends TestCase
             $this->refusalMessage(fn (): Router => (new Router())
                 ->middlewareGroup('web', [SessionMiddleware::class, CsrfMiddleware::class])
                 ->resource('/u', 'UserController', excludedMiddlewares: ['web'])),
+        );
+    }
+
+    public function testSkipRefusalEscapesControlCharactersOfTheGroupName(): void
+    {
+        self::assertSame(
+            'Route "GET /a" cannot skip "web\r\n\u001b": "web\r\n\u001b" is a middleware group with no class that can be skipped',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup("web\r\n\e", [CsrfMiddleware::class])
+                ->get('/a', 'PublicController@a')
+                ->withoutMiddleware("web\r\n\e")),
+        );
+    }
+
+    public function testSecurityMiddlewareSkipRefusalEscapesControlCharactersOfTheClass(): void
+    {
+        self::assertSame(
+            'Route "GET /a" cannot skip "Vendor\r\n\u001bMiddleware": it would skip the framework security middleware Zephyrus\Session\SessionMiddleware',
+            RouteMiddlewareException::excludedSecurityMiddleware(
+                'Route "GET /a"',
+                "Vendor\r\n\eMiddleware",
+                SessionMiddleware::class,
+            )->getMessage(),
+        );
+    }
+
+    public function testSkipRefusalEscapesControlCharactersOfTheUnknownClass(): void
+    {
+        self::assertSame(
+            'Route "GET /a" cannot skip "Vendor\r\n\u001bMiddleware": it does not exist or does not implement '
+            . 'Zephyrus\Http\MiddlewareInterface. Pass the class of a global middleware, for example SessionMiddleware::class',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->get('/a', 'PublicController@a')
+                ->withoutMiddleware("Vendor\r\n\eMiddleware")),
+        );
+    }
+
+    public function testCircularGroupRefusalEscapesControlCharactersOfTheGroupNames(): void
+    {
+        self::assertSame(
+            'Circular middleware group reference detected: a\r\n\u001b -> b -> a\r\n\u001b',
+            $this->refusalMessage(fn (): Router => (new Router())
+                ->middlewareGroup("a\r\n\e", ['b'])
+                ->middlewareGroup('b', ["a\r\n\e"])
+                ->get('/loop', 'LoopController@index', middlewares: ["a\r\n\e"])),
         );
     }
 

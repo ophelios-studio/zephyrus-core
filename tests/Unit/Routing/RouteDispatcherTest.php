@@ -98,6 +98,45 @@ final class RouteDispatcherTest extends TestCase
         self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
     }
 
+    public function testUnknownRouteMiddlewareRefusalEscapesControlCharactersOfTheName(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', middlewares: ["mis\r\nsing\e"]));
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+        );
+
+        try {
+            self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
+            self::fail('expected a refusal');
+        } catch (RouteMiddlewareException $e) {
+            self::assertSame('Unknown route middleware: mis\r\nsing\u001b', $e->getMessage());
+        }
+    }
+
+    public function testResolutionRefusalEscapesControlCharactersOfTheName(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users', 'UserController@index', middlewares: ["au\r\nth"]));
+
+        $dispatcher = new RouteDispatcher(
+            routes: $routes,
+            pipeline: new MiddlewarePipeline(),
+            resolver: static fn (RouteMatch $match, Request $request): Response => Response::text('ok'),
+            routeMiddlewareResolver: static fn (string $name): MiddlewareInterface => throw new \RuntimeException('container is down'),
+        );
+
+        try {
+            self::runRoute($dispatcher, Request::fromArray('GET', '/users'));
+            self::fail('expected a refusal');
+        } catch (RouteMiddlewareException $e) {
+            self::assertSame('Unable to resolve route middleware "au\r\nth": container is down', $e->getMessage());
+        }
+    }
+
     public function testDispatchWrapsUnexpectedResolverFailuresAsRouteMiddlewareException(): void
     {
         $routes = new RouteCollection();
