@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Data;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Data\DatabaseException;
 use Zephyrus\Data\PaginationRequest;
@@ -278,5 +279,109 @@ final class PaginationRequestTest extends TestCase
         $this->expectExceptionMessage('Max per-page must be >= 1');
 
         PaginationRequest::fromArray(['per_page' => 10], maxPerPage: 0);
+    }
+
+    public function testOffsetAcceptsTheLargestPageWhoseOffsetFitsAnInt(): void
+    {
+        $perPage = 100;
+        $largest = intdiv(PHP_INT_MAX, $perPage) + 1;
+
+        $request = new PaginationRequest(page: $largest, perPage: $perPage);
+
+        self::assertSame(intdiv(PHP_INT_MAX, $perPage) * $perPage, $request->offset());
+    }
+
+    public function testOffsetRejectsThePageRightAfterTheLargestOne(): void
+    {
+        $perPage = 100;
+        $request = new PaginationRequest(page: intdiv(PHP_INT_MAX, $perPage) + 2, perPage: $perPage);
+
+        try {
+            $request->offset();
+            self::fail('expected a refusal');
+        } catch (DatabaseException $e) {
+            self::assertSame(
+                'Query failed [pagination]: Page is too large for the requested per-page size',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testFromArrayAcceptsACeilingOfOne(): void
+    {
+        $request = PaginationRequest::fromArray(['per_page' => 50], maxPerPage: 1);
+
+        self::assertSame(1, $request->perPage);
+    }
+
+    public function testFromArrayRaisesANonPositivePerPageToOneWhenGivenACeiling(): void
+    {
+        self::assertSame(1, PaginationRequest::fromArray(['per_page' => 0], maxPerPage: 100)->perPage);
+        self::assertSame(1, PaginationRequest::fromArray(['per_page' => 1], maxPerPage: 100)->perPage);
+    }
+
+    public function testFromArrayWithBoundsAcceptsADefaultAndACeilingOfOne(): void
+    {
+        $request = PaginationRequest::fromArrayWithBounds([], defaultPerPage: 1, maxPerPage: 1);
+
+        self::assertSame(1, $request->perPage);
+    }
+
+    public function testFromArrayWithBoundsDefaultsToTwentyFiveWithACeilingOfOneHundred(): void
+    {
+        self::assertSame(25, PaginationRequest::fromArrayWithBounds([])->perPage);
+        self::assertSame(100, PaginationRequest::fromArrayWithBounds(['per_page' => 100])->perPage);
+        self::assertSame(100, PaginationRequest::fromArrayWithBounds(['per_page' => 101])->perPage);
+    }
+
+    public function testFromQueryDefaultsToTwentyFiveWithACeilingOfOneHundred(): void
+    {
+        self::assertSame(25, PaginationRequest::fromQuery([])->perPage);
+        self::assertSame(100, PaginationRequest::fromQuery(['per_page' => 100])->perPage);
+        self::assertSame(100, PaginationRequest::fromQuery(['per_page' => 101])->perPage);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, int>, int}>
+     */
+    public static function perPageKeyPrecedence(): iterable
+    {
+        yield 'per_page over perPage' => [['per_page' => 1, 'perPage' => 2], 1];
+        yield 'perPage over page_size' => [['perPage' => 2, 'page_size' => 3], 2];
+        yield 'page_size over pageSize' => [['page_size' => 3, 'pageSize' => 4], 3];
+        yield 'pageSize over limit' => [['pageSize' => 4, 'limit' => 5], 4];
+        yield 'per_page over limit' => [['per_page' => 1, 'limit' => 5], 1];
+    }
+
+    /**
+     * @param array<string, int> $query
+     */
+    #[DataProvider('perPageKeyPrecedence')]
+    public function testThePerPageKeysAreReadInAFixedOrder(array $query, int $expected): void
+    {
+        self::assertSame($expected, PaginationRequest::fromArray($query)->perPage);
+    }
+
+    public function testAnOffsetBelowZeroIsTreatedAsTheFirstPage(): void
+    {
+        $request = PaginationRequest::fromArray(['offset' => -5, 'per_page' => 1]);
+
+        self::assertSame(1, $request->page);
+    }
+
+    public function testAnOffsetIsDividedByTheRealPerPage(): void
+    {
+        self::assertSame(1, PaginationRequest::fromArray(['offset' => 0, 'per_page' => 1])->page);
+        self::assertSame(6, PaginationRequest::fromArray(['offset' => 5, 'per_page' => 1])->page);
+    }
+
+    public function testAnOffsetWithANonPositivePerPageIsRefusedAsAPaginationError(): void
+    {
+        try {
+            PaginationRequest::fromArray(['offset' => 10, 'per_page' => 0]);
+            self::fail('expected a refusal');
+        } catch (DatabaseException $e) {
+            self::assertSame('Query failed [pagination]: Per-page must be >= 1', $e->getMessage());
+        }
     }
 }

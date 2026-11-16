@@ -191,4 +191,26 @@ final class PaginatedResultTest extends TestCase
         self::assertStringContainsString('password_hash', $json);
         self::assertStringContainsString('argon2id', $json);
     }
+
+    public function testFirstAndLastPageBoundsAreInclusive(): void
+    {
+        $only = new PaginatedResult(items: [], total: 0, page: 1, perPage: 10, totalPages: 1, hasPrevious: false, hasNext: false);
+        $middle = new PaginatedResult(items: [], total: 30, page: 2, perPage: 10, totalPages: 3, hasPrevious: true, hasNext: true);
+        $last = new PaginatedResult(items: [], total: 30, page: 3, perPage: 10, totalPages: 3, hasPrevious: true, hasNext: false);
+
+        self::assertTrue($only->isFirstPage());
+        self::assertTrue($only->isLastPage());
+        self::assertFalse($middle->isFirstPage());
+        self::assertFalse($middle->isLastPage());
+        self::assertTrue($last->isLastPage());
+    }
+
+    public function testThePreviousPageNumberIsOneBelowAndNeverUnderOne(): void
+    {
+        $third = new PaginatedResult(items: [], total: 30, page: 3, perPage: 10, totalPages: 3, hasPrevious: true, hasNext: false);
+        $flagged = new PaginatedResult(items: [], total: 30, page: 1, perPage: 10, totalPages: 3, hasPrevious: true, hasNext: true);
+
+        self::assertSame(2, $third->previousPageNumber());
+        self::assertSame(1, $flagged->previousPageNumber());
+    }
 }
