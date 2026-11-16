@@ -2785,4 +2785,44 @@ final class RequestTest extends TestCase
         self::assertEquals($second, $request->file('b'));
         self::assertNull($request->file('bad'));
     }
+
+    public function testANumericForwardedHeaderIsReadAsAString(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_FORWARDED' => 9],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('http://example.com/', (string) $request->uri());
+    }
+
+    public function testTheHostHeaderBeatsTheServerName(): void
+    {
+        $request = self::globals(['HTTP_HOST' => 'app.example.test', 'SERVER_NAME' => 'internal.example.test']);
+
+        self::assertSame('http://app.example.test/', (string) $request->uri());
+    }
+
+    public function testADeclaredLengthWithAnEmbeddedSpaceIsNotTrustedAsANumber(): void
+    {
+        $request = self::globals(
+            ['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '99 5', 'CONTENT_TYPE' => 'application/json'],
+            rawBody: '{"a":1}',
+            maxBodySize: 10,
+        );
+
+        self::assertSame(['a' => 1], $request->body()->all());
+    }
+
+    public function testAnEmptyForwardedParameterDoesNotHideTheOnesAfterIt(): void
+    {
+        $request = self::globals(
+            ['REMOTE_ADDR' => '10.0.0.1', 'HTTP_FORWARDED' => 'host=;proto=https'],
+            trustedProxies: ['10.0.0.1'],
+            trustedHeaders: ['forwarded'],
+        );
+
+        self::assertSame('https://example.com/', (string) $request->uri());
+    }
 }
