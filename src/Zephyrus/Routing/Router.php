@@ -7,6 +7,7 @@ namespace Zephyrus\Routing;
 use Zephyrus\Core\Config\Configuration;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\Config\RouterConfig;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\FileSystem\SafePath;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
@@ -64,8 +65,8 @@ final class Router
 
         if (!str_starts_with($basePath, '/')) {
             throw new \InvalidArgumentException(sprintf(
-                'Router::fromConfiguration() needs the absolute path of the application root as basePath, not "%s".',
-                $basePath,
+                'Router::fromConfiguration() needs the absolute path of the application root as basePath, not %s.',
+                MessageValue::quote($basePath, 512, keepEnd: true),
             ));
         }
 

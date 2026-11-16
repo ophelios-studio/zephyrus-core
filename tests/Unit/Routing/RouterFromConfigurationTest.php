@@ -171,6 +171,20 @@ final class RouterFromConfigurationTest extends TestCase
         }
     }
 
+    public function testARelativeApplicationRootWithAControlCharacterIsRefusedEscaped(): void
+    {
+        try {
+            Router::fromConfiguration($this->configuration('development'), "app\r\nFAKE");
+            self::fail('expected a refusal');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                'Router::fromConfiguration() needs the absolute path of the application root as basePath, '
+                . 'not "app\r\nFAKE".',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     private function configuration(string $environment): Configuration
     {
         return Configuration::fromArray([
