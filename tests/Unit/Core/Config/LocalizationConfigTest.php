@@ -102,6 +102,33 @@ final class LocalizationConfigTest extends TestCase
         self::assertNull($config->localePath);
     }
 
+    public function testASingleSupportedLocaleStringIsReadAsOneEntry(): void
+    {
+        self::assertSame(['fr'], LocalizationConfig::fromArray(['supportedLocales' => ' FR '])->supportedLocales);
+    }
+
+    public function testSurroundingWhitespaceIsIgnoredOnTheTimezoneAndTheFormats(): void
+    {
+        $config = LocalizationConfig::fromArray([
+            'timezone' => ' America/Toronto ',
+            'dateFormat' => ' long ',
+            'timeFormat' => ' medium ',
+            'datetimeFormat' => ' full ',
+        ]);
+
+        self::assertSame('America/Toronto', $config->timezone);
+        self::assertSame('long', $config->dateFormat);
+        self::assertSame('medium', $config->timeFormat);
+        self::assertSame('full', $config->datetimeFormat);
+    }
+
+    public function testBlankLegacyLocalePathsAreSkippedAndTheRestTrimmed(): void
+    {
+        self::assertSame('/a', LocalizationConfig::fromArray(['jsonLocalePaths' => ['/a', '']])->localePath);
+        self::assertSame('/a', LocalizationConfig::fromArray(['jsonLocalePaths' => ['/a', '  ']])->localePath);
+        self::assertSame('/b', LocalizationConfig::fromArray(['jsonLocalePaths' => ['/a', ' /b ']])->localePath);
+    }
+
     public function testFromArrayEmptyCurrencyNormalizesToNull(): void
     {
         $config = LocalizationConfig::fromArray([
