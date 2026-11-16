@@ -1068,83 +1068,6 @@ final class DatabaseTest extends TestCase
             );
         }
     }
-}
-
-/**
- * A SQLite PDO that records every PDO::ATTR_EMULATE_PREPARES value it is given,
- * from the constructor option or from setAttribute().
- *
- * pdo_sqlite does not implement the attribute, so getAttribute() cannot read it back.
- */
-final class AttributeSpyPdo extends PDO
-{
-    public bool $constructorEmulateOption = false;
-
-    /** @var list<bool> ATTR_EMULATE_PREPARES values passed to setAttribute(), in order */
-    public array $emulateSettings = [];
-
-    /** @var list<int> every attribute key passed to setAttribute(), in order */
-    public array $attributeKeys = [];
-
-    /**
-     * @param array<int, mixed>|null $options
-     */
-    public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null)
-    {
-        $this->constructorEmulateOption = ($options[PDO::ATTR_EMULATE_PREPARES] ?? false) === true;
-
-        parent::__construct($dsn, $username, $password, $options);
-    }
-
-    public function setAttribute(int $attribute, mixed $value): bool
-    {
-        $this->attributeKeys[] = $attribute;
-
-        if ($attribute === PDO::ATTR_EMULATE_PREPARES) {
-            $this->emulateSettings[] = (bool) $value;
-
-            // Not forwarded: pdo_sqlite does not implement the attribute.
-            return true;
-        }
-
-        return parent::setAttribute($attribute, $value);
-    }
-}
-
-/**
- * A SQLite connection that reports the MySQL driver name, so the fallback to lastInsertId() can be reached.
- */
-final class OtherDriverPdo extends PDO
-{
-    public function lastInsertId(?string $name = null): string|false
-    {
-        return '42';
-    }
-
-    public function getAttribute(int $attribute): mixed
-    {
-        return $attribute === PDO::ATTR_DRIVER_NAME ? 'mysql' : parent::getAttribute($attribute);
-    }
-}
-
-/**
- * A SQLite connection that reports the PostgreSQL driver name, so its rules run without a server.
- */
-final class DriverNamePdo extends PDO
-{
-    public bool $lastInsertIdCalled = false;
-
-    public function lastInsertId(?string $name = null): string|false
-    {
-        $this->lastInsertIdCalled = true;
-
-        return '42';
-    }
-
-    public function getAttribute(int $attribute): mixed
-    {
-        return $attribute === PDO::ATTR_DRIVER_NAME ? 'pgsql' : parent::getAttribute($attribute);
-    }
 
     private function seedUsers(int $count): void
     {
@@ -1296,5 +1219,82 @@ final class DriverNamePdo extends PDO
     public function testSelectStringCastsANumericColumnToAString(): void
     {
         self::assertSame('42', $this->db->selectString('SELECT 42'));
+    }
+}
+
+/**
+ * A SQLite PDO that records every PDO::ATTR_EMULATE_PREPARES value it is given,
+ * from the constructor option or from setAttribute().
+ *
+ * pdo_sqlite does not implement the attribute, so getAttribute() cannot read it back.
+ */
+final class AttributeSpyPdo extends PDO
+{
+    public bool $constructorEmulateOption = false;
+
+    /** @var list<bool> ATTR_EMULATE_PREPARES values passed to setAttribute(), in order */
+    public array $emulateSettings = [];
+
+    /** @var list<int> every attribute key passed to setAttribute(), in order */
+    public array $attributeKeys = [];
+
+    /**
+     * @param array<int, mixed>|null $options
+     */
+    public function __construct(string $dsn, ?string $username = null, ?string $password = null, ?array $options = null)
+    {
+        $this->constructorEmulateOption = ($options[PDO::ATTR_EMULATE_PREPARES] ?? false) === true;
+
+        parent::__construct($dsn, $username, $password, $options);
+    }
+
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        $this->attributeKeys[] = $attribute;
+
+        if ($attribute === PDO::ATTR_EMULATE_PREPARES) {
+            $this->emulateSettings[] = (bool) $value;
+
+            // Not forwarded: pdo_sqlite does not implement the attribute.
+            return true;
+        }
+
+        return parent::setAttribute($attribute, $value);
+    }
+}
+
+/**
+ * A SQLite connection that reports the MySQL driver name, so the fallback to lastInsertId() can be reached.
+ */
+final class OtherDriverPdo extends PDO
+{
+    public function lastInsertId(?string $name = null): string|false
+    {
+        return '42';
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return $attribute === PDO::ATTR_DRIVER_NAME ? 'mysql' : parent::getAttribute($attribute);
+    }
+}
+
+/**
+ * A SQLite connection that reports the PostgreSQL driver name, so its rules run without a server.
+ */
+final class DriverNamePdo extends PDO
+{
+    public bool $lastInsertIdCalled = false;
+
+    public function lastInsertId(?string $name = null): string|false
+    {
+        $this->lastInsertIdCalled = true;
+
+        return '42';
+    }
+
+    public function getAttribute(int $attribute): mixed
+    {
+        return $attribute === PDO::ATTR_DRIVER_NAME ? 'pgsql' : parent::getAttribute($attribute);
     }
 }

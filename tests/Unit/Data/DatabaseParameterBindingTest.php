@@ -172,6 +172,7 @@ final class DatabaseParameterBindingTest extends TestCase
         yield 'negative integral float' => [-3.0, '-3'];
         yield 'negative zero' => [-0.0, '-0'];
         yield 'large integral float below 2^53' => [9007199254740991.0, '9007199254740991'];
+        yield 'integral float that a short exponent would also read back' => [1.0e15, '1000000000000000'];
         yield 'large float uses an exponent' => [1.0e25, '1.0e+25'];
         yield 'small float uses an exponent' => [1.5e-7, '1.5e-7'];
         yield 'largest double' => [PHP_FLOAT_MAX, '1.7976931348623157e+308'];
@@ -410,6 +411,82 @@ final class DatabaseParameterBindingTest extends TestCase
         self::assertInstanceOf(BindingSpyStatement::class, $stmt);
 
         return $stmt->bound;
+    }
+
+    public function testATextWithANulByteIsRefusedWithTheWholeAdvice(): void
+    {
+        try {
+            $this->db->selectValue('SELECT ?, ?', ['first', "a\0b"]);
+            self::fail('expected the value to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                'Query parameter #2 cannot be bound: text cannot hold a NUL byte. '
+                . 'Validate request input before querying; bind real binary data as a ' . Binary::class . '.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAValueWithNoSqlFormIsRefusedWithTheListOfBindableTypes(): void
+    {
+        try {
+            $this->db->selectValue('SELECT ?, ?', ['first', ['x']]);
+            self::fail('expected the value to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                'Query parameter #2 cannot be bound: array has no SQL form. Bind a scalar, null, a '
+                . 'DateTimeInterface, a BackedEnum, a Stringable, a Binary or a stream.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAnEmptyNameIsRefusedAsAPlaceholderKey(): void
+    {
+        try {
+            $this->db->selectValue('SELECT 1', ['' => 'x']);
+            self::fail('expected the key to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                "Query parameter key '' is not a placeholder: use a list for ? placeholders and names for named ones.",
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testANamedKeyStartingWithAMinusSignIsNotReadAsANegativePosition(): void
+    {
+        $this->expectException(DatabaseException::class);
+
+        $this->db->selectValue('SELECT 1', ['-x' => 'v']);
+    }
+
+    /**
+     * @return iterable<string, array{array<int, string>, string}>
+     */
+    public static function misnumberedLists(): iterable
+    {
+        yield 'a gap' => [[1 => 'a', 2 => 'b'], '1, 2'];
+        yield 'ten keys are all listed' => [array_combine(range(1, 10), array_fill(0, 10, 'v')), '1, 2, 3, 4, 5, 6, 7, 8, 9, 10'];
+        yield 'eleven keys are cut after ten' => [array_combine(range(1, 11), array_fill(0, 11, 'v')), '1, 2, 3, 4, 5, 6, 7, 8, 9, 10, ...'];
+        yield 'a negative position' => [[-1 => 'v'], '-1'];
+    }
+
+    /**
+     * @param array<int, string> $params
+     */
+    #[DataProvider('misnumberedLists')]
+    public function testAMisnumberedListNamesItsKeysInTheRefusal(array $params, string $listed): void
+    {
+        try {
+            $this->db->selectValue('SELECT ?', $params);
+            self::fail('expected the list to be refused');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(
+                "Positional query parameters must use the keys 0 to n-1 (got keys {$listed}): renumber them or use named parameters.",
+                $e->getMessage(),
+            );
+        }
     }
 }
 
