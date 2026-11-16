@@ -251,6 +251,55 @@ final class RouterConfigTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{int, string}>
+     */
+    public static function pathLengthsAroundTheQuotingLimit(): iterable
+    {
+        yield 'exactly at the limit, quoted whole' => [512, '"%s"'];
+        yield 'one byte over, cut to its last 512 bytes' => [513, '"...%s" (513 bytes)'];
+    }
+
+    #[DataProvider('pathLengthsAroundTheQuotingLimit')]
+    public function testAMissingControllerDirectoryIsQuotedFromItsEndWhenLong(int $length, string $quoted): void
+    {
+        $directory = '/x' . str_repeat('y', $length - 2);
+        $config = RouterConfig::fromArray(['controllers' => ['App\Controllers' => $directory]]);
+
+        try {
+            $config->controllerDirectories('/srv/app');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'router' field 'controllers' has invalid value "
+                . '"' . substr($directory, 0, 64) . '..." (' . $length . ' bytes): '
+                . sprintf($quoted, substr($directory, -512)) . ', the directory of App\\Controllers, is not a directory.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    #[DataProvider('pathLengthsAroundTheQuotingLimit')]
+    public function testAnApplicationRootIsQuotedFromItsEndWhenLongInTheCacheRefusal(int $length, string $quoted): void
+    {
+        $root = '/x' . str_repeat('y', $length - 2);
+        $config = RouterConfig::fromArray([
+            'controllers' => ['App\Controllers' => 'app/Controllers'],
+            'cache' => '../routes.php',
+        ]);
+
+        try {
+            $config->cachePath($root);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'router' field 'cache' has invalid value \"../routes.php\": it resolves outside "
+                . 'the application root ' . sprintf($quoted, substr($root, -512)) . '.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testAMissingControllerDirectoryIsRefused(): void
     {
         $config = RouterConfig::fromArray(['controllers' => ['App\Controllers' => 'app/Controllers']]);
