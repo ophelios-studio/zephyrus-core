@@ -50,6 +50,16 @@ final class FormatterExceptionTest extends TestCase
         self::assertSame('Invalid grouping separator: it is the decimal or monetary decimal sign of locale fr_CA.', $message);
     }
 
+    public function testUnsupportedDatePatternNamesThePresetsAndTheIcuPatternOption(): void
+    {
+        $message = FormatterException::unsupportedDatePattern('none', 'it formats nothing')->getMessage();
+
+        self::assertSame(
+            'Invalid date pattern "none": it formats nothing. Use short, medium, long, full or an ICU pattern.',
+            $message,
+        );
+    }
+
     public function testInvalidCurrencyCodeStatesTheExpectedShape(): void
     {
         $message = FormatterException::invalidCurrencyCode()->getMessage();

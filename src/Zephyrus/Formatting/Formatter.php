@@ -87,8 +87,8 @@ final class Formatter
      *                                             In a right-to-left locale, or inside right-to-left text, only `,` `.`
      *                                             U+00A0 and U+202F keep the groups in order; a space, U+2009, `'` or
      *                                             U+2019 can reverse them.
-     * @throws FormatterException if $locale contains a NUL byte, or the default currency or the grouping separator
-     *         is not accepted.
+     * @throws FormatterException if $locale contains a NUL byte, the default currency or the grouping separator
+     *         is not accepted, or a default date, time or datetime pattern is 'none' (in any case) or blank.
      */
     public function __construct(
         string $locale = 'en_US',
@@ -101,6 +101,9 @@ final class Formatter
         if (str_contains($locale, "\0")) {
             throw FormatterException::invalidLocale($locale);
         }
+        self::assertSupportedPattern($defaultDatePattern);
+        self::assertSupportedPattern($defaultTimePattern);
+        self::assertSupportedPattern($defaultDatetimePattern);
         $this->locale = $locale;
         $this->french = Locale::getPrimaryLanguage($locale) === 'fr';
         $this->plainNumberLocale = $this->french ? $locale : 'en';
@@ -260,39 +263,39 @@ final class Formatter
      * Formats a date. Without $pattern, the constructor default is used.
      *
      * @param mixed       $date    A DateTimeInterface, Unix timestamp (int), or date string.
-     * @param string|null $pattern Preset or ICU pattern. Null uses the configured default.
+     * @param string|null $pattern Preset or ICU pattern. Null or blank uses the configured default.
      *
-     * @throws FormatterException When the value is not a supported date or ICU cannot format it.
+     * @throws FormatterException When the value is not a supported date, the pattern is 'none' in any case or with surrounding spaces, or ICU cannot format it.
      */
     public function date(mixed $date, ?string $pattern = null): string
     {
-        return $this->formatDateTime($date, $pattern ?? $this->defaultDatePattern, dateOnly: true);
+        return $this->formatDateTime($date, $this->patternOrDefault($pattern, $this->defaultDatePattern), dateOnly: true);
     }
 
     /**
      * Formats a time. Without $pattern, the constructor default is used.
      *
      * @param mixed       $time    A DateTimeInterface, Unix timestamp (int), or time string.
-     * @param string|null $pattern Preset or ICU pattern. Null uses the configured default.
+     * @param string|null $pattern Preset or ICU pattern. Null or blank uses the configured default.
      *
-     * @throws FormatterException When the value is not a supported time or ICU cannot format it.
+     * @throws FormatterException When the value is not a supported time, the pattern is 'none' in any case or with surrounding spaces, or ICU cannot format it.
      */
     public function time(mixed $time, ?string $pattern = null): string
     {
-        return $this->formatDateTime($time, $pattern ?? $this->defaultTimePattern, timeOnly: true);
+        return $this->formatDateTime($time, $this->patternOrDefault($pattern, $this->defaultTimePattern), timeOnly: true);
     }
 
     /**
      * Formats a date and time. Without $pattern, the constructor default is used.
      *
      * @param mixed       $datetime A DateTimeInterface, Unix timestamp (int), or datetime string.
-     * @param string|null $pattern  Preset or ICU pattern. Null uses the configured default.
+     * @param string|null $pattern  Preset or ICU pattern. Null or blank uses the configured default.
      *
-     * @throws FormatterException When the value is not a supported datetime or ICU cannot format it.
+     * @throws FormatterException When the value is not a supported datetime, the pattern is 'none' in any case or with surrounding spaces, or ICU cannot format it.
      */
     public function datetime(mixed $datetime, ?string $pattern = null): string
     {
-        return $this->formatDateTime($datetime, $pattern ?? $this->defaultDatetimePattern);
+        return $this->formatDateTime($datetime, $this->patternOrDefault($pattern, $this->defaultDatetimePattern));
     }
 
     /**
@@ -698,21 +701,22 @@ final class Formatter
         bool $dateOnly = false,
         bool $timeOnly = false,
     ): string {
+        self::assertSupportedPattern($pattern);
         $timestamp = $this->toTimestamp($value);
 
         $presetMap = [
-            'none' => IntlDateFormatter::NONE,
             'short' => IntlDateFormatter::SHORT,
             'medium' => IntlDateFormatter::MEDIUM,
             'long' => IntlDateFormatter::LONG,
             'full' => IntlDateFormatter::FULL,
         ];
 
-        $isPreset = isset($presetMap[$pattern]);
+        $preset = strtolower(trim($pattern));
+        $isPreset = isset($presetMap[$preset]);
 
         if ($isPreset) {
-            $dateType = $timeOnly ? IntlDateFormatter::NONE : $presetMap[$pattern];
-            $timeType = $dateOnly ? IntlDateFormatter::NONE : $presetMap[$pattern];
+            $dateType = $timeOnly ? IntlDateFormatter::NONE : $presetMap[$preset];
+            $timeType = $dateOnly ? IntlDateFormatter::NONE : $presetMap[$preset];
             $fmt = new IntlDateFormatter($this->locale, $dateType, $timeType);
         } else {
             $fmt = new IntlDateFormatter(
@@ -729,6 +733,22 @@ final class Formatter
         }
 
         return $result;
+    }
+
+    private function patternOrDefault(?string $pattern, string $default): string
+    {
+        return $pattern === null || trim($pattern) === '' ? $default : $pattern;
+    }
+
+    /**
+     * @throws FormatterException When $pattern is 'none' in any case or blank.
+     */
+    private static function assertSupportedPattern(string $pattern): void
+    {
+        $refusal = FormatterInput::datePatternRefusal($pattern);
+        if ($refusal !== null) {
+            throw FormatterException::unsupportedDatePattern($pattern, $refusal);
+        }
     }
 
     /**

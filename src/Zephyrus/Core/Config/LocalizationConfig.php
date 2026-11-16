@@ -63,7 +63,7 @@ final readonly class LocalizationConfig
     /**
      * @param array<string, mixed> $values
      * @throws ConfigurationException if a key is unknown, a setting is written in two spellings, locale or timezone
-     *         is blank, or currency or grouping_separator is invalid.
+     *         is blank, or currency, grouping_separator, date_format, time_format or datetime_format is invalid.
      */
     public static function fromArray(array $values): self
     {
@@ -80,6 +80,10 @@ final readonly class LocalizationConfig
         $timeFormat = trim((string) ($keys->value('timeFormat') ?? 'short'));
         $datetimeFormat = trim((string) ($keys->value('datetimeFormat') ?? 'medium'));
         $groupingSeparator = self::resolveGroupingSeparator($keys->value('groupingSeparator'));
+
+        $dateFormat = self::resolveDatePattern('date_format', $dateFormat, 'medium');
+        $timeFormat = self::resolveDatePattern('time_format', $timeFormat, 'short');
+        $datetimeFormat = self::resolveDatePattern('datetime_format', $datetimeFormat, 'medium');
 
         if ($locale === '') {
             throw ConfigurationException::invalidValue('localization', 'locale', $locale, 'must be non-empty');
@@ -101,11 +105,35 @@ final readonly class LocalizationConfig
             localePath: $localePath,
             timezone: $timezone,
             currency: $currency,
-            dateFormat: $dateFormat !== '' ? $dateFormat : 'medium',
-            timeFormat: $timeFormat !== '' ? $timeFormat : 'short',
-            datetimeFormat: $datetimeFormat !== '' ? $datetimeFormat : 'medium',
+            dateFormat: $dateFormat,
+            timeFormat: $timeFormat,
+            datetimeFormat: $datetimeFormat,
             groupingSeparator: $groupingSeparator,
         );
+    }
+
+    /**
+     * Replace a blank pattern with its default, and refuse one that formats nothing.
+     *
+     * @throws ConfigurationException if the pattern is 'none' in any case.
+     */
+    private static function resolveDatePattern(string $field, string $pattern, string $default): string
+    {
+        if ($pattern === '') {
+            return $default;
+        }
+
+        $refusal = FormatterInput::datePatternRefusal($pattern);
+        if ($refusal !== null) {
+            throw ConfigurationException::invalidValue(
+                'localization',
+                $field,
+                $pattern,
+                $refusal . '. ' . FormatterInput::DATE_PATTERN_RULE,
+            );
+        }
+
+        return $pattern;
     }
 
     /**

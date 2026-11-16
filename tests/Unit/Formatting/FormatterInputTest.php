@@ -132,4 +132,24 @@ final class FormatterInputTest extends TestCase
         self::assertFalse(FormatterInput::isCurrencyCode(' CAD'));
         self::assertFalse(FormatterInput::isCurrencyCode("CAD\n"));
     }
+
+    public function testDatePatternRefusalNamesAPatternThatFormatsNothing(): void
+    {
+        foreach (['none', 'NONE', ' None '] as $pattern) {
+            self::assertSame('it formats nothing', FormatterInput::datePatternRefusal($pattern));
+        }
+    }
+
+    public function testDatePatternRefusalNamesABlankPattern(): void
+    {
+        self::assertSame('it is empty', FormatterInput::datePatternRefusal(''));
+        self::assertSame('it is empty', FormatterInput::datePatternRefusal(" \t"));
+    }
+
+    public function testDatePatternRefusalAcceptsPresetsAndIcuPatterns(): void
+    {
+        foreach (['short', 'Long', 'yyyy-MM-dd', 'nonexistent'] as $pattern) {
+            self::assertNull(FormatterInput::datePatternRefusal($pattern));
+        }
+    }
 }

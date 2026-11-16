@@ -197,6 +197,34 @@ final class LocalizationConfigTest extends TestCase
         self::assertSame('medium', $config->datetimeFormat);
     }
 
+    /**
+     * @return iterable<string, array{string, string, string}>
+     */
+    public static function refusedDatePatterns(): iterable
+    {
+        yield 'date_format in upper case' => ['date_format', 'NONE', 'NONE'];
+        yield 'time_format' => ['time_format', 'none', 'none'];
+        yield 'datetime_format with spaces' => ['datetime_format', ' none ', 'none'];
+    }
+
+    #[DataProvider('refusedDatePatterns')]
+    public function testFromArrayRefusesADatePatternThatFormatsNothingNamingTheKey(
+        string $key,
+        string $value,
+        string $shown,
+    ): void {
+        try {
+            LocalizationConfig::fromArray([$key => $value]);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                "Configuration section 'localization' field '$key' has invalid value \"$shown\": "
+                . 'it formats nothing. Use short, medium, long, full or an ICU pattern.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testFromArrayGroupingSeparatorIsNullByDefault(): void
     {
         self::assertNull(LocalizationConfig::fromArray([])->groupingSeparator);

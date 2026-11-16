@@ -1145,4 +1145,114 @@ final class FormatterTest extends TestCase
         // French ordinal: "1ᵉʳ" or "1er" depending on ICU version.
         self::assertStringStartsWith('1', $result);
     }
+
+    // ─── Refused 'none' date pattern ────────────────────────────────
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function formatMethodsTakingAPattern(): iterable
+    {
+        yield 'date' => ['date'];
+        yield 'time' => ['time'];
+        yield 'datetime' => ['datetime'];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function refusedNoneSpellings(): iterable
+    {
+        yield 'none' => ['none'];
+        yield 'upper case' => ['NONE'];
+        yield 'mixed case' => ['None'];
+        yield 'leading space' => [' none'];
+        yield 'trailing space' => ['None '];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function refusedDefaultParameters(): iterable
+    {
+        yield 'defaultDatePattern' => ['defaultDatePattern'];
+        yield 'defaultTimePattern' => ['defaultTimePattern'];
+        yield 'defaultDatetimePattern' => ['defaultDatetimePattern'];
+    }
+
+    private static function refusal(string $pattern, string $reason): string
+    {
+        return sprintf(
+            'Invalid date pattern "%s": %s. Use short, medium, long, full or an ICU pattern.',
+            $pattern,
+            $reason,
+        );
+    }
+
+    #[DataProvider('refusedNoneSpellings')]
+    public function testNonePatternIsRefusedInEverySpellingAtTheCall(string $pattern): void
+    {
+        $formatter = new Formatter('fr_CA');
+        $date = new DateTime('2026-03-10 14:30:45');
+
+        foreach (['date', 'time', 'datetime'] as $method) {
+            try {
+                $formatter->$method($date, $pattern);
+                self::fail('expected a refusal');
+            } catch (FormatterException $exception) {
+                self::assertSame(self::refusal($pattern, 'it formats nothing'), $exception->getMessage());
+            }
+        }
+    }
+
+    #[DataProvider('refusedNoneSpellings')]
+    public function testNonePatternIsRefusedInEverySpellingAsAConstructorDefault(string $pattern): void
+    {
+        foreach (['defaultDatePattern', 'defaultTimePattern', 'defaultDatetimePattern'] as $parameter) {
+            try {
+                new Formatter('en_US', ...[$parameter => $pattern]);
+                self::fail('expected a refusal');
+            } catch (FormatterException $exception) {
+                self::assertSame(self::refusal($pattern, 'it formats nothing'), $exception->getMessage());
+            }
+        }
+    }
+
+    #[DataProvider('refusedDefaultParameters')]
+    public function testABlankConstructorDefaultIsRefused(string $parameter): void
+    {
+        foreach (['', '  '] as $blank) {
+            try {
+                new Formatter('en_US', ...[$parameter => $blank]);
+                self::fail('expected a refusal');
+            } catch (FormatterException $exception) {
+                self::assertSame(self::refusal($blank, 'it is empty'), $exception->getMessage());
+            }
+        }
+    }
+
+    #[DataProvider('formatMethodsTakingAPattern')]
+    public function testPresetNamesAreMatchedWithoutCaseOrSurroundingSpaces(string $method): void
+    {
+        $formatter = new Formatter('en_US');
+        $date = new DateTime('2026-03-10 14:30:45');
+
+        self::assertSame($formatter->$method($date, 'short'), $formatter->$method($date, 'Short'));
+        self::assertSame($formatter->$method($date, 'long'), $formatter->$method($date, ' LONG '));
+    }
+
+    #[DataProvider('formatMethodsTakingAPattern')]
+    public function testABlankPatternMeansTheConstructorDefault(string $method): void
+    {
+        $formatter = new Formatter('en_US');
+        $date = new DateTime('2026-03-10 14:30:45');
+
+        self::assertSame($formatter->$method($date), $formatter->$method($date, ''));
+        self::assertSame($formatter->$method($date), $formatter->$method($date, '  '));
+    }
+
+    public function testAnIcuPatternThatIsNotAPresetIsNotTrimmed(): void
+    {
+        self::assertSame(' 2026 ', (new Formatter('en_US'))->date(new DateTime('2026-03-10'), ' yyyy '));
+    }
 }

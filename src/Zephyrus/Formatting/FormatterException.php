@@ -69,6 +69,16 @@ final class FormatterException extends ZephyrusRuntimeException
         ));
     }
 
+    public static function unsupportedDatePattern(string $pattern, string $reason): self
+    {
+        return new self(sprintf(
+            'Invalid date pattern %s: %s. %s.',
+            MessageValue::quote($pattern),
+            $reason,
+            FormatterInput::DATE_PATTERN_RULE,
+        ));
+    }
+
     public static function invalidLocale(string $locale): self
     {
         return new self(sprintf('Invalid locale: %s', MessageValue::quote($locale)));
