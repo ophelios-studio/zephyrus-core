@@ -459,4 +459,17 @@ final class FormValidatorTest extends TestCase
         $bag = $form->validate(['email' => 'a@b.com']);
         self::assertFalse($bag->hasErrors());
     }
+
+    public function testAnEmptyOptionalFieldDoesNotStopTheFieldsAfterIt(): void
+    {
+        $form = new FormValidator([
+            'nickname' => [Rules::minLength(3)],
+            'email' => [Rules::email()],
+        ]);
+
+        $bag = $form->validate(['nickname' => '', 'email' => 'not-valid']);
+
+        self::assertFalse($bag->hasErrorsFor('nickname'));
+        self::assertTrue($bag->hasErrorsFor('email'));
+    }
 }
