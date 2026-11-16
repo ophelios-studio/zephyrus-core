@@ -297,4 +297,46 @@ final class RouteSignatureTest extends TestCase
 
         new RouteSignature("  \t ");
     }
+
+    public function testANegativeClockSkewNeverShortensTheValidityWindow(): void
+    {
+        $signer = new RouteSignature('top-secret');
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 10, now: 1_700_000_000);
+
+        self::assertTrue($signer->verifyAt($signed, now: 1_700_000_010, clockSkewSeconds: -5));
+    }
+
+    public function testAnExpiredUrlWithoutASignatureIsReportedAsInvalidNotExpired(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        try {
+            $signer->assertValidAt('https://example.com/downloads/42?_exp=1700000060', now: 1_700_000_100);
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $e) {
+            self::assertSame('Invalid route signature', $e->getMessage());
+        }
+    }
+
+    public function testAnExpiryHoldingDigitsAmongOtherCharactersIsMalformed(): void
+    {
+        $signer = new RouteSignature('top-secret');
+        $signed = $signer->signTemporary('https://example.com/downloads/42', ttlSeconds: 60, now: 1_700_000_000);
+        $tampered = str_replace('_exp=1700000060', '_exp=x1700000060', $signed);
+
+        try {
+            $signer->assertValidAt($tampered, now: 1_700_000_001);
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $e) {
+            self::assertSame('Route signature expiry value is malformed', $e->getMessage());
+        }
+    }
+
+    public function testASignedUrlWithoutAFragmentCarriesNoFragmentMark(): void
+    {
+        $signer = new RouteSignature('top-secret');
+
+        self::assertStringNotContainsString('#', $signer->sign('https://example.com/users/42'));
+        self::assertStringNotContainsString('#', $signer->sign('https://example.com/users/42#'));
+    }
 }
