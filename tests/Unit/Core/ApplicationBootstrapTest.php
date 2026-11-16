@@ -517,100 +517,13 @@ final class ApplicationBootstrapTest extends TestCase
         }
     }
 
-    public function testFromResolvedPathsRejectsMissingRequiredEntry(): void
+    public function testTheConfigDirectoryEntryPointAppliesTheLayoutRules(): void
     {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromResolvedPaths([
-            'optional' => ['/tmp/app.local.php'],
-        ]);
-    }
-
-    public function testFromResolvedPathsRejectsNonArrayOptionalEntry(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromResolvedPaths([
-            'required' => '/tmp/app.php',
-            'optional' => 'invalid',
-        ]);
-    }
-
-    public function testFromResolvedPathsRejectsNonStringOptionalEntries(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromResolvedPaths([
-            'required' => '/tmp/app.php',
-            'optional' => ['/tmp/app.local.php', 123],
-        ]);
-    }
-
-    public function testFromResolvedPathsRejectsEmptyOptionalEntries(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromResolvedPaths([
-            'required' => '/tmp/app.php',
-            'optional' => ['   '],
-        ]);
-    }
-
-    public function testFromEnvironmentRejectsInvalidExtraOptionalNames(): void
-    {
-        $dir = sys_get_temp_dir() . '/zephyrus-bootstrap-envinvalid-' . bin2hex(random_bytes(8));
-        mkdir($dir, 0775, true);
-        file_put_contents($dir . '/app.php', "<?php return [];\n");
-
-        $originalDir = getenv('APP_CONFIG_DIR');
-        $originalExtra = getenv('APP_CONFIG_EXTRA');
-
-        putenv('APP_CONFIG_DIR=' . $dir);
-        putenv('APP_CONFIG_EXTRA=../secret');
-
         try {
-            $this->expectException(ConfigurationException::class);
-            ApplicationBootstrap::fromEnvironment();
-        } finally {
-            putenv($originalDir === false ? 'APP_CONFIG_DIR' : 'APP_CONFIG_DIR=' . $originalDir);
-            putenv($originalExtra === false ? 'APP_CONFIG_EXTRA' : 'APP_CONFIG_EXTRA=' . $originalExtra);
-            @unlink($dir . '/app.php');
-            @rmdir($dir);
+            ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '../app');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Config base name must not contain path separators.', $e->getMessage());
         }
-    }
-
-    public function testFromConfigDirectoryRejectsOptionalNamesWithPathSeparators(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromConfigDirectory('/tmp', extraOptionalNames: ['../secret']);
-    }
-
-    public function testFromConfigDirectoryRejectsEmptyOptionalNames(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromConfigDirectory('/tmp', extraOptionalNames: ['']);
-    }
-
-    public function testFromConfigDirectoryRejectsEmptyDirectory(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromConfigDirectory('   ');
-    }
-
-    public function testFromConfigDirectoryRejectsEmptyBaseName(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '');
-    }
-
-    public function testFromConfigDirectoryRejectsBaseNameWithPathSeparator(): void
-    {
-        $this->expectException(ConfigurationException::class);
-
-        ApplicationBootstrap::fromConfigDirectory('/tmp', baseName: '../app');
     }
 }

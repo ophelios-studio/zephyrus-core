@@ -40,26 +40,16 @@ final class ApplicationBootstrapEnvironmentNameTest extends TestCase
     #[DataProvider('environmentsWithSeparators')]
     public function testAnEnvironmentNameWithAPathSeparatorIsRefused(string $environment): void
     {
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('must not contain path separators');
-
-        ApplicationBootstrap::configPathsForDirectory(
-            configDir: '/tmp/zephyrus-config',
-            baseName: 'app',
-            environment: $environment,
-        );
-    }
-
-    public function testTheGuardMatchesTheOneAlreadyAppliedToTheBaseName(): void
-    {
-        // Same rule, same message shape, so the three inputs now read alike.
-        $this->expectException(ConfigurationException::class);
-        $this->expectExceptionMessage('must not contain path separators');
-
-        ApplicationBootstrap::configPathsForDirectory(
-            configDir: '/tmp/zephyrus-config',
-            baseName: 'app/../app',
-        );
+        try {
+            ApplicationBootstrap::configPathsForDirectory(
+                configDir: '/tmp/zephyrus-config',
+                baseName: 'app',
+                environment: $environment,
+            );
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Config environment name must not contain path separators.', $e->getMessage());
+        }
     }
 
     public function testAnOrdinaryEnvironmentNameStillResolves(): void

@@ -154,10 +154,10 @@
         },
         "FunctionCallRemoval": {
             "ignore": [
-                "Zephyrus\\Http\\SseEmitter::emit::41", // CLI records no headers and flush output
-                "Zephyrus\\Http\\SseEmitter::sendHeaders::51", // CLI records no headers and flush output
-                "Zephyrus\\Http\\SseEmitter::sendHeaders::52", // CLI records no headers and flush output
-                "Zephyrus\\Http\\SseEmitter::sendHeaders::53", // CLI records no headers and flush output
+                "Zephyrus\\Http\\SseEmitter::emit::41", // not killable in-process: the CLI SAPI drops header() and flush() is unobservable
+                "Zephyrus\\Http\\SseEmitter::sendHeaders::51", // not killable in-process: the CLI SAPI drops header() and flush() is unobservable
+                "Zephyrus\\Http\\SseEmitter::sendHeaders::52", // not killable in-process: the CLI SAPI drops header() and flush() is unobservable
+                "Zephyrus\\Http\\SseEmitter::sendHeaders::53", // not killable in-process: the CLI SAPI drops header() and flush() is unobservable
                 "Zephyrus\\Routing\\RouteCollection::uniqueMiddlewares::243", // keys of an already sorted histogram
             ],
         },
@@ -283,7 +283,7 @@
                 "Zephyrus\\Data\\Database::__construct::142", // exception mode is the PHP 8 default
                 "Zephyrus\\FileSystem\\Directory::delete::146", // only matters under open_basedir
                 "Zephyrus\\Formatting\\Formatter::percent::220", // ICU raises the max fraction digits
-                "Zephyrus\\Http\\SseEmitter::emit::37", // CLI records no headers and flush output
+                "Zephyrus\\Http\\SseEmitter::emit::37", // not killable in-process: the CLI SAPI drops header() and flush() is unobservable
                 "Zephyrus\\Rendering\\LatteEngine::configureCache::222", // loaded class hides the refresh in-process
                 "Zephyrus\\Rendering\\LatteEngine::configureCache::234", // loaded class hides the refresh in-process
             ],

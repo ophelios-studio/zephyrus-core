@@ -226,7 +226,7 @@ final class ApplicationBootstrapInputsTest extends TestCase
 
     public function testAnInvalidExtraNameIsReportedAtItsPositionAmongTheNonBlankNames(): void
     {
-        putenv('APP_CONFIG_DIR=/tmp/c');
+        putenv('APP_CONFIG_DIR=' . $this->newDir() . '/missing');
         putenv('APP_CONFIG_EXTRA=a,,../b');
 
         try {
