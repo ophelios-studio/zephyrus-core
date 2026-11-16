@@ -28,6 +28,69 @@ final class SecurityConfigTest extends TestCase
         self::assertNull($config->encryptionKey);
     }
 
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function refusedListEntries(): iterable
+    {
+        $field = "Configuration section 'security' field ";
+
+        yield 'a blank csrf exception' => [
+            ['csrfExceptions' => ['  ']],
+            $field . "'csrfExceptions[0]' has invalid value \"  \": each entry must be a non-empty string.",
+        ];
+        yield 'a trusted proxy that is not a string' => [
+            ['trustedProxies' => [5]],
+            $field . "'trustedProxies[0]' has invalid value 5: each entry must be a string.",
+        ];
+        yield 'two proxies in one item' => [
+            ['trustedProxies' => ['10.0.0.1,10.0.0.2']],
+            $field . "'trustedProxies[0]' has invalid value \"10.0.0.1,10.0.0.2\": not an IP address or a CIDR range "
+                . 'such as 10.0.0.0/8 or 2001:db8::/32; use list items, not a comma inside one item.',
+        ];
+        yield 'a blank trusted header' => [
+            ['trustedHeaders' => ['  ']],
+            $field . "'trustedHeaders[0]' has invalid value \"  \": each entry must be a non-empty string.",
+        ];
+        yield 'a trusted header that is not a string' => [
+            ['trustedHeaders' => [5]],
+            $field . "'trustedHeaders[0]' has invalid value 5: each entry must be a non-empty string.",
+        ];
+        yield 'an unknown trusted header' => [
+            ['trustedHeaders' => ['x-bogus']],
+            $field . "'trustedHeaders[0]' has invalid value \"x-bogus\": unknown forwarding header, supported names are "
+                . 'x-forwarded-for, x-forwarded-host, x-forwarded-proto, x-forwarded-port, forwarded, x-real-ip, '
+                . 'cf-connecting-ip, x-client-ip.',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    #[DataProvider('refusedListEntries')]
+    public function testAnInvalidListEntryIsRefusedWithTheWholeReason(array $values, string $message): void
+    {
+        try {
+            SecurityConfig::fromArray($values);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame($message, $e->getMessage());
+        }
+    }
+
+    public function testASingleStringIsReadAsOneListEntry(): void
+    {
+        $config = SecurityConfig::fromArray(['csrfExceptions' => '#^/hook$#', 'trustedHeaders' => 'X-Forwarded-For']);
+
+        self::assertSame(['#^/hook$#'], $config->csrfExceptions);
+        self::assertSame(['x-forwarded-for'], $config->trustedHeaders);
+    }
+
+    public function testTheEncryptionKeyIsTrimmed(): void
+    {
+        self::assertSame('abc', SecurityConfig::fromArray(['encryptionKey' => "  abc \n"])->encryptionKey);
+    }
+
     public function testAcceptsCamelCaseKeys(): void
     {
         $config = SecurityConfig::fromArray([
