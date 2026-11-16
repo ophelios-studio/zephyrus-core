@@ -302,6 +302,118 @@ final class RouteTest extends TestCase
         }
     }
 
+    public function testAQueryRefusalEscapesTheControlCharactersOfThePath(): void
+    {
+        try {
+            new Route('GET', "/a\r\nFAKE?b", 'HomeController@index');
+            self::fail('A path holding "?" must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route path "/a\\r\\nFAKE?b": the request path ends at "?", so this route would only match '
+                . '"/a\\r\\nFAKE"; declare "/a\\r\\nFAKE" and read the query string from the request',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAFragmentRefusalEscapesTheControlCharactersOfThePath(): void
+    {
+        try {
+            new Route('GET', "/a\x1b#b", 'HomeController@index');
+            self::fail('A path holding "#" must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route path "/a\\u001b#b": a browser never sends the "#" fragment, so this route would only '
+                . 'match "/a\\u001b"; declare "/a\\u001b"',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnOptionalPlaceholderRefusalEscapesTheControlCharactersOfThePath(): void
+    {
+        try {
+            new Route('GET', "/x\x1b/{id?}", 'HomeController@index');
+            self::fail('An optional placeholder must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route parameter name "id?" on route "/x\\u001b/{id?}": optional placeholders are not '
+                . 'supported; declare a second route without that segment',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnInvalidParameterNameRefusalEscapesTheNameAndThePath(): void
+    {
+        try {
+            new Route('GET', "/{a\r\nb}", 'HomeController@index');
+            self::fail('A placeholder whose name is not valid must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route parameter name "a\\r\\nb" on route "/{a\\r\\nb}": a placeholder must match '
+                . Route::PARAMETER_NAME_PATTERN,
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAReservedParameterNameRefusalEscapesTheControlCharactersOfThePath(): void
+    {
+        try {
+            new Route('GET', "/x\x1b/{client_ip}", 'HomeController@index');
+            self::fail('A reserved parameter name must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Reserved route parameter name "client_ip" on route "/x\\u001b/{client_ip}": the framework publishes '
+                . 'this attribute itself, so a URL segment must not be able to supply it',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testADuplicateParameterNameRefusalEscapesTheControlCharactersOfThePath(): void
+    {
+        try {
+            new Route('GET', "/a\x1b/{id}/{id}", 'HomeController@index');
+            self::fail('A duplicate parameter name must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Duplicate route parameter name "id" on route "/a\\u001b/{id}/{id}": only the last occurrence would '
+                . 'survive, so the earlier segment would match unchecked',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAMixedSegmentRefusalEscapesTheControlCharactersOfThePathAndSegment(): void
+    {
+        try {
+            new Route('GET', "/a/x\r\n{id}", 'HomeController@index');
+            self::fail('A segment mixing a placeholder with text must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route path "/a/x\\r\\n{id}": segment "x\\r\\n{id}" mixes a placeholder with text; capture the '
+                . 'whole segment with a constraint or give the placeholder its own segment',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAnInvalidPlaceholderRefusalEscapesTheControlCharactersOfThePathAndSegment(): void
+    {
+        try {
+            new Route('GET', "/{x\x1b{}", 'HomeController@index');
+            self::fail('A brace-wrapped segment that is not a placeholder must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route path "/{x\\u001b{}": segment "{x\\u001b{}" is not a valid placeholder; write {name}, '
+                . 'where name starts with a letter or underscore and holds only letters, digits and underscores',
+                $exception->getMessage(),
+            );
+        }
+    }
+
     public function testConstructorAcceptsPathsWithoutQueryOrFragmentMarks(): void
     {
         self::assertSame('/a', (new Route('GET', '/a', 'HomeController@index'))->path);

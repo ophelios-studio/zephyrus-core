@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Routing\Exception\RouteMiddlewareException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
@@ -169,20 +170,21 @@ final readonly class Route
         }
 
         $prefix = substr($path, 0, $position);
-        $prefix = str_starts_with($prefix, '/') ? $prefix : '/' . $prefix;
+        $prefix = MessageValue::escapeControls(str_starts_with($prefix, '/') ? $prefix : '/' . $prefix);
+        $shownPath = MessageValue::escapeControls($path);
 
         throw new RouteSignatureException($path[$position] === '?'
             ? sprintf(
                 'Invalid route path "%s": the request path ends at "?", so this route would only match "%s"; '
                 . 'declare "%s" and read the query string from the request',
-                $path,
+                $shownPath,
                 $prefix,
                 $prefix,
             )
             : sprintf(
                 'Invalid route path "%s": a browser never sends the "#" fragment, so this route would only match '
                 . '"%s"; declare "%s"',
-                $path,
+                $shownPath,
                 $prefix,
                 $prefix,
             ));
@@ -211,15 +213,15 @@ final readonly class Route
                     'Invalid route parameter name "%s" on route "%s": optional placeholders are not supported; '
                     . 'declare a second route without that segment',
                     $name,
-                    $path,
+                    MessageValue::escapeControls($path),
                 ));
             }
 
             if (preg_match(self::PARAMETER_NAME_PATTERN, $name) !== 1) {
                 throw new RouteSignatureException(sprintf(
                     'Invalid route parameter name "%s" on route "%s": a placeholder must match %s',
-                    $name,
-                    $path,
+                    MessageValue::escapeControls($name),
+                    MessageValue::escapeControls($path),
                     self::PARAMETER_NAME_PATTERN,
                 ));
             }
@@ -232,7 +234,7 @@ final readonly class Route
                     'Reserved route parameter name "%s" on route "%s": the framework publishes this '
                     . 'attribute itself, so a URL segment must not be able to supply it',
                     $name,
-                    $path,
+                    MessageValue::escapeControls($path),
                 ));
             }
 
@@ -241,7 +243,7 @@ final readonly class Route
                     'Duplicate route parameter name "%s" on route "%s": only the last occurrence would '
                     . 'survive, so the earlier segment would match unchecked',
                     $name,
-                    $path,
+                    MessageValue::escapeControls($path),
                 ));
             }
 
@@ -274,8 +276,8 @@ final readonly class Route
         throw new RouteSignatureException(sprintf(
             'Invalid route path "%s": segment "%s" mixes a placeholder with text; capture the whole '
             . 'segment with a constraint or give the placeholder its own segment',
-            $path,
-            $segment,
+            MessageValue::escapeControls($path),
+            MessageValue::escapeControls($segment),
         ));
     }
 
@@ -284,8 +286,8 @@ final readonly class Route
         return new RouteSignatureException(sprintf(
             'Invalid route path "%s": segment "%s" is not a valid placeholder; write {name}, where name '
             . 'starts with a letter or underscore and holds only letters, digits and underscores',
-            $path,
-            $segment,
+            MessageValue::escapeControls($path),
+            MessageValue::escapeControls($segment),
         ));
     }
 
