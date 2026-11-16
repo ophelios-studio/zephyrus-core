@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Session;
 
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
@@ -97,5 +99,16 @@ final class SessionMiddlewareTest extends TestCase
             self::assertSame(42, $session->get('user_id'));
             return Response::text('ok');
         });
+    }
+
+    #[RunInSeparateProcess]
+    public function testTheSessionIsExposedThroughTheAppFacadeWhileTheRequestIsHandled(): void
+    {
+        $session = new SessionManager([]);
+        $middleware = new SessionMiddleware(SessionConfig::fromArray([]), $session);
+
+        $middleware->process(new Request(method: 'GET', uri: '/'), static fn (): Response => Response::text('ok'));
+
+        self::assertSame($session, App::getSession());
     }
 }

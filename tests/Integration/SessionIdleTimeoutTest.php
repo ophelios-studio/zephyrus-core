@@ -68,11 +68,20 @@ final class SessionIdleTimeoutTest extends TestCase
     {
         $warnings = $this->debugWarningsDuringStart(new SessionManager(), ['idle_timeout' => 600]);
 
-        self::assertCount(1, $warnings);
-        self::assertStringContainsString('idle', $warnings[0]);
-        self::assertStringContainsString('files', $warnings[0]);
-        self::assertStringContainsString('DatabaseSessionHandler', $warnings[0]);
-        self::assertStringContainsString('remove idleTimeout and set session.gc_maxlifetime', $warnings[0]);
+        self::assertSame([
+            'The session idle timeout is only a garbage-collection age with the files save handler: nothing '
+            . 'checks how long a session sat idle when it is read, so it is resumed. Register '
+            . 'DatabaseSessionHandler through setHandler() to enforce it, or remove idleTimeout and set '
+            . 'session.gc_maxlifetime if a garbage-collection age is all you need.',
+        ], $warnings);
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartDoesNotWarnWhenAnotherSaveHandlerWasRegisteredOutsideTheManager(): void
+    {
+        session_set_save_handler(new \SessionHandler(), true);
+
+        self::assertSame([], $this->debugWarningsDuringStart(new SessionManager(), ['idle_timeout' => 600]));
     }
 
     #[RunInSeparateProcess]

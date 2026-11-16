@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Integration;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\SessionConfig;
@@ -369,6 +370,147 @@ final class SessionManagerRealSessionTest extends TestCase
         $session = new SessionManager();
 
         self::assertSame(['a' => 1, 'b' => 2], $session->all());
+    }
+
+    // ── cookie configuration ──────────────────────────────────────────────────
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function sameSiteProvider(): array
+    {
+        return ['strict' => ['Strict'], 'lax' => ['Lax'], 'none' => ['None']];
+    }
+
+    #[DataProvider('sameSiteProvider')]
+    #[RunInSeparateProcess]
+    public function testStartAppliesTheConfiguredSameSiteValue(string $sameSite): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray(['same_site' => $sameSite, 'secure' => true]));
+
+        self::assertSame($sameSite, session_get_cookie_params()['samesite']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testStartAppliesTheConfiguredCookieNameAndLifetime(): void
+    {
+        $session = new SessionManager();
+
+        $session->start(SessionConfig::fromArray(['name' => 'app_sid', 'lifetime' => 4321]));
+
+        self::assertSame('app_sid', session_name());
+        self::assertSame(4321, session_get_cookie_params()['lifetime']);
+    }
+
+    /**
+     * @return array<string, array{?string, bool}>
+     */
+    public static function serverHttpsProvider(): array
+    {
+        return [
+            'on'            => ['on', true],
+            'a port number' => ['1', true],
+            'off'           => ['off', false],
+            'uppercase off' => ['OFF', false],
+            'empty'         => ['', false],
+            'absent'        => [null, false],
+        ];
+    }
+
+    #[DataProvider('serverHttpsProvider')]
+    #[RunInSeparateProcess]
+    public function testTheSecureAttributeFollowsTheServerHttpsFlagWhenTheRequestSaysNothing(?string $https, bool $secure): void
+    {
+        unset($_SERVER['HTTPS']);
+        if ($https !== null) {
+            $_SERVER['HTTPS'] = $https;
+        }
+
+        (new SessionManager())->start(SessionConfig::fromArray([]));
+
+        self::assertSame($secure, session_get_cookie_params()['secure']);
+    }
+
+    #[RunInSeparateProcess]
+    public function testAHandlerSetInOverrideModeIsKeptButNeverRegisteredWithPhp(): void
+    {
+        $handler = new StrictModeAwareHandler();
+        $session = new SessionManager([]);
+
+        $session->setHandler($handler);
+
+        self::assertSame($handler, $session->handler());
+        self::assertSame('files', ini_get('session.save_handler'));
+    }
+
+    #[RunInSeparateProcess]
+    public function testDestroyingAnOverrideSessionIgnoresTheStateOfPhpsOwnSession(): void
+    {
+        session_id('0123456789abcdef0123456789abcdef');
+        $session = new SessionManager(['a' => 1]);
+
+        $session->destroy();
+
+        self::assertSame([], $session->all());
+        self::assertSame('', $session->id());
+    }
+
+    #[RunInSeparateProcess]
+    public function testPhpsWarningsAreSilencedDuringARefusedOperationAndTheCallersHandlerIsBack(): void
+    {
+        session_start();
+        $session = new SessionManager();
+        $seen = [];
+        set_error_handler(static function (int $severity, string $message) use (&$seen): bool {
+            $seen[] = $message;
+
+            return true;
+        });
+
+        try {
+            try {
+                $session->setHandler(new StrictModeAwareHandler());
+                self::fail('expected a refusal');
+            } catch (SessionException $e) {
+                self::assertSame([], $seen, 'the refusal must not leak the warning to the caller');
+                self::assertSame(0, $e->getPrevious()?->getCode());
+            }
+
+            trigger_error('afterwards', E_USER_WARNING);
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame(['afterwards'], $seen);
+    }
+
+    #[RunInSeparateProcess]
+    public function testRegenerateDeletesTheOldSessionByDefault(): void
+    {
+        $handler = new RecordingDestroyHandler();
+        $session = new SessionManager();
+        $session->setHandler($handler);
+        $session->start(SessionConfig::fromArray([]));
+
+        $session->regenerate();
+
+        self::assertSame(1, $handler->destroyCalls);
+    }
+
+    #[RunInSeparateProcess]
+    public function testOutputAlreadySentChainsAWarningWithoutACode(): void
+    {
+        $session = new SessionManager();
+        $this->sendOutputToBrowser();
+
+        try {
+            $session->start(SessionConfig::fromArray([]));
+            self::fail('expected a refusal');
+        } catch (SessionException $e) {
+            self::assertSame(0, $e->getPrevious()?->getCode());
+        }
     }
 
     // ── start refusal ─────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Session;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
@@ -281,6 +282,33 @@ final class SessionManagerTest extends TestCase
         $this->expectExceptionMessage('Session key must be a non-empty string.');
 
         $session->set('', 'value');
+    }
+
+    /**
+     * @return array<string, array{callable(SessionManager): mixed}>
+     */
+    public static function keyedAccessProvider(): array
+    {
+        return [
+            'get'    => [static fn (SessionManager $session): mixed => $session->get('')],
+            'has'    => [static fn (SessionManager $session): mixed => $session->has('')],
+            'remove' => [static fn (SessionManager $session): mixed => $session->remove('')],
+            'set'    => [static fn (SessionManager $session): mixed => $session->set('', 1)],
+        ];
+    }
+
+    /**
+     * @param callable(SessionManager): mixed $access
+     */
+    #[DataProvider('keyedAccessProvider')]
+    public function testEveryKeyedAccessRefusesAnEmptyKey(callable $access): void
+    {
+        try {
+            $access($this->makeSession(['a' => 1]));
+            self::fail('expected a refusal');
+        } catch (SessionException $e) {
+            self::assertSame('Session key must be a non-empty string. Got "".', $e->getMessage());
+        }
     }
 
     // ── writes without a started session ──────────────────────────────────────
