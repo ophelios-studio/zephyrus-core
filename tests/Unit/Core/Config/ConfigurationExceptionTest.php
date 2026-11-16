@@ -369,4 +369,39 @@ final class ConfigurationExceptionTest extends TestCase
         self::assertNull($phar->path());
         self::assertNull($data->path());
     }
+
+    public function testALocalPathGivenToTheStreamWrapperRefusalIsNamedGenerically(): void
+    {
+        self::assertSame(
+            'Configuration file must be a local path, not a stream wrapper URL (stream wrapper)',
+            ConfigurationException::streamWrapperUrl('/srv/app/config.yml')->getMessage(),
+        );
+    }
+
+    public function testTheUnwiredSecurityRefusalListsEverySettingAndTheWayOut(): void
+    {
+        self::assertSame(
+            "Configuration declares security settings that this application does not enforce as declared:\n"
+            . "  - forceHttps is not enforced as declared: add the middleware\n"
+            . "  - csrfEnabled is not enforced as declared: register Csrf\n"
+            . "\nApply the fix given for each setting, or acknowledge the gap explicitly with "
+            . 'ApplicationBuilder::withAcknowledgedSecurityKeys([...]) when the protection is provided '
+            . 'elsewhere (a reverse proxy, a wrapping middleware, the web server).',
+            ConfigurationException::unwiredSecurity([
+                'forceHttps' => 'add the middleware',
+                'csrfEnabled' => 'register Csrf',
+            ])->getMessage(),
+        );
+    }
+
+    public function testTheShadowedContentSecurityPolicyRefusalTellsTheOrderToUse(): void
+    {
+        self::assertSame(
+            'ContentSecurityPolicyMiddleware is registered before SecureHeadersMiddleware, whose csp is set, '
+            . 'so the policy registered first is never sent. Register ContentSecurityPolicyMiddleware after '
+            . 'SecureHeadersMiddleware, or leave SecureHeadersConfig::csp empty.',
+            ConfigurationException::shadowedContentSecurityPolicy()->getMessage(),
+        );
+    }
+
 }
