@@ -1272,6 +1272,14 @@ final class RouteCollectionTest extends TestCase
         self::assertSame('PageController@show', $collection->match('GET', '//a/b')->route->handler);
     }
 
+    public function testAStrictCollectionAlsoCollapsesALeadingRunOfSlashes(): void
+    {
+        $collection = new RouteCollection(false);
+        $collection->add(Route::define('GET', '/a/b', 'PageController@show'));
+
+        self::assertSame('PageController@show', $collection->match('GET', '//a/b')->route->handler);
+    }
+
     public function testATargetWithoutAPathResolvesToTheRoot(): void
     {
         $collection = new RouteCollection();
