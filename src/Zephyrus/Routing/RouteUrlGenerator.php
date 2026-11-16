@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Routing;
 
 use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\Exceptions\RegexCompilation;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\RouteSignatureException;
 use Zephyrus\Routing\Exception\RouteUrlGenerationException;
@@ -113,11 +114,13 @@ final readonly class RouteUrlGenerator
 
         // The D modifier must match RouteCollection::compileConstraintRegex(): without it "$" accepts a trailing newline.
         $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
-        if (@preg_match($regex, '') === false) {
+        $compilationError = RegexCompilation::error($regex);
+        if ($compilationError !== null) {
             throw RouteUrlGenerationException::constraintViolation(
                 $name,
                 $routeName,
-                'invalid constraint pattern ' . MessageValue::quote($pattern),
+                'invalid constraint pattern ' . MessageValue::quote($pattern) . ' ('
+                . MessageValue::escapeControls(preg_replace('/ at offset \d+$/', '', $compilationError) ?? $compilationError) . ')',
             );
         }
 

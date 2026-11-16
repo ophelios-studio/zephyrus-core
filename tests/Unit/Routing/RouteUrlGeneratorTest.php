@@ -14,6 +14,9 @@ use Zephyrus\Routing\RouteUrlGenerator;
 
 final class RouteUrlGeneratorTest extends TestCase
 {
+    private const string INVALID_CONSTRAINT_REFUSAL = 'Route parameter "id" for route "users.show": '
+        . 'invalid constraint pattern "[0-9+" (Compilation failed: missing terminating ] for character class)';
+
     public function testAGeneratorRefusesACollectionWithTwoRoutesOfTheSameName(): void
     {
         $routes = new RouteCollection();
@@ -260,10 +263,32 @@ final class RouteUrlGeneratorTest extends TestCase
 
         $generator = new RouteUrlGenerator($routes);
 
-        $this->expectException(RouteUrlGenerationException::class);
-        $this->expectExceptionMessage('Route parameter "id" for route "users.show": invalid constraint pattern "[0-9+"');
+        try {
+            $generator->generate('users.show', ['id' => '42']);
+            self::fail('expected a refusal');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame(self::INVALID_CONSTRAINT_REFUSAL, $e->getMessage());
+        }
+    }
 
-        $generator->generate('users.show', ['id' => '42']);
+    public function testAnInvalidConstraintPatternIsRefusedWithTheFrameworkMessageUnderAThrowingErrorHandler(): void
+    {
+        $routes = new RouteCollection();
+        $routes->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9+'], name: 'users.show'));
+        $generator = new RouteUrlGenerator($routes);
+
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        try {
+            $generator->generate('users.show', ['id' => '42']);
+            self::fail('expected a refusal');
+        } catch (RouteUrlGenerationException $e) {
+            self::assertSame(self::INVALID_CONSTRAINT_REFUSAL, $e->getMessage());
+        } finally {
+            restore_error_handler();
+        }
     }
 
     public function testAnInvalidConstraintPatternIsQuotedInItsRefusal(): void
@@ -276,7 +301,7 @@ final class RouteUrlGeneratorTest extends TestCase
             self::fail('An invalid constraint pattern must be refused.');
         } catch (RouteUrlGenerationException $e) {
             self::assertSame(
-                'Route parameter "id" for route "users.show": invalid constraint pattern "\\\\d+(\\u001b"',
+                'Route parameter "id" for route "users.show": invalid constraint pattern "\\\\d+(\\u001b" (Compilation failed: missing closing parenthesis)',
                 $e->getMessage(),
             );
         }

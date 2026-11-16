@@ -16,6 +16,9 @@ use Zephyrus\Routing\RouteCollection;
 
 final class RouteCollectionTest extends TestCase
 {
+    private const string INVALID_CONSTRAINT_REFUSAL = 'Invalid route constraint pattern for parameter "id" on route "/users/{id}": '
+        . '[0-9+ (Compilation failed: missing terminating ] for character class)';
+
     public function testMatchReturnsFirstRouteWithSameMethodAndPath(): void
     {
         $collection = new RouteCollection();
@@ -173,10 +176,31 @@ final class RouteCollectionTest extends TestCase
         $collection = new RouteCollection();
         $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9+']));
 
-        $this->expectException(RouteSignatureException::class);
-        $this->expectExceptionMessage('Invalid route constraint pattern for parameter "id" on route "/users/{id}"');
+        try {
+            $collection->match('GET', '/users/42');
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $e) {
+            self::assertSame(self::INVALID_CONSTRAINT_REFUSAL, $e->getMessage());
+        }
+    }
 
-        $collection->match('GET', '/users/42');
+    public function testAnInvalidConstraintPatternIsRefusedWithTheFrameworkMessageUnderAThrowingErrorHandler(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show', ['id' => '[0-9+']));
+
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        try {
+            $collection->match('GET', '/users/42');
+            self::fail('expected a refusal');
+        } catch (RouteSignatureException $e) {
+            self::assertSame(self::INVALID_CONSTRAINT_REFUSAL, $e->getMessage());
+        } finally {
+            restore_error_handler();
+        }
     }
 
     public function testWithLastRouteNameOnEmptyCollectionThrowsNamingTheRoute(): void

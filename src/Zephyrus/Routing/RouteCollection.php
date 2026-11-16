@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing;
 
+use Zephyrus\Exceptions\MessageValue;
+use Zephyrus\Exceptions\RegexCompilation;
 use Zephyrus\Http\Uri;
 use Zephyrus\Routing\Exception\DuplicateRouteNameException;
 use Zephyrus\Routing\Exception\MethodNotAllowedException;
@@ -771,12 +773,14 @@ final class RouteCollection
         // The D modifier is required: without it "$" accepts a trailing newline, so "123\n" satisfies "\d+".
         $regex = '~^(?:' . str_replace('~', '\\~', $pattern) . ')$~D';
 
-        if (@preg_match($regex, '') === false) {
+        $compilationError = RegexCompilation::error($regex);
+        if ($compilationError !== null) {
             throw new RouteSignatureException(sprintf(
-                'Invalid route constraint pattern for parameter "%s" on route "%s": %s',
+                'Invalid route constraint pattern for parameter "%s" on route "%s": %s (%s)',
                 $parameterName,
                 $route->path,
                 $pattern,
+                MessageValue::escapeControls(preg_replace('/ at offset \d+$/', '', $compilationError) ?? $compilationError),
             ));
         }
 
