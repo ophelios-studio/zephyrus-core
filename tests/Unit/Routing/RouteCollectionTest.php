@@ -1163,4 +1163,155 @@ final class RouteCollectionTest extends TestCase
         self::assertSame('/users/{id}', $match->route->path);
         self::assertSame('12:30', $match->parameters['id']);
     }
+
+    public function testHistogramsListParametersAndConstraintsInAlphabeticalOrder(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/teams/{team}/users/{id}', 'TeamUserController@show', [
+            'team' => '[a-z]+',
+            'id' => '\\d+',
+        ]));
+
+        self::assertSame(['id' => 1, 'team' => 1], $collection->parameterHistogram());
+        self::assertSame(['id' => 1, 'team' => 1], $collection->constrainedParameterHistogram());
+    }
+
+    public function testAllowedMethodsAreSortedWhateverTheRegistrationOrder(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('PUT', '/users/{id}', 'UserController@update'));
+        $collection->add(Route::define('GET', '/users/{id}', 'UserController@show'));
+
+        self::assertSame(['GET', 'HEAD', 'PUT'], $collection->allowedMethodsForPath('/users/42'));
+    }
+
+    public function testOnlyAGetRouteAddsTheHeadAlias(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('POST', '/users', 'UserController@store'));
+
+        self::assertSame(['POST'], $collection->allowedMethodsForPath('/users'));
+
+        try {
+            $collection->match('GET', '/users');
+            self::fail('expected a refusal');
+        } catch (MethodNotAllowedException $e) {
+            self::assertSame(['POST'], $e->allowedMethods);
+        }
+    }
+
+    public function testTheAllowedMethodsOfAMethodRefusalAreSortedWhateverTheRegistrationOrder(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('PUT', '/users', 'UserController@update'));
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+        $collection->add(Route::define('PUT', '/users', 'UserController@replace'));
+
+        try {
+            $collection->match('DELETE', '/users');
+            self::fail('expected a refusal');
+        } catch (MethodNotAllowedException $e) {
+            self::assertSame(['GET', 'HEAD', 'PUT'], $e->allowedMethods);
+            self::assertSame('Method not allowed for "/users". Allowed: GET, HEAD, PUT', $e->getMessage());
+        }
+    }
+
+    public function testALowercaseHeadRequestIsServedByAGetRoute(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/users', 'UserController@index'));
+
+        self::assertSame('UserController@index', $collection->match('head', '/users')->route->handler);
+    }
+
+    public function testTheFirstRefusedParameterOfARouteIsTheOneReported(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/{first}/{second}', 'PairController@show'));
+
+        try {
+            $collection->match('GET', '/%01/%02');
+            self::fail('expected a refusal');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('first', $e->refusedParameter());
+        }
+    }
+
+    public function testTheFirstRouteWithARefusedParameterIsTheOneReported(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a/{one}', 'PairController@one'));
+        $collection->add(Route::define('GET', '/{two}/{three}', 'PairController@two'));
+
+        try {
+            $collection->match('GET', '/a/%01');
+            self::fail('expected a refusal');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('one', $e->refusedParameter());
+        }
+    }
+
+    public function testTheRootPathHasNoSegmentForAParameterToCapture(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/{any}', 'CatchAllController@show', ['any' => '.*']));
+
+        try {
+            $collection->match('GET', '/');
+            self::fail('expected a refusal');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched "GET" "/"', $e->getMessage());
+        }
+    }
+
+    public function testALeadingRunOfSlashesIsCollapsedBeforeTheTargetIsParsed(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/a/b', 'PageController@show'));
+
+        self::assertSame('PageController@show', $collection->match('GET', '//a/b')->route->handler);
+    }
+
+    public function testATargetWithoutAPathResolvesToTheRoot(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/', 'HomeController@index'));
+
+        self::assertSame('HomeController@index', $collection->match('GET', '?a=1')->route->handler);
+        self::assertSame('HomeController@index', $collection->match('GET', '#top')->route->handler);
+    }
+
+    public function testAStrictCollectionReportsAnAuthorityTargetWithOnlySlashesAsTheRoot(): void
+    {
+        $collection = new RouteCollection(false);
+
+        try {
+            $collection->match('GET', 'http://example.com//');
+            self::fail('expected a refusal');
+        } catch (RouteNotFoundException $e) {
+            self::assertSame('No route matched "GET" "/"', $e->getMessage());
+        }
+    }
+
+    #[DataProvider('literalSegmentsWithAStrayBrace')]
+    public function testASegmentWithAStrayBraceIsMatchedLiterally(string $routePath, string $other): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', $routePath, 'PageController@show'));
+
+        self::assertSame('PageController@show', $collection->match('GET', $routePath)->route->handler);
+
+        $this->expectException(RouteNotFoundException::class);
+
+        $collection->match('GET', $other);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function literalSegmentsWithAStrayBrace(): iterable
+    {
+        yield 'closing brace only' => ['/abc}', '/zzzz'];
+        yield 'opening brace only' => ['/{abc', '/zzzz'];
+    }
 }
