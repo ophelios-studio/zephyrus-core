@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Security;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -289,5 +290,106 @@ final class MaxBodySizeMiddlewareTest extends TestCase
 
         self::assertSame(0, $calls);
         self::assertSame('HANDLED', $response->body);
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     */
+    private static function statusOfParsedBody(array $body, ?string $contentType, string $rawBody = ''): int
+    {
+        $headers = ['Content-Length' => '10'];
+        if ($contentType !== null) {
+            $headers['Content-Type'] = $contentType;
+        }
+        $request = Request::fromArray('POST', '/upload', body: $body, headers: $headers, rawBody: $rawBody);
+
+        return (new MaxBodySizeMiddleware(1_000))
+            ->process($request, static fn (): Response => Response::text('HANDLED'))
+            ->status;
+    }
+
+    public function testATextFieldOfAMultipartBodyCountsAgainstTheBudget(): void
+    {
+        $status = self::statusOfParsedBody(['note' => str_repeat('a', 2_000)], 'multipart/form-data; boundary=x');
+
+        self::assertSame(413, $status);
+    }
+
+    public function testTheKeysOfANestedMultipartFieldCountAgainstTheBudget(): void
+    {
+        $body = ['list' => [str_repeat('k', 600) => 'v', str_repeat('j', 600) => ['w' => 'x']]];
+
+        self::assertSame(413, self::statusOfParsedBody($body, 'multipart/form-data; boundary=x'));
+    }
+
+    public function testAMultipartBodyWithinTheBudgetPasses(): void
+    {
+        $status = self::statusOfParsedBody(['a' => 'xx', 'n' => ['k' => 'yyy']], 'multipart/form-data; boundary=x');
+
+        self::assertSame(200, $status);
+    }
+
+    public function testMultipartFieldsOfExactlyTheLimitPassAndOneByteMoreIsRefused(): void
+    {
+        $contentType = 'multipart/form-data; boundary=x';
+
+        self::assertSame(200, self::statusOfParsedBody(['k' => str_repeat('a', 999)], $contentType));
+        self::assertSame(413, self::statusOfParsedBody(['k' => str_repeat('a', 1_000)], $contentType));
+    }
+
+    public function testAnObjectFieldOfAParsedBodyIsNotMeasuredAsText(): void
+    {
+        $status = self::statusOfParsedBody(['o' => new \stdClass()], 'multipart/form-data; boundary=x');
+
+        self::assertSame(200, $status);
+    }
+
+    public function testAUrlEncodedBodyIsMeasuredByItsRawBodyAndNotByItsFields(): void
+    {
+        $status = self::statusOfParsedBody(
+            ['note' => str_repeat('a', 600), 'other' => str_repeat('b', 600)],
+            'application/x-www-form-urlencoded',
+            str_repeat('x', 600),
+        );
+
+        self::assertSame(200, $status);
+    }
+
+    /** @return iterable<string, array{?string}> */
+    public static function contentTypesPhpParsesOrIgnores(): iterable
+    {
+        yield 'mixed case with spaces' => [' Multipart/Form-Data ; boundary=x'];
+        yield 'comma before the boundary' => ['multipart/form-data,boundary=x'];
+        yield 'space before the boundary' => ['multipart/form-data boundary=x'];
+        yield 'a second type before the boundary' => ['multipart/form-data, text/plain; boundary=x'];
+        yield 'no content type at all' => [null];
+    }
+
+    #[DataProvider('contentTypesPhpParsesOrIgnores')]
+    public function testTheFieldsOfAnEmptyRawBodyCountWhateverTheContentType(?string $contentType): void
+    {
+        self::assertSame(413, self::statusOfParsedBody(['note' => str_repeat('a', 2_000)], $contentType));
+    }
+
+    public function testTwoUploadsOfTheMaximumIntegerSaturateTheMeasure(): void
+    {
+        $seen = [];
+        $middleware = new MaxBodySizeMiddleware(
+            1_000,
+            onFailure: static function (Request $request, BodyTooLarge $refusal) use (&$seen): ?Response {
+                $seen[] = $refusal->bytes;
+
+                return null;
+            },
+        );
+        $request = Request::fromArray('POST', '/upload', files: [
+            'a' => new FileUpload('a.bin', 'application/octet-stream', '/tmp/phpA', PHP_INT_MAX),
+            'b' => new FileUpload('b.bin', 'application/octet-stream', '/tmp/phpB', PHP_INT_MAX),
+        ]);
+
+        $response = $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(413, $response->status);
+        self::assertSame([PHP_INT_MAX], $seen);
     }
 }

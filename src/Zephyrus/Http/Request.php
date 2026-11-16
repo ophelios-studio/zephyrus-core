@@ -152,7 +152,9 @@ final readonly class Request
      *                                                   MaxBodySizeMiddleware. A body over it, or a declared
      *                                                   Content-Length over it (raw body then empty), is left
      *                                                   unparsed (empty, malformed, even on a GET) and the
-     *                                                   middleware refuses it.
+     *                                                   middleware refuses it. A multipart body, which PHP parses
+     *                                                   itself, stays parsed unless its declared length is over
+     *                                                   the limit: the middleware's measure refuses it either way.
      *
      * @throws \InvalidArgumentException When $maxBodySize is negative.
      */

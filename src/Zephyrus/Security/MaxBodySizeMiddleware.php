@@ -10,6 +10,8 @@ use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
+use function is_array;
+use function is_scalar;
 use function is_string;
 use function preg_match;
 use function str_contains;
@@ -27,10 +29,12 @@ use function trim;
  *
  *   $builder->withMiddleware(new MaxBodySizeMiddleware($config->security->maxBodySize));
  *
- * The measure is the largest of a valid declared Content-Length, the raw body and the total size of the
- * uploaded files, so a false length cannot hide a raw body or an uploaded file. A multipart body is already
- * parsed into $_FILES and $_POST and its raw body is empty, which is why the files are counted; its text
- * fields are not measured, and only post_max_size bounds them.
+ * The measure is the largest of a valid declared Content-Length, the raw body and the parsed-body measure, so a false
+ * length cannot hide a raw body or an uploaded file. PHP parses a multipart body into $_FILES and $_POST itself and its
+ * raw body is then empty: an empty raw body means the keys and values of the text fields count, whatever the
+ * Content-Type, and the uploaded files always count. A urlencoded or JSON body keeps its raw body, measured as is.
+ * Without a Content-Length, a body PHP parsed is measured on what PHP kept (a repeated name keeps its last value).
+ * post_max_size still bounds what PHP reads into memory. A total past PHP_INT_MAX counts as PHP_INT_MAX.
  * Pass the same limit to Request::fromGlobals(maxBodySize: ...) so the body is never read past it:
  * without it the whole body is in memory before this middleware runs.
  * This is a budget, not a defence: a client that lies about its length is stopped by the web
@@ -102,7 +106,7 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
         return Response::json(['error' => $this->message], 413);
     }
 
-    /** The largest of the declared length, the raw body and the uploaded files; null when all are absent. */
+    /** The largest of the declared length, the raw body and the parsed-body measure; null when all are absent. */
     private function bodyBytes(Request $request): ?int
     {
         $declared = $request->headers()->get('content-length');
@@ -115,9 +119,37 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
             }
         }
 
-        $measured = max($declaredBytes ?? 0, strlen($request->body()->raw()), $this->uploadedBytes($request));
+        $measured = max($declaredBytes ?? 0, strlen($request->body()->raw()), $this->parsedBodyBytes($request));
 
         return $measured === 0 ? $declaredBytes : $measured;
+    }
+
+    /** The uploaded files, plus the keys and values of the text fields when the raw body is empty. */
+    private function parsedBodyBytes(Request $request): int
+    {
+        $total = $this->uploadedBytes($request);
+
+        if ($request->body()->raw() === '') {
+            $total = self::add($total, $this->fieldBytes($request->body()->all()));
+        }
+
+        return $total;
+    }
+
+    /** @param array<array-key, mixed> $fields */
+    private function fieldBytes(array $fields): int
+    {
+        $total = 0;
+
+        foreach ($fields as $key => $value) {
+            $total = self::add($total, strlen((string) $key));
+            $total = self::add(
+                $total,
+                is_array($value) ? $this->fieldBytes($value) : (is_scalar($value) ? strlen((string) $value) : 0),
+            );
+        }
+
+        return $total;
     }
 
     private function uploadedBytes(Request $request): int
@@ -126,10 +158,15 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
 
         foreach ($request->files as $entry) {
             foreach (is_array($entry) ? $entry : [$entry] as $file) {
-                $total += $file->sizeBytes;
+                $total = self::add($total, $file->sizeBytes);
             }
         }
 
         return $total;
+    }
+
+    private static function add(int $total, int $bytes): int
+    {
+        return $bytes > PHP_INT_MAX - $total ? PHP_INT_MAX : $total + $bytes;
     }
 }
