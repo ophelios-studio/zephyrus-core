@@ -71,7 +71,7 @@ final class EnvironmentVariable
         }
 
         // Without local_only, mod_php returns the per-request header table.
-        $fromProcess = getenv($name, local_only: true);
+        $fromProcess = getenv($name, true);
 
         return $fromProcess === false ? null : $fromProcess;
     }
