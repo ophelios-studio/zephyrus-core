@@ -121,6 +121,8 @@ final class ConfigSectionStrictValuesTest extends TestCase
 
         self::assertSame(8080, $section->getInt('port'));
         self::assertSame(3.5, $section->getFloat('rate'));
+        self::assertSame(1.5, $this->section(['rate' => 1.5])->getFloat('rate'));
+        self::assertSame(2.0, $this->section(['rate' => 2])->getFloat('rate'));
     }
 
     public function testAnAbsentKeyReadsAsTheZeroValueOfItsType(): void

@@ -1394,7 +1394,7 @@ final class ConfigurationTest extends TestCase
     public function testAnIntegerTopLevelKeyIsIgnored(): void
     {
         /** @phpstan-ignore argument.type */
-        $config = Configuration::fromArray(['application' => ['debug' => true], 7 => 'x']);
+        $config = Configuration::fromArray(['application' => ['debug' => true], 7 => 'x'], ['mailer' => MailerConfig::class]);
 
         self::assertTrue($config->application->debug);
     }
@@ -1441,6 +1441,16 @@ final class ConfigurationTest extends TestCase
             self::fail('expected a refusal');
         } catch (ConfigurationException $e) {
             self::assertSame('Configuration file path at index 1 must be a string.', $e->getMessage());
+        }
+    }
+
+    public function testABlankPathIsRefusedByTheYamlLoaders(): void
+    {
+        try {
+            Configuration::fromYamlFiles(['  ']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file path at index 0 must not be empty.', $e->getMessage());
         }
     }
 

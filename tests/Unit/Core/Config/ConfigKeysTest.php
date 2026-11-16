@@ -297,7 +297,7 @@ final class ConfigKeysTest extends TestCase
 
     public function testATieBetweenSpellingsGoesToTheOneWrittenMostLikeTheKeyIgnoringCase(): void
     {
-        self::assertSame('ab_c', ConfigKeys::closest('AB_C', ['abc', 'ab_c']));
+        self::assertSame('a', ConfigKeys::closest('A_', ['_a', 'a']));
     }
 
     public function testAShortKeyIsNotMatchedToAnUnrelatedShortSpelling(): void
