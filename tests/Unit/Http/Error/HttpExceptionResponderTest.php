@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Http\Error;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Zephyrus\Http\Error\HttpExceptionResponder;
@@ -187,6 +188,64 @@ final class HttpExceptionResponderTest extends TestCase
         self::assertSame(404, $response->status);
         self::assertSame('application/json; charset=utf-8', $response->headers['content-type']);
         self::assertSame('{"error":{"status":404,"message":"Not Found"}}', $response->body);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function acceptNegotiationProvider(): array
+    {
+        $text = 'text/plain; charset=utf-8';
+        $json = 'application/json; charset=utf-8';
+        $problem = 'application/problem+json; charset=utf-8';
+
+        return [
+            'upper case media type' => ['Application/JSON', $json],
+            'parameter padded with spaces' => ['application/json; q=0', $text],
+            'spaces around the slash' => ['application / json', $json],
+            'extra segment stays in the subtype' => ['application/json/extra', $text],
+            'empty list member' => ['text/html,,application/json', $json],
+            'unusable range before a usable one' => ['text/html, application/json', $json],
+            'refused range before a usable one' => ['application/json;q=0, application/problem+json', $problem],
+            'json subtype under another type' => ['text/json', $text],
+            'problem json subtype under another type' => ['text/problem+json', $text],
+            'explicit json beats problem json on a tie' => ['application/json, application/problem+json', $json],
+            'explicit json beats problem json on a tie, reversed' => ['application/problem+json, application/json', $json],
+            'problem json beats a wildcard on a tie' => ['application/*+json, application/problem+json', $problem],
+            'problem json beats a wildcard on a tie, reversed' => ['application/problem+json, application/*+json', $problem],
+            'higher weighted problem json' => ['application/problem+json;q=0.9, application/json;q=0.5', $problem],
+            'higher weighted json' => ['application/problem+json;q=0.5, application/json;q=0.9', $json],
+            'vendor json beats problem json on a tie' => ['application/vnd.api+json, application/problem+json', $json],
+            'vendor json after problem json on a tie' => ['application/problem+json, application/vnd.api+json', $json],
+            'lower weighted wildcard keeps the problem json weight' => ['application/problem+json, application/*+json;q=0.5', $problem],
+            'lower weighted problem json keeps the wildcard weight' => ['application/*+json, application/problem+json;q=0.5', $json],
+            'lower weighted problem json after a heavier one' => ['application/problem+json, application/problem+json;q=0.5', $problem],
+            'problem json refused' => ['application/problem+json;q=0', $text],
+            'wildcard json refused' => ['application/*+json;q=0', $text],
+        ];
+    }
+
+    #[DataProvider('acceptNegotiationProvider')]
+    public function testTheErrorFormatFollowsTheAcceptHeader(string $accept, string $contentType): void
+    {
+        $request = Request::fromArray(method: 'GET', uri: '/missing', headers: ['Accept' => $accept]);
+
+        $response = (new HttpExceptionResponder())
+            ->toResponse(new RouteNotFoundException('No route matched GET /missing'), $request);
+
+        self::assertSame($contentType, $response->headers['content-type']);
+    }
+
+    public function testACustomHandlerAfterANonMatchingOneIsStillFound(): void
+    {
+        $responder = (new HttpExceptionResponder())
+            ->registerHandler(\InvalidArgumentException::class, static fn (): Response => Response::text('other', 400))
+            ->registerHandler(RuntimeException::class, static fn (): Response => Response::text('runtime', 503));
+
+        $response = $responder->toResponse(new RuntimeException('boom'));
+
+        self::assertSame(503, $response->status);
+        self::assertSame('runtime', $response->body);
     }
 
     // ---- ValidationException → 422 -----------------------------------------
