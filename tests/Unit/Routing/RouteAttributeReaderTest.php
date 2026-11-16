@@ -235,6 +235,41 @@ class RootTrailingSlashController
     public function test(): void {}
 }
 
+#[RootAttribute('/admin')]
+class RootedIndexController
+{
+    #[GetAttribute('/')]
+    public function index(): void {}
+}
+
+#[RootAttribute('/admin')]
+class RootedParentOfAnEmptyRootController
+{
+}
+
+#[RootAttribute('/')]
+class RootedWithAnEmptyRootController extends RootedParentOfAnEmptyRootController
+{
+    #[GetAttribute('/list')]
+    public function list(): void {}
+}
+
+final class SecondContentFilterTestMiddleware implements MiddlewareInterface
+{
+    public function process(Request $request, callable $next): Response
+    {
+        return $next($request);
+    }
+}
+
+class TwoExclusionsController
+{
+    #[WithoutMiddlewareAttribute(ContentFilterTestMiddleware::class)]
+    #[WithoutMiddlewareAttribute(SecondContentFilterTestMiddleware::class)]
+    #[GetAttribute('/pair')]
+    public function pair(): void {}
+}
+
 class InvalidMethodController
 {
     #[RouteAttribute('/x', 'GE T')]
@@ -651,5 +686,29 @@ final class RouteAttributeReaderTest extends TestCase
 
         self::assertSame($cause, $refusal->getPrevious());
         self::assertSame(0, $refusal->getCode());
+    }
+
+    public function testARouteAtTheRootOfARootedControllerIsTheRootPathItself(): void
+    {
+        $routes = $this->reader->read(RootedIndexController::class);
+
+        self::assertSame('/admin', $routes[0]->path);
+    }
+
+    public function testAnEmptyRootOnAChildKeepsTheParentRoot(): void
+    {
+        $routes = $this->reader->read(RootedWithAnEmptyRootController::class);
+
+        self::assertSame('/admin/list', $routes[0]->path);
+    }
+
+    public function testEveryExclusionOfAMethodIsKept(): void
+    {
+        $routes = $this->reader->read(TwoExclusionsController::class);
+
+        self::assertSame(
+            [ContentFilterTestMiddleware::class, SecondContentFilterTestMiddleware::class],
+            $routes[0]->excludedMiddlewares,
+        );
     }
 }
