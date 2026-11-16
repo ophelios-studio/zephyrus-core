@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\Bootstrap\ApplicationBootstrap;
@@ -102,6 +103,44 @@ final class ApplicationBootstrapTest extends TestCase
             ));
         } finally {
             @unlink($required);
+        }
+    }
+
+    public static function leadingBlanks(): array
+    {
+        return [
+            'no blank' => [''],
+            'leading space' => [' '],
+            'leading tab' => ["\t"],
+        ];
+    }
+
+    #[DataProvider('leadingBlanks')]
+    public function testFromConfigFilesRefusesAnOptionalStreamWrapperUrlWithoutTouchingIt(string $prefix): void
+    {
+        $spy = new class {
+            public static int $calls = 0;
+            /** @var resource|null */
+            public $context;
+
+            public function url_stat(string $path, int $flags): array|false
+            {
+                self::$calls++;
+
+                return false;
+            }
+        };
+        $scheme = 'zspy' . bin2hex(random_bytes(4));
+        stream_wrapper_register($scheme, $spy::class);
+
+        try {
+            ApplicationBootstrap::fromConfigFiles([], [$prefix . $scheme . '://host/c.yml']);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file must be a local path, not a stream wrapper URL (' . $scheme . '://)', $e->getMessage());
+            self::assertSame(0, $spy::$calls);
+        } finally {
+            stream_wrapper_unregister($scheme);
         }
     }
 

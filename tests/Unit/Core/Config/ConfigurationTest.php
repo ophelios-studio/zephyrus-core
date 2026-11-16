@@ -343,24 +343,24 @@ final class ConfigurationTest extends TestCase
     }
 
     /**
-     * @return array<string, array{string}>
+     * @return array<string, array{string, string}>
      */
     public static function streamWrapperUrlPrefixes(): array
     {
         return [
-            'file scheme' => ['file://'],
-            'upper-case scheme' => ['PHAR://'],
-            'data URL' => ['data:,'],
-            'compression wrapper' => ['compress.zlib://'],
-            'filter wrapper' => ['php://filter/resource='],
-            'glob wrapper' => ['glob://'],
-            'two-character scheme' => ['xy://'],
-            'scheme with plus and minus' => ['x+y-z://'],
+            'file scheme' => ['file://', 'file://'],
+            'upper-case scheme' => ['PHAR://', 'PHAR://'],
+            'data URL' => ['data:,', 'data:'],
+            'compression wrapper' => ['compress.zlib://', 'compress.zlib://'],
+            'filter wrapper' => ['php://filter/resource=', 'php://'],
+            'glob wrapper' => ['glob://', 'glob://'],
+            'two-character scheme' => ['xy://', 'xy://'],
+            'scheme with plus and minus' => ['x+y-z://', 'x+y-z://'],
         ];
     }
 
     #[DataProvider('streamWrapperUrlPrefixes')]
-    public function testAPhpFileGivenAsAStreamWrapperUrlIsRefusedAndNeverExecuted(string $prefix): void
+    public function testAPhpFileGivenAsAStreamWrapperUrlIsRefusedAndNeverExecuted(string $prefix, string $scheme): void
     {
         $directory = sys_get_temp_dir() . '/zephyrus-config-wrapper-' . bin2hex(random_bytes(8));
         mkdir($directory);
@@ -368,7 +368,7 @@ final class ConfigurationTest extends TestCase
         $marker = $directory . '/marker';
         file_put_contents($path, "<?php file_put_contents('" . $marker . "', 'ran'); return [];");
         $url = $prefix . $path;
-        $expected = 'Configuration file config.php: must be a local path, not a stream wrapper URL';
+        $expected = 'Configuration file must be a local path, not a stream wrapper URL (' . $scheme . ')';
 
         try {
             $loaders = [
@@ -393,6 +393,80 @@ final class ConfigurationTest extends TestCase
         }
     }
 
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function yamlFileNames(): array
+    {
+        return [
+            'yml' => ['c.yml', 'file://'],
+            'yaml' => ['c.yaml', 'file://'],
+            'phar scheme' => ['c.yml', 'phar://'],
+        ];
+    }
+
+    #[DataProvider('yamlFileNames')]
+    public function testAYamlFileGivenAsAStreamWrapperUrlIsRefusedFoundOrNot(string $name, string $prefix): void
+    {
+        $directory = sys_get_temp_dir() . '/zephyrus-config-yaml-url-' . bin2hex(random_bytes(8));
+        mkdir($directory);
+        $present = $directory . '/' . $name;
+        file_put_contents($present, "localization:\n  locale: fr\n");
+        $expected = 'Configuration file must be a local path, not a stream wrapper URL (' . $prefix . ')';
+
+        try {
+            $urls = [$prefix . $present, $prefix . $directory . '/missing/' . $name];
+            $loaders = [];
+            foreach ($urls as $url) {
+                $loaders[] = fn () => Configuration::fromFile($url);
+                $loaders[] = fn () => Configuration::fromFiles([$url]);
+                $loaders[] = fn () => Configuration::fromOptionalFiles([$url]);
+                $loaders[] = fn () => Configuration::fromYamlFile($url);
+                $loaders[] = fn () => Configuration::fromYamlFiles([$url]);
+                $loaders[] = fn () => Configuration::fromOptionalYamlFiles([$url]);
+            }
+
+            foreach ($loaders as $load) {
+                try {
+                    $load();
+                    self::fail('expected a refusal');
+                } catch (ConfigurationException $e) {
+                    self::assertSame($expected, $e->getMessage());
+                }
+            }
+        } finally {
+            @unlink($present);
+            @rmdir($directory);
+        }
+    }
+
+    public function testAWindowsDrivePathIsNotAStreamWrapperUrl(): void
+    {
+        try {
+            Configuration::fromYamlFile('C:\\missing-dir\\c.yml');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file not found: C:\\missing-dir\\c.yml', $e->getMessage());
+        }
+
+        try {
+            Configuration::fromFile('C:/missing-dir/c.php');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file not found: c.php', $e->getMessage());
+        }
+    }
+
+    public function testASingleLetterSchemeReadsAsALocalPath(): void
+    {
+        try {
+            Configuration::fromYamlFile('a://c.yml');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file not found: c.yml', $e->getMessage());
+        }
+    }
+
     public function testAnUpperCasePhpExtensionGivenAsAStreamWrapperUrlIsRefused(): void
     {
         $url = 'compress.zlib://' . sys_get_temp_dir() . '/missing-' . bin2hex(random_bytes(8)) . '/CONFIG.PHP';
@@ -402,7 +476,7 @@ final class ConfigurationTest extends TestCase
             self::fail('expected a refusal');
         } catch (ConfigurationException $e) {
             self::assertSame(
-                'Configuration file CONFIG.PHP: must be a local path, not a stream wrapper URL',
+                'Configuration file must be a local path, not a stream wrapper URL (compress.zlib://)',
                 $e->getMessage(),
             );
         }
@@ -417,7 +491,7 @@ final class ConfigurationTest extends TestCase
             self::fail('expected a refusal');
         } catch (ConfigurationException $e) {
             self::assertSame(
-                'Configuration file c.php: must be a local path, not a stream wrapper URL',
+                'Configuration file must be a local path, not a stream wrapper URL (zz9://)',
                 $e->getMessage(),
             );
         }

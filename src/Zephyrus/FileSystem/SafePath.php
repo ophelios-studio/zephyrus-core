@@ -16,6 +16,8 @@ namespace Zephyrus\FileSystem;
  */
 final class SafePath
 {
+    private const string STREAM_WRAPPER_URL = '~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~';
+
     /**
      * Resolve `$relativePath` under `$root`.
      *
@@ -42,6 +44,22 @@ final class SafePath
         $realRoot = rtrim($realRoot, DIRECTORY_SEPARATOR);
 
         return str_starts_with($realPath, $realRoot . DIRECTORY_SEPARATOR) ? $realPath : null;
+    }
+
+    /**
+     * Whether `$path` is a stream wrapper URL (`scheme://`, `data:`) rather than a local path.
+     */
+    public static function isStreamWrapperUrl(string $path): bool
+    {
+        return preg_match(self::STREAM_WRAPPER_URL, $path) === 1;
+    }
+
+    /**
+     * The scheme of a stream wrapper URL as written (`phar://`, `data:`), or null for a local path.
+     */
+    public static function streamWrapperScheme(string $path): ?string
+    {
+        return preg_match(self::STREAM_WRAPPER_URL, $path, $match) === 1 ? $match[0] : null;
     }
 
     /**

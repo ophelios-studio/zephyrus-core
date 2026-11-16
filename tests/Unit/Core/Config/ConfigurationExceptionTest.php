@@ -358,4 +358,15 @@ final class ConfigurationExceptionTest extends TestCase
             $e->getMessage(),
         );
     }
+
+    public function testAStreamWrapperUrlNamesTheSchemeAsWrittenAndNeverTheRest(): void
+    {
+        $phar = ConfigurationException::streamWrapperUrl('phar://user:s3cret@host/c.yml');
+        $data = ConfigurationException::streamWrapperUrl('data:,database: {password: hunter2}');
+
+        self::assertSame('Configuration file must be a local path, not a stream wrapper URL (phar://)', $phar->getMessage());
+        self::assertSame('Configuration file must be a local path, not a stream wrapper URL (data:)', $data->getMessage());
+        self::assertNull($phar->path());
+        self::assertNull($data->path());
+    }
 }

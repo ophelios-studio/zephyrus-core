@@ -295,13 +295,14 @@ final readonly class Configuration
      * Build a Configuration tree from a YAML file.
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when the file is missing, unparsable or not a mapping, an !env tag is refused,
-     *        or the configuration is refused by fromArray().
+     * @throws ConfigurationException when the path is given as a stream wrapper URL, the file is missing, unparsable
+     *        or not a mapping, an !env tag is refused, or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
     public static function fromYamlFile(string $path, array $sectionFactories = []): self
     {
+        self::assertLocalPath($path);
         $configFile = new ConfigurationFile($path);
         return self::fromArray($configFile->toArray(), $sectionFactories);
     }
@@ -313,8 +314,9 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when a path is not a non-empty string, a file is missing, unparsable
-     *        or not a mapping, an !env tag is refused, or the configuration is refused by fromArray().
+     * @throws ConfigurationException when a path is not a non-empty string or is given as a stream wrapper URL,
+     *        a file is missing, unparsable or not a mapping, an !env tag is refused, or the configuration is refused
+     *        by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
@@ -330,8 +332,9 @@ final readonly class Configuration
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when a path is not a non-empty string, a present file is unparsable
-     *        or not a mapping, an !env tag is refused, or the configuration is refused by fromArray().
+     * @throws ConfigurationException when a path is not a non-empty string or is given as a stream wrapper URL,
+     *        a present file is unparsable or not a mapping, an !env tag is refused, or the configuration is refused
+     *        by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
      *        name (any spelling), or shares its section name with another factory, in any spelling.
      */
@@ -344,7 +347,7 @@ final readonly class Configuration
      * Build a Configuration tree from one file: YAML (.yml, .yaml) or a PHP file (.php) returning a mapping.
      *
      * @param array<string, class-string<ConfigSection>> $sectionFactories
-     * @throws ConfigurationException when the file has another extension, is a PHP file given as a stream wrapper URL,
+     * @throws ConfigurationException when the file has another extension, is given as a stream wrapper URL,
      *        is missing, is a YAML file that does not parse or is not a mapping, is a PHP file that fails to load or
      *        does not return a mapping, an !env tag is refused, or the configuration is refused by fromArray().
      * @throws \InvalidArgumentException if a factory is not keyed by a section name, targets a built-in section
@@ -371,7 +374,7 @@ final readonly class Configuration
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a file has another extension than .yml, .yaml or .php,
-     *        or is a PHP file given as a stream wrapper URL, when a path is not a non-empty string, a file is missing,
+     *        or is given as a stream wrapper URL, when a path is not a non-empty string, a file is missing,
      *        is a YAML file that does not parse or is not a mapping, is a PHP file that fails to load or
      *        does not return a mapping, an !env tag is refused,
      *        or the configuration is refused by fromArray().
@@ -386,12 +389,12 @@ final readonly class Configuration
     /**
      * Build a Configuration tree from multiple files and ignore missing paths.
      * A missing file is skipped; an existing file with another extension is refused.
-     * A PHP file given as a stream wrapper URL is refused, found or not.
+     * A stream wrapper URL is refused, found or not.
      *
      * @param string[] $paths
      * @param array<string, class-string<ConfigSection>> $sectionFactories
      * @throws ConfigurationException when a present file has another extension than .yml, .yaml or .php,
-     *        or is a PHP file given as a stream wrapper URL, when a path is not a non-empty string, a present file is
+     *        or is given as a stream wrapper URL, when a path is not a non-empty string, a present file is
      *        a YAML file that does not parse or is not a mapping, is a PHP file that fails to load or
      *        does not return a mapping, an !env tag is refused,
      *        or the configuration is refused by fromArray().
@@ -524,13 +527,11 @@ final readonly class Configuration
         return ConfigSection::REDACTED;
     }
 
-    /**
-     * Whether a path is a .php file named through a stream wrapper URL (scheme://, data:).
-     */
-    private static function isPhpStreamWrapperUrl(string $path): bool
+    private static function assertLocalPath(string $path): void
     {
-        return strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'php'
-            && preg_match('~^(?:[a-zA-Z0-9+.-]{2,}://|data:)~', $path) === 1;
+        if (SafePath::isStreamWrapperUrl($path)) {
+            throw ConfigurationException::streamWrapperUrl($path);
+        }
     }
 
     /**
@@ -540,6 +541,7 @@ final readonly class Configuration
      */
     private static function loadFileAsArray(string $path): array
     {
+        self::assertLocalPath($path);
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
         if (in_array($extension, ['yml', 'yaml'], true)) {
@@ -548,10 +550,6 @@ final readonly class Configuration
 
         if ($extension !== 'php') {
             throw ConfigurationException::invalidFormat($path, 'must be YAML (.yml, .yaml) or PHP (.php)');
-        }
-
-        if (self::isPhpStreamWrapperUrl($path)) {
-            throw ConfigurationException::invalidFormat($path, 'must be a local path, not a stream wrapper URL');
         }
 
         $resolved = SafePath::isFile($path) ? realpath($path) : false;
@@ -586,7 +584,8 @@ final readonly class Configuration
         $merged = [];
 
         foreach (self::normalizePaths($paths) as $path) {
-            if ($ignoreMissing && !self::isPhpStreamWrapperUrl($path) && !SafePath::isFile($path)) {
+            self::assertLocalPath($path);
+            if ($ignoreMissing && !SafePath::isFile($path)) {
                 continue;
             }
 
@@ -647,6 +646,7 @@ final readonly class Configuration
         $merged = [];
 
         foreach (self::normalizePaths($paths) as $path) {
+            self::assertLocalPath($path);
             if ($ignoreMissing && !SafePath::isFile($path)) {
                 continue;
             }

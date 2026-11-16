@@ -33,4 +33,16 @@ final class SafePathTest extends TestCase
     {
         self::assertSame(realpath($this->root . '/a.txt'), SafePath::within($this->root, 'a.txt'));
     }
+
+    public function testStreamWrapperUrlsAreToldFromLocalPaths(): void
+    {
+        self::assertTrue(SafePath::isStreamWrapperUrl('phar:///a/c.yml'));
+        self::assertTrue(SafePath::isStreamWrapperUrl('data:,x'));
+        self::assertFalse(SafePath::isStreamWrapperUrl('a://c.yml'));
+        self::assertFalse(SafePath::isStreamWrapperUrl('C:\\dir\\c.yml'));
+        self::assertFalse(SafePath::isStreamWrapperUrl('/srv/app/c.yml'));
+        self::assertSame('phar://', SafePath::streamWrapperScheme('phar:///a/c.yml'));
+        self::assertSame('data:', SafePath::streamWrapperScheme('data:,x'));
+        self::assertNull(SafePath::streamWrapperScheme('/srv/app/c.yml'));
+    }
 }

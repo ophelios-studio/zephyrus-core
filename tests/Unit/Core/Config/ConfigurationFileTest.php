@@ -117,6 +117,35 @@ final class ConfigurationFileTest extends TestCase
         self::assertNull($db['database']);
     }
 
+    public function testAStreamWrapperUrlIsRefusedBeforeAnyFileCheck(): void
+    {
+        $spy = new class {
+            public static int $calls = 0;
+            /** @var resource|null */
+            public $context;
+
+            public function url_stat(string $path, int $flags): array|false
+            {
+                self::$calls++;
+
+                return false;
+            }
+        };
+        $scheme = 'zspy' . bin2hex(random_bytes(4));
+        stream_wrapper_register($scheme, $spy::class);
+
+        try {
+            (new ConfigurationFile($scheme . '://user:s3cret@host/c.yml'))->toArray();
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame('Configuration file must be a local path, not a stream wrapper URL (' . $scheme . '://)', $e->getMessage());
+            self::assertNull($e->path());
+            self::assertSame(0, $spy::$calls);
+        } finally {
+            stream_wrapper_unregister($scheme);
+        }
+    }
+
     public function testThrowsForMissingFile(): void
     {
         $this->expectException(ConfigurationException::class);

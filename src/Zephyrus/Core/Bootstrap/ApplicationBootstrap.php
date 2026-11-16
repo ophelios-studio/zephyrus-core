@@ -29,7 +29,8 @@ final class ApplicationBootstrap
 
         $existingOptional = array_values(array_filter(
             $optionalConfigFiles,
-            static fn (mixed $path): bool => is_string($path) && SafePath::isFile($path),
+            static fn (mixed $path): bool => is_string($path)
+                && (SafePath::isStreamWrapperUrl(trim($path)) || SafePath::isFile($path)),
         ));
 
         return ApplicationBuilder::buildFromConfigurationFiles(array_merge($requiredConfigFiles, $existingOptional));

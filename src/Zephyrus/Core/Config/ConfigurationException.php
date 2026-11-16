@@ -6,6 +6,7 @@ namespace Zephyrus\Core\Config;
 
 use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusException;
+use Zephyrus\FileSystem\SafePath;
 
 /**
  * Thrown when configuration loading, parsing, or validation fails.
@@ -260,6 +261,17 @@ final class ConfigurationException extends ZephyrusException
     public static function invalidFormat(string $path, string $reason = 'must return an array'): self
     {
         return self::withPath(sprintf('Configuration file %s: %s', basename($path), $reason), $path);
+    }
+
+    /**
+     * A configuration file given as a stream wrapper URL; names the scheme only, never the rest of the URL.
+     */
+    public static function streamWrapperUrl(string $path): self
+    {
+        return new self(sprintf(
+            'Configuration file must be a local path, not a stream wrapper URL (%s)',
+            SafePath::streamWrapperScheme($path) ?? 'stream wrapper',
+        ));
     }
 
     /**

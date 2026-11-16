@@ -139,6 +139,10 @@ final class ConfigurationFile
             return $this->content;
         }
 
+        if (SafePath::isStreamWrapperUrl($this->path)) {
+            throw ConfigurationException::streamWrapperUrl($this->path);
+        }
+
         if (!SafePath::isFile($this->path)) {
             throw ConfigurationException::fileNotFound($this->path);
         }
