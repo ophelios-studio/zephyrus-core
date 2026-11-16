@@ -56,11 +56,25 @@ final class DatabaseActorException extends ZephyrusRuntimeException
     /**
      * @param list<string> $declared
      */
-    public static function undeclaredKey(int|string $key, array $declared): self
+    public static function undeclaredKey(string $key, array $declared): self
     {
         return new self(sprintf(
             'The actor values key %s names no declared key (declared: %s).',
-            MessageValue::describe($key),
+            MessageValue::quote($key),
+            MessageValue::quoteList($declared),
+        ));
+    }
+
+    /**
+     * @param list<string> $declared
+     */
+    public static function keyNotASettingName(string $type, array $declared): self
+    {
+        return new self(sprintf(
+            "The actor values hold a key that is not a setting name (%s given), not shown since it may be an actor "
+            . "value: the keys are the declared names, such as ['%s' => \$value] (declared: %s).",
+            $type,
+            $declared[0],
             MessageValue::quoteList($declared),
         ));
     }

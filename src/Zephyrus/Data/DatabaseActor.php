@@ -140,7 +140,9 @@ final class DatabaseActor
 
         foreach ($values as $key => $value) {
             if (!is_string($key) || !isset($this->settings[$key])) {
-                throw DatabaseActorException::undeclaredKey($key, array_keys($this->settings));
+                throw is_string($key) && self::isSettingName($key)
+                    ? DatabaseActorException::undeclaredKey($key, array_keys($this->settings))
+                    : DatabaseActorException::keyNotASettingName(get_debug_type($key), array_keys($this->settings));
             }
 
             if (!is_string($value)) {
