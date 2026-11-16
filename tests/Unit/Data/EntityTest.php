@@ -1034,6 +1034,14 @@ final class EntityTest extends TestCase
         self::assertSame('A', $entity->after);
     }
 
+    public function testAStaticPropertyIsLeftOutOfTheJsonOfAnEntity(): void
+    {
+        $row = new stdClass();
+        $row->after = 'A';
+
+        self::assertSame(['after' => 'A'], StaticSlotEntity::build($row)->jsonSerialize());
+    }
+
     public function testANullColumnForAnUntypedPropertyIsAssigned(): void
     {
         $row = new stdClass();

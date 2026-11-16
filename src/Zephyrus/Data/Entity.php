@@ -235,7 +235,7 @@ abstract class Entity implements JsonSerializable
     }
 
     /**
-     * Return the public properties as an array, excluding those marked #[JsonIgnore] and
+     * Return the public instance properties as an array, excluding those marked #[JsonIgnore] and
      * virtual properties with no get hook.
      *
      * @return array<string, mixed>
@@ -247,7 +247,7 @@ abstract class Entity implements JsonSerializable
         $data = [];
 
         foreach ($properties as $property) {
-            if (!empty($property->getAttributes(JsonIgnore::class))) {
+            if ($property->isStatic() || !empty($property->getAttributes(JsonIgnore::class))) {
                 continue;
             }
 
