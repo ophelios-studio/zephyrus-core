@@ -125,6 +125,46 @@ final class DatabaseSessionHandlerRealSessionTest extends TestCase
         self::assertSame(0, $this->database->selectInt("SELECT count(*) FROM {$this->table}"));
     }
 
+    #[RunInSeparateProcess]
+    public function testConstructingTheHandlerBeforeTheSessionStartsTurnsStrictModeOn(): void
+    {
+        ini_set('session.use_strict_mode', '0');
+
+        new DatabaseSessionHandler(new Database(new PDO('sqlite::memory:')));
+
+        self::assertSame('1', ini_get('session.use_strict_mode'));
+    }
+
+    #[RunInSeparateProcess]
+    public function testConstructingTheHandlerAfterOutputWasSentLeavesStrictModeAloneAndRaisesNothing(): void
+    {
+        ini_set('session.use_strict_mode', '0');
+        $levels = ob_get_level();
+        ob_start();
+        echo 'output';
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        while (ob_get_level() < $levels) {
+            ob_start();
+        }
+        $warnings = [];
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        });
+
+        try {
+            new DatabaseSessionHandler(new Database(new PDO('sqlite::memory:')));
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $warnings);
+        self::assertSame('0', ini_get('session.use_strict_mode'));
+    }
+
     private function connect(string $driver): void
     {
         $dsn = $driver === 'pgsql' ? (string) getenv('ZEPHYRUS_TEST_PGSQL_DSN') : 'sqlite::memory:';

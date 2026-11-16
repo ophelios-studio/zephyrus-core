@@ -487,6 +487,29 @@ final class SessionManagerRealSessionTest extends TestCase
     }
 
     #[RunInSeparateProcess]
+    public function testARefusedOperationLeavesNothingInPhpsErrorLog(): void
+    {
+        $logFile = tempnam(sys_get_temp_dir(), 'zephyrus-session-log-');
+        self::assertIsString($logFile);
+        ini_set('log_errors', '1');
+        ini_set('display_errors', '0');
+        ini_set('error_log', $logFile);
+        session_start();
+
+        try {
+            try {
+                (new SessionManager())->setHandler(new StrictModeAwareHandler());
+                self::fail('expected a refusal');
+            } catch (SessionException) {
+            }
+
+            self::assertSame('', (string) file_get_contents($logFile));
+        } finally {
+            unlink($logFile);
+        }
+    }
+
+    #[RunInSeparateProcess]
     public function testRegenerateDeletesTheOldSessionByDefault(): void
     {
         $handler = new RecordingDestroyHandler();
