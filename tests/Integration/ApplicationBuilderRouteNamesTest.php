@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -13,6 +14,11 @@ use Zephyrus\Routing\Router;
 
 final class ApplicationBuilderRouteNamesTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        App::reset();
+    }
+
     public function testBuildRefusesTwoControllersSharingARouteName(): void
     {
         $router = (new Router())

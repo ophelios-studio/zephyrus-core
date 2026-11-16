@@ -32,6 +32,7 @@ final class SessionIdleTimeoutTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeIsolatedSessionSavePath();
+        App::reset();
     }
 
     #[RunInSeparateProcess]

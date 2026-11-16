@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Integration;
 
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Controller\Controller;
+use Zephyrus\Core\App;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
@@ -14,6 +15,11 @@ use Zephyrus\Routing\Router;
 
 final class ApplicationBootstrapLocalizationTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        App::reset();
+    }
+
     public function testBootstrapCanServeLocalizedEndpointUsingApplicationBuilder(): void
     {
         $router = (new Router())

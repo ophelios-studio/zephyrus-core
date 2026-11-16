@@ -11,6 +11,11 @@ use Zephyrus\Routing\Router;
 
 final class FormatterGroupingWiringTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        App::reset();
+    }
+
     public function testLocalizationGroupingSeparatorReachesTheFormatter(): void
     {
         ApplicationBuilder::create()

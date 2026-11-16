@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Tests\Unit\Core;
 
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Http\Request;
 use Zephyrus\Localization\LocaleLoaderInterface;
@@ -36,6 +37,11 @@ final class ApplicationLocalizationTest extends TestCase
     private function requestWithHeader(string $acceptLanguage): Request
     {
         return Request::fromArray('GET', '/', headers: ['accept-language' => $acceptLanguage]);
+    }
+
+    protected function tearDown(): void
+    {
+        App::reset();
     }
 
     // -------------------------------------------------------------------------

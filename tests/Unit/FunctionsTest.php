@@ -21,6 +21,11 @@ use Zephyrus\Session\SessionManager;
 
 final class FunctionsTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        App::reset();
+    }
+
     protected function tearDown(): void
     {
         App::reset();

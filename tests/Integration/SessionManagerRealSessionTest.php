@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Integration;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
 use Zephyrus\Core\Config\SessionConfig;
 use Zephyrus\Session\SessionException;
 use Zephyrus\Session\SessionManager;
@@ -29,6 +30,7 @@ final class SessionManagerRealSessionTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeIsolatedSessionSavePath();
+        App::reset();
     }
 
     // ── isStarted ─────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Core\App;
 use Zephyrus\Core\Application;
 use Zephyrus\Core\ApplicationBuilder;
 use Zephyrus\Core\Config\Configuration;
@@ -46,6 +47,11 @@ final class SecurityConfigurationWiringTest extends TestCase
                 'csrf' => ['enabled' => true],
             ],
         ];
+    }
+
+    protected function tearDown(): void
+    {
+        App::reset();
     }
 
     public function testAnUnwiredSecurityBlockRefusesToBootAndNamesEveryGap(): void
