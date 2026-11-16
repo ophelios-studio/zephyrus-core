@@ -28,4 +28,14 @@ final class RouteMiddlewareExceptionTest extends TestCase
             RouteMiddlewareException::excludedMiddlewareGroup('Resource "/u"', 'web', ["Ctrl\r\nFAKE"])->getMessage(),
         );
     }
+
+    public function testResolutionFailureKeepsTheCauseAndCarriesNoErrorCode(): void
+    {
+        $cause = new \RuntimeException('x');
+
+        $refusal = RouteMiddlewareException::resolutionFailed('auth', $cause);
+
+        self::assertSame($cause, $refusal->getPrevious());
+        self::assertSame(0, $refusal->getCode());
+    }
 }

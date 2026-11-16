@@ -806,4 +806,32 @@ final class RouteCacheTest extends TestCase
             $path,
         );
     }
+
+    public function testNoRoutesRefusalQuotesACachePathOfExactly512BytesWhole(): void
+    {
+        $file = '/' . str_repeat('a', 511);
+
+        self::assertSame(
+            sprintf(
+                'The controllers of router.controllers declare no route, so the routes cache "%s" was not written: '
+                . 'check that each namespace matches its directory.',
+                $file,
+            ),
+            RouteCacheException::noRoutes($file)->getMessage(),
+        );
+    }
+
+    public function testNoRoutesRefusalKeepsTheEndOfACachePathOver512Bytes(): void
+    {
+        $file = 'HEAD' . str_repeat('a', 508) . '/routes.php';
+
+        self::assertSame(
+            sprintf(
+                'The controllers of router.controllers declare no route, so the routes cache "...%s" (523 bytes) was '
+                . 'not written: check that each namespace matches its directory.',
+                substr($file, -512),
+            ),
+            RouteCacheException::noRoutes($file)->getMessage(),
+        );
+    }
 }

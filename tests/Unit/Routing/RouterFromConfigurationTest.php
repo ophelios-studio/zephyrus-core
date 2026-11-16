@@ -211,4 +211,41 @@ final class RouterFromConfigurationTest extends TestCase
 
         return array_map(static fn (Route $route): string => $route->path, array_values($router->routes()->all()));
     }
+
+    public function testARelativeApplicationRootOfExactly512BytesIsQuotedWhole(): void
+    {
+        $basePath = str_repeat('a', 512);
+
+        try {
+            Router::fromConfiguration($this->configuration('development'), $basePath);
+            self::fail('expected a refusal');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                sprintf(
+                    'Router::fromConfiguration() needs the absolute path of the application root as basePath, not "%s".',
+                    $basePath,
+                ),
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testARelativeApplicationRootOver512BytesKeepsItsEnd(): void
+    {
+        $basePath = 'HEAD' . str_repeat('a', 509);
+
+        try {
+            Router::fromConfiguration($this->configuration('development'), $basePath);
+            self::fail('expected a refusal');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                sprintf(
+                    'Router::fromConfiguration() needs the absolute path of the application root as basePath, '
+                    . 'not "...%s" (513 bytes).',
+                    substr($basePath, -512),
+                ),
+                $exception->getMessage(),
+            );
+        }
+    }
 }

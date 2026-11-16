@@ -1225,4 +1225,18 @@ final class HandlerResolverTest extends TestCase
             parameters: $attributes,
         );
     }
+
+    public function testWrappedHandlerRefusalsKeepTheCauseAndCarryNoErrorCode(): void
+    {
+        $cause = new \RuntimeException('x');
+        $reflection = new \ReflectionException('y');
+
+        $instantiation = HandlerResolverException::unresolvableClass('Ctrl', $cause);
+        $method = HandlerResolverException::unresolvableMethod('Ctrl', 'act', $reflection);
+
+        self::assertSame($cause, $instantiation->getPrevious());
+        self::assertSame(0, $instantiation->getCode());
+        self::assertSame($reflection, $method->getPrevious());
+        self::assertSame(0, $method->getCode());
+    }
 }

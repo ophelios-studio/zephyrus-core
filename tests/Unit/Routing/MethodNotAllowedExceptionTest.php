@@ -29,4 +29,24 @@ final class MethodNotAllowedExceptionTest extends TestCase
             (new MethodNotAllowedException(['POST'], $path))->getMessage(),
         );
     }
+
+    public function testAPathOfExactly512BytesIsQuotedWhole(): void
+    {
+        $path = '/' . str_repeat('a', 511);
+
+        self::assertSame(
+            sprintf('Method not allowed for "%s". Allowed: GET', $path),
+            (new MethodNotAllowedException(['GET'], $path))->getMessage(),
+        );
+    }
+
+    public function testAPathOver512BytesKeepsItsHeadAndStatesItsLength(): void
+    {
+        $path = '/' . str_repeat('a', 511) . 'TAIL';
+
+        self::assertSame(
+            sprintf('Method not allowed for "%s..." (516 bytes). Allowed: GET', substr($path, 0, 512)),
+            (new MethodNotAllowedException(['GET'], $path))->getMessage(),
+        );
+    }
 }

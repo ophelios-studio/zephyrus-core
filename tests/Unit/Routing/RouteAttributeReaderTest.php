@@ -642,4 +642,14 @@ final class RouteAttributeReaderTest extends TestCase
 
         return null;
     }
+
+    public function testUnresolvableClassRefusalKeepsTheCauseAndCarriesNoErrorCode(): void
+    {
+        $cause = new \ReflectionException('bad');
+
+        $refusal = RouteAttributeException::unresolvableClass('Ctrl', $cause);
+
+        self::assertSame($cause, $refusal->getPrevious());
+        self::assertSame(0, $refusal->getCode());
+    }
 }
