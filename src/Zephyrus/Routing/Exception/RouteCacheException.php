@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Routing\Exception;
 
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\Exceptions\ZephyrusRuntimeException;
 
 /**
@@ -19,7 +20,7 @@ final class RouteCacheException extends ZephyrusRuntimeException
         return new self(sprintf(
             'The controllers of router.controllers declare no route, so the routes cache %s was not written: check '
             . 'that each namespace matches its directory.',
-            $file,
+            MessageValue::quote($file, 512, keepEnd: true),
         ));
     }
 }

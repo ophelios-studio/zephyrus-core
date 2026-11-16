@@ -262,7 +262,7 @@ final class ConsoleTest extends TestCase
         self::assertSame(
             sprintf(
                 'cache:warm failed for %1$s/config.yml: The controllers of router.controllers declare no route, so the '
-                . 'routes cache %1$s/var/zephyrus/routes.php was not written: check that each namespace matches its '
+                . 'routes cache "%1$s/var/zephyrus/routes.php" was not written: check that each namespace matches its '
                 . "directory.\n",
                 $root,
             ),

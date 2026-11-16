@@ -581,13 +581,24 @@ final class RouteCacheTest extends TestCase
         } catch (RouteCacheException $exception) {
             self::assertSame(
                 sprintf(
-                    'The controllers of router.controllers declare no route, so the routes cache %s was not written: '
+                    'The controllers of router.controllers declare no route, so the routes cache "%s" was not written: '
                     . 'check that each namespace matches its directory.',
                     $tree->root->path . '/' . RouterConfig::DEFAULT_CACHE,
                 ),
                 $exception->getMessage(),
             );
         }
+    }
+
+    public function testNoRoutesRefusalQuotesAndEscapesTheCachePath(): void
+    {
+        $refusal = RouteCacheException::noRoutes("/app/var/\r\n\u{202E}/routes.php");
+
+        self::assertSame(
+            'The controllers of router.controllers declare no route, so the routes cache "/app/var/\r\n\u202e/routes.php" '
+            . 'was not written: check that each namespace matches its directory.',
+            $refusal->getMessage(),
+        );
     }
 
     /**
