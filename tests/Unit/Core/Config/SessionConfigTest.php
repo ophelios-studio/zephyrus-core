@@ -313,6 +313,36 @@ final class SessionConfigTest extends TestCase
         SessionConfig::fromArray(['idle_timeout' => $value]);
     }
 
+    public function testAcceptsTheLongestIdleTimeoutThatStillFitsTheExpiryColumn(): void
+    {
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $before = time();
+            $longest = 2_147_483_647 - $before;
+
+            $config = null;
+            try {
+                $config = new SessionConfig('APP', 0, true, false, 'Lax', '/', idleTimeout: $longest);
+            } catch (ConfigurationException) {
+            }
+
+            if (time() === $before) {
+                self::assertSame($longest, $config?->idleTimeout);
+
+                return;
+            }
+        }
+
+        self::markTestSkipped('The clock kept crossing a second boundary.');
+    }
+
+    public function testTheAutoSpellingIgnoresCaseAndSurroundingWhitespace(): void
+    {
+        $config = SessionConfig::fromArray(['secure' => " Auto \t"]);
+
+        self::assertTrue($config->secureAuto);
+        self::assertFalse($config->secure);
+    }
+
     public function testAcceptsAnIdleTimeoutJustShortOfTheExpiryColumnLimit(): void
     {
         $seconds = 2_147_483_647 - time() - 60;
