@@ -2393,6 +2393,15 @@ final class RulesTest extends TestCase
         self::assertTrue(Rules::byteRange()->test("bytes=0-10, \t20-30"));
     }
 
+    public function testByteRangeComparesBoundsBeyondTheIntegerRange(): void
+    {
+        self::assertFalse(Rules::byteRange()->test('bytes=99999999999999999999-9223372036854775807'));
+        self::assertFalse(Rules::byteRange()->test('bytes=99999999999999999999-99999999999999999998'));
+        self::assertFalse(Rules::byteRange()->test('bytes=000000000000000000000000000500-0'));
+        self::assertTrue(Rules::byteRange()->test('bytes=9223372036854775807-99999999999999999999'));
+        self::assertTrue(Rules::byteRange()->test('bytes=00000000000000000000001-2'));
+    }
+
     // ---- contentRange ----
 
     public function testContentRangePassesValidForms(): void
@@ -2414,6 +2423,16 @@ final class RulesTest extends TestCase
         self::assertFalse(Rules::contentRange()->test('bytes */*'));
         self::assertFalse(Rules::contentRange()->test('bytes 0-499'));
         self::assertFalse(Rules::contentRange()->test(null));
+    }
+
+    public function testContentRangeComparesBoundsBeyondTheIntegerRange(): void
+    {
+        self::assertFalse(Rules::contentRange()->test('bytes 99999999999999999999-99999999999999999998/*'));
+        self::assertFalse(Rules::contentRange()->test('bytes 99999999999999999998-99999999999999999998/99999999999999999998'));
+        self::assertFalse(Rules::contentRange()->test('bytes 0-0/00'));
+        self::assertTrue(Rules::contentRange()->test('bytes 0-9223372036854775807/99999999999999999999'));
+        self::assertTrue(Rules::contentRange()->test('bytes 0-99999999999999999998/99999999999999999999'));
+        self::assertTrue(Rules::contentRange()->test('bytes 99999999999999999998-99999999999999999998/99999999999999999999'));
     }
 
     public function testContentRangeDefaultMessage(): void

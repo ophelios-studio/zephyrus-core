@@ -1633,7 +1633,7 @@ final class Rules
                     $range = trim($range, " \t");
 
                     if (preg_match('/^(\d+)-(\d+)$/D', $range, $m) === 1) {
-                        if ((int) $m[1] > (int) $m[2]) {
+                        if (self::compareDigits($m[1], $m[2]) > 0) {
                             return false;
                         }
                         continue;
@@ -1678,9 +1678,7 @@ final class Rules
                     return false;
                 }
 
-                $start = (int) $m[1];
-                $end = (int) $m[2];
-                if ($start > $end) {
+                if (self::compareDigits($m[1], $m[2]) > 0) {
                     return false;
                 }
 
@@ -1688,12 +1686,24 @@ final class Rules
                     return true;
                 }
 
-                $size = (int) $m[3];
-
-                return $size > 0 && $start < $size && $end < $size;
+                return self::compareDigits($m[3], '0') > 0
+                    && self::compareDigits($m[1], $m[3]) < 0
+                    && self::compareDigits($m[2], $m[3]) < 0;
             },
             $message,
         );
+    }
+
+    /**
+     * Compares two strings of decimal digits by value, without integer conversion.
+     */
+    private static function compareDigits(string $a, string $b): int
+    {
+        $a = ltrim($a, '0') ?: '0';
+        $b = ltrim($b, '0') ?: '0';
+        $length = strlen($a) <=> strlen($b);
+
+        return $length !== 0 ? $length : strcmp($a, $b) <=> 0;
     }
 
     private function __construct() {}

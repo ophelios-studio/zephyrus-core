@@ -101,6 +101,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Fixed
 
+- `Rules::byteRange()` and `Rules::contentRange()` compare their bounds as decimal strings, so a bound past `PHP_INT_MAX` no longer saturates: `bytes=99999999999999999999-9223372036854775807` is refused and `bytes 0-9223372036854775807/99999999999999999999` accepted.
 - A malformed regular expression given to `CsrfConfig` (`excludedPathPatterns`) or as a route constraint is refused with the framework's own exception (`InvalidArgumentException`, `RouteSignatureException`, `RouteUrlGenerationException`) even under an application error handler that throws on every warning (`@` ignored), where PHP's `ErrorException` escaped. The three refusals now end with PHP's reason for the failure (`... is not a valid regex: <pattern> (<reason>; expected a shape such as ...).`, `Invalid route constraint pattern for parameter "id" on route "/users/{id}": <pattern> (<reason>)`, `... invalid constraint pattern "<pattern>" (<reason>)`).
 - Refusals escape control characters (`\r`, `\n`, `\uXXXX`) in the values they quote, so a refusal cannot break a log line:
   - CSRF (`CsrfConfig`): the pattern and the PCRE reason, and the body field.
