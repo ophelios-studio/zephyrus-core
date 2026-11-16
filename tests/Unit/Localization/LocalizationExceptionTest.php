@@ -97,6 +97,16 @@ final class LocalizationExceptionTest extends TestCase
         );
     }
 
+    public function testAnOverlongRootLevelFileNameKeepsItsEnd(): void
+    {
+        $file = str_repeat('a', 70) . '.json';
+
+        self::assertSame(
+            'Unable to read locale file "...' . str_repeat('a', 59) . '.json" (75 bytes).',
+            LocalizationException::unreadableFile('/' . $file)->getMessage(),
+        );
+    }
+
     /**
      * unreadableDirectory() receives a basename, so there is no path to expose.
      */

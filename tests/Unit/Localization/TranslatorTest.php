@@ -15,6 +15,16 @@ use Zephyrus\Localization\Translator;
 
 final class TranslatorTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        App::reset();
+    }
+
+    protected function tearDown(): void
+    {
+        App::reset();
+    }
+
     public function testTranslatesFromRequestedLocale(): void
     {
         $translator = $this->buildTranslator();
@@ -743,6 +753,187 @@ final class TranslatorTest extends TestCase
         } finally {
             App::reset();
         }
+    }
+
+    // -----------------------------------------------------------------
+    // Locale chain, catalog values, pipe parsing
+    // -----------------------------------------------------------------
+
+    public function testARegionalDefaultLocaleFallsBackToItsBaseLanguageForAnUnrelatedRequest(): void
+    {
+        $translator = $this->translatorWith(['fr' => ['greeting' => 'Bonjour']], 'fr-CA');
+
+        self::assertSame('Bonjour', $translator->trans('greeting', locale: 'de'));
+    }
+
+    public function testARequestedLocaleIsTrimmed(): void
+    {
+        $translator = $this->translatorWith(['fr' => ['greeting' => 'Bonjour']]);
+
+        self::assertSame('Bonjour', $translator->trans('greeting', locale: ' fr '));
+    }
+
+    public function testTheWholeRegionOfARequestedLocaleIsUppercased(): void
+    {
+        $translator = $this->translatorWith(['zh-HANT-TW' => ['greeting' => 'Nihao']]);
+
+        self::assertSame('Nihao', $translator->trans('greeting', locale: 'zh-hant-tw'));
+    }
+
+    public function testACatalogValueThatIsNotATextIsHandledByItsKind(): void
+    {
+        $translator = $this->translatorWith(['en' => [
+            'count' => 5,
+            'flag' => true,
+            'nothing' => null,
+            'group' => ['a' => 1],
+            'tree' => ['count' => 5, 'nothing' => null, 'list' => ['x']],
+            'dotted.group' => ['a' => 1],
+        ]]);
+
+        self::assertSame('5', $translator->trans('count'));
+        self::assertSame('1', $translator->trans('flag'));
+        self::assertSame('', $translator->trans('nothing'));
+        self::assertSame('group', $translator->trans('group'));
+        self::assertSame('5', $translator->trans('tree.count'));
+        self::assertSame('', $translator->trans('tree.nothing'));
+        self::assertSame('tree.list', $translator->trans('tree.list'));
+        self::assertSame('dotted.group', $translator->trans('dotted.group'));
+    }
+
+    public function testPipeSegmentsAreTrimmedAndEmptyOnesSkipped(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('ALICE', $translator->trans('{n| upper }', ['n' => 'Alice']));
+        self::assertSame('ALICE', $translator->trans('{n|lower||upper}', ['n' => 'Alice']));
+    }
+
+    public function testPipeNamesAreCaseInsensitive(): void
+    {
+        self::assertSame('ALICE', $this->buildTranslator()->trans('{n|UPPER}', ['n' => 'alice']));
+    }
+
+    public function testTrimPipeStripsBothEnds(): void
+    {
+        self::assertSame('a b', $this->buildTranslator()->trans('{n|trim}', ['n' => '  a b ']));
+    }
+
+    public function testCasePipesHandleMultibyteText(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('élan', $translator->trans('{n|lower}', ['n' => 'ÉLAN']));
+        self::assertSame('ÉLAN', $translator->trans('{n|upper}', ['n' => 'élan']));
+        self::assertSame('Élan Vital', $translator->trans('{n|title}', ['n' => 'élan vital']));
+    }
+
+    public function testNumberPipeDefaultsToNoDecimals(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('1235', $translator->trans('{n|number}', ['n' => 1234.56]));
+        self::assertSame('1235', $translator->trans('{n|number:0}', ['n' => 1234.56]));
+    }
+
+    public function testNumberPipeNeverTakesANegativePrecision(): void
+    {
+        self::assertSame('1234', $this->buildTranslator()->trans('{n|number:-1}', ['n' => 1234]));
+    }
+
+    public function testNumberPipeTakesCustomSeparators(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('1.234,57', $translator->trans('{n|number:2:.:,}', ['n' => 1234.567]));
+        self::assertSame('1,234.:x57', $translator->trans('{n|number:2:,:.:x}', ['n' => 1234.567]));
+    }
+
+    public function testTruncatePipeCountsCharactersNotBytes(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('éé…', $translator->trans('{n|truncate:2}', ['n' => 'éééé']));
+        self::assertSame('éé', $translator->trans('{n|truncate:2}', ['n' => 'éé']));
+    }
+
+    public function testTruncateSuffixMayContainAColon(): void
+    {
+        self::assertSame('abca:b', $this->buildTranslator()->trans('{n|truncate:3:a:b}', ['n' => 'abcdef']));
+    }
+
+    public function testPluralFormMayContainAColon(): void
+    {
+        self::assertSame('items:x', $this->buildTranslator()->trans('{n|plural:item:items:x}', ['n' => 2]));
+    }
+
+    public function testPluralPipeFollowsTheRussianRuleForTwentyOne(): void
+    {
+        $translator = $this->buildTranslator();
+
+        self::assertSame('item', $translator->trans('{n|plural:item:items}', ['n' => 21], 'ru'));
+        self::assertSame('items', $translator->trans('{n|plural:item:items}', ['n' => 22], 'ru'));
+    }
+
+    public function testPluralFallbackIsExactlyOneNotApproximatelyOne(): void
+    {
+        $translator = $this->buildTranslator();
+        $locale = str_repeat('x', 300);
+
+        self::assertSame('b', $translator->trans('{n|plural:a:b}', ['n' => '1.0000000000000002'], $locale));
+    }
+
+    public function testUnknownPipeMessageListsEveryValidPipeName(): void
+    {
+        $formatter = new Formatter('en_US');
+        $formatter->register('wallet', static fn (string $value): string => $value);
+        App::setFormatter($formatter);
+
+        try {
+            $this->buildTranslator()->trans('{v|walet}', ['v' => 'x']);
+            self::fail('expected a refusal');
+        } catch (LocalizationException $e) {
+            self::assertSame(
+                'Unknown pipe "walet" in translation key "{v|walet}". Valid pipes: lower, upper, title, trim, ltrim, '
+                . 'rtrim, number, truncate, plural, default, money, decimal, percent, ordinal, spellOut, date, time, '
+                . 'datetime, timeago, duration, filesize, list, wallet. '
+                . 'Add a formatter with Formatter::register().',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testACamelCaseBuiltInPipeNeedsAFormatterWhateverTheCaseUsed(): void
+    {
+        try {
+            $this->buildTranslator()->trans('{v|spellout}', ['v' => '12']);
+            self::fail('expected a refusal');
+        } catch (LocalizationException $e) {
+            self::assertSame(
+                'Pipe "spellout" in translation key "{v|spellout}" needs a Formatter: call App::setFormatter() first.',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $catalogs
+     */
+    private function translatorWith(array $catalogs, string $defaultLocale = 'en'): Translator
+    {
+        $loader = new class ($catalogs) implements \Zephyrus\Localization\LocaleLoaderInterface {
+            /** @param array<string, array<string, mixed>> $catalogs */
+            public function __construct(private readonly array $catalogs)
+            {
+            }
+
+            public function load(string $locale): array
+            {
+                return $this->catalogs[$locale] ?? [];
+            }
+        };
+
+        return new Translator($loader, $defaultLocale);
     }
 
     private function buildTranslator(): Translator
