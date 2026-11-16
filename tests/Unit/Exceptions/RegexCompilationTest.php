@@ -50,6 +50,24 @@ final class RegexCompilationTest extends TestCase
         }
     }
 
+    public function testAnInvalidPatternRaisesNoWarningForPhpToDisplay(): void
+    {
+        $display = ini_set('display_errors', '1');
+        $reporting = error_reporting(E_ALL);
+        ob_start();
+
+        try {
+            $error = RegexCompilation::error('/unclosed');
+        } finally {
+            $output = ob_get_clean();
+            error_reporting($reporting);
+            ini_set('display_errors', (string) $display);
+        }
+
+        self::assertSame("No ending delimiter '/' found", $error);
+        self::assertSame('', $output);
+    }
+
     public function testAFailureWithoutAWarningGivesThePcreErrorMessage(): void
     {
         $matched = @preg_match('/(?R)/', '');

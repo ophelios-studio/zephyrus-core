@@ -52,6 +52,7 @@ final class MessageValueTest extends TestCase
         yield 'first strong isolate' => ["\u{2068}", '\u2068'];
         yield 'byte order mark' => ["\u{FEFF}", '\ufeff'];
         yield 'tag letter A' => ["\u{E0041}", '\udb40\udc41'];
+        yield 'tag space' => ["\u{E0020}", '\udb40\udc20'];
     }
 
     #[DataProvider('controlAndFormatCharacters')]
