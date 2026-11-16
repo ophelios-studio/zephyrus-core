@@ -113,6 +113,47 @@ final class MessageValueTest extends TestCase
         );
     }
 
+    public function testQuoteEndsLeavesAValueAtTheLimitWhole(): void
+    {
+        self::assertSame('"abcdef"', MessageValue::quoteEnds('abcdef', 6));
+    }
+
+    public function testQuoteEndsCutsAValueOneByteOverTheLimitAndGivesItsLength(): void
+    {
+        self::assertSame('"abc...efg" (7 bytes)', MessageValue::quoteEnds('abcdefg', 6));
+    }
+
+    public function testQuoteEndsKeepsHalfTheLimitAtTheStartAndTheRestAtTheEnd(): void
+    {
+        self::assertSame('"ab...hij" (10 bytes)', MessageValue::quoteEnds('abcdefghij', 5));
+    }
+
+    public function testQuoteEndsNeverSplitsAMultibyteCharacterAtEitherCut(): void
+    {
+        $value = str_repeat('a', 7) . 'é' . str_repeat('x', 20) . 'é' . str_repeat('b', 7);
+
+        self::assertSame(
+            '"' . str_repeat('a', 7) . '...' . str_repeat('b', 7) . '" (' . strlen($value) . ' bytes)',
+            MessageValue::quoteEnds($value, 16),
+        );
+    }
+
+    public function testQuoteEndsNeverSplitsAFourByteCharacterAtEitherCut(): void
+    {
+        $value = str_repeat("\u{1F600}", 10);
+
+        self::assertSame('"' . "\u{1F600}" . '...' . "\u{1F600}" . '" (40 bytes)', MessageValue::quoteEnds($value, 9));
+        self::assertSame('"..." (40 bytes)', MessageValue::quoteEnds($value, 3));
+    }
+
+    public function testQuoteEndsEscapesControlCharactersInBothKeptParts(): void
+    {
+        self::assertSame(
+            '"a\u001b...\u007fz" (20 bytes)',
+            MessageValue::quoteEnds("a\x1b" . str_repeat('m', 16) . "\x7fz", 4),
+        );
+    }
+
     public function testCutsAtTheGivenLimit(): void
     {
         self::assertSame('"abc..." (6 bytes)', MessageValue::quote('abcdef', 3));

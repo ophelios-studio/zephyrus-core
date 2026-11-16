@@ -105,22 +105,25 @@ final class FileSystemExceptionTest extends TestCase
         self::assertSame('Failed to copy "/a" to "/c" ("x\ny")', $exception->getMessage());
     }
 
-    public function testAReasonOver256BytesKeepsItsEndFollowedByItsLength(): void
+    public function testAReasonOver256BytesKeepsItsStartAndEndFollowedByItsLength(): void
     {
-        $reason = 'rename(' . str_repeat('a', 300) . '): Permission denied';
-        $exception = FileSystemException::operationFailed('write to', '/p', reason: $reason);
+        $reason = 'mkdir(): open_basedir restriction in effect. File(/srv/data/' . str_repeat('a', 200)
+            . ') is not within the allowed path(s): (' . str_repeat('/opt/x:', 40) . ')';
+        $exception = FileSystemException::operationFailed('create the directory', '/p', reason: $reason);
         self::assertSame(
-            'Failed to write to: "/p" ("...' . substr($reason, -256) . '" (' . strlen($reason) . ' bytes))',
+            'Failed to create the directory: "/p" ("' . substr($reason, 0, 128) . '...' . substr($reason, -128)
+                . '" (' . strlen($reason) . ' bytes))',
             $exception->getMessage(),
         );
     }
 
-    public function testATransferReasonOver256BytesKeepsItsEndFollowedByItsLength(): void
+    public function testATransferReasonOver256BytesKeepsItsStartAndEndFollowedByItsLength(): void
     {
-        $reason = 'rename(' . str_repeat('a', 300) . '): Permission denied';
+        $reason = 'rename(/srv/data/' . str_repeat('a', 300) . ',/srv/out/b): Permission denied';
         $exception = FileSystemException::transferFailed('move', '/a', '/c', $reason);
         self::assertSame(
-            'Failed to move "/a" to "/c" ("...' . substr($reason, -256) . '" (' . strlen($reason) . ' bytes))',
+            'Failed to move "/a" to "/c" ("' . substr($reason, 0, 128) . '...' . substr($reason, -128)
+                . '" (' . strlen($reason) . ' bytes))',
             $exception->getMessage(),
         );
     }

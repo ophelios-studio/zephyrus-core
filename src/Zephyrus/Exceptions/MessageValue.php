@@ -47,6 +47,27 @@ final class MessageValue
     }
 
     /**
+     * Like quote(), but a value over $maxBytes keeps its first intdiv($maxBytes, 2) bytes and the rest of
+     * $maxBytes at its end: `"abc...xyz" (300 bytes)`. Each part is cut on a character boundary.
+     */
+    public static function quoteEnds(string $value, int $maxBytes): string
+    {
+        $length = strlen($value);
+        if ($length <= $maxBytes) {
+            return '"' . self::escape($value) . '"';
+        }
+
+        $head = intdiv($maxBytes, 2);
+
+        return sprintf(
+            '"%s...%s" (%d bytes)',
+            self::escape(self::firstBytes($value, $head)),
+            self::escape(self::lastBytes($value, $maxBytes - $head)),
+            $length,
+        );
+    }
+
+    /**
      * A string through quote(), an int or float as var_export() writes it, true, false, null, or the type name.
      */
     public static function describe(mixed $value): string
