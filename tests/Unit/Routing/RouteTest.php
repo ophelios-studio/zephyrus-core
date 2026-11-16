@@ -475,4 +475,46 @@ final class RouteTest extends TestCase
         self::assertSame('/a', (new Route('GET', '/a', 'HomeController@index'))->path);
         self::assertSame('/users/{id}', (new Route('GET', '/users/{id}', 'HomeController@index'))->path);
     }
+
+    public function testAPathWithoutALeadingSlashIsQuotedWithOneInTheQueryMarkRefusal(): void
+    {
+        try {
+            new Route('GET', 'a?b', 'HomeController@index');
+            self::fail('A path holding "?" must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                'Invalid route path "a?b": the request path ends at "?", so this route would only match "/a"; '
+                . 'declare "/a" and read the query string from the request',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    #[DataProvider('invalidNamesBeforeAQuestionMark')]
+    public function testAnInvalidNameIsNotReportedAsAnOptionalPlaceholder(string $path, string $name): void
+    {
+        try {
+            new Route('GET', $path, 'HomeController@index');
+            self::fail('An invalid placeholder name must be refused.');
+        } catch (RouteSignatureException $exception) {
+            self::assertSame(
+                sprintf(
+                    'Invalid route parameter name "%s" on route "%s": a placeholder must match %s',
+                    $name,
+                    $path,
+                    Route::PARAMETER_NAME_PATTERN,
+                ),
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function invalidNamesBeforeAQuestionMark(): iterable
+    {
+        yield 'a leading digit' => ['/x/{1d?}', '1d?'];
+        yield 'a trailing dash' => ['/x/{a-?}', 'a-?'];
+    }
 }
