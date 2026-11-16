@@ -215,7 +215,7 @@ final class ConsoleTest extends TestCase
         self::assertSame(
             sprintf(
                 "cache:warm failed for %1\$s/config.yml: Configuration section 'router' field 'controllers' has invalid "
-                . 'value "app/Controllers": %1$s/app/Controllers, the directory of App\Controllers, is not a '
+                . 'value "app/Controllers": "%1$s/app/Controllers", the directory of App\Controllers, is not a '
                 . "directory.\n",
                 $this->project->path,
             ),
@@ -487,8 +487,9 @@ final class ConsoleTest extends TestCase
         self::assertSame(
             sprintf(
                 "cache:warm failed for %1\$s/config/config.yml: Configuration section 'router' field 'controllers' has "
-                . 'invalid value "app/Controllers": %1$s/config/app/Controllers, the directory of App\Controllers, is not '
-                . 'a directory. Note that router: is cached only from config.yml at the application root, and its paths '
+                . 'invalid value "app/Controllers": "%1$s/config/app/Controllers", the directory of App\Controllers, '
+                . 'is not a directory. Note that router: is cached only from config.yml at the application root, '
+                . 'and its paths '
                 . "were resolved against %1\$s/config.\n",
                 $this->project->path,
             ),

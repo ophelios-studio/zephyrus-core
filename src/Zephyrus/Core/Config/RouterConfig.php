@@ -7,6 +7,7 @@ namespace Zephyrus\Core\Config;
 use Symfony\Component\Yaml\Tag\TaggedValue;
 use Zephyrus\Core\Cache\BootCache;
 use Zephyrus\Core\Cache\PathPrefix;
+use Zephyrus\Exceptions\MessageValue;
 use Zephyrus\FileSystem\SafePath;
 
 /**
@@ -119,7 +120,11 @@ final readonly class RouterConfig
                     self::SECTION,
                     'controllers',
                     $directory,
-                    sprintf('%s, the directory of %s, is not a directory', $resolved, $namespace),
+                    sprintf(
+                        '%s, the directory of %s, is not a directory',
+                        MessageValue::quote($resolved, 512, keepEnd: true),
+                        MessageValue::escapeControls($namespace),
+                    ),
                 );
             }
 

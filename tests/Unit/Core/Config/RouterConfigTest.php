@@ -223,7 +223,23 @@ final class RouterConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertSame(
                 "Configuration section 'router' field 'controllers' has invalid value \"app/Controllers\": "
-                . '/srv/missing-application/app/Controllers, the directory of App\Controllers, is not a directory.',
+                . '"/srv/missing-application/app/Controllers", the directory of App\Controllers, is not a directory.',
+                $exception->getMessage(),
+            );
+        }
+    }
+
+    public function testAMissingControllerDirectoryWithControlCharactersIsRefusedEscaped(): void
+    {
+        $config = RouterConfig::fromArray(['controllers' => ['App\Controllers' => "nope\r\nFAKE"]]);
+
+        try {
+            $config->controllerDirectories('/srv/missing-application');
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $exception) {
+            self::assertSame(
+                'Configuration section \'router\' field \'controllers\' has invalid value "nope\r\nFAKE": '
+                . '"/srv/missing-application/nope\r\nFAKE", the directory of App\Controllers, is not a directory.',
                 $exception->getMessage(),
             );
         }
@@ -239,7 +255,7 @@ final class RouterConfigTest extends TestCase
         } catch (ConfigurationException $exception) {
             self::assertSame(
                 "Configuration section 'router' field 'controllers' has invalid value \"app/Con\\u0000trollers\": "
-                . "/srv/missing-application/app/Con\0trollers, the directory of App\\Controllers, is not a directory.",
+                . '"/srv/missing-application/app/Con\u0000trollers", the directory of App\Controllers, is not a directory.',
                 $exception->getMessage(),
             );
         }
