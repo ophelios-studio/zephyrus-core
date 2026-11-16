@@ -34,6 +34,20 @@ final class ServiceWithUnresolvableParam
     public function __construct(public readonly string $dsn) {}
 }
 
+final class ServiceWithUnionParam
+{
+    public function __construct(public readonly string|int $value) {}
+}
+
+final class ServiceWithMixedParams
+{
+    public function __construct(
+        public readonly SimpleService $simple,
+        public readonly int $timeout = 30,
+        public readonly string $label = 'default',
+    ) {}
+}
+
 interface SomeInterface {}
 
 abstract class AbstractService {}
@@ -412,33 +426,81 @@ final class ContainerTest extends TestCase
 
     public function testAutoWireNamesBuiltInTypeThatCannotBeProvided(): void
     {
+        $id = ServiceWithUnresolvableParam::class;
+
         try {
-            $this->container->get(ServiceWithUnresolvableParam::class);
+            $this->container->get($id);
             self::fail('An unprovidable scalar parameter must be refused.');
         } catch (ContainerException $e) {
-            self::assertStringContainsString('parameter $dsn of [' . ServiceWithUnresolvableParam::class . ']', $e->getMessage());
-            self::assertStringContainsString('built-in type string', $e->getMessage());
-            self::assertStringContainsString(
-                'give it a default value, or bind [' . ServiceWithUnresolvableParam::class . '] explicitly',
+            self::assertSame(
+                "Cannot auto-wire parameter \$dsn of [{$id}]: it has the built-in type string, "
+                . 'which the container cannot provide, and no default value; '
+                . "give it a default value, or bind [{$id}] explicitly.",
                 $e->getMessage(),
             );
-            self::assertStringNotContainsString('add a class or interface type', $e->getMessage());
-            self::assertStringNotContainsString('no type hint', $e->getMessage());
+        }
+    }
+
+    public function testAutoWireNamesUnionTypeThatCannotBeProvided(): void
+    {
+        $id = ServiceWithUnionParam::class;
+
+        try {
+            $this->container->get($id);
+            self::fail('An unprovidable union parameter must be refused.');
+        } catch (ContainerException $e) {
+            self::assertSame(
+                "Cannot auto-wire parameter \$value of [{$id}]: it has the type string|int, "
+                . 'which the container cannot provide, and no default value; '
+                . "give it a default value, or bind [{$id}] explicitly.",
+                $e->getMessage(),
+            );
         }
     }
 
     public function testAutoWireUntypedParamWithoutDefaultNamesTheFix(): void
     {
+        $id = ServiceWithUntypedParam::class;
+
         try {
-            $this->container->get(ServiceWithUntypedParam::class);
+            $this->container->get($id);
             self::fail('An untyped parameter without a default must be refused.');
         } catch (ContainerException $e) {
-            self::assertStringContainsString('parameter $value of [' . ServiceWithUntypedParam::class . ']', $e->getMessage());
-            self::assertStringContainsString(
-                'add a class or interface type, give it a default value, or bind [' . ServiceWithUntypedParam::class . '] explicitly',
+            self::assertSame(
+                "Cannot auto-wire parameter \$value of [{$id}]: it has no type hint and no default value; "
+                . "add a class or interface type, give it a default value, or bind [{$id}] explicitly.",
                 $e->getMessage(),
             );
         }
+    }
+
+    public function testAutoWireResolvesEveryParameterOfAMixedConstructor(): void
+    {
+        $service = $this->container->get(ServiceWithMixedParams::class);
+
+        self::assertInstanceOf(ServiceWithMixedParams::class, $service);
+        self::assertSame(30, $service->timeout);
+        self::assertSame('default', $service->label);
+    }
+
+    public function testHasIsTrueForNonClassIdsRegisteredAsBindingOrSingleton(): void
+    {
+        $this->container->bind('transient.entry', fn() => 1);
+        $this->container->singleton('shared.entry', fn() => 2);
+
+        self::assertTrue($this->container->has('transient.entry'));
+        self::assertTrue($this->container->has('shared.entry'));
+    }
+
+    public function testMakeCallsTheTransientBindingOfANonClassId(): void
+    {
+        $calls = 0;
+        $this->container->bind('counter.entry', function () use (&$calls): int {
+            return ++$calls;
+        });
+
+        self::assertSame(1, $this->container->make('counter.entry'));
+        self::assertSame(2, $this->container->make('counter.entry'));
     }
 
     public function testAutoWireResolvesStringVariadicToNoArguments(): void
@@ -570,10 +632,15 @@ final class ContainerTest extends TestCase
 
     public function testCircularDependencyThrowsContainerException(): void
     {
-        $this->expectException(ContainerException::class);
-        $this->expectExceptionMessageMatches('/Circular dependency detected/');
-
-        $this->container->get(CircularA::class);
+        try {
+            $this->container->get(CircularA::class);
+            self::fail('A circular dependency must be refused.');
+        } catch (ContainerException $e) {
+            self::assertSame(
+                'Circular dependency detected while resolving [' . CircularA::class . '].',
+                $e->getMessage(),
+            );
+        }
     }
 
     // ------------------------------------------------------------------
