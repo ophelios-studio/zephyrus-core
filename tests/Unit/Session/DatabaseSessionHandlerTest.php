@@ -851,11 +851,11 @@ final class DatabaseSessionHandlerTest extends TestCase
      */
     private static function assertNeverReadWarning(array $warnings): void
     {
-        self::assertCount(1, $warnings);
-        self::assertSame(E_USER_WARNING, $warnings[0][0]);
-        self::assertStringContainsString('read()', $warnings[0][1]);
-        self::assertStringContainsString('so nothing is stored', $warnings[0][1]);
-        self::assertStringNotContainsString('43e880c2447ca10d3092d51d258c050c', $warnings[0][1]);
+        self::assertSame([[
+            E_USER_WARNING,
+            'DatabaseSessionHandler refused to write a session it never read, so nothing is stored. '
+            . 'A handler wrapping it must delegate read() before write() or updateTimestamp().',
+        ]], $warnings);
     }
 
     public function testUpdateTimestampReportsTheRowItRefreshed(): void
@@ -865,6 +865,15 @@ final class DatabaseSessionHandlerTest extends TestCase
         $this->handler->read('43e880c2447ca10d3092d51d258c050c');
 
         self::assertTrue($this->handler->updateTimestamp('43e880c2447ca10d3092d51d258c050c', 'user_id|i:1;'));
+    }
+
+    public function testDestroyOfAnIdTheHandlerRefusesNeverReachesTheDatabase(): void
+    {
+        $handler = new DatabaseSessionHandler(static function (): never {
+            throw new \RuntimeException('the database must not be resolved');
+        });
+
+        self::assertTrue($handler->destroy('short'));
     }
 
     public function testDestroyReportsSuccessWhetherItDeletedTheRowOrFoundItGone(): void

@@ -507,9 +507,73 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
             restore_error_handler();
         }
 
-        self::assertCount(1, $warnings);
-        self::assertStringContainsString('lockSessions: false', $warnings[0]);
+        self::assertSame([
+            'DatabaseSessionHandler released a session lock on a database connection that does not hold it, so the '
+            . 'lock stays held on another server connection. Transaction pooling (PgBouncer pool_mode=transaction) '
+            . 'causes this: construct the handler with lockSessions: false there. Locking is now off for the rest of '
+            . 'this request.',
+        ], $warnings);
         self::assertSame(0, $locksAfterNextRead);
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function lockKeyProvider(): array
+    {
+        return [
+            'zero'                     => ['AAAAAAAAAAAAAAAAAAAA3qp014620000', 0x00000000],
+            'a small hash'             => ['AAAAAAAAAAAAAAAAAAAAw053526w0000', 0x12345678],
+            'the largest signed hash'  => ['AAAAAAAAAAAAAAAAAAAA0241uv2p0000', 0x7fffffff],
+            'the first negative hash'  => ['AAAAAAAAAAAAAAAAAAAA13qst0t30000', 0x80000000],
+            'a high hash'              => ['AAAAAAAAAAAAAAAAAAAAw535psr20000', 0x9abcdef0],
+            'the largest hash'         => ['AAAAAAAAAAAAAAAAAAAA2p5r0rpq0000', 0xffffffff],
+        ];
+    }
+
+    #[DataProvider('lockKeyProvider')]
+    public function testTheSessionLockIsKeyedByTheUnsignedCrcOfTheId(string $id, int $crc): void
+    {
+        self::assertSame($crc, crc32($id));
+        $this->database->execute(
+            "INSERT INTO {$this->schema}.session (session_id, access, expire, data) VALUES (?, ?, ?, ?)",
+            [$id, time(), time() + 1440, 'user_id|i:1;'],
+        );
+
+        $this->handler()->read($id);
+
+        $locks = $this->database->select(
+            "SELECT classid::bigint AS classid, objid::bigint AS objid FROM pg_locks "
+            . "WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND granted",
+        );
+        self::assertCount(1, $locks);
+        self::assertSame(DatabaseSessionHandler::ADVISORY_LOCK_NAMESPACE, (int) $locks[0]->classid);
+        self::assertSame($crc, (int) $locks[0]->objid);
+    }
+
+    public function testAHandlerBuiltWithoutLockingTakesNoLockOnRead(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $handler = new DatabaseSessionHandler($this->database, "{$this->schema}.session", lockSessions: false);
+
+        self::assertSame('user_id|i:1;', $handler->read($id));
+
+        self::assertSame(0, $this->advisoryLocksHeld());
+    }
+
+    public function testAContendedReadThatGetsTheLockAfterWaitingReleasesItOnClose(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $holder = $this->holdSessionInAnotherProcess($id, 500_000);
+        $handler = $this->handler();
+
+        $handler->read($id);
+        $heldAfterRead = $this->advisoryLocksHeld();
+        $handler->close();
+        proc_close($holder);
+
+        self::assertSame(1, $heldAfterRead);
+        self::assertSame(0, $this->advisoryLocksHeld());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
