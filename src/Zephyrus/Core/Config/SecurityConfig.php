@@ -36,7 +36,8 @@ use Zephyrus\Security\SecureHeadersConfig;
  *   - csrfEnabled:    true. CSRF protection is opt-out.
  *   - csrfExceptions: [] (no excluded paths).
  *   - allowedHosts:   [] (any host). Populate it in production.
- *   - maxBodySize:    2097152 (2 MB). 0 = unlimited. An integer or a string of at most 18 digits, no unit suffix.
+ *   - maxBodySize:    2097152 (2 MB, Request::MAX_BODY_SIZE_DEFAULT). 0 = unlimited. An integer or a string of at
+ *                     most 18 digits, no unit suffix. Request::fromGlobals() reads 2 MB unless given this value.
  *   - trustedProxies: [] (no proxy trusted, so forwarded headers are ignored).
  *   - trustedHeaders: the X-Forwarded-* family (Request::TRUSTED_HEADERS_DEFAULT). 'forwarded',
  *                     'x-real-ip', 'cf-connecting-ip' and 'x-client-ip' are opt-in. [] reads none.
@@ -188,7 +189,7 @@ final readonly class SecurityConfig
         }
 
         $maxBodySize = $keys->value('maxBodySize') === null
-            ? 2_097_152
+            ? Request::MAX_BODY_SIZE_DEFAULT
             : self::byteCount($keys->key('maxBodySize'), $keys->value('maxBodySize'));
         $trustedProxies = self::listValue($keys->value('trustedProxies'));
         // An absent key takes the default set. An explicit [] is a valid, strictest setting.

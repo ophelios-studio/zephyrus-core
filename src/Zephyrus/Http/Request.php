@@ -70,6 +70,9 @@ final readonly class Request
         'x-client-ip',
     ];
 
+    /** The body read limit of fromGlobals() and the default of security.maxBodySize: 2 MB. */
+    public const int MAX_BODY_SIZE_DEFAULT = 2_097_152;
+
     private const SCHEME_PATTERN = '#^[a-zA-Z][a-zA-Z0-9+.\-]*://#';
 
     private const HTTP_URL_PATTERN = '#^(https?)://#i';
@@ -147,14 +150,15 @@ final readonly class Request
      *                                                   the peer is a trusted proxy. Names are
      *                                                   case-insensitive. Defaults to the
      *                                                   X-Forwarded-* family; pass [] to read none.
-     * @param int                        $maxBodySize    0 reads the whole body. Above 0, a body is read at most
-     *                                                   one byte past that limit: pass the limit given to
-     *                                                   MaxBodySizeMiddleware. A body over it, or a declared
-     *                                                   Content-Length over it (raw body then empty), is left
-     *                                                   unparsed (empty, malformed, even on a GET) and the
-     *                                                   middleware refuses it. A multipart body, which PHP parses
-     *                                                   itself, stays parsed unless its declared length is over
-     *                                                   the limit: the middleware's measure refuses it either way.
+     * @param int                        $maxBodySize    The read limit, 2 MB by default: pass
+     *                                                   $config->security->maxBodySize. A body is read at most one
+     *                                                   byte past it. A body over it, or a declared Content-Length
+     *                                                   over it (raw body then empty), is left unparsed and
+     *                                                   truncated (RequestBody::isTruncated()), even on a GET, and
+     *                                                   refused before any controller (413 by default). A multipart
+     *                                                   body, which PHP parses itself, is measured on its fields and
+     *                                                   files as MaxBodySizeMiddleware measures it, and truncated
+     *                                                   the same way over the limit. 0 reads the whole body.
      *
      * @throws \InvalidArgumentException When $maxBodySize is negative.
      */
@@ -167,7 +171,7 @@ final readonly class Request
         ?string $rawBody = null,
         array $trustedProxies = [],
         array $trustedHeaders = self::TRUSTED_HEADERS_DEFAULT,
-        int $maxBodySize = 0,
+        int $maxBodySize = self::MAX_BODY_SIZE_DEFAULT,
     ): self {
         if ($maxBodySize < 0) {
             throw new \InvalidArgumentException('Maximum body size must be 0 (unlimited) or a positive byte count.');
@@ -188,16 +192,20 @@ final readonly class Request
         $uri     = self::buildUri($server, $trusted, $trustedProxies);
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
-        $overBudget = false;
-        $raw = self::readBody($rawBody, $headers['content-length'] ?? null, $maxBodySize, $overBudget);
-        $malformed  = $overBudget;
-        $parsedBody = $overBudget ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
+        $contentLength = $headers['content-length'] ?? null;
+        $cut        = false;
+        $raw        = self::readBody($rawBody, BodySize::declared($contentLength), $maxBodySize, $cut);
+        $malformed  = false;
+        $parsedBody = $cut ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
+        $files      = self::normalizeFileUploads($files);
+        $truncated  = $maxBodySize !== 0 && BodySize::measure($contentLength, $raw, $parsedBody, $files) > $maxBodySize;
+        $parsedBody = $truncated ? [] : $parsedBody;
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
 
         return new self(
             method:     $method,
             uri:        $uri,
-            body:       new RequestBody($parsedBody, $raw, $malformed),
+            body:       new RequestBody($parsedBody, $raw, $malformed, $maxBodySize, $truncated),
             query:      $get,
             headers:    new HeaderBag($headers),
             cookies:    new CookieJar($cookie),
@@ -729,16 +737,17 @@ final readonly class Request
         return in_array($scheme, ['http', 'https'], true) ? $scheme : null;
     }
 
-    /** Reads the body, at most $maxBytes + 1 bytes when $maxBytes is positive. */
-    private static function readBody(?string $injected, mixed $declared, int $maxBytes, bool &$overBudget): string
+    /**
+     * Reads the body, at most $maxBytes + 1 bytes when $maxBytes is positive, and nothing when the declared length is
+     * over it. $cut is set when the body was read past $maxBytes, so it is not parsed.
+     */
+    private static function readBody(?string $injected, ?int $declared, int $maxBytes, bool &$cut): string
     {
         if ($maxBytes === 0) {
             return $injected ?? (string) file_get_contents('php://input');
         }
 
-        if (is_string($declared) && preg_match('/^\d+$/D', trim($declared)) === 1 && (int) trim($declared) > $maxBytes) {
-            $overBudget = true;
-
+        if ($declared !== null && $declared > $maxBytes) {
             return '';
         }
 
@@ -754,7 +763,7 @@ final readonly class Request
             $raw = substr($injected, 0, $readLimit);
         }
 
-        $overBudget = strlen($raw) > $maxBytes;
+        $cut = strlen($raw) > $maxBytes;
 
         return $raw;
     }

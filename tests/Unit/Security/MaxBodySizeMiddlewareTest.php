@@ -7,6 +7,7 @@ namespace Zephyrus\Tests\Unit\Security;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\Request;
+use Zephyrus\Http\RequestBody;
 use Zephyrus\Http\Response;
 use Zephyrus\Security\BodyTooLarge;
 use Zephyrus\Security\MaxBodySizeMiddleware;
@@ -290,6 +291,102 @@ final class MaxBodySizeMiddlewareTest extends TestCase
 
         self::assertSame(0, $calls);
         self::assertSame('HANDLED', $response->body);
+    }
+
+    public function testABodyCutUnderTheBudgetIsRefusedThroughOnFailure(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(
+            1_000,
+            onFailure: static fn (Request $request, BodyTooLarge $refusal): Response => Response::text('Too large', 422),
+        );
+
+        $response = $middleware->process(self::bodyCutAtFourBytes(), static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(422, $response->status);
+    }
+
+    public function testAnUnlimitedBudgetStillRefusesACutBody(): void
+    {
+        $middleware = new MaxBodySizeMiddleware(0);
+
+        $response = $middleware->process(self::bodyCutAtFourBytes(), static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame(413, $response->status);
+    }
+
+    /**
+     * @return array<string, array{0: int, 1: Request, 2: array{0: int, 1: int}}>
+     */
+    public static function truncatedBodyProvider(): array
+    {
+        $uploadedFile = ['name' => 'scan.pdf', 'type' => 'application/pdf', 'tmp_name' => 'php-upload', 'error' => UPLOAD_ERR_OK, 'size' => 10];
+
+        return [
+            'cut past a read limit under the budget'        => [1_000, self::bodyCutAtFourBytes(), [5, 4]],
+            'cut past a read limit under no budget'         => [0, self::bodyCutAtFourBytes(), [5, 4]],
+            'cut past a budget under the read limit'        => [2, self::bodyCutAtFourBytes(), [5, 2]],
+            'declared past the read limit'                  => [1_000, self::bodyCutAtFourBytes(['CONTENT_LENGTH' => '999999999999']), [999_999_999_999, 4]],
+            'fields PHP parsed past the read limit'         => [1_000, self::chunkedMultipartCutAtFourBytes(['notes' => 'abcdef']), [5, 4]],
+            'a file PHP parsed past the read limit'         => [1_000, self::chunkedMultipartCutAtFourBytes([], ['scan' => $uploadedFile]), [10, 4]],
+            'cut past a read limit above the budget, no length declared' => [1_048_576, new Request('POST', '/upload', new RequestBody([], '', readLimit: 2_097_152, truncated: true)), [2_097_153, 1_048_576]],
+            'built truncated without a read limit'          => [1_000, new Request('POST', '/upload', new RequestBody([], '', truncated: true)), [1_001, 1_000]],
+            'built truncated without a read limit or budget' => [0, new Request('POST', '/upload', new RequestBody([], '', truncated: true)), [1, 0]],
+            'built truncated at the largest read limit'     => [0, new Request('POST', '/upload', new RequestBody([], '', readLimit: PHP_INT_MAX, truncated: true)), [PHP_INT_MAX, PHP_INT_MAX]],
+        ];
+    }
+
+    /**
+     * @param array{0: int, 1: int} $expected The bytes and the limit onFailure receives.
+     */
+    #[DataProvider('truncatedBodyProvider')]
+    public function testOnFailureReceivesTheLimitThatRefusedATruncatedBody(int $budget, Request $request, array $expected): void
+    {
+        $seen = [];
+        $middleware = new MaxBodySizeMiddleware(
+            $budget,
+            onFailure: static function (Request $request, BodyTooLarge $refusal) use (&$seen): ?Response {
+                $seen[] = [$refusal->bytes, $refusal->maxBytes];
+
+                return null;
+            },
+        );
+
+        $middleware->process($request, static fn (): Response => Response::text('HANDLED'));
+
+        self::assertSame([$expected], $seen);
+    }
+
+    /**
+     * @param array<string, string> $server
+     */
+    private static function bodyCutAtFourBytes(array $server = []): Request
+    {
+        return Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/upload', 'CONTENT_TYPE' => 'application/json'] + $server,
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: '{"a":1}',
+            maxBodySize: 4,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $post
+     * @param array<string, mixed> $files
+     */
+    private static function chunkedMultipartCutAtFourBytes(array $post, array $files = []): Request
+    {
+        return Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/upload', 'CONTENT_TYPE' => 'multipart/form-data; boundary=form-boundary'],
+            get: [],
+            post: $post,
+            cookie: [],
+            files: $files,
+            rawBody: '',
+            maxBodySize: 4,
+        );
     }
 
     /**

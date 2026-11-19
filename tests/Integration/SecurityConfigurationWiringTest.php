@@ -24,6 +24,7 @@ use Zephyrus\Security\ForceHttpsMiddleware;
 use Zephyrus\Security\MaxBodySizeMiddleware;
 use Zephyrus\Security\SecureHeadersConfig;
 use Zephyrus\Security\SecureHeadersMiddleware;
+use Zephyrus\Tests\Support\CapturedErrorLog;
 
 /**
  * The security: block must not be inert: declared keys have to reach a global middleware. The framework
@@ -32,6 +33,8 @@ use Zephyrus\Security\SecureHeadersMiddleware;
  */
 final class SecurityConfigurationWiringTest extends TestCase
 {
+    use CapturedErrorLog;
+
     private const array DECLARED_HEADERS = ['security' => ['headers' => ['csp' => "default-src 'self'"]]];
 
     /**
@@ -49,8 +52,14 @@ final class SecurityConfigurationWiringTest extends TestCase
         ];
     }
 
+    protected function setUp(): void
+    {
+        $this->captureErrorLog();
+    }
+
     protected function tearDown(): void
     {
+        $this->releaseErrorLog();
         App::reset();
     }
 
@@ -438,6 +447,45 @@ final class SecurityConfigurationWiringTest extends TestCase
             ->build();
 
         self::assertInstanceOf(Application::class, $application);
+    }
+
+    public function testABodyCutBelowTheDeclaredMaxBodySizeIsRefusedAndTheFixIsLogged(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray(['security' => ['max_body_size' => 8_388_608]])
+            ->withRouter(new Router())
+            ->withMiddleware(new MaxBodySizeMiddleware(8_388_608))
+            ->build();
+
+        $response = $application->handle(self::putWithoutReadLimit(str_repeat('a', 3_145_728)));
+
+        self::assertSame(413, $response->status);
+        self::assertSame(
+            ['Zephyrus: Request::fromGlobals() read the body with a limit of 2097152 bytes, but security.maxBodySize allows '
+                . '8388608: pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().'],
+            $this->capturedErrorLogLines(),
+        );
+    }
+
+    public function testABodyCutWithoutADeclaredMaxBodySizeIsRefusedWithoutAReport(): void
+    {
+        $application = ApplicationBuilder::create()
+            ->withConfigurationArray([])
+            ->withRouter(new Router())
+            ->build();
+        $request = Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'PUT', 'REQUEST_URI' => '/upload'],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: 'abcdefgh',
+            maxBodySize: 4,
+        );
+
+        $response = $application->handle($request);
+
+        self::assertSame([413, ''], [$response->status, $this->capturedErrorLog()]);
     }
 
     #[DataProvider('noLooserSecondLimitProvider')]
@@ -1060,6 +1108,18 @@ final class SecurityConfigurationWiringTest extends TestCase
         }
 
         self::fail('build() accepted the configuration.');
+    }
+
+    private static function putWithoutReadLimit(string $body): Request
+    {
+        return Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'PUT', 'REQUEST_URI' => '/upload'],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: $body,
+        );
     }
 
     /**

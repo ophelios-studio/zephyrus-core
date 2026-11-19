@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zephyrus\Core;
 
 use Throwable;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewarePipeline;
@@ -12,27 +13,36 @@ use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 use Zephyrus\Routing\RouteDispatcher;
 use Zephyrus\Routing\RouteMatch;
+use Zephyrus\Security\MaxBodySizeMiddleware;
 
 /**
  * Turns a Request into a Response: resolves the route, runs the global and
  * route middlewares, and converts any throwable into an error response.
  *
- * Order: RequestEvent (a listener may short-circuit), routing and pipeline,
- * then ResponseEvent (a listener may replace the response). ExceptionEvent
- * fires once per throwable at the point of conversion.
+ * Order: RequestEvent (a listener may short-circuit), the truncated body check,
+ * routing and pipeline, then ResponseEvent (a listener may replace the response).
+ * ExceptionEvent fires once per throwable at the point of conversion.
+ *
+ * A body Request::fromGlobals() truncated at its read limit never reaches a
+ * handler: a global MaxBodySizeMiddleware refuses it in the pipeline, and without
+ * one the kernel answers that middleware's default 413 before the pipeline. When
+ * the read limit is below the configured security.maxBodySize, a
+ * ConfigurationException naming the fix goes to ExceptionEvent, then is rethrown
+ * when unhandled exceptions are, or logged as its message alone, on one line.
  *
  * Error responses (404, 405, failing handler) pass through the global
  * pipeline and carry its decorations (security headers, CSP, host and HTTPS
- * checks). Three responses do not: a RequestEvent short-circuit, the backstop
- * used when a global middleware itself throws, and a response replaced by a
- * ResponseEvent listener. A header that must reach every response also belongs
- * at the web server or proxy.
+ * checks). Four responses do not: a RequestEvent short-circuit, the kernel's 413
+ * for a truncated body, the backstop used when a global middleware itself
+ * throws, and a response replaced by a ResponseEvent listener. A header that
+ * must reach every response also belongs at the web server or proxy.
  *
  * A throwable is unhandled when no handler or built-in mapping answers it,
  * when its handler rethrows it, or when its handler fails with another one.
  * handle() throws only when a RequestEvent or ResponseEvent listener throws,
- * or when a throwable is unhandled and unhandled exceptions are rethrown
- * (KernelBuilder::withUnhandledExceptionsRethrown(), for a debugger).
+ * or when a throwable is unhandled (the truncated body report included) and
+ * unhandled exceptions are rethrown (KernelBuilder::withUnhandledExceptionsRethrown(),
+ * for a debugger).
  * Otherwise an unhandled throwable is written to the error log and answered
  * with the generic 500 (a fixed text 500 when a handler failed, logged with
  * the exception it was answering).
@@ -56,11 +66,16 @@ final readonly class HttpKernel
 {
     private MiddlewarePipeline $globalPipeline;
 
+    private bool $bodyLimitMounted;
+
     /**
      * @param MiddlewarePipeline|null $globalPipeline Middlewares wrapping routed responses and
-     *   404/405/failing-handler error responses. Not RequestEvent short-circuits, the
-     *   global-middleware backstop or ResponseEvent replacements (see class docblock).
+     *   404/405/failing-handler error responses. Not RequestEvent short-circuits, the kernel's
+     *   413 for a truncated body, the global-middleware backstop or ResponseEvent replacements
+     *   (see class docblock).
      * @param bool $rethrowUnhandled Lets an unhandled throwable leave handle(), for a debugger.
+     * @param int|null $configuredMaxBodySize The configured security.maxBodySize (0 for unlimited): a body
+     *   truncated at a smaller read limit is reported. Null reports nothing.
      */
     public function __construct(
         private RouteDispatcher $dispatcher,
@@ -68,8 +83,10 @@ final readonly class HttpKernel
         private ?EventDispatcher $events = null,
         ?MiddlewarePipeline $globalPipeline = null,
         private bool $rethrowUnhandled = false,
+        private ?int $configuredMaxBodySize = null,
     ) {
         $this->globalPipeline = $globalPipeline ?? new MiddlewarePipeline();
+        $this->bodyLimitMounted = $this->globalPipeline->hasMiddleware(MaxBodySizeMiddleware::class);
     }
 
     public function handle(Request $request): Response
@@ -84,6 +101,14 @@ final readonly class HttpKernel
             }
         }
 
+        if ($request->body()->isTruncated()) {
+            $this->reportReadLimitBelowConfiguration($request);
+
+            if (!$this->bodyLimitMounted) {
+                return $this->fireResponseEvent($request, MaxBodySizeMiddleware::defaultRefusal($request));
+            }
+        }
+
         try {
             $response = $this->resolveAndPipe($request);
         } catch (KernelRethrowSignal $signal) {
@@ -93,6 +118,33 @@ final readonly class HttpKernel
         }
 
         return $this->fireResponseEvent($request, $response);
+    }
+
+    /**
+     * Reports a body truncated at a read limit below the configured security.maxBodySize, which means
+     * Request::fromGlobals() was not given the configuration. The request is refused either way.
+     */
+    private function reportReadLimitBelowConfiguration(Request $request): void
+    {
+        $readLimit = $request->body()->readLimit();
+        $configured = $this->configuredMaxBodySize;
+        if ($readLimit === null || $configured === null) {
+            return;
+        }
+
+        if ($configured !== 0 && $configured <= $readLimit) {
+            return;
+        }
+
+        $error = ConfigurationException::bodyReadBelowConfiguredLimit($readLimit, $configured);
+        $this->fireExceptionEvent($error, $request, ExceptionEvent::SOURCE_REQUEST);
+
+        if ($this->rethrowUnhandled) {
+            throw $error;
+        }
+
+        // Any client can trigger this on every request: the message alone, never the trace or its paths.
+        error_log('Zephyrus: ' . $error->getMessage());
     }
 
     /**

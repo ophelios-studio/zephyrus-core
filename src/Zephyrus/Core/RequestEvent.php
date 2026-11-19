@@ -9,7 +9,8 @@ use Zephyrus\Http\Response;
 /**
  * Fired by HttpKernel before routing. A listener calling setResponse() short-circuits
  * routing: no further RequestEvent listener runs, and the response still goes through
- * ResponseEvent.
+ * ResponseEvent. Listeners run before a truncated body is refused, so they can see one
+ * (fields empty, uploaded files still listed, RequestBody::isTruncated()).
  */
 final class RequestEvent extends KernelEvent
 {

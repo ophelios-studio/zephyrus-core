@@ -9,6 +9,27 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Security
+
+- `Request::fromGlobals()` reads at most 2 MB of the request body (2097152 bytes, `Request::MAX_BODY_SIZE_DEFAULT`, also the default of `security.max_body_size`) when it is not given `maxBodySize`, where it read the whole body into memory before any middleware could refuse it: a 300 MB `PUT` took 300 MB of PHP memory. A declared `Content-Length` over the limit is never read, and a body without one is read one byte past it. Such a body is truncated (`RequestBody::isTruncated()`, and `isMalformed()` is true) and never reaches a controller: a global `MaxBodySizeMiddleware` refuses it whatever its own limit, through its `onFailure`, and without one `HttpKernel` answers the middleware's default `413` (plain text when `Accept` lists `text/html`, JSON otherwise) before the global middlewares run. `maxBodySize: 0` still reads the whole body.
+
+### Changed
+
+- An application whose `security.max_body_size` is above 2 MB and that does not pass it to `Request::fromGlobals()` now refuses bodies between 2 MB and its limit, forms and uploads included, where it accepted them. Pass `maxBodySize: $config->security->maxBodySize` to `fromGlobals()`, also when the body is injected with `rawBody:` (see [UPGRADE.md](UPGRADE.md#from-3170-to-3171)). Each such request is refused and reported with a `ConfigurationException` that names the fix (`Request::fromGlobals() read the body with a limit of 2097152 bytes, but security.maxBodySize allows 8388608: pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().`): to `ExceptionEvent` listeners (source `ExceptionEvent::SOURCE_REQUEST`), then thrown to the debugger when unhandled exceptions are rethrown, or written to the error log. Requests within 2 MB are unaffected, and an application that does not declare `max_body_size` gets no report.
+
+### Added
+
+- `RequestBody::isTruncated()` and `RequestBody::readLimit()` (the limit `fromGlobals()` read the body with, `0` for none, `null` for a body it did not build), with the matching `RequestBody` constructor arguments.
+- `KernelBuilder::withConfiguredMaxBodySize()` and the `HttpKernel` constructor argument `configuredMaxBodySize`, which `ApplicationBuilder::build()` sets from a declared `security.maxBodySize`; `MiddlewarePipeline::contains()`.
+
+### Documentation
+
+Pages of zephyrus.ophelios.com that this version makes stale, each in English and in French (`content/fr/`):
+
+- `fundamentals/security.md`: `fromGlobals()` reads 2 MB by default, not the whole body, and a truncated body is refused by the kernel when no `MaxBodySizeMiddleware` is mounted (Request body size, the defaults table and the checklist).
+- `fundamentals/application.md` and `fundamentals/http.md`: `maxBodySize` is required above 2 MB; `RequestBody::isTruncated()` and `readLimit()`.
+- `digging-deeper/uploads.md`: an upload over 2 MB needs `maxBodySize` passed to `fromGlobals()`.
+
 ## [3.17.0] - 2026-11-19
 
 ### Breaking changes

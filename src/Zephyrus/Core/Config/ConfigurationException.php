@@ -324,6 +324,27 @@ final class ConfigurationException extends ZephyrusException
         );
     }
 
+    /** Reported by HttpKernel when Request::fromGlobals() truncated a body at a read limit below security.maxBodySize. */
+    public static function bodyReadBelowConfiguredLimit(int $readLimit, int $configuredLimit): self
+    {
+        if ($configuredLimit === 0) {
+            return new self(sprintf(
+                'Request::fromGlobals() read the body with a limit of %d bytes, but security.maxBodySize is 0 '
+                    . '(unlimited): set security.maxBodySize to the largest body the application accepts and pass '
+                    . 'maxBodySize: $config->security->maxBodySize to Request::fromGlobals(); a limit of 0 reads any '
+                    . 'body whole into memory.',
+                $readLimit,
+            ));
+        }
+
+        return new self(sprintf(
+            'Request::fromGlobals() read the body with a limit of %d bytes, but security.maxBodySize allows %d: '
+                . 'pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().',
+            $readLimit,
+            $configuredLimit,
+        ));
+    }
+
     /** Raised when ContentSecurityPolicyMiddleware is registered before a SecureHeadersMiddleware that sets its own csp. */
     public static function shadowedContentSecurityPolicy(): self
     {

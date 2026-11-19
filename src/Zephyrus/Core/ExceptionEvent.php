@@ -51,6 +51,9 @@ final class ExceptionEvent extends KernelEvent
     /** The exception responder itself threw, usually a broken error template. */
     public const SOURCE_RESPONDER = 'responder';
 
+    /** Request::fromGlobals() truncated the body at a read limit below the configured security.maxBodySize. */
+    public const SOURCE_REQUEST = 'request';
+
     /**
      * @param string $source One of the SOURCE_* constants, describing where the
      *   throwable came from.

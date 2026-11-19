@@ -76,6 +76,22 @@ final class MiddlewarePipeline
     }
 
     /**
+     * Whether a middleware of the chain is an instance of the given class or interface.
+     *
+     * @param class-string $class
+     */
+    public function hasMiddleware(string $class): bool
+    {
+        foreach ($this->middlewares as $middleware) {
+            if ($middleware instanceof $class) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Runs the chain around $destination and returns the response.
      *
      * @param callable(Request): Response $destination

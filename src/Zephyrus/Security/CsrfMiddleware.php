@@ -28,6 +28,9 @@ use function strtolower;
  * Requests that matched no route are never refused: the 404 or 405 is answered
  * instead, since no handler runs and no state changes.
  *
+ * Register MaxBodySizeMiddleware before it: a body too large reads as empty, so a
+ * token sent in the form is missing and the request gets this 403, not the 413.
+ *
  * Usage:
  *
  *   $csrf = new SessionCsrfTokenManager($session);

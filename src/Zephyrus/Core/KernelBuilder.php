@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zephyrus\Core;
 
+use InvalidArgumentException;
 use LogicException;
 use Throwable;
 use Zephyrus\Container\ContainerInterface;
@@ -68,6 +69,8 @@ final class KernelBuilder
     private array $exceptionHandlers = [];
 
     private bool $unhandledExceptionsRethrown = false;
+
+    private ?int $configuredMaxBodySize = null;
 
     public static function create(): self
     {
@@ -207,6 +210,26 @@ final class KernelBuilder
     }
 
     /**
+     * Declares the configured security.maxBodySize (0 for unlimited), so a body Request::fromGlobals() truncated at a
+     * smaller read limit is reported as a ConfigurationException (see HttpKernel). ApplicationBuilder::build() passes
+     * it when the configuration declares maxBodySize.
+     *
+     * @throws InvalidArgumentException When $bytes is negative.
+     */
+    #[\NoDiscard]
+    public function withConfiguredMaxBodySize(int $bytes): self
+    {
+        if ($bytes < 0) {
+            throw new InvalidArgumentException('Maximum body size must be 0 (unlimited) or a positive byte count.');
+        }
+
+        $clone = clone $this;
+        $clone->configuredMaxBodySize = $bytes;
+
+        return $clone;
+    }
+
+    /**
      * Whether a middleware of the given class is registered, globally or under a route name.
      * Matching is by instanceof: a decorator wrapping a framework middleware is not seen
      * (see ApplicationBuilder::withAcknowledgedSecurityKeys()).
@@ -324,6 +347,7 @@ final class KernelBuilder
             $this->eventDispatcher,
             $globalPipeline,
             $this->unhandledExceptionsRethrown,
+            $this->configuredMaxBodySize,
         );
     }
 

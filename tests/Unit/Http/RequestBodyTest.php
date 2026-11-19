@@ -6,6 +6,7 @@ namespace Tests\Unit\Http;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Zephyrus\Http\Request;
 use Zephyrus\Http\RequestBody;
 
 final class RequestBodyTest extends TestCase
@@ -98,5 +99,20 @@ final class RequestBodyTest extends TestCase
     public function isMalformedReflectsTheConstructorFlag(): void
     {
         self::assertTrue((new RequestBody([], '{"a":', true))->isMalformed());
+    }
+
+    #[Test]
+    public function aBodyBuiltOutsideFromGlobalsHasNoReadLimitAndIsNotTruncated(): void
+    {
+        $body = Request::fromArray('POST', '/upload', body: ['a' => 1], rawBody: '{"a":1}')->body();
+
+        self::assertNull($body->readLimit());
+        self::assertFalse($body->isTruncated());
+    }
+
+    #[Test]
+    public function aTruncatedBodyIsMalformed(): void
+    {
+        self::assertTrue((new RequestBody([], 'abcde', readLimit: 4, truncated: true))->isMalformed());
     }
 }

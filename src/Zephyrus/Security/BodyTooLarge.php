@@ -7,6 +7,9 @@ namespace Zephyrus\Security;
 /**
  * Why MaxBodySizeMiddleware refused a request.
  *
+ * For a body Request::fromGlobals() truncated, maxBytes is the limit that cut it (the smaller positive one of the
+ * budget and the read limit) and bytes its measure, at least that limit plus one.
+ *
  * The failure callback receives attacker-controlled input, see MaxBodySizeMiddleware::__construct().
  */
 final readonly class BodyTooLarge

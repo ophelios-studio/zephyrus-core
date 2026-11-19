@@ -6,18 +6,15 @@ namespace Zephyrus\Security;
 
 use Closure;
 use InvalidArgumentException;
+use Zephyrus\Http\BodySize;
 use Zephyrus\Http\MiddlewareInterface;
 use Zephyrus\Http\Request;
 use Zephyrus\Http\Response;
 
-use function is_array;
-use function is_scalar;
-use function is_string;
-use function preg_match;
+use function max;
+use function min;
 use function str_contains;
-use function strlen;
 use function strtolower;
-use function trim;
 
 /**
  * Refuses a request whose body exceeds a byte budget with a 413: text/plain when Accept lists text/html, JSON otherwise.
@@ -35,13 +32,18 @@ use function trim;
  * Content-Type, and the uploaded files always count. A urlencoded or JSON body keeps its raw body, measured as is.
  * Without a Content-Length, a body PHP parsed is measured on what PHP kept (a repeated name keeps its last value).
  * post_max_size still bounds what PHP reads into memory. A total past PHP_INT_MAX counts as PHP_INT_MAX.
- * Pass the same limit to Request::fromGlobals(maxBodySize: ...) so the body is never read past it:
- * without it the whole body is in memory before this middleware runs.
+ * Request::fromGlobals() measures a body the same way and truncates one over its read limit (2 MB unless given one),
+ * which this middleware refuses whatever its budget, even 0: pass it the same limit,
+ * Request::fromGlobals(maxBodySize: ...).
+ * Register it before CsrfMiddleware: a body too large reads as empty, so a token sent in the form is missing and the
+ * request gets the CSRF 403, not the 413.
  * This is a budget, not a defence: a client that lies about its length is stopped by the web
  * server limit (client_max_body_size, LimitRequestBody) and by post_max_size, which must be set too.
  */
 final class MaxBodySizeMiddleware implements MiddlewareInterface
 {
+    private const string DEFAULT_MESSAGE = 'Request body too large.';
+
     /**
      * @param int $maxBytes Maximum accepted body size; 0 means unlimited,
      *                      matching SecurityConfig::$maxBodySize.
@@ -54,7 +56,7 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
      */
     public function __construct(
         private readonly int $maxBytes,
-        private readonly string $message = 'Request body too large.',
+        private readonly string $message = self::DEFAULT_MESSAGE,
         private readonly ?Closure $onFailure = null,
     ) {
         if ($maxBytes < 0) {
@@ -70,19 +72,47 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
 
     public function process(Request $request, callable $next): Response
     {
+        if ($request->body()->isTruncated()) {
+            return $this->refuse($request, $this->truncatedBodyRefusal($request));
+        }
+
         if ($this->maxBytes === 0) {
             /** @var Response */
             return $next($request);
         }
 
-        $bytes = $this->bodyBytes($request);
+        $bytes = self::bodyBytes($request);
 
-        if ($bytes !== null && $bytes > $this->maxBytes) {
+        if ($bytes > $this->maxBytes) {
             return $this->refuse($request, new BodyTooLarge($bytes, $this->maxBytes));
         }
 
         /** @var Response */
         return $next($request);
+    }
+
+    /**
+     * Refuses a truncated body at the limit that cut it, the smaller positive one of this budget and the read limit,
+     * with a size past both limits.
+     */
+    private function truncatedBodyRefusal(Request $request): BodyTooLarge
+    {
+        $readLimit = $request->body()->readLimit() ?? 0;
+        $limit = match (true) {
+            $this->maxBytes === 0 => $readLimit,
+            $readLimit === 0      => $this->maxBytes,
+            default               => min($this->maxBytes, $readLimit),
+        };
+
+        return new BodyTooLarge(
+            max(self::bodyBytes($request), self::pastLimit($limit), self::pastLimit($readLimit)),
+            $limit,
+        );
+    }
+
+    private static function pastLimit(int $limit): int
+    {
+        return $limit < PHP_INT_MAX ? $limit + 1 : $limit;
     }
 
     /**
@@ -99,74 +129,30 @@ final class MaxBodySizeMiddleware implements MiddlewareInterface
             }
         }
 
+        return self::defaultRefusal($request, $this->message);
+    }
+
+    /**
+     * The 413 without onFailure: text/plain when Accept lists text/html, JSON {"error": ...} otherwise.
+     *
+     * @internal Shared with HttpKernel, which answers a truncated body this way when no instance is mounted.
+     */
+    public static function defaultRefusal(Request $request, string $message = self::DEFAULT_MESSAGE): Response
+    {
         if (str_contains(strtolower($request->headers()->get('Accept') ?? ''), 'text/html')) {
-            return Response::text($this->message, 413);
+            return Response::text($message, 413);
         }
 
-        return Response::json(['error' => $this->message], 413);
+        return Response::json(['error' => $message], 413);
     }
 
-    /** The largest of the declared length, the raw body and the parsed-body measure; null when all are absent. */
-    private function bodyBytes(Request $request): ?int
+    private static function bodyBytes(Request $request): int
     {
-        $declared = $request->headers()->get('content-length');
-        $declaredBytes = null;
-
-        if (is_string($declared)) {
-            $declared = trim($declared);
-            if (preg_match('/^\d+$/D', $declared) === 1) {
-                $declaredBytes = (int) $declared;
-            }
-        }
-
-        $measured = max($declaredBytes ?? 0, strlen($request->body()->raw()), $this->parsedBodyBytes($request));
-
-        return $measured === 0 ? $declaredBytes : $measured;
-    }
-
-    /** The uploaded files, plus the keys and values of the text fields when the raw body is empty. */
-    private function parsedBodyBytes(Request $request): int
-    {
-        $total = $this->uploadedBytes($request);
-
-        if ($request->body()->raw() === '') {
-            $total = self::add($total, $this->fieldBytes($request->body()->all()));
-        }
-
-        return $total;
-    }
-
-    /** @param array<array-key, mixed> $fields */
-    private function fieldBytes(array $fields): int
-    {
-        $total = 0;
-
-        foreach ($fields as $key => $value) {
-            $total = self::add($total, strlen((string) $key));
-            $total = self::add(
-                $total,
-                is_array($value) ? $this->fieldBytes($value) : (is_scalar($value) ? strlen((string) $value) : 0),
-            );
-        }
-
-        return $total;
-    }
-
-    private function uploadedBytes(Request $request): int
-    {
-        $total = 0;
-
-        foreach ($request->files as $entry) {
-            foreach (is_array($entry) ? $entry : [$entry] as $file) {
-                $total = self::add($total, $file->sizeBytes);
-            }
-        }
-
-        return $total;
-    }
-
-    private static function add(int $total, int $bytes): int
-    {
-        return $bytes > PHP_INT_MAX - $total ? PHP_INT_MAX : $total + $bytes;
+        return BodySize::measure(
+            $request->headers()->get('content-length'),
+            $request->body()->raw(),
+            $request->body()->all(),
+            $request->files,
+        );
     }
 }

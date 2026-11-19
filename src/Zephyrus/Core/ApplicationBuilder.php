@@ -941,6 +941,8 @@ final class ApplicationBuilder
      * withDebugClientAllowlist() entries or, without an allowlist, to loopback under PHP's built-in server.
      *
      * With a router: section and no withRouter(), the router is built with Router::fromConfiguration().
+     * A declared security.maxBodySize reaches the kernel, which reports a body Request::fromGlobals() truncated
+     * below it (KernelBuilder::withConfiguredMaxBodySize()).
      *
      * @throws ConfigurationException when a declared security setting is not wired, an enforced
      *                                Content-Security-Policy middleware is shadowed by a SecureHeadersMiddleware csp,
@@ -1017,6 +1019,11 @@ final class ApplicationBuilder
 
         if ($errorsExposed) {
             $kernelBuilder = $kernelBuilder->withUnhandledExceptionsRethrown();
+        }
+
+        $security = $this->configuration?->security;
+        if ($security !== null && $security->isDeclared('maxBodySize')) {
+            $kernelBuilder = $kernelBuilder->withConfiguredMaxBodySize($security->maxBodySize);
         }
 
         return new Application(

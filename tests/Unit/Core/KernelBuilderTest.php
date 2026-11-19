@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Zephyrus\Tests\Unit\Core;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Container\Container;
+use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\ExceptionEvent;
 use Zephyrus\Core\HttpKernel;
 use Zephyrus\Core\KernelBuilder;
@@ -396,6 +398,51 @@ final class KernelBuilderTest extends TestCase
         $builder = KernelBuilder::create()->withMiddleware($this->makeMiddleware('X-Global', 'yes'));
 
         self::assertSame([], $builder->routeNamesOf($this->makeMiddleware('X-Any', 'yes')::class));
+    }
+
+    public function testWithConfiguredMaxBodySizeReturnsNewInstance(): void
+    {
+        $builder = KernelBuilder::create();
+
+        self::assertNotSame($builder, $builder->withConfiguredMaxBodySize(5));
+    }
+
+    public function testTheConfiguredMaxBodySizeReachesTheKernel(): void
+    {
+        $kernel = KernelBuilder::create()
+            ->withConfiguredMaxBodySize(5)
+            ->withUnhandledExceptionsRethrown()
+            ->build();
+        $request = Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/upload', 'CONTENT_TYPE' => 'application/json'],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: '{"a":1}',
+            maxBodySize: 4,
+        );
+
+        try {
+            $kernel->handle($request);
+            self::fail('expected a refusal');
+        } catch (ConfigurationException $e) {
+            self::assertSame(
+                'Request::fromGlobals() read the body with a limit of 4 bytes, but security.maxBodySize allows 5: '
+                    . 'pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().',
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testANegativeConfiguredMaxBodySizeIsRefused(): void
+    {
+        try {
+            $ignored = KernelBuilder::create()->withConfiguredMaxBodySize(-1);
+            self::fail('expected a refusal');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame('Maximum body size must be 0 (unlimited) or a positive byte count.', $e->getMessage());
+        }
     }
 
     // -------------------------------------------------------------------------
