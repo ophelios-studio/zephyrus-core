@@ -9,6 +9,8 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+## [3.17.0] - 2026-11-19
+
 ### Breaking changes
 
 #### Requirements
@@ -437,7 +439,8 @@ Pages of zephyrus.ophelios.com that this version makes stale, each in English an
 
 Earlier releases have no notes.
 
-[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v3.17.0...HEAD
+[3.17.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.16.0...v3.17.0
 [0.16.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.14.0...v0.14.1
