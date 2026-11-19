@@ -1,7 +1,7 @@
-# Upgrading from 0.13 to 3.17
+# Upgrading from 0.13 to 3.17.1
 
 This guide takes an application that runs on Zephyrus 0.13.0, 0.14, 0.15, 0.16.0 or a `dev` commit between them to
-3.17. It lists every change that can make the application refuse to boot, throw or answer differently, grouped by
+3.17.1. It lists every change that can make the application refuse to boot, throw or answer differently, grouped by
 domain, each with the change to make and a way to check it. The [changelog](CHANGELOG.md) has the full list by version.
 
 Each entry names the version that brought it. Skip the entries your current version already has; an application on a
@@ -9,22 +9,59 @@ Each entry names the version that brought it. Skip the entries your current vers
 
 ## Contents
 
-1. [Upgrade procedure](#upgrade-procedure)
-2. [Requirements](#requirements)
-3. [Configuration and boot](#configuration-and-boot)
-4. [Sessions](#sessions)
-5. [CSRF](#csrf)
-6. [Routing](#routing)
-7. [HTTP](#http)
-8. [Security: headers, proxies, hosts and the debugger](#security-headers-proxies-hosts-and-the-debugger)
-9. [Views](#views)
-10. [Data](#data)
-11. [Validation](#validation)
-12. [Formatting and localization](#formatting-and-localization)
-13. [Files and uploads](#files-and-uploads)
-14. [Mail](#mail)
-15. [Container, exceptions and removed APIs](#container-exceptions-and-removed-apis)
-16. [What to search for](#what-to-search-for)
+1. [From 3.17.0 to 3.17.1](#from-3170-to-3171)
+2. [Upgrade procedure](#upgrade-procedure)
+3. [Requirements](#requirements)
+4. [Configuration and boot](#configuration-and-boot)
+5. [Sessions](#sessions)
+6. [CSRF](#csrf)
+7. [Routing](#routing)
+8. [HTTP](#http)
+9. [Security: headers, proxies, hosts and the debugger](#security-headers-proxies-hosts-and-the-debugger)
+10. [Views](#views)
+11. [Data](#data)
+12. [Validation](#validation)
+13. [Formatting and localization](#formatting-and-localization)
+14. [Files and uploads](#files-and-uploads)
+15. [Mail](#mail)
+16. [Container, exceptions and removed APIs](#container-exceptions-and-removed-apis)
+17. [What to search for](#what-to-search-for)
+
+## From 3.17.0 to 3.17.1
+
+### Request body read limit (3.17.1)
+
+**Breaks.** `Request::fromGlobals()` reads at most 2 MB of the body (2097152 bytes) when it is not given `maxBodySize`,
+where it read the whole body into memory. A body over that read limit, or a declared `Content-Length` over it, never
+reaches a controller; a multipart body sent without a `Content-Length` is measured on its fields and files.
+`MaxBodySizeMiddleware` refuses it through its `onFailure` when it is mounted, and the kernel answers `413` otherwise.
+An application that declares `security.max_body_size` above 2097152 and calls `fromGlobals()` without `maxBodySize:`
+now refuses its forms and uploads between 2 MB and its limit, and reports each one to `ExceptionEvent` listeners, then
+to the debugger or, without one, as this line in the error log:
+
+```text
+Zephyrus: Request::fromGlobals() read the body with a limit of 2097152 bytes, but security.maxBodySize allows 8388608: pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().
+```
+
+An application that declares no `max_body_size` but takes bodies over 2 MB (an upload limit set only by
+`post_max_size`) refuses them the same way, with no report.
+
+**Change.** Pass the configured limit, also when the body is injected with `rawBody:` (without a declared
+`max_body_size`, pass the limit the application accepts; `maxBodySize: 0` reads any body whole into memory):
+
+```php
+$request = Request::fromGlobals(
+    trustedProxies: $config->security->trustedProxies,
+    maxBodySize: $config->security->maxBodySize,
+);
+```
+
+Mount `MaxBodySizeMiddleware` before `CsrfMiddleware`: a truncated form reads as empty, so a CSRF check that runs
+first answers `403` for its missing token, not `413`.
+
+**Check.** `rg -n 'fromGlobals\('` lists the calls; each passes `maxBodySize:` when the application accepts bodies over
+2097152 bytes (`max_body_size`, or `post_max_size` when it declares none). An upload just under that limit passes, and
+the error log has no `Zephyrus: Request::fromGlobals() read the body` line.
 
 ## Upgrade procedure
 
@@ -1216,7 +1253,7 @@ is a place to review, not always a defect.
 | `rg -n 'exceptions:' config.yml` | [Exemptions must be anchored regular expressions](#exemptions-must-be-anchored-regular-expressions-0140) |
 | `rg -n -- '->headers\['` | [Response headers are stored lowercase](#response-headers-are-stored-lowercase-0140) |
 | `rg -n 'redirect\(\$'` | [Control characters in headers and redirects](#control-characters-in-headers-and-redirects-0140) |
-| `rg -n 'fromGlobals\('` | [Request body size](#request-body-size-0140-3170) |
+| `rg -n 'fromGlobals\('` | [Request body read limit](#request-body-read-limit-3171) and [Request body size](#request-body-size-0140-3170) |
 | `rg -n 'MaxBodySizeMiddleware'` | [Request body size](#request-body-size-0140-3170) |
 | `rg -ni 'allowed_?hosts'` | [Allowed hosts](#allowed-hosts-0140-0141) |
 | `rg -ni 'trusted_?proxies'` | [Trusted proxies and forwarding headers](#trusted-proxies-and-forwarding-headers-0140-0141) |

@@ -9,24 +9,31 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Breaking changes
+
+This patch release makes an exception to the compatibility promise above for a security fix: an application that
+declares `security.max_body_size` above 2 MB without passing it to `Request::fromGlobals()`, or that takes bodies over
+2 MB without declaring a limit, must act.
+
+- An application whose `security.max_body_size` is above 2 MB and that does not pass it to `Request::fromGlobals()` now refuses bodies between 2 MB and its limit, forms and uploads included, where it accepted them. Pass `maxBodySize: $config->security->maxBodySize` to `fromGlobals()`, also when the body is injected with `rawBody:` (see [UPGRADE.md](UPGRADE.md#from-3170-to-3171)). Each such request is refused and reported with a `ConfigurationException` that names the fix (`Request::fromGlobals() read the body with a limit of 2097152 bytes, but security.maxBodySize allows 8388608: pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().`): to `ExceptionEvent` listeners (source `ExceptionEvent::SOURCE_REQUEST`), then thrown to the debugger when unhandled exceptions are rethrown, or written to the error log as `Zephyrus: ` and that message on one line. Requests within 2 MB are unaffected. An application that declares no `max_body_size` but takes bodies over 2 MB (an upload limit set only by `post_max_size`) refuses them the same way, with no report: pass the limit it accepts (`maxBodySize: 0` reads any body whole into memory).
+
 ### Security
 
-- `Request::fromGlobals()` reads at most 2 MB of the request body (2097152 bytes, `Request::MAX_BODY_SIZE_DEFAULT`, also the default of `security.max_body_size`) when it is not given `maxBodySize`, where it read the whole body into memory before any middleware could refuse it: a 300 MB `PUT` took 300 MB of PHP memory. A declared `Content-Length` over the limit is never read, and a body without one is read one byte past it. Such a body is truncated (`RequestBody::isTruncated()`, and `isMalformed()` is true) and never reaches a controller: a global `MaxBodySizeMiddleware` refuses it whatever its own limit, through its `onFailure`, and without one `HttpKernel` answers the middleware's default `413` (plain text when `Accept` lists `text/html`, JSON otherwise) before the global middlewares run. `maxBodySize: 0` still reads the whole body.
-
-### Changed
-
-- An application whose `security.max_body_size` is above 2 MB and that does not pass it to `Request::fromGlobals()` now refuses bodies between 2 MB and its limit, forms and uploads included, where it accepted them. Pass `maxBodySize: $config->security->maxBodySize` to `fromGlobals()`, also when the body is injected with `rawBody:` (see [UPGRADE.md](UPGRADE.md#from-3170-to-3171)). Each such request is refused and reported with a `ConfigurationException` that names the fix (`Request::fromGlobals() read the body with a limit of 2097152 bytes, but security.maxBodySize allows 8388608: pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().`): to `ExceptionEvent` listeners (source `ExceptionEvent::SOURCE_REQUEST`), then thrown to the debugger when unhandled exceptions are rethrown, or written to the error log. Requests within 2 MB are unaffected, and an application that does not declare `max_body_size` gets no report.
+- `Request::fromGlobals()` reads at most 2 MB of the request body (2097152 bytes, `Request::MAX_BODY_SIZE_DEFAULT`, also the default of `security.max_body_size`) when it is not given `maxBodySize`, where it read the whole body into memory before any middleware could refuse it: a 300 MB `PUT` took 300 MB of PHP memory. A declared `Content-Length` over the limit is never read, a body without one is read one byte past it, and a multipart body PHP parsed itself without one (chunked) is measured on its fields and files as `MaxBodySizeMiddleware` measures it. Such a body is truncated (`RequestBody::isTruncated()`, and `isMalformed()` is true) and never reaches a controller: a global `MaxBodySizeMiddleware` refuses it whatever its own limit, through its `onFailure` (whose `BodyTooLarge` carries the limit that cut the body), and without one `HttpKernel` answers the middleware's default `413` (plain text when `Accept` lists `text/html`, JSON otherwise) before the global middlewares run. `maxBodySize: 0` still reads the whole body. Register `MaxBodySizeMiddleware` before `CsrfMiddleware`: a truncated form reads as empty, so a CSRF check that runs first answers `403`, not `413`.
 
 ### Added
 
+- `Request::MAX_BODY_SIZE_DEFAULT` (2097152), the read limit of `fromGlobals()` and the default of `security.maxBodySize`.
 - `RequestBody::isTruncated()` and `RequestBody::readLimit()` (the limit `fromGlobals()` read the body with, `0` for none, `null` for a body it did not build), with the matching `RequestBody` constructor arguments.
-- `KernelBuilder::withConfiguredMaxBodySize()` and the `HttpKernel` constructor argument `configuredMaxBodySize`, which `ApplicationBuilder::build()` sets from a declared `security.maxBodySize`; `MiddlewarePipeline::contains()`.
+- `ExceptionEvent::SOURCE_REQUEST`, the source of the report of a body read below the configured limit.
+- `MiddlewarePipeline::hasMiddleware()`, whether a middleware of the chain is an instance of a class.
+- `KernelBuilder::withConfiguredMaxBodySize()` and the `HttpKernel` constructor argument `configuredMaxBodySize`, which `ApplicationBuilder::build()` sets from a declared `security.maxBodySize`.
 
 ### Documentation
 
 Pages of zephyrus.ophelios.com that this version makes stale, each in English and in French (`content/fr/`):
 
-- `fundamentals/security.md`: `fromGlobals()` reads 2 MB by default, not the whole body, and a truncated body is refused by the kernel when no `MaxBodySizeMiddleware` is mounted (Request body size, the defaults table and the checklist).
+- `fundamentals/security.md`: `fromGlobals()` reads 2 MB by default, not the whole body, a chunked multipart body is measured on its fields and files, a truncated body is refused by the kernel when no `MaxBodySizeMiddleware` is mounted, and `MaxBodySizeMiddleware` goes before `CsrfMiddleware` (Request body size, the defaults table and the checklist).
 - `fundamentals/application.md` and `fundamentals/http.md`: `maxBodySize` is required above 2 MB; `RequestBody::isTruncated()` and `readLimit()`.
 - `digging-deeper/uploads.md`: an upload over 2 MB needs `maxBodySize` passed to `fromGlobals()`.
 
