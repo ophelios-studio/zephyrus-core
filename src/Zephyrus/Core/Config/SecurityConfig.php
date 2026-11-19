@@ -113,7 +113,7 @@ final readonly class SecurityConfig
     public function __construct(
         public bool $forceHttps,
         public bool $csrfEnabled,
-        /** @deprecated since 0.14, will be removed in 0.15. Pass false: fromArray() refuses true. */
+        /** @deprecated since 0.14, will be removed in 4.0. Pass false: fromArray() refuses true. */
         public bool $csrfAutoHtml,
         public array $csrfExceptions,
         public array $allowedHosts,
