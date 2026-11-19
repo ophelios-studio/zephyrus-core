@@ -100,7 +100,7 @@ final class CsrfConfig
     public function __construct(
         public readonly string $bodyField            = '_csrf_token',
         public readonly string $headerName           = 'X-CSRF-Token',
-        /** @deprecated since 0.14, will be removed in 0.15. Leave it unset: true is refused. */
+        /** @deprecated since 0.14, will be removed in 4.0. Leave it unset: true is refused. */
         public readonly bool   $injectToken          = false,
         array                  $excludedPathPatterns = [],
         public readonly bool   $enabled              = true,
