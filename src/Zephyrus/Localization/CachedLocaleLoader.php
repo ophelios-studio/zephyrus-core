@@ -40,6 +40,7 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
     /**
      * Returns the cached catalog for $locale, loading and storing it on a miss.
      * An empty catalog is not stored, so the next call asks the inner loader again.
+     * Only a canonical BCP 47 tag is cached (fr-CA, not fr_CA, fr-ca or FR); any other spelling is read on every call.
      *
      * @return array<string, mixed>
      */
