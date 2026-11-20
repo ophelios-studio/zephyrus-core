@@ -324,6 +324,26 @@ final class ConfigurationException extends ZephyrusException
         );
     }
 
+    /** Reported by HttpKernel when Request::fromGlobals() truncated a form POST at a post_max_size below security.maxBodySize. */
+    public static function postMaxSizeBelowConfiguredLimit(int $postMaxSize, int $configuredLimit): self
+    {
+        if ($configuredLimit === 0) {
+            return new self(sprintf(
+                "PHP's post_max_size (%d bytes) bounds a form POST, but security.maxBodySize is 0 (unlimited): PHP drops "
+                    . 'or cuts the fields and files of a form POST past it before the application runs. Set '
+                    . 'security.maxBodySize to the largest body the application accepts and post_max_size to at least that.',
+                $postMaxSize,
+            ));
+        }
+
+        return new self(sprintf(
+            "PHP's post_max_size (%d bytes) is below security.maxBodySize (%d): PHP drops or cuts the fields and files "
+                . 'of a form POST past it before the application runs. Raise post_max_size to at least security.maxBodySize.',
+            $postMaxSize,
+            $configuredLimit,
+        ));
+    }
+
     /** Reported by HttpKernel when Request::fromGlobals() truncated a body at a read limit below security.maxBodySize. */
     public static function bodyReadBelowConfiguredLimit(int $readLimit, int $configuredLimit): self
     {

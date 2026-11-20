@@ -7,6 +7,7 @@ namespace Zephyrus\Core;
 use Throwable;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Event\EventDispatcher;
+use Zephyrus\Http\BodySize;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewarePipeline;
 use Zephyrus\Http\Request;
@@ -121,8 +122,8 @@ final readonly class HttpKernel
     }
 
     /**
-     * Reports a body truncated at a read limit below the configured security.maxBodySize, which means
-     * Request::fromGlobals() was not given the configuration. The request is refused either way.
+     * Reports a body truncated at a read limit below the configured security.maxBodySize: PHP's post_max_size, or
+     * Request::fromGlobals() not given the configuration. The request is refused either way.
      */
     private function reportReadLimitBelowConfiguration(Request $request): void
     {
@@ -136,7 +137,10 @@ final readonly class HttpKernel
             return;
         }
 
-        $error = ConfigurationException::bodyReadBelowConfiguredLimit($readLimit, $configured);
+        $postMaxSize = BodySize::postMaxSize();
+        $error = $postMaxSize !== 0 && $readLimit === $postMaxSize
+            ? ConfigurationException::postMaxSizeBelowConfiguredLimit($postMaxSize, $configured)
+            : ConfigurationException::bodyReadBelowConfiguredLimit($readLimit, $configured);
         $this->fireExceptionEvent($error, $request, ExceptionEvent::SOURCE_REQUEST);
 
         if ($this->rethrowUnhandled) {

@@ -107,6 +107,43 @@ final class RequestPostMaxSizeTest extends TestCase
         self::assertSame([false, self::READ_LIMIT, 200], [$seen['truncated'], $seen['readLimit'], $seen['status']]);
     }
 
+    public function testAFormPostCutAtAPostMaxSizeBelowTheConfiguredLimitIsReportedWithItsFix(): void
+    {
+        $query = '/submit?limit=' . self::READ_LIMIT . '&configured=' . self::READ_LIMIT;
+
+        $seen = self::send('POST', $query, self::FORM, 'notes=' . str_repeat('a', 100_000));
+
+        self::assertSame(
+            "PHP's post_max_size (65536 bytes) is below security.maxBodySize (1048576): PHP drops or cuts the fields and "
+                . 'files of a form POST past it before the application runs. Raise post_max_size to at least '
+                . 'security.maxBodySize.',
+            $seen['report'],
+        );
+    }
+
+    public function testAFormPostCutAtPostMaxSizeUnderAnUnlimitedConfigurationIsReportedWithItsFix(): void
+    {
+        $seen = self::send('POST', '/submit?limit=0&configured=0', self::FORM, 'notes=' . str_repeat('a', 100_000));
+
+        self::assertSame(
+            "PHP's post_max_size (65536 bytes) bounds a form POST, but security.maxBodySize is 0 (unlimited): PHP drops "
+                . 'or cuts the fields and files of a form POST past it before the application runs. Set '
+                . 'security.maxBodySize to the largest body the application accepts and post_max_size to at least that.',
+            $seen['report'],
+        );
+    }
+
+    public function testABodyCutAtAReadLimitBelowPostMaxSizeKeepsTheReadLimitReport(): void
+    {
+        $seen = self::send('POST', '/submit?limit=1000&configured=' . self::READ_LIMIT, self::FORM, 'notes=' . str_repeat('a', 2_000));
+
+        self::assertSame(
+            'Request::fromGlobals() read the body with a limit of 1000 bytes, but security.maxBodySize allows 1048576: '
+                . 'pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().',
+            $seen['report'],
+        );
+    }
+
     /**
      * @return array{truncated: bool, readLimit: int, fields: list<string>, status: ?int, report: ?string}
      */
