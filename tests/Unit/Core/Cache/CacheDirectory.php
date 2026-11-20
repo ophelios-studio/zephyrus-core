@@ -75,7 +75,7 @@ final class CacheDirectory
 
     private static function removeTree(string $path): void
     {
-        if (is_link($path) || is_file($path)) {
+        if (is_link($path) || !is_dir($path)) {
             unlink($path);
 
             return;

@@ -438,7 +438,6 @@
         },
         "Ternary": {
             "ignore": [
-                "Zephyrus\\Core\\Cache\\ConfigurationCache::prepare::91", // differs only when the source group is not the process group, which ConfigurationCacheTest checks where the process has a second group
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
             ],
         },
