@@ -140,6 +140,7 @@
                 "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::300", // extra-colon hosts are refused by port or label
                 "Zephyrus\\Security\\Cryptography::hashFile::254", // chunk size does not change the digest
                 "Zephyrus\\Security\\Cryptography::randomHex::324", // only changes surplus random bytes drawn
+                "Zephyrus\\Security\\Cryptography::randomString::288", // only changes surplus random bytes drawn; also hides the * 2 / 4 mutant, which testRandomStringHasCorrectLength kills
                 "Zephyrus\\Validation\\Rules::boolean::308", // the 0 and 1 shortcut is redundant
             ],
         },
@@ -186,6 +187,7 @@
                 "Zephyrus\\Security\\AllowedHostsMiddleware::matchesHost::214", // empty label check refuses it earlier
                 "Zephyrus\\Security\\AllowedHostsMiddleware::normalizeEntry::242", // a parsed entry had its port stripped
                 "Zephyrus\\Validation\\Rules::cardNumberLuhn::1351", // Luhn arithmetic is unchanged mod 10
+                "Zephyrus\\Validation\\Rules::contentRange::1689", // a size above zero is implied by a start below it
             ],
         },
         "GreaterThanOrEqualTo": {
@@ -220,7 +222,9 @@
                 "Zephyrus\\Routing\\RouteSignature::validationFailure::107", // clamped or overridden by the caller
                 "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::300", // extra-colon hosts are refused by port or label
                 "Zephyrus\\Security\\Cryptography::hashFile::254", // chunk size does not change the digest
-                "Zephyrus\\Security\\Cryptography::randomString::291", // only changes surplus random bytes drawn
+                "Zephyrus\\Security\\Cryptography::randomString::288", // only changes surplus random bytes drawn; also hides the / 5 mutant, which testRandomStringHasCorrectLength kills
+                "Zephyrus\\Security\\Cryptography::randomString::291", // the encoding has at least two characters beyond the requested length, so skipping one still fills it
+                "Zephyrus\\Validation\\Rules::contentRange::1690", // the end below the size already implies the start below it; also hides $m[4], which every valid range kills
             ],
         },
         "LessThan": {
@@ -230,6 +234,7 @@
                 "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
                 "Zephyrus\\Http\\SapiEmitter::emitBody::68", // an empty body emits nothing either way
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseQuality::148", // same effective weight
+                "Zephyrus\\Validation\\Rules::contentRange::1690", // the end below the size already implies the start below it
             ],
         },
         "LessThanOrEqualTo": {
@@ -251,6 +256,7 @@
                 "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
                 "Zephyrus\\Upload\\Uploader::ensureDirectory::529", // differs only on a mkdir race
                 "Zephyrus\\Upload\\Uploader::storedExtension::504", // the last segment is always in the allowlist
+                "Zephyrus\\Validation\\Rules::contentRange::1689", // the end below the size implies the other two; also hides the outer mutant, which the end equal to the size kills
             ],
         },
         "LogicalAndAllSubExprNegation": {
@@ -286,6 +292,8 @@
                 "Zephyrus\\Upload\\Uploader::assertContainedDirectory::377", // ancestor check refuses the same escapes first
                 "Zephyrus\\Upload\\Uploader::validateTargetName::450", // refused earlier by the trailing dot rule
                 "Zephyrus\\Validation\\Rules::timezone::405", // strict in_array refuses empty and non-strings
+                "Zephyrus\\Validation\\Rules::boolean::308", // only joining the 1 and 0 checks with && survives, and 1 and 0 also pass the string branch; testBooleanPassesNativeBool kills the other two
+                "Zephyrus\\Validation\\Rules::hostname::561", // only joining the two dot checks with && survives, and such a name has an empty label; testHostnameBoundaries kills the other four
             ],
         },
         "LogicalOrAllSubExprNegation": {
@@ -377,6 +385,7 @@
                 "Zephyrus\\Validation\\Rules::jsonPointer::1443", // no trailing newline can occur here
                 "Zephyrus\\Validation\\Rules::rfc3339DateTime::381", // round-trip refuses what the regex refuses
                 "Zephyrus\\Validation\\Rules::subnetMask::686", // no trailing newline can occur here
+                "Zephyrus\\Security\\ContentSecurityPolicyMiddleware::containsHashSource::232", // D is inert without $; also hides dropping i, which testDebugModeWarnsForAnUpperCaseHashSource kills
             ],
         },
         "ReturnRemoval": {
@@ -436,6 +445,8 @@
             "ignore": [
                 "Zephyrus\\Data\\Database::floatLiteral::1150", // same result for integral inputs
                 "Zephyrus\\Security\\Cryptography::randomString::288", // only changes surplus random bytes drawn
+                "Zephyrus\\Security\\Cryptography::base64urlDecode::440", // round() differs only at a length of 1 modulo 4, which strict decoding refuses with or without padding; also hides floor, which testDecryptAcceptsACiphertextCarryingBase64urlPadding kills
+                "Zephyrus\\Security\\Cryptography::randomHex::324", // x / 2 ends in .0 or .5 and round() goes up; also hides floor, which testRandomHexHasCorrectLength kills
             ],
         },
         "Ternary": {
