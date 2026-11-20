@@ -163,7 +163,7 @@
             "ignore": [
                 "Zephyrus\\Console\\Console::refuseOverlap::145", // a cache path never equals a .gitignore
                 "Zephyrus\\Console\\Console::run::113", // a cache path never equals a .gitignore
-                "Zephyrus\\Localization\\CachedLocaleLoader::load::49", // apcu_fetch() writes $success by reference before it is read
+                "Zephyrus\\Localization\\CachedLocaleLoader::load::51", // apcu_fetch() writes $success by reference before it is read
                 "Zephyrus\\Core\\Config\\SessionConfig::fromArray::140", // default of the secure key is never read
                 "Zephyrus\\Http\\Request::resolveClientIp::897", // every caller passes the value
             ],

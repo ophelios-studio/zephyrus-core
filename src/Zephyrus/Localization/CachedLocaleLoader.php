@@ -6,6 +6,7 @@ namespace Zephyrus\Localization;
 
 /**
  * Caches locale catalogs in APCu when it is loaded and debug is off, otherwise delegates to the inner loader.
+ * An empty catalog is never cached, and a locale holding a colon (never a BCP 47 tag) bypasses the cache.
  *
  * Usage:
  *
@@ -22,7 +23,8 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
 
     /**
      * @param bool   $debug  Bypasses the cache entirely when true.
-     * @param string $prefix APCu key prefix, avoids collisions between applications.
+     * @param string $prefix APCu key prefix, reserved for this loader's catalogs (flush() deletes every
+     *                       `<prefix>:<locale>` key) and should not contain a colon.
      * @param int    $ttl    Time-to-live in seconds, 0 for no expiry.
      */
     public function __construct(
@@ -41,7 +43,7 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
      */
     public function load(string $locale): array
     {
-        if (!$this->cacheEnabled) {
+        if (!$this->cacheEnabled || str_contains($locale, ':')) {
             return $this->inner->load($locale);
         }
 
@@ -56,7 +58,9 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
         }
 
         $catalog = $this->inner->load($locale);
-        apcu_store($key, $catalog, $this->ttl);
+        if ($catalog !== []) {
+            apcu_store($key, $catalog, $this->ttl);
+        }
 
         return $catalog;
     }
@@ -71,7 +75,7 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
         }
 
         /** @var \APCUIterator $iterator */
-        $iterator = new \APCUIterator('#^' . preg_quote($this->prefix . ':', '#') . '#');
+        $iterator = new \APCUIterator('#^' . preg_quote($this->prefix . ':', '#') . '[^:]*\z#');
         apcu_delete($iterator);
     }
 
