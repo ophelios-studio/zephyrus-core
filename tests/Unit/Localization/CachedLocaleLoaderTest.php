@@ -4,12 +4,26 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Localization;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Localization\CachedLocaleLoader;
 use Zephyrus\Localization\LocaleLoaderInterface;
 
 final class CachedLocaleLoaderTest extends TestCase
 {
+    /** @var list<string> */
+    private array $trackedPrefixes = [];
+
+    protected function tearDown(): void
+    {
+        if (extension_loaded('apcu') && apcu_enabled()) {
+            foreach ($this->trackedPrefixes as $prefix) {
+                apcu_delete(new \APCUIterator('#^' . preg_quote($prefix, '#') . '#'));
+            }
+        }
+        $this->trackedPrefixes = [];
+    }
+
     // -----------------------------------------------------------------
     // Helper: a counting loader to verify delegation behavior
     // -----------------------------------------------------------------
@@ -146,8 +160,6 @@ final class CachedLocaleLoaderTest extends TestCase
         self::assertSame(['hello' => 'Hello'], $second);
         // With cache, inner should only be called once
         self::assertSame(1, $inner->callCount);
-
-        $loader->flush();
     }
 
     public function testApcuFlushInvalidatesCache(): void
@@ -180,8 +192,6 @@ final class CachedLocaleLoaderTest extends TestCase
         $loader->load('en');
 
         self::assertSame(1, $inner->callCount);
-
-        $loader->flush();
     }
 
     public function testApcuEntriesDoNotExpireByDefault(): void
@@ -194,8 +204,6 @@ final class CachedLocaleLoaderTest extends TestCase
         $loader->load('en');
 
         self::assertSame(0, $this->ttlOf($prefix . ':en'));
-
-        $loader->flush();
     }
 
     public function testApcuEntriesCarryTheGivenTtl(): void
@@ -208,8 +216,6 @@ final class CachedLocaleLoaderTest extends TestCase
         $loader->load('en');
 
         self::assertSame(3600, $this->ttlOf($prefix . ':en'));
-
-        $loader->flush();
     }
 
     public function testApcuCachedCatalogComesBackWhole(): void
@@ -221,8 +227,6 @@ final class CachedLocaleLoaderTest extends TestCase
 
         self::assertSame($catalog, $loader->load('en'));
         self::assertSame($catalog, $loader->load('en'));
-
-        $loader->flush();
     }
 
     public function testApcuKeepsEachLocaleUnderItsOwnKey(): void
@@ -240,8 +244,6 @@ final class CachedLocaleLoaderTest extends TestCase
         self::assertTrue(apcu_exists($prefix . ':en'));
         self::assertSame(['hello' => 'Bonjour'], $loader->load('fr'));
         self::assertSame(['hello' => 'Hello'], $loader->load('en'));
-
-        $loader->flush();
     }
 
     public function testApcuIgnoresAStoredValueThatIsNotACatalog(): void
@@ -253,59 +255,70 @@ final class CachedLocaleLoaderTest extends TestCase
         $loader = new CachedLocaleLoader($this->countingLoader(['en' => ['hello' => 'Hello']]), prefix: $prefix);
 
         self::assertSame(['hello' => 'Hello'], $loader->load('en'));
-
-        $loader->flush();
     }
 
-    public function testApcuFlushLeavesTheKeysOfAnotherPrefixAlone(): void
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function foreignKeyProvider(): array
+    {
+        return [
+            'another prefix' => ['test_a_{id}', 'test_b_{id}'],
+            'prefix extended by more characters' => ['test_app_{id}', 'test_app_{id}2'],
+            'prefix holding a regex metacharacter' => ['test.{id}', 'testX{id}'],
+            'longer prefix holding a colon' => ['test_app_{id}', 'test_app_{id}:x'],
+        ];
+    }
+
+    #[DataProvider('foreignKeyProvider')]
+    public function testApcuFlushDeletesItsOwnKeyAndLeavesAForeignKeyAlone(string $prefix, string $foreignPrefix): void
     {
         $this->requireApcu();
 
-        $suffix = bin2hex(random_bytes(8));
-        $loader = new CachedLocaleLoader($this->countingLoader([]), prefix: 'test_a_' . $suffix);
-        apcu_store('test_a_' . $suffix . ':en', ['x' => 'X']);
-        apcu_store('test_b_' . $suffix . ':en', ['y' => 'Y']);
+        $id = bin2hex(random_bytes(8));
+        $prefix = str_replace('{id}', $id, $prefix);
+        $foreignPrefix = str_replace('{id}', $id, $foreignPrefix);
+        $this->trackPrefix($prefix);
+        $this->trackPrefix($foreignPrefix);
+        $loader = new CachedLocaleLoader($this->countingLoader([]), prefix: $prefix);
+        apcu_store($prefix . ':en', ['x' => 'X']);
+        apcu_store($foreignPrefix . ':en', ['y' => 'Y']);
 
         $loader->flush();
 
-        self::assertFalse(apcu_exists('test_a_' . $suffix . ':en'));
-        self::assertTrue(apcu_exists('test_b_' . $suffix . ':en'));
-
-        apcu_delete('test_b_' . $suffix . ':en');
+        self::assertFalse(apcu_exists($prefix . ':en'));
+        self::assertTrue(apcu_exists($foreignPrefix . ':en'));
     }
 
-    public function testApcuFlushLeavesThePrefixExtendedByMoreCharactersAlone(): void
+    public function testApcuAnEmptyCatalogIsNotStored(): void
     {
         $this->requireApcu();
 
-        $suffix = bin2hex(random_bytes(8));
-        $loader = new CachedLocaleLoader($this->countingLoader([]), prefix: 'test_app_' . $suffix);
-        apcu_store('test_app_' . $suffix . ':en', ['x' => 'X']);
-        apcu_store('test_app_' . $suffix . '2:en', ['y' => 'Y']);
+        $prefix = $this->uniquePrefix();
+        $inner = $this->countingLoader([]);
+        $loader = new CachedLocaleLoader($inner, prefix: $prefix);
 
-        $loader->flush();
+        self::assertSame([], $loader->load('es'));
+        self::assertSame([], $loader->load('es'));
 
-        self::assertFalse(apcu_exists('test_app_' . $suffix . ':en'));
-        self::assertTrue(apcu_exists('test_app_' . $suffix . '2:en'));
-
-        apcu_delete('test_app_' . $suffix . '2:en');
+        self::assertSame(2, $inner->callCount);
+        self::assertFalse(apcu_exists($prefix . ':es'));
     }
 
-    public function testApcuFlushTreatsThePrefixAsLiteralText(): void
+    public function testApcuALocaleHoldingAColonBypassesTheCache(): void
     {
         $this->requireApcu();
 
-        $suffix = bin2hex(random_bytes(8));
-        $loader = new CachedLocaleLoader($this->countingLoader([]), prefix: 'test.' . $suffix);
-        apcu_store('test.' . $suffix . ':en', ['x' => 'X']);
-        apcu_store('testX' . $suffix . ':en', ['y' => 'Y']);
+        $prefix = $this->uniquePrefix();
+        apcu_store($prefix . ':x:en', ['stale' => 'S']);
+        $inner = $this->countingLoader(['x:en' => ['hello' => 'Hello']]);
+        $loader = new CachedLocaleLoader($inner, prefix: $prefix);
 
-        $loader->flush();
+        self::assertSame(['hello' => 'Hello'], $loader->load('x:en'));
+        self::assertSame(['hello' => 'Hello'], $loader->load('x:en'));
 
-        self::assertFalse(apcu_exists('test.' . $suffix . ':en'));
-        self::assertTrue(apcu_exists('testX' . $suffix . ':en'));
-
-        apcu_delete('testX' . $suffix . ':en');
+        self::assertSame(2, $inner->callCount);
+        self::assertSame(['stale' => 'S'], apcu_fetch($prefix . ':x:en'));
     }
 
     public function testApcuFlushInDebugModeKeepsTheCachedKeys(): void
@@ -319,8 +332,6 @@ final class CachedLocaleLoaderTest extends TestCase
         $loader->flush();
 
         self::assertTrue(apcu_exists($prefix . ':en'));
-
-        apcu_delete($prefix . ':en');
     }
 
     private function requireApcu(): void
@@ -332,7 +343,15 @@ final class CachedLocaleLoaderTest extends TestCase
 
     private function uniquePrefix(): string
     {
-        return 'test_apcu_' . bin2hex(random_bytes(8));
+        $prefix = 'test_apcu_' . bin2hex(random_bytes(8));
+        $this->trackPrefix($prefix);
+
+        return $prefix;
+    }
+
+    private function trackPrefix(string $prefix): void
+    {
+        $this->trackedPrefixes[] = $prefix;
     }
 
     private function ttlOf(string $key): ?int
