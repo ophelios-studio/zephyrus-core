@@ -6,7 +6,8 @@ namespace Zephyrus\Localization;
 
 /**
  * Caches locale catalogs in APCu when it is loaded and debug is off, otherwise delegates to the inner loader.
- * An empty catalog is never cached, and a locale holding a colon (never a BCP 47 tag) bypasses the cache.
+ * Only non-empty catalogs of canonical locale tags are cached; growth stays bounded only if the inner loader
+ * returns [] for a locale it lacks (a loader falling back to a default catalog adds one entry per locale asked).
  *
  * Usage:
  *
@@ -24,7 +25,7 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
     /**
      * @param bool   $debug  Bypasses the cache entirely when true.
      * @param string $prefix APCu key prefix, reserved for this loader's catalogs (flush() deletes every
-     *                       `<prefix>:<locale>` key) and should not contain a colon.
+     *                       `<prefix>:<locale>` key).
      * @param int    $ttl    Time-to-live in seconds, 0 for no expiry.
      */
     public function __construct(
@@ -38,12 +39,13 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
 
     /**
      * Returns the cached catalog for $locale, loading and storing it on a miss.
+     * An empty catalog is not stored, so the next call asks the inner loader again.
      *
      * @return array<string, mixed>
      */
     public function load(string $locale): array
     {
-        if (!$this->cacheEnabled || str_contains($locale, ':')) {
+        if (!$this->cacheEnabled || !$this->isCacheable($locale)) {
             return $this->inner->load($locale);
         }
 
@@ -77,6 +79,11 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
         /** @var \APCUIterator $iterator */
         $iterator = new \APCUIterator('#^' . preg_quote($this->prefix . ':', '#') . '[^:]*\z#');
         apcu_delete($iterator);
+    }
+
+    private function isCacheable(string $locale): bool
+    {
+        return LocaleTag::isWellFormed($locale) && LocaleTag::canonical($locale) === $locale;
     }
 
     private function cacheKey(string $locale): string

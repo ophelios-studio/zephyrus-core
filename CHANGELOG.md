@@ -21,7 +21,7 @@ changes are listed first, each with the change to make in your code.
 
 - `Request::fromGlobals()` and `HeaderBag::isJson()` take the media type of a `Content-Type` as the part before its first `;`: a value that starts with its parameters (`;application/json`) has an empty media type, and its body is no longer parsed as JSON.
 - `CachedLocaleLoader::flush()` deletes only the catalogs of its own prefix: a loader with prefix `app` no longer deletes the catalogs cached under `app2` or `app:x`.
-- `CachedLocaleLoader::load()` no longer stores an empty catalog in APCu (an unknown locale used to leave a permanent entry), and a locale holding a colon bypasses the cache, so two loaders can no longer read each other's keys.
+- `CachedLocaleLoader::load()` caches only non-empty catalogs of canonical locale tags: an unknown or non-canonical locale (`fr `, `FR`, `x:en`) is read from the inner loader each time instead of leaving a permanent APCu entry, and can no longer read another loader's catalog.
 
 ## [3.17.2] - 2026-11-20
 
