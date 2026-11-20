@@ -117,6 +117,7 @@
         },
         "DecrementInteger": {
             "ignore": [
+                "Zephyrus\\Core\\Cache\\ConfigurationCache::prepare::90", // fileperms() and filegroup() fail only when the source is gone, and parseYaml() then throws before the fallback is used
                 "Zephyrus\\Core\\DebugIntegration::assertAllowedClientEntry::365", // only the slash of the address is read
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // differs only on a read limit of 0, which fromGlobals() never truncates at
                 "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
@@ -200,6 +201,7 @@
         },
         "IncrementInteger": {
             "ignore": [
+                "Zephyrus\\Core\\Cache\\ConfigurationCache::prepare::90", // fileperms() and filegroup() fail only when the source is gone, and parseYaml() then throws before the fallback is used
                 "Zephyrus\\Core\\Config\\ConfigKeys::assertKnown::165", // limit and pad only test for null
                 "Zephyrus\\Data\\PostgresArrayParser::readQuotedElement::141", // same result on an unterminated literal
                 "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::174", // same result on an unterminated literal
@@ -238,6 +240,7 @@
             "ignore": [
                 "Zephyrus\\Console\\Console::refuseOverlap::149", // a cache path never equals a .gitignore
                 "Zephyrus\\Core\\ApplicationBuilder::load::1005", // Formatter also reads '' as no currency
+                "Zephyrus\\Core\\Cache\\AtomicFileWriter::replace::254", // differs only when fwrite() fails, a full disk, which a test cannot cause; chmod() and fflush() cannot fail on the file just created
                 "Zephyrus\\Core\\Config\\LocalizationConfig::fromArray::100", // resolveLocalePath never returns an empty string
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
@@ -435,6 +438,7 @@
         },
         "Ternary": {
             "ignore": [
+                "Zephyrus\\Core\\Cache\\ConfigurationCache::prepare::91", // differs only when the source group is not the process group, which ConfigurationCacheTest checks where the process has a second group
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
             ],
         },
