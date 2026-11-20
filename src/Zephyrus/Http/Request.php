@@ -138,6 +138,10 @@ final readonly class Request
      * expr=%{REQUEST_SCHEME}`, and in each vhost `RequestHeader set X-Forwarded-Port` with the port
      * that vhost listens on (443 for TLS, 80 otherwise). List allowed_hosts in production.
      *
+     * A body shorter than its Content-Length, or holding an upload PHP ended without its boundary (UPLOAD_ERR_PARTIAL),
+     * is incomplete: fields and raw body empty, files still listed, RequestBody::isMalformed() true. A multipart POST cut
+     * inside its text fields cannot be told from a complete one.
+     *
      * @param array<string, mixed>|null  $server
      * @param array<string, mixed>|null  $get
      * @param array<string, mixed>|null  $post
@@ -193,19 +197,22 @@ final readonly class Request
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
         $contentLength = $headers['content-length'] ?? null;
+        $declared   = BodySize::declared($contentLength);
         $cut        = false;
-        $raw        = self::readBody($rawBody, BodySize::declared($contentLength), $maxBodySize, $cut);
+        $raw        = self::readBody($rawBody, $declared, $maxBodySize, $cut);
         $malformed  = false;
         $parsedBody = $cut ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
         $files      = self::normalizeFileUploads($files);
         $truncated  = $maxBodySize !== 0 && BodySize::measure($contentLength, $raw, $parsedBody, $files) > $maxBodySize;
-        $parsedBody = $truncated ? [] : $parsedBody;
+        $incomplete = !$truncated && self::isIncomplete($method, $headers, $declared, $raw, $files);
+        $parsedBody = $truncated || $incomplete ? [] : $parsedBody;
+        $raw        = $incomplete ? '' : $raw;
         $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
 
         return new self(
             method:     $method,
             uri:        $uri,
-            body:       new RequestBody($parsedBody, $raw, $malformed, $maxBodySize, $truncated),
+            body:       new RequestBody($parsedBody, $raw, $malformed || $incomplete, $maxBodySize, $truncated),
             query:      $get,
             headers:    new HeaderBag($headers),
             cookies:    new CookieJar($cookie),
@@ -766,6 +773,52 @@ final readonly class Request
         $cut = strlen($raw) > $maxBytes;
 
         return $raw;
+    }
+
+    /**
+     * Whether the body ended before its declared length, or PHP ended an upload without its boundary. A multipart POST
+     * parsed by PHP leaves no raw body to compare.
+     *
+     * @param array<string, string> $headers
+     * @param array<string, FileUpload|array<int, FileUpload>> $files
+     */
+    private static function isIncomplete(string $method, array $headers, ?int $declared, string $raw, array $files): bool
+    {
+        if (self::hasPartialUpload($files)) {
+            return true;
+        }
+
+        if ($raw === '' && $method === 'POST' && self::phpMediaType($headers) === 'multipart/form-data') {
+            return false;
+        }
+
+        return $declared !== null && strlen($raw) < $declared;
+    }
+
+    /** @param array<string, FileUpload|array<int, FileUpload>> $files */
+    private static function hasPartialUpload(array $files): bool
+    {
+        foreach ($files as $entry) {
+            foreach (is_array($entry) ? $entry : [$entry] as $file) {
+                if ($file->errorCode === UPLOAD_ERR_PARTIAL) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The media type PHP matches its body parsers against: lowercased, cut at the first ";", "," or space.
+     *
+     * @param array<string, string> $headers
+     */
+    private static function phpMediaType(array $headers): string
+    {
+        $contentType = $headers['content-type'] ?? '';
+
+        return strtolower(substr($contentType, 0, strcspn($contentType, ';, ')));
     }
 
     /**

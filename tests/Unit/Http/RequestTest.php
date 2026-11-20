@@ -2735,7 +2735,7 @@ final class RequestTest extends TestCase
         self::assertTrue(self::globals($server, rawBody: $json(512))->body()->isMalformed());
     }
 
-    public function testADeclaredLengthOverTheBudgetMarksTheBodyMalformed(): void
+    public function testADeclaredLengthOverTheBudgetTruncatesTheBody(): void
     {
         $request = self::globals(
             ['REQUEST_METHOD' => 'POST', 'CONTENT_LENGTH' => '11', 'CONTENT_TYPE' => 'application/json'],
@@ -2743,7 +2743,7 @@ final class RequestTest extends TestCase
             maxBodySize: 10,
         );
 
-        self::assertTrue($request->body()->isMalformed());
+        self::assertTrue($request->body()->isTruncated());
         self::assertSame('', $request->body()->raw());
     }
 
@@ -2755,7 +2755,7 @@ final class RequestTest extends TestCase
             maxBodySize: 50,
         );
 
-        self::assertTrue($request->body()->isMalformed());
+        self::assertTrue($request->body()->isTruncated());
         self::assertSame('', $request->body()->raw());
     }
 
