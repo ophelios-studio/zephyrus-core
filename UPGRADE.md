@@ -1,7 +1,7 @@
-# Upgrading from 0.13 to 3.17.1
+# Upgrading from 0.13 to 3.17.2
 
 This guide takes an application that runs on Zephyrus 0.13.0, 0.14, 0.15, 0.16.0 or a `dev` commit between them to
-3.17.1. It lists every change that can make the application refuse to boot, throw or answer differently, grouped by
+3.17.2. It lists every change that can make the application refuse to boot, throw or answer differently, grouped by
 domain, each with the change to make and a way to check it. The [changelog](CHANGELOG.md) has the full list by version.
 
 Each entry names the version that brought it. Skip the entries your current version already has; an application on a
@@ -9,23 +9,57 @@ Each entry names the version that brought it. Skip the entries your current vers
 
 ## Contents
 
-1. [From 3.17.0 to 3.17.1](#from-3170-to-3171)
-2. [Upgrade procedure](#upgrade-procedure)
-3. [Requirements](#requirements)
-4. [Configuration and boot](#configuration-and-boot)
-5. [Sessions](#sessions)
-6. [CSRF](#csrf)
-7. [Routing](#routing)
-8. [HTTP](#http)
-9. [Security: headers, proxies, hosts and the debugger](#security-headers-proxies-hosts-and-the-debugger)
-10. [Views](#views)
-11. [Data](#data)
-12. [Validation](#validation)
-13. [Formatting and localization](#formatting-and-localization)
-14. [Files and uploads](#files-and-uploads)
-15. [Mail](#mail)
-16. [Container, exceptions and removed APIs](#container-exceptions-and-removed-apis)
-17. [What to search for](#what-to-search-for)
+1. [From 3.17.1 to 3.17.2](#from-3171-to-3172)
+2. [From 3.17.0 to 3.17.1](#from-3170-to-3171)
+3. [Upgrade procedure](#upgrade-procedure)
+4. [Requirements](#requirements)
+5. [Configuration and boot](#configuration-and-boot)
+6. [Sessions](#sessions)
+7. [CSRF](#csrf)
+8. [Routing](#routing)
+9. [HTTP](#http)
+10. [Security: headers, proxies, hosts and the debugger](#security-headers-proxies-hosts-and-the-debugger)
+11. [Views](#views)
+12. [Data](#data)
+13. [Validation](#validation)
+14. [Formatting and localization](#formatting-and-localization)
+15. [Files and uploads](#files-and-uploads)
+16. [Mail](#mail)
+17. [Container, exceptions and removed APIs](#container-exceptions-and-removed-apis)
+18. [What to search for](#what-to-search-for)
+
+## From 3.17.1 to 3.17.2
+
+### Incomplete bodies and post_max_size (3.17.2)
+
+**Breaks (413).** A form POST past PHP's `post_max_size` is refused with `413` before any controller, where it reached
+the controller empty or cut. When `post_max_size` is below `security.max_body_size`, each form between the two is also
+reported to `ExceptionEvent` listeners, then to the debugger or, without one, as one error log line starting with
+`Zephyrus: PHP's post_max_size`.
+
+**Breaks (400).** A body shorter than its `Content-Length`, or a multipart body holding an upload PHP
+ended without its boundary, is refused with `400` (`Request body incomplete.`) before any middleware or controller.
+A test that injects a `rawBody:` shorter than its `CONTENT_LENGTH` and runs the request through the kernel now gets
+this `400`.
+
+**Change.** Raise `post_max_size` to at least `security.max_body_size` in the web server's PHP configuration. For your
+own page instead of the `400`, answer the incomplete body from a `RequestEvent` listener, which runs before the
+kernel's refusal:
+
+```php
+$events->addListener(RequestEvent::class, static function (RequestEvent $event): void {
+    $body = $event->getRequest()->body();
+    if ($body->isMalformed() && !$body->isTruncated() && $body->raw() === '') {
+        $event->setResponse(Response::html('<p>Your form did not arrive whole. Please send it again.</p>', 400));
+    }
+});
+```
+
+In a test, give `CONTENT_LENGTH` the length of `rawBody:`, or leave it out.
+
+**Check.** `ini_get('post_max_size')`, read on the web server and not the CLI (which loads its own `php.ini`), is at
+least `security.max_body_size`, and the error log has no `Zephyrus: PHP's post_max_size` line. `rg -n CONTENT_LENGTH
+tests/` lists the tests to compare with their `rawBody:`.
 
 ## From 3.17.0 to 3.17.1
 
