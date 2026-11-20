@@ -321,6 +321,64 @@ final class CachedLocaleLoaderTest extends TestCase
         self::assertSame(['stale' => 'S'], apcu_fetch($prefix . ':x:en'));
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nonCanonicalLocaleProvider(): array
+    {
+        return [
+            'trailing space' => ['fr '],
+            'leading tab' => ["\tfr"],
+            'upper case' => ['FR'],
+            'underscore separator' => ['fr_CA'],
+            'lower case region' => ['fr-ca'],
+        ];
+    }
+
+    #[DataProvider('nonCanonicalLocaleProvider')]
+    public function testApcuANonCanonicalLocaleBypassesTheCache(string $locale): void
+    {
+        $this->requireApcu();
+
+        $prefix = $this->uniquePrefix();
+        $inner = $this->countingLoader([
+            'fr' => ['hello' => 'Bonjour'],
+            'FR' => ['hello' => 'Bonjour'],
+            'fr-CA' => ['hello' => 'Allo'],
+            'fr-ca' => ['hello' => 'Allo'],
+            'fr_CA' => ['hello' => 'Allo'],
+            'fr ' => ['hello' => 'Bonjour'],
+            "\tfr" => ['hello' => 'Bonjour'],
+        ]);
+        $loader = new CachedLocaleLoader($inner, prefix: $prefix);
+
+        $first = $loader->load($locale);
+        $second = $loader->load($locale);
+
+        self::assertNotSame([], $first);
+        self::assertSame($first, $second);
+        self::assertSame(2, $inner->callCount);
+        self::assertFalse(apcu_exists($prefix . ':' . $locale));
+    }
+
+    public function testApcuCanonicalLocalesAreCachedOnce(): void
+    {
+        $this->requireApcu();
+
+        $prefix = $this->uniquePrefix();
+        $inner = $this->countingLoader(['fr' => ['hello' => 'Bonjour'], 'fr-CA' => ['hello' => 'Allo']]);
+        $loader = new CachedLocaleLoader($inner, prefix: $prefix);
+
+        $loader->load('fr');
+        $loader->load('fr');
+        $loader->load('fr-CA');
+        $loader->load('fr-CA');
+
+        self::assertSame(2, $inner->callCount);
+        self::assertTrue(apcu_exists($prefix . ':fr'));
+        self::assertTrue(apcu_exists($prefix . ':fr-CA'));
+    }
+
     public function testApcuFlushInDebugModeKeepsTheCachedKeys(): void
     {
         $this->requireApcu();
