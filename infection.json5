@@ -560,7 +560,6 @@
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::272", // a later trim covers it
                 "Zephyrus\\Http\\HeaderBag::isJson::74", // a later trim covers it
                 "Zephyrus\\Http\\Request::isJsonContentType::1225", // a later trim or lowercase compensates
-                "Zephyrus\\Http\\Request::isJsonContentType::1231", // a later trim or lowercase compensates
                 "Zephyrus\\Http\\Request::parseForwardedElement::1198", // a later trim or lowercase compensates
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::81", // blank header parses to no entries
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::89", // a later trim covers it

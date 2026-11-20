@@ -1733,6 +1733,34 @@ final class RequestTest extends TestCase
         self::assertSame('active', $request->body()->get('status'));
     }
 
+    #[DataProvider('jsonContentTypesWithSpaceBeforeTheParameters')]
+    public function testFromGlobalsJsonBodyIsParsedWhenWhitespaceSeparatesTheMediaTypeFromItsParameters(
+        string $contentType,
+    ): void {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/items',
+                'CONTENT_TYPE'   => $contentType,
+            ],
+            post: ['p' => '1'],
+            rawBody: '{"a":1}',
+        );
+
+        self::assertSame(['a' => 1], $request->body()->all());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function jsonContentTypesWithSpaceBeforeTheParameters(): iterable
+    {
+        yield 'space before the charset' => ["application/json ; charset=utf-8"];
+        yield 'tab before the charset' => ["application/json\t;charset=utf-8"];
+        yield 'suffix media type' => ['application/vnd.api+json ;x=1'];
+    }
+
     public function testFromGlobalsJsonSuffixMediaTypeBodyIsParsed(): void
     {
         $request = Request::fromGlobals(
