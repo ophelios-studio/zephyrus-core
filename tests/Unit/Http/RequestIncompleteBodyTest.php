@@ -80,11 +80,39 @@ final class RequestIncompleteBodyTest extends TestCase
         self::assertSame('POST', $request->method);
     }
 
-    public function testAMultipartPostParsedByPhpIsNotJudgedOnItsEmptyRawBody(): void
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function multipartContentTypes(): array
     {
-        $body = self::request(self::MULTIPART + ['CONTENT_LENGTH' => '1207'], '', ['title' => 'Draft'])->body();
+        return [
+            'in lowercase' => ['multipart/form-data; boundary=form-boundary'],
+            'in uppercase with its parameters' => ['MULTIPART/FORM-DATA;boundary=XX'],
+        ];
+    }
+
+    #[DataProvider('multipartContentTypes')]
+    public function testAMultipartPostParsedByPhpIsNotJudgedOnItsEmptyRawBody(string $contentType): void
+    {
+        $body = self::request(['CONTENT_TYPE' => $contentType, 'CONTENT_LENGTH' => '1207'], '', ['title' => 'Draft'])->body();
 
         self::assertSame([['title' => 'Draft'], false], [$body->all(), $body->isMalformed()]);
+    }
+
+    public function testAMultipartSentWithALowercaseMethodIsNotParsedByPhpSoItsEmptyBodyIsIncomplete(): void
+    {
+        $body = self::request(self::MULTIPART + ['CONTENT_LENGTH' => '1207'], '', method: 'post')->body();
+
+        self::assertSame([true, false], [$body->isMalformed(), $body->isTruncated()]);
+    }
+
+    public function testABodySentWithAContentEncodingIsNotJudgedOnItsLength(): void
+    {
+        $server = self::FORM + ['CONTENT_LENGTH' => '23', 'HTTP_CONTENT_ENCODING' => 'gzip'];
+
+        $body = self::request($server, 'a=1', ['a' => '1'])->body();
+
+        self::assertSame([['a' => '1'], 'a=1', false], [$body->all(), $body->raw(), $body->isMalformed()]);
     }
 
     /**

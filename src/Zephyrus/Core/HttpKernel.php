@@ -137,7 +137,9 @@ final readonly class HttpKernel
             return;
         }
 
-        $postMaxSize = BodySize::postMaxSize();
+        $override = strtoupper(trim($request->headers()->get('x-http-method-override') ?? ''));
+        $sentMethod = $request->method !== 'POST' && $override === $request->method ? 'POST' : $request->method;
+        $postMaxSize = BodySize::postMaxSize($sentMethod, $request->headers()->get('content-type'));
         $error = $postMaxSize !== 0 && $readLimit === $postMaxSize
             ? ConfigurationException::postMaxSizeBelowConfiguredLimit($postMaxSize, $configured)
             : ConfigurationException::bodyReadBelowConfiguredLimit($readLimit, $configured);

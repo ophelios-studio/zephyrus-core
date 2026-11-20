@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Runs Request::fromGlobals() and the kernel under PHP's built-in server, which applies post_max_size as a web server
- * SAPI does. The server starts once for the class.
+ * SAPI does. Each server starts once for the class, on first use.
  */
 final class RequestPostMaxSizeTest extends TestCase
 {
@@ -19,42 +19,16 @@ final class RequestPostMaxSizeTest extends TestCase
 
     private const string FORM = 'application/x-www-form-urlencoded';
 
-    /** @var resource|null */
-    private static $server = null;
-
-    private static int $port = 0;
-
-    public static function setUpBeforeClass(): void
-    {
-        $probe = stream_socket_server('tcp://127.0.0.1:0');
-        self::assertIsResource($probe);
-        self::$port = (int) substr((string) strrchr((string) stream_socket_get_name($probe, false), ':'), 1);
-        fclose($probe);
-
-        $server = proc_open(
-            [
-                PHP_BINARY, '-d', 'post_max_size=' . self::POST_MAX_SIZE, '-d', 'display_errors=0', '-d', 'log_errors=0',
-                '-S', '127.0.0.1:' . self::$port, __DIR__ . '/Fixtures/body_router.php',
-            ],
-            [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['pipe', 'w']],
-            $pipes,
-        );
-        self::assertIsResource($server);
-        self::$server = $server;
-        // The server announces itself on stderr once it listens.
-        do {
-            $line = fgets($pipes[2]);
-        } while ($line !== false && !str_contains($line, 'Development Server'));
-        self::assertNotFalse($line, 'The built-in server did not start.');
-    }
+    /** @var array<string, array{resource, int}> enable_post_data_reading => [process, port] */
+    private static array $servers = [];
 
     public static function tearDownAfterClass(): void
     {
-        if (self::$server !== null) {
-            proc_terminate(self::$server);
-            proc_close(self::$server);
-            self::$server = null;
+        foreach (self::$servers as [$process]) {
+            proc_terminate($process);
+            proc_close($process);
         }
+        self::$servers = [];
     }
 
     /**
@@ -69,6 +43,8 @@ final class RequestPostMaxSizeTest extends TestCase
             'a form declaring its length' => [self::FORM, $form, false],
             'a chunked form' => [self::FORM, $form, true],
             'a multipart form declaring its length' => ['multipart/form-data; boundary=edge', $multipart, false],
+            'an uppercase form with parameters' => ['Application/X-WWW-Form-Urlencoded;charset=UTF-8', $form, false],
+            'an uppercase multipart with parameters' => ['MULTIPART/FORM-DATA;boundary=edge', $multipart, false],
         ];
     }
 
@@ -107,6 +83,20 @@ final class RequestPostMaxSizeTest extends TestCase
         self::assertSame([false, self::READ_LIMIT, 200], [$seen['truncated'], $seen['readLimit'], $seen['status']]);
     }
 
+    public function testAFormPostIsReadPastPostMaxSizeWhenPostDataReadingIsOff(): void
+    {
+        $seen = self::send('POST', '/submit?limit=' . self::READ_LIMIT, self::FORM, 'notes=' . str_repeat('a', 100_000), enablePostDataReading: '"Off"');
+
+        self::assertSame([false, self::READ_LIMIT, 200], [$seen['truncated'], $seen['readLimit'], $seen['status']]);
+    }
+
+    public function testAFormPostIsTruncatedAtPostMaxSizeWhenPostDataReadingIsOnInAnyCase(): void
+    {
+        $seen = self::send('POST', '/submit?limit=' . self::READ_LIMIT, self::FORM, 'notes=' . str_repeat('a', 100_000), enablePostDataReading: '"On"');
+
+        self::assertSame([true, self::POST_MAX_SIZE, 413], [$seen['truncated'], $seen['readLimit'], $seen['status']]);
+    }
+
     public function testAFormPostCutAtAPostMaxSizeBelowTheConfiguredLimitIsReportedWithItsFix(): void
     {
         $query = '/submit?limit=' . self::READ_LIMIT . '&configured=' . self::READ_LIMIT;
@@ -133,6 +123,20 @@ final class RequestPostMaxSizeTest extends TestCase
         );
     }
 
+    public function testAFormPostCutAtPostMaxSizeUnderAMethodOverrideHeaderIsReportedWithPostMaxSize(): void
+    {
+        $query = '/submit?limit=' . self::READ_LIMIT . '&configured=' . self::READ_LIMIT;
+
+        $seen = self::send('POST', $query, self::FORM, 'notes=' . str_repeat('a', 100_000), headers: ['X-HTTP-Method-Override' => 'put']);
+
+        self::assertSame(
+            "PHP's post_max_size (65536 bytes) is below security.maxBodySize (1048576): PHP drops or cuts the fields and "
+                . 'files of a form POST past it before the application runs. Raise post_max_size to at least '
+                . 'security.maxBodySize.',
+            $seen['report'],
+        );
+    }
+
     public function testABodyCutAtAReadLimitBelowPostMaxSizeKeepsTheReadLimitReport(): void
     {
         $seen = self::send('POST', '/submit?limit=1000&configured=' . self::READ_LIMIT, self::FORM, 'notes=' . str_repeat('a', 2_000));
@@ -144,16 +148,40 @@ final class RequestPostMaxSizeTest extends TestCase
         );
     }
 
+    public function testAFormPutCutAtALimitEqualToPostMaxSizeKeepsTheReadLimitReport(): void
+    {
+        $query = '/submit?limit=' . self::POST_MAX_SIZE . '&configured=' . self::READ_LIMIT;
+
+        $seen = self::send('PUT', $query, self::FORM, 'notes=' . str_repeat('a', 100_000));
+
+        self::assertSame(
+            'Request::fromGlobals() read the body with a limit of 65536 bytes, but security.maxBodySize allows 1048576: '
+                . 'pass maxBodySize: $config->security->maxBodySize to Request::fromGlobals().',
+            $seen['report'],
+        );
+    }
+
     /**
+     * @param array<string, string> $headers
      * @return array{truncated: bool, readLimit: int, fields: list<string>, status: ?int, report: ?string}
      */
-    private static function send(string $method, string $target, ?string $contentType, string $body, bool $chunked = false): array
-    {
-        $socket = stream_socket_client('tcp://127.0.0.1:' . self::$port, $errorCode, $errorMessage, 5);
+    private static function send(
+        string $method,
+        string $target,
+        ?string $contentType,
+        string $body,
+        bool $chunked = false,
+        string $enablePostDataReading = '1',
+        array $headers = [],
+    ): array {
+        $socket = stream_socket_client('tcp://127.0.0.1:' . self::port($enablePostDataReading), $errorCode, $errorMessage, 5);
         self::assertIsResource($socket, $errorMessage);
 
         $head = "{$method} {$target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n";
         $head .= $contentType === null ? '' : "Content-Type: {$contentType}\r\n";
+        foreach ($headers as $name => $value) {
+            $head .= "{$name}: {$value}\r\n";
+        }
         if ($chunked) {
             fwrite($socket, $head . "Transfer-Encoding: chunked\r\n\r\n");
             foreach (str_split($body, 8_192) as $chunk) {
@@ -169,5 +197,36 @@ final class RequestPostMaxSizeTest extends TestCase
 
         /** @var array{truncated: bool, readLimit: int, fields: list<string>, status: ?int, report: ?string} */
         return json_decode(substr($response, (int) strpos($response, "\r\n\r\n") + 4), true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /** The port of the server running with this enable_post_data_reading, started on first use. */
+    private static function port(string $enablePostDataReading): int
+    {
+        if (isset(self::$servers[$enablePostDataReading])) {
+            return self::$servers[$enablePostDataReading][1];
+        }
+
+        $probe = stream_socket_server('tcp://127.0.0.1:0');
+        self::assertIsResource($probe);
+        $port = (int) substr((string) strrchr((string) stream_socket_get_name($probe, false), ':'), 1);
+        fclose($probe);
+
+        $process = proc_open(
+            [
+                PHP_BINARY, '-d', 'post_max_size=' . self::POST_MAX_SIZE, '-d', 'enable_post_data_reading=' . $enablePostDataReading,
+                '-d', 'display_errors=0', '-d', 'log_errors=0', '-S', '127.0.0.1:' . $port, __DIR__ . '/Fixtures/body_router.php',
+            ],
+            [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+        self::$servers[$enablePostDataReading] = [$process, $port];
+        // The server announces itself on stderr once it listens.
+        do {
+            $line = fgets($pipes[2]);
+        } while ($line !== false && !str_contains($line, 'Development Server'));
+        self::assertNotFalse($line, 'The built-in server did not start.');
+
+        return $port;
     }
 }

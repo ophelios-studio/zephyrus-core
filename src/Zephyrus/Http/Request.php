@@ -138,9 +138,10 @@ final readonly class Request
      * expr=%{REQUEST_SCHEME}`, and in each vhost `RequestHeader set X-Forwarded-Port` with the port
      * that vhost listens on (443 for TLS, 80 otherwise). List allowed_hosts in production.
      *
-     * A body shorter than its Content-Length, or holding an upload PHP ended without its boundary (UPLOAD_ERR_PARTIAL),
-     * is incomplete: fields and raw body empty, files still listed, RequestBody::isMalformed() true. A multipart POST cut
-     * inside its text fields cannot be told from a complete one.
+     * A body shorter than its Content-Length (without a Content-Encoding), or holding an upload PHP ended without its
+     * boundary (UPLOAD_ERR_PARTIAL), is incomplete: fields and raw body empty, files still listed,
+     * RequestBody::isMalformed() true. A chunked body cut short, or a multipart POST cut in or between its text
+     * fields, cannot be told from a complete one.
      *
      * @param array<string, mixed>|null  $server
      * @param array<string, mixed>|null  $get
@@ -189,35 +190,39 @@ final readonly class Request
         $cookie = $cookie ?? $_COOKIE;
         $files  = $files  ?? $_FILES;
 
-        $method  = strtoupper($server['REQUEST_METHOD'] ?? 'GET');
-        $headers = self::extractHeadersFromServer($server);
-        $remoteAddr = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
+        $serverMethod   = (string) ($server['REQUEST_METHOD'] ?? 'GET');
+        $method         = strtoupper($serverMethod);
+        $headers        = self::extractHeadersFromServer($server);
+        $headerBag      = new HeaderBag($headers);
+        $remoteAddr     = self::normalizeIp(isset($server['REMOTE_ADDR']) ? (string) $server['REMOTE_ADDR'] : null);
         $trustForwarded = self::isProxyTrusted($remoteAddr, $trustedProxies);
         // An untrusted peer yields an empty header allowlist, so downstream code checks one gate.
         $trusted = $trustForwarded ? self::normalizeTrustedHeaders($trustedHeaders) : [];
         $uri     = self::buildUri($server, $trusted, $trustedProxies);
         $clientIp = self::resolveClientIp($server, $headers, $trustForwarded, $trustedProxies, $trusted);
 
+        $contentType   = $headers['content-type'] ?? null;
         $contentLength = $headers['content-length'] ?? null;
-        $declared   = BodySize::declared($contentLength);
-        $readLimit  = self::readLimit($maxBodySize, $method, $headers);
-        $cut        = false;
-        $raw        = self::readBody($rawBody, $declared, $readLimit, $cut);
-        $malformed  = false;
-        $parsedBody = $cut ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
-        $files      = self::normalizeFileUploads($files);
-        $truncated  = $readLimit !== 0 && BodySize::measure($contentLength, $raw, $parsedBody, $files) > $readLimit;
-        $incomplete = !$truncated && self::isIncomplete($method, $headers, $declared, $raw, $files);
-        $parsedBody = $truncated || $incomplete ? [] : $parsedBody;
-        $raw        = $incomplete ? '' : $raw;
-        $method     = self::resolveMethodOverride($method, $headers, $parsedBody);
+        $declared      = BodySize::declared($contentLength);
+        $readLimit     = self::readLimit($maxBodySize, BodySize::postMaxSize($serverMethod, $contentType));
+        $cut           = false;
+        $raw           = self::readBody($rawBody, $declared, $readLimit, $cut);
+        $malformed     = false;
+        $parsedBody    = $cut ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
+        $files         = self::normalizeFileUploads($files);
+        $truncated     = $readLimit !== 0 && BodySize::measure($contentLength, $raw, $parsedBody, $files) > $readLimit;
+        $rawToCompare  = $raw === '' && BodySize::phpConsumes($serverMethod, $contentType) ? null : $raw;
+        $incomplete    = !$truncated && BodySize::isIncomplete($headerBag, $rawToCompare, $files);
+        $parsedBody    = $truncated || $incomplete ? [] : $parsedBody;
+        $raw           = $incomplete ? '' : $raw;
+        $method        = self::resolveMethodOverride($method, $headers, $parsedBody);
 
         return new self(
             method:     $method,
             uri:        $uri,
             body:       new RequestBody($parsedBody, $raw, $malformed || $incomplete, $readLimit, $truncated),
             query:      $get,
-            headers:    new HeaderBag($headers),
+            headers:    $headerBag,
             cookies:    new CookieJar($cookie),
             attributes: [],
             files:      $files,
@@ -778,79 +783,14 @@ final readonly class Request
         return $raw;
     }
 
-    /**
-     * $maxBodySize, lowered to post_max_size for a form POST that PHP parses itself: PHP drops or cuts its fields past it.
-     *
-     * @param array<string, string> $headers
-     */
-    private static function readLimit(int $maxBodySize, string $method, array $headers): int
+    /** $maxBodySize, lowered to post_max_size when PHP applies it: PHP drops or cuts a form POST's fields past it. */
+    private static function readLimit(int $maxBodySize, int $postMaxSize): int
     {
-        $postMaxSize = self::phpParsesTheBody($method, $headers) ? BodySize::postMaxSize() : 0;
-
         return match (true) {
             $postMaxSize === 0 => $maxBodySize,
             $maxBodySize === 0 => $postMaxSize,
             default            => min($maxBodySize, $postMaxSize),
         };
-    }
-
-    /**
-     * Whether PHP parses this body into $_POST and $_FILES before the application runs. Any other body reaches
-     * php://input whole, whatever post_max_size says.
-     *
-     * @param array<string, string> $headers
-     */
-    private static function phpParsesTheBody(string $method, array $headers): bool
-    {
-        return $method === 'POST'
-            && (bool) ini_get('enable_post_data_reading')
-            && in_array(self::phpMediaType($headers), ['application/x-www-form-urlencoded', 'multipart/form-data'], true);
-    }
-
-    /**
-     * Whether the body ended before its declared length, or PHP ended an upload without its boundary. A multipart POST
-     * parsed by PHP leaves no raw body to compare.
-     *
-     * @param array<string, string> $headers
-     * @param array<string, FileUpload|array<int, FileUpload>> $files
-     */
-    private static function isIncomplete(string $method, array $headers, ?int $declared, string $raw, array $files): bool
-    {
-        if (self::hasPartialUpload($files)) {
-            return true;
-        }
-
-        if ($raw === '' && $method === 'POST' && self::phpMediaType($headers) === 'multipart/form-data') {
-            return false;
-        }
-
-        return $declared !== null && strlen($raw) < $declared;
-    }
-
-    /** @param array<string, FileUpload|array<int, FileUpload>> $files */
-    private static function hasPartialUpload(array $files): bool
-    {
-        foreach ($files as $entry) {
-            foreach (is_array($entry) ? $entry : [$entry] as $file) {
-                if ($file->errorCode === UPLOAD_ERR_PARTIAL) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * The media type PHP matches its body parsers against: lowercased, cut at the first ";", "," or space.
-     *
-     * @param array<string, string> $headers
-     */
-    private static function phpMediaType(array $headers): string
-    {
-        $contentType = $headers['content-type'] ?? '';
-
-        return strtolower(substr($contentType, 0, strcspn($contentType, ';, ')));
     }
 
     /**
