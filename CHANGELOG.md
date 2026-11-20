@@ -9,6 +9,23 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Fixed
+
+- An incomplete body no longer reaches the controller with its fields cut short: `Request::fromGlobals()` reads a body shorter than its `Content-Length` (unless it carries a `Content-Encoding`), or a multipart body holding an upload PHP ended without its boundary (`UPLOAD_ERR_PARTIAL`), as empty and malformed, and `HttpKernel` refuses it with `400` before any middleware or controller, unless a `RequestEvent` listener answers it first. A chunked multipart whose file PHP cut at `post_max_size` is refused with this `400`, not `413`.
+- `Request::fromGlobals()` reads a form POST that PHP parses itself (urlencoded or multipart) with `post_max_size` as its read limit when that is smaller than `maxBodySize`, so a form past it is refused with `413` before any controller instead of reaching it empty or cut. A JSON or other raw body, a `PUT`, and a POST that PHP leaves whole in `php://input` keep `maxBodySize`.
+- Known limits of the incomplete body check: a chunked body cut short, a body with a `Content-Encoding` cut short, and a multipart POST cut in or between its text fields still reach the controller as complete or partial (CSRF does not catch the multipart cut when the token travels in a header), so validate required fields.
+- `HttpKernel` reports a form POST cut at a `post_max_size` below `security.max_body_size` with its fix (raise `post_max_size`), through `ExceptionEvent` listeners, the debugger, or one error log line.
+
+### Documentation
+
+Pages of zephyrus.ophelios.com that this version makes stale, each in English and in French (`content/fr/`):
+
+- `fundamentals/security.md`: Request body size, a form POST past `post_max_size` is refused with `413` and reported, and an incomplete body is refused with `400`, with its known limits.
+- `fundamentals/http.md`: `isMalformed()` is also true for an incomplete body, which the kernel refuses with `400`.
+- `fundamentals/application.md`: the request lifecycle refuses a truncated (`413`) or incomplete (`400`) body after `RequestEvent` and before routing, and these refusals skip the global middlewares.
+- `digging-deeper/container-and-events.md`: a `RequestEvent` listener sees a truncated or incomplete body first and can answer it with its own page.
+- `digging-deeper/uploads.md`: a POST whose files push it past `post_max_size` is refused with `413` before the controller, and a partial upload is refused with `400`.
+
 ## [3.17.1] - 2026-11-20
 
 ### Breaking changes
