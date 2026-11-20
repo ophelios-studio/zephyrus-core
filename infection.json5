@@ -34,6 +34,11 @@
                 "Zephyrus\\Event\\EventDispatcher::dispatch::171", // continue re-checks the stopped flag
             ],
         },
+        "CastBool": {
+            "ignore": [
+                "Zephyrus\\Core\\DebugIntegration::installSecretMasking::448", // || already yields a bool
+            ],
+        },
         "CastArray": {
             "ignore": [
                 "Zephyrus\\FileSystem\\SafePath::isSafeRelativePath::107", // type-only casts under strict_types
@@ -349,6 +354,7 @@
                 "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::normalizeEnvironmentName::201", // the fall-through returns '' too
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::360", // same YAML read either way
                 "Zephyrus\\Core\\Config\\SessionConfig::assertCookieCanBeStored::226", // __Host- and __Secure- are exclusive
+                "Zephyrus\\Core\\DebugIntegration::declaredProperties::581", // a cache hit recomputes the same map
                 "Zephyrus\\Core\\HttpKernel::fireExceptionEvent::297", // the Error is caught and swallowed
                 "Zephyrus\\Data\\Database::floatLiteral::1138", // sprintf already prints NaN
                 "Zephyrus\\Data\\FilterRequest::toWhereClause::95", // duplicated by the empty parts return
@@ -443,6 +449,7 @@
         "UnwrapArrayUnique": {
             "ignore": [
                 "Zephyrus\\Core\\ApplicationBuilder::withAcknowledgedSecurityKeys::508", // the keys are only iterated
+                "Zephyrus\\Core\\DebugIntegration::installSecretMasking::425", // the merge below dedupes the list again
                 "Zephyrus\\Core\\KernelBuilder::assertRouteMiddlewaresAreRegistered::417", // Router already dedupes them
                 "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
                 "Zephyrus\\Routing\\Router::group::255", // router re-expands and dedupes the middlewares
@@ -461,6 +468,8 @@
                 "Zephyrus\\Core\\Config\\Configuration::fromArray::95", // in_array ignores the keys
                 "Zephyrus\\Core\\Config\\Configuration::fromArray::96", // in_array ignores the keys
                 "Zephyrus\\Core\\Config\\EnvironmentContract::requireOneOf::80", // nothing reads the allowed list keys
+                "Zephyrus\\Core\\DebugIntegration::installSecretMasking::402", // the spread that reads the list renumbers it
+                "Zephyrus\\Core\\DebugIntegration::installSecretMasking::425", // array_merge renumbers the list below
                 "Zephyrus\\Core\\Config\\LocalizationConfig::resolveLocalePath::201", // end() returns the same last element
                 "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::259", // keys are never read
                 "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::265", // keys are never read
@@ -496,6 +505,7 @@
         },
         "UnwrapLtrim": {
             "ignore": [
+                "Zephyrus\\Core\\DebugIntegration::matchesSensitivePattern::654", // the pattern is unanchored, a leading dollar cannot change a match
                 "Zephyrus\\FileSystem\\SafePath::within::40", // realpath normalises separators
                 "Zephyrus\\Localization\\Translator::interpolate::167", // empty leading segment is skipped anyway
                 "Zephyrus\\Routing\\RouteCollection::normalizePath::735", // empty segments never match a placeholder
@@ -524,6 +534,7 @@
         "UnwrapStrToLower": {
             "ignore": [
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::358", // extension is lowercased by the loader
+                "Zephyrus\\Core\\DebugIntegration::matchesSensitivePattern::654", // the pattern carries the i flag
                 "Zephyrus\\Http\\Request::httpScheme::735", // value is already lowercased upstream
                 "Zephyrus\\Http\\Request::isDefaultPortForScheme::1191", // value is already lowercased upstream
                 "Zephyrus\\Http\\Request::normalizeIp::986", // redundant with a later fallback
