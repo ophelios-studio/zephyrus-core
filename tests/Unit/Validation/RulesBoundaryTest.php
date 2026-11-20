@@ -478,6 +478,13 @@ final class RulesBoundaryTest extends TestCase
             'closed range with leading junk' => ['bytes x0-4/5', false],
             'end beyond the size' => ['bytes 0-5/5', false],
             'empty resource' => ['bytes 0-0/0', false],
+            'single byte of a one byte resource' => ['bytes 0-0/1', true],
+            'last byte of the resource' => ['bytes 0-9/10', true],
+            'end equal to the size' => ['bytes 0-10/10', false],
+            'start after the end' => ['bytes 5-4/10', false],
+            'end equal to a size with a leading zero' => ['bytes 5-5/05', false],
+            'end below a size with a leading zero' => ['bytes 5-5/06', true],
+            'size of zeros only' => ['bytes 0-0/000', false],
         ];
     }
 
