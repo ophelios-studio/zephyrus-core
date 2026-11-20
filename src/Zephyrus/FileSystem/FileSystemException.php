@@ -125,6 +125,29 @@ final class FileSystemException extends ZephyrusRuntimeException
         return new self(sprintf('Path already exists: %s', self::quotePath($path)));
     }
 
+    public static function fileLockTimedOut(string $path, float $waitSeconds): self
+    {
+        return new self(sprintf(
+            'Lock on the file not acquired within the %s-second wait: %s',
+            self::formatSeconds($waitSeconds),
+            self::quotePath($path),
+        ));
+    }
+
+    public static function directoryLockTimedOut(string $directory, float $waitSeconds): self
+    {
+        return new self(sprintf(
+            'Lock on the directory not acquired within the %s-second wait: %s',
+            self::formatSeconds($waitSeconds),
+            self::quotePath($directory),
+        ));
+    }
+
+    private static function formatSeconds(float $seconds): string
+    {
+        return rtrim(rtrim(number_format($seconds, 3, '.', ''), '0'), '.');
+    }
+
     private static function quotePath(string $path): string
     {
         return MessageValue::quote($path, self::MAX_PATH_BYTES, keepEnd: true);

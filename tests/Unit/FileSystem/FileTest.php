@@ -632,6 +632,144 @@ final class FileTest extends TestCase
         self::assertSame($expected, $written);
     }
 
+    public function testAppendThrowsOnceTheLockWaitPassesWhileTheFileLockIsHeld(): void
+    {
+        $path = $this->tempDir . '/held.log';
+        file_put_contents($path, "kept\n");
+        $holder = fopen($path, 'r');
+        self::assertNotFalse($holder);
+        flock($holder, LOCK_EX);
+
+        $start = hrtime(true);
+        try {
+            (new File($path))->append("lost\n", 0.2);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Lock on the file not acquired within the 0.2-second wait: "' . $path . '"', $e->getMessage());
+        } finally {
+            flock($holder, LOCK_UN);
+            fclose($holder);
+        }
+        $elapsed = (hrtime(true) - $start) / 1e9;
+
+        self::assertGreaterThanOrEqual(0.2, $elapsed);
+        self::assertLessThan(2.0, $elapsed);
+        self::assertSame("kept\n", (string) file_get_contents($path));
+    }
+
+    public function testAppendWithAZeroLockWaitThrowsAtOnceWhileTheFileLockIsHeld(): void
+    {
+        $path = $this->tempDir . '/held-zero.log';
+        file_put_contents($path, "kept\n");
+        $holder = fopen($path, 'r');
+        self::assertNotFalse($holder);
+        flock($holder, LOCK_EX);
+
+        $start = hrtime(true);
+        try {
+            (new File($path))->append("lost\n", 0.0);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame('Lock on the file not acquired within the 0-second wait: "' . $path . '"', $e->getMessage());
+        } finally {
+            flock($holder, LOCK_UN);
+            fclose($holder);
+        }
+
+        self::assertLessThan(1.0, (hrtime(true) - $start) / 1e9);
+        self::assertSame("kept\n", (string) file_get_contents($path));
+    }
+
+    public function testAppendKeepsRetryingForTheLockUntilItIsReleased(): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs the pcntl and posix extensions.');
+        }
+        if (!is_readable('/proc/self/fd')) {
+            self::markTestSkipped('Needs /proc/<pid>/fd, to see the appender open the locked path.');
+        }
+        $path = $this->tempDir . '/retried.log';
+        file_put_contents($path, "first\n");
+        $holder = fopen($path, 'r');
+        self::assertNotFalse($holder);
+        flock($holder, LOCK_EX);
+
+        $appender = $this->forkAppender($path, ['second'], 5.0);
+        $completed = false;
+        try {
+            self::waitUntilBlockedOnALockOrDone($appender, $this->tempDir . '/never-created', $path);
+            usleep(100000);
+            $completed = true;
+        } finally {
+            flock($holder, LOCK_UN);
+            self::waitForChild($appender, 'append() waiting for the file lock', failing: $completed);
+            fclose($holder);
+        }
+
+        self::assertSame("first\nsecond\n", (string) file_get_contents($path));
+    }
+
+    /**
+     * @return array<string, array{float}>
+     */
+    public static function invalidLockWaits(): array
+    {
+        return [
+            'negative' => [-1.0],
+            'just below zero' => [-0.001],
+            'not a number' => [NAN],
+            'infinite' => [INF],
+            'negative infinite' => [-INF],
+        ];
+    }
+
+    #[DataProvider('invalidLockWaits')]
+    public function testAppendRefusesAnInvalidLockWaitBeforeTouchingTheFileSystem(float $wait): void
+    {
+        $path = $this->tempDir . '/never.log';
+
+        try {
+            (new File($path))->append("x\n", $wait);
+            self::fail('expected a refusal');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame('Lock wait must be a finite number of seconds, zero or more: ' . $wait, $e->getMessage());
+        }
+
+        self::assertFileDoesNotExist($path);
+    }
+
+    public function testAppendWaitsTenSecondsForItsLocksByDefault(): void
+    {
+        $parameter = (new \ReflectionMethod(File::class, 'append'))->getParameters()[1];
+
+        self::assertSame('lockWaitSeconds', $parameter->getName());
+        self::assertSame(10.0, $parameter->getDefaultValue());
+    }
+
+    public function testAppendThrowsOnceTheLockWaitPassesWhileTheDirectoryLockIsHeld(): void
+    {
+        self::requireDirectoryLockTools();
+        $path = $this->tempDir . '/missing.log';
+        $directory = fopen($this->tempDir, 'r');
+        self::assertNotFalse($directory);
+        flock($directory, LOCK_EX);
+
+        try {
+            (new File($path))->append("x\n", 0.2);
+            self::fail('expected a refusal');
+        } catch (FileSystemException $e) {
+            self::assertSame(
+                'Lock on the directory not acquired within the 0.2-second wait: "' . $this->tempDir . '"',
+                $e->getMessage(),
+            );
+        } finally {
+            flock($directory, LOCK_UN);
+            fclose($directory);
+        }
+
+        self::assertFileDoesNotExist($path);
+    }
+
     public function testAppendCreatingTheFileWaitsForTheDirectoryLockAndAppendsToAFileCreatedMeanwhile(): void
     {
         if (!PHP_ZTS) {
@@ -640,8 +778,8 @@ final class FileTest extends TestCase
         if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
             self::markTestSkipped('Needs the pcntl and posix extensions.');
         }
-        if (!is_readable('/proc/locks')) {
-            self::markTestSkipped('Needs /proc/locks, to see the appender wait.');
+        if (!is_readable('/proc/self/fd')) {
+            self::markTestSkipped('Needs /proc/<pid>/fd, to see the appender open the locked path.');
         }
         $path = $this->tempDir . '/created-meanwhile.log';
         $directory = fopen($this->tempDir, 'r');
@@ -651,7 +789,7 @@ final class FileTest extends TestCase
         $appender = $this->forkAppender($path, ['child']);
         $completed = false;
         try {
-            self::waitUntilBlockedOnALockOrDone($appender, $path);
+            self::waitUntilBlockedOnALockOrDone($appender, $path, $this->tempDir);
             self::assertFileDoesNotExist($path);
             file_put_contents($path, "parent\n");
             $completed = true;
@@ -697,7 +835,7 @@ final class FileTest extends TestCase
         $appender = $this->forkReportingAppender($path, $report);
         $completed = false;
         try {
-            self::waitUntilBlockedOnALockOrDone($appender, $path);
+            self::waitUntilBlockedOnALockOrDone($appender, $path, $this->tempDir);
             symlink($target, $path);
             $completed = true;
         } finally {
@@ -1490,7 +1628,7 @@ final class FileTest extends TestCase
      *
      * @param list<string> $lines
      */
-    private function forkAppender(string $path, array $lines): int
+    private function forkAppender(string $path, array $lines, float $lockWaitSeconds = 10.0): int
     {
         $pid = pcntl_fork();
         if ($pid === -1) {
@@ -1503,7 +1641,7 @@ final class FileTest extends TestCase
         try {
             $file = new File($path);
             foreach ($lines as $line) {
-                $file->append($line . "\n");
+                $file->append($line . "\n", $lockWaitSeconds);
             }
         } finally {
             posix_kill(posix_getpid(), SIGKILL);
@@ -1518,8 +1656,8 @@ final class FileTest extends TestCase
         if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
             self::markTestSkipped('Needs the pcntl and posix extensions.');
         }
-        if (!is_readable('/proc/locks')) {
-            self::markTestSkipped('Needs /proc/locks, to see the appender wait.');
+        if (!is_readable('/proc/self/fd')) {
+            self::markTestSkipped('Needs /proc/<pid>/fd, to see the appender open the locked path.');
         }
     }
 
@@ -1567,22 +1705,34 @@ final class FileTest extends TestCase
     }
 
     /**
-     * Return once process `$pid` waits for an exclusive flock(), as /proc/locks lists it, has
-     * exited, or `$path` exists.
+     * Return once process `$pid` holds one more open handle on `$lockedPath` than this process
+     * does (the handle it opened to take the lock), has exited, or `$path` exists.
      */
-    private static function waitUntilBlockedOnALockOrDone(int $pid, string $path): void
+    private static function waitUntilBlockedOnALockOrDone(int $pid, string $path, string $lockedPath): void
     {
-        $waiting = '/^\d+: -> FLOCK\s+ADVISORY\s+WRITE\s+' . $pid . '\s/m';
+        $inherited = self::countOpenHandlesOn(posix_getpid(), $lockedPath);
         for ($attempt = 0; $attempt < 10000; $attempt++) {
             clearstatcache(true, $path);
             if (file_exists($path)
                 || pcntl_waitpid($pid, $status, WNOHANG) !== 0
-                || preg_match($waiting, (string) file_get_contents('/proc/locks')) === 1) {
+                || self::countOpenHandlesOn($pid, $lockedPath) > $inherited) {
                 return;
             }
             usleep(1000);
         }
         self::fail('the appender neither waited nor finished');
+    }
+
+    private static function countOpenHandlesOn(int $pid, string $path): int
+    {
+        $count = 0;
+        foreach (glob('/proc/' . $pid . '/fd/*') ?: [] as $descriptor) {
+            if (@readlink($descriptor) === $path) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     /**

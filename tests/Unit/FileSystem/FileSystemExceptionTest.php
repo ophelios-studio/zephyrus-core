@@ -128,6 +128,26 @@ final class FileSystemExceptionTest extends TestCase
         );
     }
 
+    public function testALockWaitIsWrittenWithoutExponentOrTrailingZeros(): void
+    {
+        self::assertSame(
+            'Lock on the file not acquired within the 10-second wait: "/p"',
+            FileSystemException::fileLockTimedOut('/p', 10.0)->getMessage(),
+        );
+        self::assertSame(
+            'Lock on the directory not acquired within the 0.25-second wait: "/d"',
+            FileSystemException::directoryLockTimedOut('/d', 0.25)->getMessage(),
+        );
+        self::assertSame(
+            'Lock on the file not acquired within the 0-second wait: "/p"',
+            FileSystemException::fileLockTimedOut('/p', 0.0)->getMessage(),
+        );
+        self::assertSame(
+            'Lock on the file not acquired within the 1500000-second wait: "/p"',
+            FileSystemException::fileLockTimedOut('/p', 1500000.0)->getMessage(),
+        );
+    }
+
     public function testBothPathsOfACopyOntoItselfAreQuoted(): void
     {
         $exception = FileSystemException::copyOntoItself('/a', '/b');

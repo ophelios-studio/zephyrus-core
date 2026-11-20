@@ -43,6 +43,8 @@ final class File extends FileSystemNode
     private const int STICKY_BIT = 0o1000;
     private const int PERMISSION_BITS = 0o777;
     private const string TEMPORARY_PREFIX = '.zephyrus-';
+    private const int LOCK_RETRY_FIRST_DELAY_NANOSECONDS = 1_000_000;
+    private const int LOCK_RETRY_MAX_DELAY_NANOSECONDS = 20_000_000;
 
     private static ?int $createdFileOwner = null;
 
@@ -102,17 +104,29 @@ final class File extends FileSystemNode
      * On a thread-safe PHP build or a filesystem without hard links, a call that creates the
      * file holds an exclusive flock() on its directory, so two calls that create it at the
      * same instant take turns; where the directory cannot be opened or locked, they may leave
-     * only one of their contents, or one of them may fail with FileSystemException. Both locks
-     * are awaited without limit, so any process that can open the file (one readable by other
-     * users included), or its directory while the file is missing, can hold append() back.
+     * only one of their contents, or one of them may fail with FileSystemException. The call
+     * waits at most `$lockWaitSeconds` in total for these locks, then throws FileSystemException,
+     * so a process that can open the file (one readable by other users included), or its
+     * directory while the file is missing, can make append() fail but no longer hold it back.
+     * Zero makes a single attempt per lock.
      *
+     * @param float $lockWaitSeconds Longest total wait for the locks, finite and zero or more.
+     * @throws \InvalidArgumentException if `$lockWaitSeconds` is negative, NAN or infinite.
      * @throws FileSystemException if the path holds a NUL byte, is a stream wrapper URL, does not
-     *         end with a file name, is a symbolic link, or appending fails.
+     *         end with a file name, is a symbolic link, a lock is not acquired in time, or
+     *         appending fails.
      */
-    public function append(string $content): void
+    public function append(string $content, float $lockWaitSeconds = 10.0): void
     {
+        if (!is_finite($lockWaitSeconds) || $lockWaitSeconds < 0.0) {
+            throw new \InvalidArgumentException(sprintf(
+                'Lock wait must be a finite number of seconds, zero or more: %s',
+                $lockWaitSeconds,
+            ));
+        }
         self::assertPlainFilePath($this->path);
-        self::appendContent($this->path, $content);
+        $deadline = hrtime(true) + (int) min($lockWaitSeconds * 1e9, 1e18);
+        self::appendContent($this->path, $content, $deadline, $lockWaitSeconds);
     }
 
     /**
@@ -377,7 +391,7 @@ final class File extends FileSystemNode
     /**
      * @throws FileSystemException
      */
-    private static function appendContent(string $path, string $content): void
+    private static function appendContent(string $path, string $content, int $deadline, float $lockWaitSeconds): void
     {
         $failure = self::failure('append to', $path);
         $handle = self::openInPlace($path, $failure, refuseLink: true);
@@ -388,7 +402,7 @@ final class File extends FileSystemNode
                 return;
             }
             // Appenders that would replace a missing file take turns under the directory lock.
-            $directory = self::lockDirectory(dirname($path));
+            $directory = self::lockDirectory(dirname($path), $deadline, $lockWaitSeconds);
             try {
                 $handle = self::openInPlace($path, $failure, refuseLink: true);
                 if ($handle === null) {
@@ -404,7 +418,7 @@ final class File extends FileSystemNode
         }
 
         try {
-            if (!self::appendUnderLock($handle, $content)) {
+            if (!self::appendUnderLock($handle, $content, $deadline, $lockWaitSeconds, $path)) {
                 throw $failure(NativeFileSystem::lastError());
             }
         } finally {
@@ -413,12 +427,13 @@ final class File extends FileSystemNode
     }
 
     /**
-     * Open `$directory` and wait for an exclusive flock() on it: null when it is not a directory
-     * or cannot be opened or locked.
+     * Open `$directory` and wait until `$deadline` for an exclusive flock() on it: null when it is
+     * not a directory or cannot be opened or locked.
      *
      * @return resource|null
+     * @throws FileSystemException if the lock is not acquired in time.
      */
-    private static function lockDirectory(string $directory)
+    private static function lockDirectory(string $directory, int $deadline, float $lockWaitSeconds)
     {
         clearstatcache(true, $directory);
         // Opening a FIFO for reading would block until a writer opens it.
@@ -429,7 +444,17 @@ final class File extends FileSystemNode
         if ($handle === false) {
             return null;
         }
-        if (!flock($handle, LOCK_EX)) {
+        try {
+            $locked = self::lockUntil(
+                $handle,
+                $deadline,
+                static fn(): FileSystemException => FileSystemException::directoryLockTimedOut($directory, $lockWaitSeconds),
+            );
+        } catch (FileSystemException $timeout) {
+            fclose($handle);
+            throw $timeout;
+        }
+        if (!$locked) {
             fclose($handle);
             return null;
         }
@@ -438,12 +463,46 @@ final class File extends FileSystemNode
     }
 
     /**
+     * Retry a non-blocking exclusive flock() until `$deadline` (hrtime nanoseconds): false on a
+     * failure other than a held lock.
+     *
      * @param resource $handle
+     * @param \Closure(): FileSystemException $timedOut
+     * @throws FileSystemException
      */
-    private static function appendUnderLock($handle, string $content): bool
+    private static function lockUntil($handle, int $deadline, \Closure $timedOut): bool
+    {
+        $delay = self::LOCK_RETRY_FIRST_DELAY_NANOSECONDS;
+        while (true) {
+            $wouldBlock = 0;
+            if (flock($handle, LOCK_EX | LOCK_NB, $wouldBlock)) {
+                return true;
+            }
+            if ($wouldBlock !== 1) {
+                return false;
+            }
+            $remaining = $deadline - hrtime(true);
+            if ($remaining <= 0) {
+                throw $timedOut();
+            }
+            usleep(max(1, intdiv(min($delay, $remaining), 1000)));
+            $delay = min($delay * 2, self::LOCK_RETRY_MAX_DELAY_NANOSECONDS);
+        }
+    }
+
+    /**
+     * @param resource $handle
+     * @throws FileSystemException if the lock is not acquired in time.
+     */
+    private static function appendUnderLock($handle, string $content, int $deadline, float $lockWaitSeconds, string $path): bool
     {
         error_clear_last();
-        if (!flock($handle, LOCK_EX)) {
+        $locked = self::lockUntil(
+            $handle,
+            $deadline,
+            static fn(): FileSystemException => FileSystemException::fileLockTimedOut($path, $lockWaitSeconds),
+        );
+        if (!$locked) {
             return false;
         }
         try {

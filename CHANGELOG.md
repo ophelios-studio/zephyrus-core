@@ -9,6 +9,14 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+### Added
+
+- `File::append()` takes an optional `$lockWaitSeconds` (default `10.0`): the longest total wait for its file lock and, when it creates the file, its directory lock. `0.0` makes a single attempt per lock; a negative, `NAN` or infinite value throws `InvalidArgumentException` before any file system access.
+
+### Changed
+
+- `File::append()` no longer waits without limit for its locks: a lock still held after the wait (10 seconds by default) makes it throw `FileSystemException`, so a process holding the file or its directory can make the call fail but no longer hold it back.
+
 ## [3.17.2] - 2026-11-20
 
 ### Fixed
