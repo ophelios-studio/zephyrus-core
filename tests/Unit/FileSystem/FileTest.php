@@ -710,21 +710,21 @@ final class FileTest extends TestCase
     }
 
     /**
-     * @return array<string, array{float}>
+     * @return array<string, array{float, string}>
      */
     public static function invalidLockWaits(): array
     {
         return [
-            'negative' => [-1.0],
-            'just below zero' => [-0.001],
-            'not a number' => [NAN],
-            'infinite' => [INF],
-            'negative infinite' => [-INF],
+            'negative' => [-1.0, '-1'],
+            'just below zero' => [-0.001, '-0.001'],
+            'not a number' => [NAN, 'NaN'],
+            'infinite' => [INF, 'INF'],
+            'negative infinite' => [-INF, '-INF'],
         ];
     }
 
     #[DataProvider('invalidLockWaits')]
-    public function testAppendRefusesAnInvalidLockWaitBeforeTouchingTheFileSystem(float $wait): void
+    public function testAppendRefusesAnInvalidLockWaitBeforeTouchingTheFileSystem(float $wait, string $shown): void
     {
         $path = $this->tempDir . '/never.log';
 
@@ -732,7 +732,7 @@ final class FileTest extends TestCase
             (new File($path))->append("x\n", $wait);
             self::fail('expected a refusal');
         } catch (\InvalidArgumentException $e) {
-            self::assertSame('Lock wait must be a finite number of seconds, zero or more: ' . $wait, $e->getMessage());
+            self::assertSame('Lock wait must be a finite number of seconds, zero or more: ' . $shown, $e->getMessage());
         }
 
         self::assertFileDoesNotExist($path);

@@ -122,7 +122,7 @@ final class File extends FileSystemNode
     {
         if (!is_finite($lockWaitSeconds) || $lockWaitSeconds < 0.0) {
             throw new \InvalidArgumentException(sprintf(
-                'Lock wait must be a finite number of seconds, zero or more: %s',
+                'Lock wait must be a finite number of seconds, zero or more: %g',
                 $lockWaitSeconds,
             ));
         }
