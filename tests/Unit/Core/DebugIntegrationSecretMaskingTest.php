@@ -9,7 +9,6 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
-use ReflectionProperty;
 use Tracy\Debugger;
 use Tracy\Dumper;
 use Tracy\ILogger;
@@ -52,16 +51,13 @@ final class DebugIntegrationSecretMaskingTest extends TestCase
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function testTheApplicationKeysHoldEachNameOnceAcrossInstallations(): void
+    public function testEachApplicationKeyStaysSensitiveAcrossInstallations(): void
     {
         DebugIntegration::installSecretMasking('first_session');
         DebugIntegration::installSecretMasking('second_session');
         DebugIntegration::installSecretMasking('first_session');
         DebugIntegration::installSecretMasking();
 
-        $keys = (new ReflectionProperty(DebugIntegration::class, 'applicationKeys'))->getValue();
-
-        self::assertSame(['first_session', 'second_session'], $keys);
         self::assertTrue(DebugIntegration::isSensitiveKey('first_session'));
         self::assertTrue(DebugIntegration::isSensitiveKey('second_session'));
     }

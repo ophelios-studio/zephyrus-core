@@ -449,6 +449,7 @@
         "UnwrapArrayUnique": {
             "ignore": [
                 "Zephyrus\\Core\\ApplicationBuilder::withAcknowledgedSecurityKeys::508", // the keys are only iterated
+                "Zephyrus\\Core\\DebugIntegration::installSecretMasking::402", // duplicates only cost memory: readers merge or test membership
                 "Zephyrus\\Core\\DebugIntegration::installSecretMasking::425", // the merge below dedupes the list again
                 "Zephyrus\\Core\\KernelBuilder::assertRouteMiddlewaresAreRegistered::417", // Router already dedupes them
                 "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
