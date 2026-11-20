@@ -20,8 +20,8 @@ use Zephyrus\Security\MaxBodySizeMiddleware;
  * Turns a Request into a Response: resolves the route, runs the global and
  * route middlewares, and converts any throwable into an error response.
  *
- * Order: RequestEvent (a listener may short-circuit), the truncated body check,
- * routing and pipeline, then ResponseEvent (a listener may replace the response).
+ * Order: RequestEvent (a listener may short-circuit), the truncated and incomplete
+ * body checks, routing and pipeline, then ResponseEvent (a listener may replace the response).
  * ExceptionEvent fires once per throwable at the point of conversion.
  *
  * A body Request::fromGlobals() truncated at its read limit never reaches a
@@ -30,13 +30,16 @@ use Zephyrus\Security\MaxBodySizeMiddleware;
  * the read limit is below the configured security.maxBodySize, a
  * ConfigurationException naming the fix goes to ExceptionEvent, then is rethrown
  * when unhandled exceptions are, or logged as its message alone, on one line.
+ * A body Request::fromGlobals() read incomplete is refused with a 400 before the
+ * pipeline, text/plain when Accept lists text/html, JSON otherwise.
  *
  * Error responses (404, 405, failing handler) pass through the global
  * pipeline and carry its decorations (security headers, CSP, host and HTTPS
  * checks). Four responses do not: a RequestEvent short-circuit, the kernel's 413
- * for a truncated body, the backstop used when a global middleware itself
- * throws, and a response replaced by a ResponseEvent listener. A header that
- * must reach every response also belongs at the web server or proxy.
+ * for a truncated body or 400 for an incomplete one, the backstop used when a
+ * global middleware itself throws, and a response replaced by a ResponseEvent
+ * listener. A header that must reach every response also belongs at the web
+ * server or proxy.
  *
  * A throwable is unhandled when no handler or built-in mapping answers it,
  * when its handler rethrows it, or when its handler fails with another one.
@@ -65,6 +68,8 @@ use Zephyrus\Security\MaxBodySizeMiddleware;
  */
 final readonly class HttpKernel
 {
+    private const string INCOMPLETE_BODY = 'Request body incomplete.';
+
     private MiddlewarePipeline $globalPipeline;
 
     private bool $bodyLimitMounted;
@@ -72,8 +77,8 @@ final readonly class HttpKernel
     /**
      * @param MiddlewarePipeline|null $globalPipeline Middlewares wrapping routed responses and
      *   404/405/failing-handler error responses. Not RequestEvent short-circuits, the kernel's
-     *   413 for a truncated body, the global-middleware backstop or ResponseEvent replacements
-     *   (see class docblock).
+     *   413 for a truncated body or 400 for an incomplete one, the global-middleware backstop
+     *   or ResponseEvent replacements (see class docblock).
      * @param bool $rethrowUnhandled Lets an unhandled throwable leave handle(), for a debugger.
      * @param int|null $configuredMaxBodySize The configured security.maxBodySize (0 for unlimited): a body
      *   truncated at a smaller read limit is reported. Null reports nothing.
@@ -108,6 +113,10 @@ final readonly class HttpKernel
             if (!$this->bodyLimitMounted) {
                 return $this->fireResponseEvent($request, MaxBodySizeMiddleware::defaultRefusal($request));
             }
+        }
+
+        if (self::isIncomplete($request)) {
+            return $this->fireResponseEvent($request, self::incompleteBodyRefusal($request));
         }
 
         try {
@@ -151,6 +160,28 @@ final readonly class HttpKernel
 
         // Any client can trigger this on every request: the message alone, never the trace or its paths.
         error_log('Zephyrus: ' . $error->getMessage());
+    }
+
+    /** A body Request::fromGlobals() read incomplete; a body built by hand is never judged. */
+    private static function isIncomplete(Request $request): bool
+    {
+        $body = $request->body();
+
+        // fromGlobals() marks an incomplete body malformed; the guard also keeps out a complete multipart POST, whose raw body is empty.
+        return $body->readLimit() !== null
+            && $body->isMalformed()
+            && !$body->isTruncated()
+            && BodySize::isIncomplete($request->headers(), $body->raw(), $request->files);
+    }
+
+    /** The 400 for an incomplete body: text/plain when Accept lists text/html, JSON {"error": ...} otherwise. */
+    private static function incompleteBodyRefusal(Request $request): Response
+    {
+        if (str_contains(strtolower($request->headers()->get('Accept') ?? ''), 'text/html')) {
+            return Response::text(self::INCOMPLETE_BODY, 400);
+        }
+
+        return Response::json(['error' => self::INCOMPLETE_BODY], 400);
     }
 
     /**

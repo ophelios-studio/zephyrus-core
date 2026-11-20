@@ -140,8 +140,8 @@ final readonly class Request
      *
      * A body shorter than its Content-Length (without a Content-Encoding), or holding an upload PHP ended without its
      * boundary (UPLOAD_ERR_PARTIAL), is incomplete: fields and raw body empty, files still listed,
-     * RequestBody::isMalformed() true. A chunked body cut short, or a multipart POST cut in or between its text
-     * fields, cannot be told from a complete one.
+     * RequestBody::isMalformed() true, and HttpKernel refuses it with a 400. A chunked body cut short, or a multipart
+     * POST cut in or between its text fields, cannot be told from a complete one.
      *
      * @param array<string, mixed>|null  $server
      * @param array<string, mixed>|null  $get

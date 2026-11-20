@@ -45,6 +45,9 @@ final class RequestPostMaxSizeTest extends TestCase
             'a multipart form declaring its length' => ['multipart/form-data; boundary=edge', $multipart, false],
             'an uppercase form with parameters' => ['Application/X-WWW-Form-Urlencoded;charset=UTF-8', $form, false],
             'an uppercase multipart with parameters' => ['MULTIPART/FORM-DATA;boundary=edge', $multipart, false],
+            'a form followed by a second type after a comma' => [self::FORM . ',text/plain', $form, false],
+            'a form followed by a parameter after a space' => [self::FORM . ' charset=x', $form, false],
+            'a multipart followed by a parameter after a space' => ['multipart/form-data boundary=edge', $multipart, false],
         ];
     }
 

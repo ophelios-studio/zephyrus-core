@@ -9,6 +9,8 @@ use PHPUnit\Framework\TestCase;
 use Zephyrus\Core\Config\ConfigurationException;
 use Zephyrus\Core\ExceptionEvent;
 use Zephyrus\Core\HttpKernel;
+use Zephyrus\Core\RequestEvent;
+use Zephyrus\Core\ResponseEvent;
 use Zephyrus\Event\EventDispatcher;
 use Zephyrus\Http\Error\HttpExceptionResponder;
 use Zephyrus\Http\MiddlewareInterface;
@@ -179,6 +181,119 @@ final class HttpKernelCutBodyTest extends TestCase
         self::assertSame([413, 0], [$response->status, $this->handlerCalls]);
     }
 
+    public function testAnIncompleteBodyIsRefusedBeforeAnyGlobalMiddleware(): void
+    {
+        $globalMiddleware = new class implements MiddlewareInterface {
+            public int $calls = 0;
+
+            public function process(Request $request, callable $next): Response
+            {
+                ++$this->calls;
+
+                /** @var Response */
+                return $next($request);
+            }
+        };
+
+        $response = $this->kernel([$globalMiddleware])->handle(self::formShortOfItsLength());
+
+        self::assertSame([400, 0, 0], [$response->status, $globalMiddleware->calls, $this->handlerCalls]);
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function incompleteBodyRefusals(): array
+    {
+        return [
+            'a browser'     => ['text/html,application/xhtml+xml', 'text/plain; charset=utf-8', 'Request body incomplete.'],
+            'an uppercase Accept' => ['TEXT/HTML', 'text/plain; charset=utf-8', 'Request body incomplete.'],
+            'an API client' => ['application/json', 'application/json; charset=utf-8', '{"error":"Request body incomplete."}'],
+        ];
+    }
+
+    #[DataProvider('incompleteBodyRefusals')]
+    public function testTheKernelRefusesAnIncompleteBodyInTextForABrowserAndInJsonOtherwise(string $accept, string $contentType, string $body): void
+    {
+        $response = $this->kernel()->handle(self::formShortOfItsLength(['HTTP_ACCEPT' => $accept]));
+
+        self::assertSame([400, $contentType, $body], [$response->status, $response->headers['content-type'], $response->body]);
+    }
+
+    public function testARequestEventListenerAnswersAnIncompleteBodyInsteadOfTheKernel(): void
+    {
+        $events = new EventDispatcher();
+        $events->addListener(RequestEvent::class, static function (RequestEvent $event): void {
+            $body = $event->getRequest()->body();
+            if ($body->isMalformed() && !$body->isTruncated() && $body->raw() === '') {
+                $event->setResponse(Response::text('Send the form again.', 422));
+            }
+        });
+
+        $response = $this->kernel(events: $events)->handle(self::formShortOfItsLength());
+
+        self::assertSame([422, 'Send the form again.', 0], [$response->status, $response->body, $this->handlerCalls]);
+    }
+
+    public function testTheIncompleteBodyRefusalGoesThroughResponseListeners(): void
+    {
+        $seen = [];
+        $events = new EventDispatcher();
+        $events->addListener(ResponseEvent::class, static function (ResponseEvent $event) use (&$seen): void {
+            $seen[] = $event->getResponse()->status;
+        });
+
+        $this->kernel(events: $events)->handle(self::formShortOfItsLength());
+
+        self::assertSame([400], $seen);
+    }
+
+    public function testABodyBuiltByHandIsNeverRefusedAsIncomplete(): void
+    {
+        $request = new Request('POST', '/submit', new RequestBody([], '', malformed: true), headers: ['Content-Length' => '40']);
+
+        $response = $this->kernel()->handle($request);
+
+        self::assertSame([200, 1], [$response->status, $this->handlerCalls]);
+    }
+
+    public function testAMalformedJsonBodyOfItsFullLengthReachesTheHandler(): void
+    {
+        $request = Request::fromGlobals(
+            server: ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/submit', 'CONTENT_TYPE' => 'application/json', 'CONTENT_LENGTH' => '5'],
+            get: [],
+            post: [],
+            cookie: [],
+            files: [],
+            rawBody: '{"a":',
+        );
+
+        $response = $this->kernel()->handle($request);
+
+        self::assertSame([200, 1], [$response->status, $this->handlerCalls]);
+    }
+
+    public function testAMultipartPostWhoseMethodIsOverriddenReachesTheHandler(): void
+    {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI' => '/submit',
+                'CONTENT_TYPE' => 'multipart/form-data; boundary=edge',
+                'CONTENT_LENGTH' => '1207',
+            ],
+            get: [],
+            post: ['_method' => 'PUT', 'title' => 'Draft'],
+            cookie: [],
+            files: [],
+            rawBody: '',
+        );
+
+        $response = $this->kernel()->handle($request);
+
+        self::assertSame(['PUT', 200, 1], [$request->method, $response->status, $this->handlerCalls]);
+    }
+
     /**
      * @param list<MiddlewareInterface> $globalMiddlewares
      */
@@ -190,6 +305,7 @@ final class HttpKernelCutBodyTest extends TestCase
     ): HttpKernel {
         $routes = new RouteCollection();
         $routes->add(Route::define('POST', '/submit', 'FormController@submit'));
+        $routes->add(Route::define('PUT', '/submit', 'FormController@replace'));
 
         $dispatcher = new RouteDispatcher(
             routes: $routes,
@@ -217,13 +333,40 @@ final class HttpKernelCutBodyTest extends TestCase
     private static function formCutAtFourBytes(array $server = []): Request
     {
         return Request::fromGlobals(
-            server: ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/submit', 'CONTENT_TYPE' => 'application/x-www-form-urlencoded'] + $server,
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI' => '/submit',
+                'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
+                'CONTENT_LENGTH' => '26',
+            ] + $server,
             get: [],
             post: ['_csrf_token' => 'token', 'name' => 'Ada'],
             cookie: [],
             files: [],
             rawBody: '_csrf_token=token&name=Ada',
             maxBodySize: 4,
+        );
+    }
+
+    /**
+     * A form declaring 40 bytes of which 21 arrived.
+     *
+     * @param array<string, string> $server
+     */
+    private static function formShortOfItsLength(array $server = []): Request
+    {
+        return Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI' => '/submit',
+                'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
+                'CONTENT_LENGTH' => '40',
+            ] + $server,
+            get: [],
+            post: ['title' => 'Draft', 'items' => ['1']],
+            cookie: [],
+            files: [],
+            rawBody: 'title=Draft&items[]=1',
         );
     }
 }
