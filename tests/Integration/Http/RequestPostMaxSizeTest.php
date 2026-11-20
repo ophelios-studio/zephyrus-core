@@ -210,6 +210,10 @@ final class RequestPostMaxSizeTest extends TestCase
         $response = (string) stream_get_contents($socket);
         fclose($socket);
 
+        if (PHP_VERSION_ID >= 80600 && str_starts_with($response, 'HTTP/1.1 413 ') && str_contains($response, '<html')) {
+            self::markTestSkipped("PHP 8.6's built-in server refuses a body past post_max_size before the script runs; the 8.4 and 8.5 jobs cover this path");
+        }
+
         /** @var array{truncated: bool, readLimit: int, fields: list<string>, status: ?int, report: ?string} */
         return json_decode(substr($response, (int) strpos($response, "\r\n\r\n") + 4), true, 512, JSON_THROW_ON_ERROR);
     }
