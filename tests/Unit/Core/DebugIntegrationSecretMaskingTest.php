@@ -15,7 +15,7 @@ use Tracy\ILogger;
 use Tracy\Logger;
 use Zephyrus\Core\DebugIntegration;
 
-class StaticFirstArrayIterator extends ArrayIterator
+final class StaticFirstArrayIterator extends ArrayIterator
 {
     public static int $instances = 0;
     protected string $label = 'visible-label';
