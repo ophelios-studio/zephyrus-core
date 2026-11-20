@@ -71,13 +71,13 @@ final readonly class HeaderBag
 
     public function isJson(): bool
     {
-        $contentType = strtolower(trim($this->get('content-type') ?? ''));
+        $contentType = strtolower($this->get('content-type') ?? '');
 
         if ($contentType === '') {
             return false;
         }
 
-        $mediaType = trim(strtok($contentType, ';') ?: '');
+        $mediaType = trim(substr($contentType, 0, strcspn($contentType, ';')));
 
         return $mediaType === 'application/json' || str_ends_with($mediaType, '+json');
     }

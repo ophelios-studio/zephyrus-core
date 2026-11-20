@@ -1222,13 +1222,13 @@ final readonly class Request
 
     private static function isJsonContentType(string $contentType): bool
     {
-        $normalized = strtolower(trim($contentType));
+        $normalized = strtolower($contentType);
 
         if ($normalized === '') {
             return false;
         }
 
-        $mediaType = trim(strtok($normalized, ';') ?: '');
+        $mediaType = trim(substr($normalized, 0, strcspn($normalized, ';')));
 
         return $mediaType === 'application/json' || str_ends_with($mediaType, '+json');
     }

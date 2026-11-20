@@ -1761,6 +1761,33 @@ final class RequestTest extends TestCase
         yield 'suffix media type' => ['application/vnd.api+json ;x=1'];
     }
 
+    #[DataProvider('contentTypesWithAnEmptyMediaType')]
+    public function testFromGlobalsJsonBodyIsNotParsedWhenTheMediaTypeBeforeTheFirstSemicolonIsEmpty(
+        string $contentType,
+    ): void {
+        $request = Request::fromGlobals(
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST'      => 'api.example.com',
+                'REQUEST_URI'    => '/items',
+                'CONTENT_TYPE'   => $contentType,
+            ],
+            post: [],
+            rawBody: '{"a":1}',
+        );
+
+        self::assertSame([], $request->body()->all());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function contentTypesWithAnEmptyMediaType(): iterable
+    {
+        yield 'parameters first' => [';application/json'];
+        yield 'whitespace then parameters' => [' ;application/json'];
+    }
+
     public function testFromGlobalsJsonSuffixMediaTypeBodyIsParsed(): void
     {
         $request = Request::fromGlobals(

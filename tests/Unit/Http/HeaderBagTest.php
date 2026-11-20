@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Http;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Zephyrus\Http\HeaderBag;
@@ -132,6 +133,22 @@ final class HeaderBagTest extends TestCase
     public function isJsonIgnoresSpacesBeforeTheParameters(): void
     {
         self::assertTrue((new HeaderBag(['content-type' => 'application/json ; charset=utf-8']))->isJson());
+    }
+
+    #[Test]
+    #[DataProvider('contentTypesWithAnEmptyMediaType')]
+    public function isJsonIsFalseWhenTheMediaTypeBeforeTheFirstSemicolonIsEmpty(string $contentType): void
+    {
+        self::assertFalse((new HeaderBag(['content-type' => $contentType]))->isJson());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function contentTypesWithAnEmptyMediaType(): iterable
+    {
+        yield 'parameters first' => [';application/json'];
+        yield 'whitespace then parameters' => [' ;application/json'];
     }
 
     #[Test]

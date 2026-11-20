@@ -17,6 +17,10 @@ changes are listed first, each with the change to make in your code.
 
 - `File::append()` no longer waits without limit for its locks: a lock still held after the wait (10 seconds by default) makes it throw `FileSystemException`, so a process holding the file or its directory can make the call fail but no longer hold it back.
 
+### Fixed
+
+- `Request::fromGlobals()` and `HeaderBag::isJson()` take the media type of a `Content-Type` as the part before its first `;`, as PHP and RFC 9110 do: a value that starts with its parameters (`;application/json`) has an empty media type, and its body is no longer parsed as JSON.
+
 ## [3.17.2] - 2026-11-20
 
 ### Fixed
