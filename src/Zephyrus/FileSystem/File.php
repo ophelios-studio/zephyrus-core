@@ -40,6 +40,7 @@ final class File extends FileSystemNode
     private const int FILE_TYPE_MASK = 0o170000;
     private const int REGULAR_FILE_TYPE = 0o100000;
     private const int SYMBOLIC_LINK_TYPE = 0o120000;
+    private const int DIRECTORY_TYPE = 0o040000;
     private const int STICKY_BIT = 0o1000;
     private const int PERMISSION_BITS = 0o777;
     private const string TEMPORARY_PREFIX = '.zephyrus-';
@@ -108,6 +109,7 @@ final class File extends FileSystemNode
      * waits at most `$lockWaitSeconds` in total for these locks, then throws FileSystemException,
      * so a process that can open the file (one readable by other users included), or its
      * directory while the file is missing, can make append() fail but no longer hold it back.
+     * A lease the file's owner holds can still delay the open by the kernel's lease-break time.
      * Zero makes a single attempt per lock.
      *
      * @param float $lockWaitSeconds Longest total wait for the locks, finite and zero or more.
@@ -435,27 +437,32 @@ final class File extends FileSystemNode
      */
     private static function lockDirectory(string $directory, int $deadline, float $lockWaitSeconds)
     {
+        // The pre-check avoids opening a non-directory; the non-blocking open covers a swap after it.
         clearstatcache(true, $directory);
-        // Opening a FIFO for reading would block until a writer opens it.
         if (!@is_dir($directory)) {
             return null;
         }
-        $handle = @fopen($directory, 'r');
+        $handle = @fopen($directory, 'rn');
         if ($handle === false) {
             return null;
         }
+        $locked = false;
         try {
+            $stat = fstat($handle);
+            if ($stat === false || !self::isOfType($stat, self::DIRECTORY_TYPE)) {
+                return null;
+            }
             $locked = self::lockUntil(
                 $handle,
                 $deadline,
                 static fn(): FileSystemException => FileSystemException::directoryLockTimedOut($directory, $lockWaitSeconds),
             );
-        } catch (FileSystemException $timeout) {
-            fclose($handle);
-            throw $timeout;
+        } finally {
+            if (!$locked) {
+                fclose($handle);
+            }
         }
         if (!$locked) {
-            fclose($handle);
             return null;
         }
 

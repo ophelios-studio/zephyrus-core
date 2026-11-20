@@ -145,7 +145,7 @@ final class FileSystemException extends ZephyrusRuntimeException
 
     private static function formatSeconds(float $seconds): string
     {
-        return rtrim(rtrim(number_format($seconds, 3, '.', ''), '0'), '.');
+        return rtrim(rtrim(number_format($seconds, 6, '.', ''), '0'), '.');
     }
 
     private static function quotePath(string $path): string

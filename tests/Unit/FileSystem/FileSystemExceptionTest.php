@@ -143,6 +143,10 @@ final class FileSystemExceptionTest extends TestCase
             FileSystemException::fileLockTimedOut('/p', 0.0)->getMessage(),
         );
         self::assertSame(
+            'Lock on the file not acquired within the 0.0004-second wait: "/p"',
+            FileSystemException::fileLockTimedOut('/p', 0.0004)->getMessage(),
+        );
+        self::assertSame(
             'Lock on the file not acquired within the 1500000-second wait: "/p"',
             FileSystemException::fileLockTimedOut('/p', 1500000.0)->getMessage(),
         );

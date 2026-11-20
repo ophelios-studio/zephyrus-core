@@ -754,6 +754,7 @@ final class FileTest extends TestCase
         self::assertNotFalse($directory);
         flock($directory, LOCK_EX);
 
+        $start = hrtime(true);
         try {
             (new File($path))->append("x\n", 0.2);
             self::fail('expected a refusal');
@@ -767,7 +768,48 @@ final class FileTest extends TestCase
             fclose($directory);
         }
 
+        self::assertGreaterThanOrEqual(0.2, (hrtime(true) - $start) / 1e9);
         self::assertFileDoesNotExist($path);
+    }
+
+    public function testTheLockWaitBoundsTheDirectoryLockAndTheFileLockTogether(): void
+    {
+        self::requireDirectoryLockTools();
+        $path = $this->tempDir . '/bounded-together.log';
+        $report = $this->tempDir . '/bounded-report';
+        $directory = fopen($this->tempDir, 'r');
+        self::assertNotFalse($directory);
+        flock($directory, LOCK_EX);
+
+        $appender = $this->forkReportingAppender($path, $report, 1.0);
+        $file = null;
+        $completed = false;
+        try {
+            self::waitUntilBlockedOnALockOrDone($appender, $this->tempDir . '/never-created', $this->tempDir);
+            usleep(600000);
+            file_put_contents($path, '');
+            $file = fopen($path, 'r');
+            self::assertNotFalse($file);
+            flock($file, LOCK_EX);
+            flock($directory, LOCK_UN);
+            $completed = true;
+        } finally {
+            flock($directory, LOCK_UN);
+            self::waitForChild($appender, 'append() bounded by its lock wait', 5.0, failing: $completed);
+            fclose($directory);
+            if (is_resource($file)) {
+                flock($file, LOCK_UN);
+                fclose($file);
+            }
+        }
+
+        $elapsed = (string) file_get_contents($report . '-elapsed');
+        self::assertSame(
+            FileSystemException::class . ': Lock on the file not acquired within the 1-second wait: "' . $path . '"',
+            (string) file_get_contents($report),
+        );
+        self::assertGreaterThanOrEqual(1.0, (float) $elapsed);
+        self::assertLessThan(1.4, (float) $elapsed);
     }
 
     public function testAppendCreatingTheFileWaitsForTheDirectoryLockAndAppendsToAFileCreatedMeanwhile(): void
@@ -812,13 +854,45 @@ final class FileTest extends TestCase
         $path = $fifo . '/x.log';
         $report = $this->tempDir . '/fifo-report';
 
-        $appender = $this->forkReportingAppender($path, $report);
-        self::waitForChild($appender, 'append() below a FIFO', 5.0);
+        $marker = $this->tempDir . '/fifo-writer-released';
+        $writer = $this->forkFifoWriter($fifo, $marker);
+        try {
+            usleep(100000);
+            $appender = $this->forkReportingAppender($path, $report);
+            self::waitForChild($appender, 'append() below a FIFO', 5.0);
+            usleep(300000);
 
-        self::assertSame(
-            FileSystemException::class . ': Failed to append to: "' . $path . '"',
-            (string) file_get_contents($report),
-        );
+            self::assertSame(
+                FileSystemException::class . ': Failed to append to: "' . $path . '"',
+                (string) file_get_contents($report),
+            );
+            self::assertFileDoesNotExist($marker);
+        } finally {
+            posix_kill($writer, SIGKILL);
+            pcntl_waitpid($writer, $status);
+        }
+    }
+
+    /**
+     * Fork a process that opens the FIFO `$fifo` for writing, which blocks until a reader opens it,
+     * then creates `$marker` once the open returns.
+     */
+    private function forkFifoWriter(string $fifo, string $marker): int
+    {
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            self::markTestSkipped('Could not fork.');
+        }
+        if ($pid > 0) {
+            return $pid;
+        }
+
+        try {
+            $handle = fopen($fifo, 'w');
+            file_put_contents($marker, '');
+        } finally {
+            posix_kill(posix_getpid(), SIGKILL);
+        }
     }
 
     public function testALinkPlantedWhileAppendWaitsForTheDirectoryLockIsRefused(): void
@@ -1662,10 +1736,10 @@ final class FileTest extends TestCase
     }
 
     /**
-     * Fork a process that appends to `$path`, writes the class and message of its exception to `$report`,
-     * then kills itself.
+     * Fork a process that appends to `$path`, writes the class and message of its exception to
+     * `$report` and its duration in seconds to `$report-elapsed`, then kills itself.
      */
-    private function forkReportingAppender(string $path, string $report): int
+    private function forkReportingAppender(string $path, string $report, float $lockWaitSeconds = 10.0): int
     {
         $pid = pcntl_fork();
         if ($pid === -1) {
@@ -1675,11 +1749,16 @@ final class FileTest extends TestCase
             return $pid;
         }
 
+        $start = hrtime(true);
         try {
-            (new File($path))->append("child\n");
-            file_put_contents($report, 'no exception');
+            (new File($path))->append("child\n", $lockWaitSeconds);
+            $result = 'no exception';
         } catch (\Throwable $e) {
-            file_put_contents($report, $e::class . ': ' . $e->getMessage());
+            $result = $e::class . ': ' . $e->getMessage();
+        }
+        try {
+            file_put_contents($report . '-elapsed', (string) ((hrtime(true) - $start) / 1e9));
+            file_put_contents($report, $result);
         } finally {
             posix_kill(posix_getpid(), SIGKILL);
         }
@@ -1710,6 +1789,7 @@ final class FileTest extends TestCase
      */
     private static function waitUntilBlockedOnALockOrDone(int $pid, string $path, string $lockedPath): void
     {
+        $lockedPath = (string) realpath($lockedPath);
         $inherited = self::countOpenHandlesOn(posix_getpid(), $lockedPath);
         for ($attempt = 0; $attempt < 10000; $attempt++) {
             clearstatcache(true, $path);
