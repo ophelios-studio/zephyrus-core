@@ -103,6 +103,12 @@
         },
         "ConcatOperandRemoval": {
             "ignore": [
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::457", // Route::define() roots the path; also hides the bare '/', which RouteDiscoveryTest::testAControllerDeclaringARouteMethodThatIsNotATokenIsRefused kills
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::461", // Route::define() roots the path; also hides the bare '/', which RouteAttributeReaderTest::testARouteAtTheRootOfARootedControllerIsTheRootPathItself kills
+                "Zephyrus\\Routing\\RouteAttributeReader::joinPath::464", // Route::define() roots the path; also hides the other operand removals, which RouteAttributeReaderTest::testRootPrefixPrependedToAllRoutes kills
+                "Zephyrus\\Routing\\Router::joinPath::679", // Route::define() roots the path; also hides the bare '/', which HttpKernelWiringTest::testResourceRoutesCoverCrudOperations kills
+                "Zephyrus\\Routing\\Router::joinPath::686", // Route::define() roots the path; also hides the other operand removals, which HttpKernelWiringTest::testGroupedRoutesAreDispatchedWithPrefixedPaths kills
+                "Zephyrus\\Routing\\Router::resource::409", // Route::define() roots the path; also hides the bare '/', which HttpKernelWiringTest::testResourceRoutesCoverCrudOperations kills
                 "Zephyrus\\Session\\SessionManager::cookieSameSite::152", // SessionConfig refuses other SameSite values
                 "Zephyrus\\Upload\\Uploader::assertContainedDirectory::383", // ancestor check refuses the same escapes first
             ],
@@ -128,7 +134,10 @@
                 "Zephyrus\\Http\\BodySize::measure::44", // sentinel never exceeds a limit of 1 or more
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::188", // initial value is always overwritten
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::190", // initial value is always overwritten
+                "Zephyrus\\Http\\IpRange::contains::53", // the shifted mask has its low bit clear, so & 254 equals & 0xff; also hides 254 << and 7 - n, which testContainsMatchesAddressAgainstRange kills
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\IpRange::netmask::235", // !== -1 only adds a zero byte that str_pad() adds anyway; also hides % 7, which testTheReasonNamesTheCoveredRangeWhateverByteHoldsTheHostBits kills
+                "Zephyrus\\Http\\IpRange::netmask::236", // & 254 equals & 0xff (low bit clear); also hides 254 << and % 7, which testTheReasonNamesTheCoveredRangeWhateverByteHoldsTheHostBits kills, and 7 - n, which testInvalidEntryReasonNamesTheIpv4RangeForEmbeddedIpv4WithHostBits kills
                 "Zephyrus\\Http\\Request::hasPort::712", // the substring starts at a bracket
                 "Zephyrus\\Http\\Request::parseQueryString::580", // NUL never reaches the query parser
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::86", // only relative positions matter
@@ -212,8 +221,10 @@
                 "Zephyrus\\Http\\BodySize::measure::44", // sentinel never exceeds a limit of 1 or more
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::212", // json wins ties either way
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::191", // element 0 is the same at limit 2 or 3; also hides index [1], which testInvalidEntryReasonNamesTheIpv4RangeForEmbeddedIpv4WithHostBits kills
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::204", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::211", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\IpRange::hostBitsRefusal::156", // element 0 is the same at limit 2 or 3; also hides index [1], which testTheReasonNeverSuggestsARangeCoveringEveryPeer kills
                 "Zephyrus\\Http\\Request::parseForwardedElement::1198", // array_pad() to 3 changes nothing after explode() with a limit of 2; also hides the explode() limit of 3, which the tests kill
                 "Zephyrus\\Http\\Request::parseQueryString::580", // a limit of 3 keeps element 0, the part before the first NUL; also hides the index 1, which the tests kill
                 "Zephyrus\\Http\\Request::readBody::770", // PHP_INT_MAX - 2 differs only within a byte of PHP_INT_MAX; also hides the + 2, which the tests kill
