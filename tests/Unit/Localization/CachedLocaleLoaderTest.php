@@ -274,6 +274,23 @@ final class CachedLocaleLoaderTest extends TestCase
         apcu_delete('test_b_' . $suffix . ':en');
     }
 
+    public function testApcuFlushLeavesThePrefixExtendedByMoreCharactersAlone(): void
+    {
+        $this->requireApcu();
+
+        $suffix = bin2hex(random_bytes(8));
+        $loader = new CachedLocaleLoader($this->countingLoader([]), prefix: 'test_app_' . $suffix);
+        apcu_store('test_app_' . $suffix . ':en', ['x' => 'X']);
+        apcu_store('test_app_' . $suffix . '2:en', ['y' => 'Y']);
+
+        $loader->flush();
+
+        self::assertFalse(apcu_exists('test_app_' . $suffix . ':en'));
+        self::assertTrue(apcu_exists('test_app_' . $suffix . '2:en'));
+
+        apcu_delete('test_app_' . $suffix . '2:en');
+    }
+
     public function testApcuFlushTreatsThePrefixAsLiteralText(): void
     {
         $this->requireApcu();
