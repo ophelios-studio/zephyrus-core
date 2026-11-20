@@ -162,7 +162,9 @@ final readonly class Request
      *                                                   refused before any controller (413 by default). A multipart
      *                                                   body, which PHP parses itself, is measured on its fields and
      *                                                   files as MaxBodySizeMiddleware measures it, and truncated
-     *                                                   the same way over the limit. 0 reads the whole body.
+     *                                                   the same way over the limit. 0 reads the whole body. A form
+     *                                                   POST (urlencoded or multipart) that PHP parses itself is read
+     *                                                   with post_max_size instead when it is smaller or this is 0.
      *
      * @throws \InvalidArgumentException When $maxBodySize is negative.
      */
@@ -198,12 +200,13 @@ final readonly class Request
 
         $contentLength = $headers['content-length'] ?? null;
         $declared   = BodySize::declared($contentLength);
+        $readLimit  = self::readLimit($maxBodySize, $method, $headers);
         $cut        = false;
-        $raw        = self::readBody($rawBody, $declared, $maxBodySize, $cut);
+        $raw        = self::readBody($rawBody, $declared, $readLimit, $cut);
         $malformed  = false;
         $parsedBody = $cut ? [] : self::parseBody($method, $headers, $post, $raw, $malformed);
         $files      = self::normalizeFileUploads($files);
-        $truncated  = $maxBodySize !== 0 && BodySize::measure($contentLength, $raw, $parsedBody, $files) > $maxBodySize;
+        $truncated  = $readLimit !== 0 && BodySize::measure($contentLength, $raw, $parsedBody, $files) > $readLimit;
         $incomplete = !$truncated && self::isIncomplete($method, $headers, $declared, $raw, $files);
         $parsedBody = $truncated || $incomplete ? [] : $parsedBody;
         $raw        = $incomplete ? '' : $raw;
@@ -212,7 +215,7 @@ final readonly class Request
         return new self(
             method:     $method,
             uri:        $uri,
-            body:       new RequestBody($parsedBody, $raw, $malformed || $incomplete, $maxBodySize, $truncated),
+            body:       new RequestBody($parsedBody, $raw, $malformed || $incomplete, $readLimit, $truncated),
             query:      $get,
             headers:    new HeaderBag($headers),
             cookies:    new CookieJar($cookie),
@@ -773,6 +776,35 @@ final readonly class Request
         $cut = strlen($raw) > $maxBytes;
 
         return $raw;
+    }
+
+    /**
+     * $maxBodySize, lowered to post_max_size for a form POST that PHP parses itself: PHP drops or cuts its fields past it.
+     *
+     * @param array<string, string> $headers
+     */
+    private static function readLimit(int $maxBodySize, string $method, array $headers): int
+    {
+        $postMaxSize = self::phpParsesTheBody($method, $headers) ? BodySize::postMaxSize() : 0;
+
+        return match (true) {
+            $postMaxSize === 0 => $maxBodySize,
+            $maxBodySize === 0 => $postMaxSize,
+            default            => min($maxBodySize, $postMaxSize),
+        };
+    }
+
+    /**
+     * Whether PHP parses this body into $_POST and $_FILES before the application runs. Any other body reaches
+     * php://input whole, whatever post_max_size says.
+     *
+     * @param array<string, string> $headers
+     */
+    private static function phpParsesTheBody(string $method, array $headers): bool
+    {
+        return $method === 'POST'
+            && (bool) ini_get('enable_post_data_reading')
+            && in_array(self::phpMediaType($headers), ['application/x-www-form-urlencoded', 'multipart/form-data'], true);
     }
 
     /**

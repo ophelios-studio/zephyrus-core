@@ -6,6 +6,8 @@ namespace Zephyrus\Http;
 
 use Zephyrus\Upload\FileUpload;
 
+use function ini_get;
+use function ini_parse_quantity;
 use function is_array;
 use function is_scalar;
 use function max;
@@ -35,6 +37,19 @@ final class BodySize
         }
 
         return max(self::declared($contentLength) ?? 0, strlen($raw), $parsedBytes);
+    }
+
+    /**
+     * PHP's post_max_size in bytes where the server API applies it to the request, 0 otherwise (the CLI, or no limit).
+     */
+    public static function postMaxSize(): int
+    {
+        if (PHP_SAPI === 'cli' || PHP_SAPI === 'phpdbg') {
+            return 0;
+        }
+
+        // Silenced: PHP already warned at startup about an invalid value, and reads it the same way.
+        return max(0, @ini_parse_quantity((string) ini_get('post_max_size')));
     }
 
     /** A Content-Length of digits only, surrounding whitespace ignored; null otherwise. */

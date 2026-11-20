@@ -31,10 +31,10 @@ use function strtolower;
  * raw body is then empty: an empty raw body means the keys and values of the text fields count, whatever the
  * Content-Type, and the uploaded files always count. A urlencoded or JSON body keeps its raw body, measured as is.
  * Without a Content-Length, a body PHP parsed is measured on what PHP kept (a repeated name keeps its last value).
- * post_max_size still bounds what PHP reads into memory. A total past PHP_INT_MAX counts as PHP_INT_MAX.
- * Request::fromGlobals() measures a body the same way and truncates one over its read limit (2 MB unless given one),
- * which this middleware refuses whatever its budget, even 0: pass it the same limit,
- * Request::fromGlobals(maxBodySize: ...).
+ * A total past PHP_INT_MAX counts as PHP_INT_MAX.
+ * Request::fromGlobals() measures a body the same way and truncates one over its read limit (2 MB unless given one,
+ * post_max_size for a form POST PHP parses when that is smaller), which this middleware refuses whatever its budget,
+ * even 0, at the smaller of the two limits: pass it the same limit, Request::fromGlobals(maxBodySize: ...).
  * Register it before CsrfMiddleware: a body too large reads as empty, so a token sent in the form is missing and the
  * request gets the CSRF 403, not the 413.
  * This is a budget, not a defence: a client that lies about its length is stopped by the web
