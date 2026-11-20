@@ -557,9 +557,9 @@
                 "Zephyrus\\Core\\Config\\ConfigSection::getInt::162", // filter_var already trims
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::249", // a later trim covers it
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::255", // a later trim covers it
-                "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::272", // a later trim covers it
-                "Zephyrus\\Http\\HeaderBag::isJson::74", // a later trim covers it
-                "Zephyrus\\Http\\Request::isJsonContentType::1225", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::272", // differs only on a NUL byte after q=, which no server passes in a header
+                "Zephyrus\\Http\\HeaderBag::isJson::74", // differs only on a malformed Content-Type starting with whitespace then ';'
+                "Zephyrus\\Http\\Request::isJsonContentType::1225", // differs only on a malformed Content-Type starting with whitespace then ';'
                 "Zephyrus\\Http\\Request::parseForwardedElement::1198", // a later trim or lowercase compensates
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::81", // blank header parses to no entries
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::89", // a later trim covers it
