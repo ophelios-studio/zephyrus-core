@@ -22,8 +22,8 @@ final class ConfigurationCacheTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->directory->remove();
         $this->outside->remove();
+        $this->directory->remove();
     }
 
     public function testALinkedSourceIsCachedBesideTheLinkNotBesideItsTarget(): void

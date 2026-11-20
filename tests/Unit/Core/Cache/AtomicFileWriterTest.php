@@ -195,6 +195,76 @@ final class AtomicFileWriterTest extends TestCase
         self::assertFileExists($kept);
     }
 
+    public function testARemovalWhoseFileVanishedAfterTheCheckDeletesNothing(): void
+    {
+        $file = $this->directory->file('var/zephyrus/routes.php', 'cached');
+        $remove = $this->writer()->prepareRemove($this->target);
+        unlink($file);
+
+        self::assertFalse($remove());
+    }
+
+    public function testTheTemporaryFileIsNamedAfterTheTargetWithSixteenHexDigits(): void
+    {
+        $this->skipWhenRoot();
+        $directory = $this->directory->directory('var/zephyrus', 0o555);
+
+        try {
+            $this->writer()->write($this->target, '<?php return [];');
+            self::fail('expected a refusal');
+        } catch (BootCacheException $e) {
+            self::assertMatchesRegularExpression(
+                sprintf(
+                    '#^Cannot write the boot cache %s: %s/\.routes\.php\.[0-9a-f]{16}\.tmp could not be created\.$#',
+                    preg_quote($this->target, '#'),
+                    preg_quote($directory, '#'),
+                ),
+                $e->getMessage(),
+            );
+        }
+    }
+
+    public function testAGroupThatCannotBeSetIsRefusedAndNothingIsLeftBehind(): void
+    {
+        $this->skipWhenRoot();
+        $directory = $this->directory->directory('var/zephyrus');
+        $group = self::foreignGroup();
+
+        try {
+            $this->writer()->write($this->target, '<?php return [];', AtomicFileWriter::FILE_MODE, $group);
+            self::fail('expected a refusal');
+        } catch (BootCacheException $e) {
+            self::assertMatchesRegularExpression(
+                sprintf(
+                    '#^Cannot write the boot cache %s: the group of %s/\.routes\.php\.[0-9a-f]{16}\.tmp could not be set to gid %d\.$#',
+                    preg_quote($this->target, '#'),
+                    preg_quote($directory, '#'),
+                    $group,
+                ),
+                $e->getMessage(),
+            );
+        }
+        self::assertSame([], $this->directory->entries('var/zephyrus'));
+    }
+
+    private static function foreignGroup(): int
+    {
+        $groups = function_exists('posix_getgroups') ? (posix_getgroups() ?: []) : [];
+        $group = 64999;
+        while (in_array($group, $groups, true)) {
+            $group++;
+        }
+
+        return $group;
+    }
+
+    private function skipWhenRoot(): void
+    {
+        if (AtomicFileWriter::processOwner() === 0) {
+            self::markTestSkipped('Root can write anywhere and give any group.');
+        }
+    }
+
     private function writer(?\Closure $ownerOf = null): AtomicFileWriter
     {
         return new AtomicFileWriter($this->directory->path, $ownerOf ?? fileowner(...));

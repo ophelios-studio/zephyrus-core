@@ -122,6 +122,7 @@ final class BootCacheTest extends TestCase
         try {
             $this->assertIgnoredWithoutIncluding($this->cache(), 'it resolves outside ' . $this->directory->path);
         } finally {
+            unlink($this->cachePath);
             $sibling->remove();
         }
     }
