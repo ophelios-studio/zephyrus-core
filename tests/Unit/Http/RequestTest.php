@@ -2825,7 +2825,7 @@ final class RequestTest extends TestCase
         self::assertSame(['a' => 1], $request->body()->all());
     }
 
-    public function testUnderTheCliAFormPostKeepsMaxBodySizeAsItsReadLimit(): void
+    public function testUnderTheCliAFormPostWithNoMaxBodySizeHasNoReadLimit(): void
     {
         $request = self::globals(
             ['REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'application/x-www-form-urlencoded'],

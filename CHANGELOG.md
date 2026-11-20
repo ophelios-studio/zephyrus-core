@@ -19,7 +19,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Fixed
 
-- `Request::fromGlobals()` and `HeaderBag::isJson()` take the media type of a `Content-Type` as the part before its first `;`, as PHP and RFC 9110 do: a value that starts with its parameters (`;application/json`) has an empty media type, and its body is no longer parsed as JSON.
+- `Request::fromGlobals()` and `HeaderBag::isJson()` take the media type of a `Content-Type` as the part before its first `;`: a value that starts with its parameters (`;application/json`) has an empty media type, and its body is no longer parsed as JSON.
 
 ## [3.17.2] - 2026-11-20
 

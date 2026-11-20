@@ -208,9 +208,9 @@
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::204", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::211", // & truncates and the extra bytes are zero
-                "Zephyrus\\Http\\Request::parseForwardedElement::1198", // explode() with a limit of 2 gives at most two elements, and two are read
-                "Zephyrus\\Http\\Request::parseQueryString::580", // element 0 is the part before the first NUL whatever the limit
-                "Zephyrus\\Http\\Request::readBody::770", // differs only for a limit within a byte of PHP_INT_MAX
+                "Zephyrus\\Http\\Request::parseForwardedElement::1198", // array_pad() to 3 changes nothing after explode() with a limit of 2; also hides the explode() limit of 3, which the tests kill
+                "Zephyrus\\Http\\Request::parseQueryString::580", // a limit of 3 keeps element 0, the part before the first NUL; also hides the index 1, which the tests kill
+                "Zephyrus\\Http\\Request::readBody::770", // PHP_INT_MAX - 2 differs only within a byte of PHP_INT_MAX; also hides the + 2, which the tests kill
                 "Zephyrus\\Http\\Request::walkForwardedChain::995", // redundant with a later fallback
                 "Zephyrus\\Routing\\RouteCollection::controllerHistogram::296", // only the first element is read
                 "Zephyrus\\Routing\\RouteSignature::validationFailure::107", // clamped or overridden by the caller
