@@ -56,6 +56,7 @@
                 "Zephyrus\\Core\\Config\\EnvironmentContract::checkBase64Bytes::304", // value already has that type
                 "Zephyrus\\Formatting\\Formatter::duration::349", // floor() float prints the same
                 "Zephyrus\\Formatting\\Formatter::duration::350", // floor() float prints the same
+                "Zephyrus\\Http\\BodySize::iniFlag::117", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Request::portNumber::737", // numeric strings compare numerically
                 "Zephyrus\\Http\\Uri::__construct::45", // casts are redundant with each other
                 "Zephyrus\\Http\\Uri::decompose::84", // casts are redundant with each other
@@ -74,6 +75,7 @@
                 "Zephyrus\\Core\\Config\\EnvironmentContract::violations::112", // value already has that type
                 "Zephyrus\\FileSystem\\SafePath::isSafeRelativePath::108", // type-only casts under strict_types
                 "Zephyrus\\Formatting\\Formatter::replaceOrdinalGrouping::600", // grouping separator is never null
+                "Zephyrus\\Http\\Request::fromGlobals::194", // a SAPI always gives REQUEST_METHOD as a string
                 "Zephyrus\\Http\\Request::normalizeFileUploads::1258", // an array key casts a numeric string itself
                 "Zephyrus\\Http\\Request::readBody::763", // php://input always yields a string
                 "Zephyrus\\Http\\Request::readBody::774", // php://input always yields a string
@@ -87,6 +89,7 @@
         },
         "Coalesce": {
             "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::149", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Routing\\Router::__construct::37", // stateless final class
             ],
         },
@@ -115,10 +118,12 @@
         "DecrementInteger": {
             "ignore": [
                 "Zephyrus\\Core\\DebugIntegration::assertAllowedClientEntry::365", // only the slash of the address is read
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // differs only on a read limit of 0, which fromGlobals() never truncates at
                 "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
                 "Zephyrus\\Data\\Database::transaction::943", // levels are never negative
                 "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
                 "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::159", // same result on an unterminated literal
+                "Zephyrus\\Http\\BodySize::iniFlag::117", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\BodySize::measure::44", // sentinel never exceeds a limit of 1 or more
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::188", // initial value is always overwritten
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::190", // initial value is always overwritten
@@ -187,6 +192,9 @@
         },
         "Identical": {
             "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Http\\BodySize::postMaxSize::55", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // same weights, same final choice
             ],
         },
@@ -200,6 +208,9 @@
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::204", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::211", // & truncates and the extra bytes are zero
+                "Zephyrus\\Http\\Request::parseForwardedElement::1198", // explode() with a limit of 2 gives at most two elements, and two are read
+                "Zephyrus\\Http\\Request::parseQueryString::580", // element 0 is the part before the first NUL whatever the limit
+                "Zephyrus\\Http\\Request::readBody::770", // differs only for a limit within a byte of PHP_INT_MAX
                 "Zephyrus\\Http\\Request::walkForwardedChain::995", // redundant with a later fallback
                 "Zephyrus\\Routing\\RouteCollection::controllerHistogram::296", // only the first element is read
                 "Zephyrus\\Routing\\RouteSignature::validationFailure::107", // clamped or overridden by the caller
@@ -228,6 +239,8 @@
                 "Zephyrus\\Console\\Console::refuseOverlap::149", // a cache path never equals a .gitignore
                 "Zephyrus\\Core\\ApplicationBuilder::load::1005", // Formatter also reads '' as no currency
                 "Zephyrus\\Core\\Config\\LocalizationConfig::fromArray::100", // resolveLocalePath never returns an empty string
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::198", // same weights, same final choice
                 "Zephyrus\\Rendering\\LatteEngine::configureCacheDirectory::242", // differs only on a mkdir race
                 "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
@@ -237,6 +250,7 @@
         },
         "LogicalAndAllSubExprNegation": {
             "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
                 "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
                 "Zephyrus\\Upload\\Uploader::assertContainedDirectory::383", // ancestor check refuses the same escapes first
@@ -244,17 +258,20 @@
         },
         "LogicalAndNegation": {
             "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
             ],
         },
         "LogicalNot": {
             "ignore": [
+                "Zephyrus\\Http\\BodySize::postMaxSize::55", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Routing\\RouteSignature::buildBaseUrl::196", // the elseif body only appends an empty string
             ],
         },
         "LogicalOr": {
             "ignore": [
                 "Zephyrus\\Data\\Database::placeholder::1073", // earlier key range check refuses it
+                "Zephyrus\\Http\\BodySize::postMaxSize::55", // the one on phpParses() is killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::261", // a range with an empty part never matches
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // same weights, same final choice
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::223", // refused earlier by the mapped address check
@@ -268,6 +285,8 @@
         },
         "LogicalOrAllSubExprNegation": {
             "ignore": [
+                "Zephyrus\\Http\\BodySize::iniFlag::117", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Http\\BodySize::postMaxSize::55", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Request::parseBody::838", // dead duplicate of the fall-through return
             ],
         },
@@ -278,7 +297,13 @@
         },
         "LogicalOrSingleSubExprNegation": {
             "ignore": [
+                "Zephyrus\\Http\\BodySize::iniFlag::117", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Request::parseBody::838", // dead duplicate of the fall-through return
+            ],
+        },
+        "MatchArmRemoval": {
+            "ignore": [
+                "Zephyrus\\Http\\Request::readLimit::790", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
             ],
         },
         "MethodCallRemoval": {
@@ -298,6 +323,8 @@
         },
         "NotIdentical": {
             "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Request::readBody::775", // php://input always yields a string
                 "Zephyrus\\Http\\Request::resolveClientIp::913", // redundant with a later fallback
             ],
@@ -368,7 +395,7 @@
                 "Zephyrus\\Http\\HeaderBag::bearerToken::56", // an empty prefix gives the same token
                 "Zephyrus\\Http\\HeaderBag::isJson::77", // an empty media type is not JSON either
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::224", // refused earlier by the mapped address check
-                "Zephyrus\\Http\\Request::isJsonContentType::1228", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::isJsonContentType::1228", // an empty media type is not JSON either
                 "Zephyrus\\Http\\Request::nearestForwardedValue::1097", // redundant with a later fallback
                 "Zephyrus\\Http\\Request::normalizeIp::1013", // redundant with a later fallback
                 "Zephyrus\\Http\\Request::parseBody::841", // dead duplicate of the fall-through return
@@ -404,6 +431,11 @@
             "ignore": [
                 "Zephyrus\\Data\\Database::floatLiteral::1150", // same result for integral inputs
                 "Zephyrus\\Security\\Cryptography::randomString::288", // only changes surplus random bytes drawn
+            ],
+        },
+        "Ternary": {
+            "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
             ],
         },
         "Throw_": {
@@ -536,6 +568,7 @@
             "ignore": [
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::358", // extension is lowercased by the loader
                 "Zephyrus\\Core\\DebugIntegration::matchesSensitivePattern::654", // the pattern carries the i flag
+                "Zephyrus\\Http\\BodySize::iniFlag::117", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Request::httpScheme::751", // value is already lowercased upstream
                 "Zephyrus\\Http\\Request::isDefaultPortForScheme::1217", // value is already lowercased upstream
                 "Zephyrus\\Http\\Request::normalizeIp::1012", // redundant with a later fallback
@@ -546,6 +579,7 @@
         },
         "UnwrapStrToUpper": {
             "ignore": [
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::149", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Data\\SortRequest::toArray::109", // constructor already uppercases
             ],
         },
@@ -555,6 +589,7 @@
                 "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromResolvedPaths::140", // the loader trims the path
                 "Zephyrus\\Core\\Config\\ConfigSection::getFloat::195", // filter_var already trims
                 "Zephyrus\\Core\\Config\\ConfigSection::getInt::162", // filter_var already trims
+                "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::149", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::249", // a later trim covers it
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::255", // a later trim covers it
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::272", // differs only on a NUL byte after q=, which no server passes in a header
