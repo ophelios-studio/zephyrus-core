@@ -56,7 +56,7 @@
                 "Zephyrus\\Core\\Config\\EnvironmentContract::checkBase64Bytes::304", // value already has that type
                 "Zephyrus\\Formatting\\Formatter::duration::349", // floor() float prints the same
                 "Zephyrus\\Formatting\\Formatter::duration::350", // floor() float prints the same
-                "Zephyrus\\Http\\Request::portNumber::721", // numeric strings compare numerically
+                "Zephyrus\\Http\\Request::portNumber::737", // numeric strings compare numerically
                 "Zephyrus\\Http\\Uri::__construct::45", // casts are redundant with each other
                 "Zephyrus\\Http\\Uri::decompose::84", // casts are redundant with each other
                 "Zephyrus\\Http\\Uri::isPortNumber::113", // casts are redundant with each other
@@ -74,9 +74,9 @@
                 "Zephyrus\\Core\\Config\\EnvironmentContract::violations::112", // value already has that type
                 "Zephyrus\\FileSystem\\SafePath::isSafeRelativePath::108", // type-only casts under strict_types
                 "Zephyrus\\Formatting\\Formatter::replaceOrdinalGrouping::600", // grouping separator is never null
-                "Zephyrus\\Http\\Request::normalizeFileUploads::1232", // an array key casts a numeric string itself
-                "Zephyrus\\Http\\Request::readBody::747", // php://input always yields a string
-                "Zephyrus\\Http\\Request::readBody::758", // php://input always yields a string
+                "Zephyrus\\Http\\Request::normalizeFileUploads::1258", // an array key casts a numeric string itself
+                "Zephyrus\\Http\\Request::readBody::763", // php://input always yields a string
+                "Zephyrus\\Http\\Request::readBody::774", // php://input always yields a string
                 "Zephyrus\\Routing\\Route::assertNoQueryOrFragmentMark::164", // only matters if PCRE fails
                 "Zephyrus\\Routing\\RouteCollection::constrainedParameterHistogram::278", // PHP normalises array keys
                 "Zephyrus\\Routing\\RouteCollection::parameterHistogram::259", // PHP normalises array keys
@@ -119,12 +119,12 @@
                 "Zephyrus\\Data\\Database::transaction::943", // levels are never negative
                 "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
                 "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::159", // same result on an unterminated literal
-                "Zephyrus\\Http\\BodySize::measure::37", // sentinel never exceeds a limit of 1 or more
+                "Zephyrus\\Http\\BodySize::measure::44", // sentinel never exceeds a limit of 1 or more
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::188", // initial value is always overwritten
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::190", // initial value is always overwritten
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
-                "Zephyrus\\Http\\Request::hasPort::696", // the substring starts at a bracket
-                "Zephyrus\\Http\\Request::parseQueryString::564", // NUL never reaches the query parser
+                "Zephyrus\\Http\\Request::hasPort::712", // the substring starts at a bracket
+                "Zephyrus\\Http\\Request::parseQueryString::580", // NUL never reaches the query parser
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::86", // only relative positions matter
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::98", // segment never matches q= on a valid tag
                 "Zephyrus\\Routing\\RouteSignature::assertValidAt::94", // clamped or overridden by the caller
@@ -147,7 +147,7 @@
                 "Zephyrus\\Console\\Console::refuseOverlap::145", // a cache path never equals a .gitignore
                 "Zephyrus\\Console\\Console::run::113", // a cache path never equals a .gitignore
                 "Zephyrus\\Core\\Config\\SessionConfig::fromArray::140", // default of the secure key is never read
-                "Zephyrus\\Http\\Request::resolveClientIp::871", // every caller passes the value
+                "Zephyrus\\Http\\Request::resolveClientIp::897", // every caller passes the value
             ],
         },
         "Foreach_": {
@@ -167,7 +167,7 @@
         "GreaterThan": {
             "ignore": [
                 "Zephyrus\\Data\\Database::floatLiteral::1142", // INF and 1/0 are never 0
-                "Zephyrus\\Http\\BodySize::add::84", // both branches give PHP_INT_MAX at equality
+                "Zephyrus\\Http\\BodySize::add::174", // both branches give PHP_INT_MAX at equality
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::198", // same weights, same final choice
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::223", // refused earlier by the mapped address check
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseQuality::152", // same effective weight
@@ -182,7 +182,7 @@
         },
         "GreaterThanOrEqualTo": {
             "ignore": [
-                "Zephyrus\\Http\\Request::walkForwardedChain::969", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::walkForwardedChain::995", // redundant with a later fallback
             ],
         },
         "Identical": {
@@ -195,12 +195,12 @@
                 "Zephyrus\\Core\\Config\\ConfigKeys::assertKnown::165", // limit and pad only test for null
                 "Zephyrus\\Data\\PostgresArrayParser::readQuotedElement::141", // same result on an unterminated literal
                 "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::174", // same result on an unterminated literal
-                "Zephyrus\\Http\\BodySize::measure::37", // sentinel never exceeds a limit of 1 or more
+                "Zephyrus\\Http\\BodySize::measure::44", // sentinel never exceeds a limit of 1 or more
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::212", // json wins ties either way
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::204", // & truncates and the extra bytes are zero
                 "Zephyrus\\Http\\IpRange::embeddedIpv4HostBitsRefusal::211", // & truncates and the extra bytes are zero
-                "Zephyrus\\Http\\Request::walkForwardedChain::969", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::walkForwardedChain::995", // redundant with a later fallback
                 "Zephyrus\\Routing\\RouteCollection::controllerHistogram::296", // only the first element is read
                 "Zephyrus\\Routing\\RouteSignature::validationFailure::107", // clamped or overridden by the caller
                 "Zephyrus\\Security\\AllowedHostsMiddleware::parseHost::300", // extra-colon hosts are refused by port or label
@@ -258,8 +258,8 @@
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::261", // a range with an empty part never matches
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // same weights, same final choice
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::223", // refused earlier by the mapped address check
-                "Zephyrus\\Http\\Request::normalizeIp::986", // redundant with a later fallback
-                "Zephyrus\\Http\\Request::parseBody::812", // dead duplicate of the fall-through return
+                "Zephyrus\\Http\\Request::normalizeIp::1012", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::parseBody::838", // dead duplicate of the fall-through return
                 "Zephyrus\\Security\\AllowedHostsMiddleware::__construct::73", // a reason always implies a null entry
                 "Zephyrus\\Upload\\Uploader::assertContainedDirectory::377", // ancestor check refuses the same escapes first
                 "Zephyrus\\Upload\\Uploader::validateTargetName::450", // refused earlier by the trailing dot rule
@@ -268,17 +268,17 @@
         },
         "LogicalOrAllSubExprNegation": {
             "ignore": [
-                "Zephyrus\\Http\\Request::parseBody::812", // dead duplicate of the fall-through return
+                "Zephyrus\\Http\\Request::parseBody::838", // dead duplicate of the fall-through return
             ],
         },
         "LogicalOrNegation": {
             "ignore": [
-                "Zephyrus\\Http\\Request::parseBody::812", // dead duplicate of the fall-through return
+                "Zephyrus\\Http\\Request::parseBody::838", // dead duplicate of the fall-through return
             ],
         },
         "LogicalOrSingleSubExprNegation": {
             "ignore": [
-                "Zephyrus\\Http\\Request::parseBody::812", // dead duplicate of the fall-through return
+                "Zephyrus\\Http\\Request::parseBody::838", // dead duplicate of the fall-through return
             ],
         },
         "MethodCallRemoval": {
@@ -298,8 +298,8 @@
         },
         "NotIdentical": {
             "ignore": [
-                "Zephyrus\\Http\\Request::readBody::759", // php://input always yields a string
-                "Zephyrus\\Http\\Request::resolveClientIp::887", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::readBody::775", // php://input always yields a string
+                "Zephyrus\\Http\\Request::resolveClientIp::913", // redundant with a later fallback
             ],
         },
         "NullSafePropertyCall": {
@@ -333,7 +333,7 @@
         },
         "PregMatchRemoveFlags": {
             "ignore": [
-                "Zephyrus\\Http\\BodySize::declared::49", // value is trimmed, D is inert
+                "Zephyrus\\Http\\BodySize::declared::103", // value is trimmed, D is inert
                 "Zephyrus\\Http\\Uri::isPortNumber::113", // the caller passes digits only
                 "Zephyrus\\Routing\\HandlerResolver::tryInt::350", // round-trip check refuses the value anyway
                 "Zephyrus\\Security\\AllowedHostsMiddleware::portNumber::265", // digits only, above 5 digits exceeds 65535
@@ -355,7 +355,7 @@
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::360", // same YAML read either way
                 "Zephyrus\\Core\\Config\\SessionConfig::assertCookieCanBeStored::226", // __Host- and __Secure- are exclusive
                 "Zephyrus\\Core\\DebugIntegration::declaredProperties::581", // a cache hit recomputes the same map
-                "Zephyrus\\Core\\HttpKernel::fireExceptionEvent::297", // the Error is caught and swallowed
+                "Zephyrus\\Core\\HttpKernel::fireExceptionEvent::334", // the Error is caught and swallowed
                 "Zephyrus\\Data\\Database::floatLiteral::1138", // sprintf already prints NaN
                 "Zephyrus\\Data\\FilterRequest::toWhereClause::95", // duplicated by the empty parts return
                 "Zephyrus\\Event\\EventDispatcher::applicableListeners::233", // the empty path returns the same value
@@ -368,11 +368,11 @@
                 "Zephyrus\\Http\\HeaderBag::bearerToken::56", // an empty prefix gives the same token
                 "Zephyrus\\Http\\HeaderBag::isJson::77", // an empty media type is not JSON either
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::224", // refused earlier by the mapped address check
-                "Zephyrus\\Http\\Request::isJsonContentType::1202", // a later trim or lowercase compensates
-                "Zephyrus\\Http\\Request::nearestForwardedValue::1071", // redundant with a later fallback
-                "Zephyrus\\Http\\Request::normalizeIp::987", // redundant with a later fallback
-                "Zephyrus\\Http\\Request::parseBody::815", // dead duplicate of the fall-through return
-                "Zephyrus\\Http\\Request::resolveClientIp::878", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::isJsonContentType::1228", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::nearestForwardedValue::1097", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::normalizeIp::1013", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::parseBody::841", // dead duplicate of the fall-through return
+                "Zephyrus\\Http\\Request::resolveClientIp::904", // redundant with a later fallback
                 "Zephyrus\\Http\\SapiEmitter::emitBody::62", // an empty body emits nothing either way
                 "Zephyrus\\Localization\\AcceptLanguageResolver::normalize::172", // star falls through to the same star
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::82", // blank header parses to no entries
@@ -428,7 +428,7 @@
         },
         "UnwrapArrayFilter": {
             "ignore": [
-                "Zephyrus\\Http\\Request::filesOf::323", // files are already a list of uploads
+                "Zephyrus\\Http\\Request::filesOf::339", // files are already a list of uploads
             ],
         },
         "UnwrapArrayMap": {
@@ -475,8 +475,8 @@
                 "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::259", // keys are never read
                 "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::265", // keys are never read
                 "Zephyrus\\Event\\EventDispatcher::removeListener::49", // keys are never read
-                "Zephyrus\\Http\\Request::filesOf::323", // files are already a list of uploads
-                "Zephyrus\\Http\\Request::uploadObjectsOf::1275", // files are already a list of uploads
+                "Zephyrus\\Http\\Request::filesOf::339", // files are already a list of uploads
+                "Zephyrus\\Http\\Request::uploadObjectsOf::1301", // files are already a list of uploads
                 "Zephyrus\\Localization\\Translator::validPipeNames::308", // implode ignores keys
                 "Zephyrus\\Routing\\RouteCollection::allowedMethodsForPath::433", // sort reindexes the list
                 "Zephyrus\\Routing\\RouteCollection::match::549", // sort reindexes the list
@@ -536,9 +536,9 @@
             "ignore": [
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::358", // extension is lowercased by the loader
                 "Zephyrus\\Core\\DebugIntegration::matchesSensitivePattern::654", // the pattern carries the i flag
-                "Zephyrus\\Http\\Request::httpScheme::735", // value is already lowercased upstream
-                "Zephyrus\\Http\\Request::isDefaultPortForScheme::1191", // value is already lowercased upstream
-                "Zephyrus\\Http\\Request::normalizeIp::986", // redundant with a later fallback
+                "Zephyrus\\Http\\Request::httpScheme::751", // value is already lowercased upstream
+                "Zephyrus\\Http\\Request::isDefaultPortForScheme::1217", // value is already lowercased upstream
+                "Zephyrus\\Http\\Request::normalizeIp::1012", // redundant with a later fallback
                 "Zephyrus\\Http\\Response::withHeader::195", // constructor lowercases the keys again
                 "Zephyrus\\Http\\Response::withHeaders::235", // constructor lowercases the keys again
                 "Zephyrus\\Upload\\Uploader::sniffMimeType::253", // finfo already returns trimmed lowercase
@@ -559,9 +559,9 @@
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::255", // a later trim covers it
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::parseAcceptHeader::272", // a later trim covers it
                 "Zephyrus\\Http\\HeaderBag::isJson::74", // a later trim covers it
-                "Zephyrus\\Http\\Request::isJsonContentType::1199", // a later trim or lowercase compensates
-                "Zephyrus\\Http\\Request::isJsonContentType::1205", // a later trim or lowercase compensates
-                "Zephyrus\\Http\\Request::parseForwardedElement::1172", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::isJsonContentType::1225", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::isJsonContentType::1231", // a later trim or lowercase compensates
+                "Zephyrus\\Http\\Request::parseForwardedElement::1198", // a later trim or lowercase compensates
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::81", // blank header parses to no entries
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::89", // a later trim covers it
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseHeader::95", // a later trim covers it
