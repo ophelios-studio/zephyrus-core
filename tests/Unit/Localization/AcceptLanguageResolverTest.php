@@ -461,4 +461,9 @@ final class AcceptLanguageResolverTest extends TestCase
     {
         self::assertSame('en-US-posix', $this->resolver->resolve('', [], 'en-us-POSIX'));
     }
+
+    public function testQualityValueIsTrimmedOfNulBytes(): void
+    {
+        self::assertSame('fr', $this->resolver->resolve("en;q=\0" . "0.1, fr;q=0.5"));
+    }
 }
