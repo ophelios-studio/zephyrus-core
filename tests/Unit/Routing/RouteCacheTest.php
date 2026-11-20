@@ -398,6 +398,18 @@ final class RouteCacheTest extends TestCase
         self::assertSame('', $this->capturedErrorLog());
     }
 
+    public function testACacheIsServedWhenItsDependenciesAreListedInAnotherOrder(): void
+    {
+        [, $cache] = $this->inheritingController();
+        $cache->prepare()();
+        $cached = require $cache->path();
+        $cached['payload']['dependencies'] = array_reverse($cached['payload']['dependencies']);
+        file_put_contents($cache->path(), "<?php\n\nreturn " . var_export($cached, true) . ";\n");
+
+        self::assertNotNull($cache->load());
+        self::assertSame('', $this->capturedErrorLog());
+    }
+
     public function testRoutesAreCachedInTheOrderOfTheirClassNamesWhateverTheOrderTheirFilesWereWritten(): void
     {
         $tree = $this->tree();

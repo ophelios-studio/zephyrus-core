@@ -1322,4 +1322,13 @@ final class RouteCollectionTest extends TestCase
         yield 'closing brace only' => ['/abc}', '/zzzz'];
         yield 'opening brace only' => ['/{abc', '/zzzz'];
     }
+
+    public function testAnAuthorityLookalikeAfterTwoSlashesIsNotReadAsAHost(): void
+    {
+        $collection = new RouteCollection();
+        $collection->add(Route::define('GET', '/b/c', 'PageController@show'));
+        $collection->add(Route::define('GET', '/a:1/b/c', 'PortController@show'));
+
+        self::assertSame('PortController@show', $collection->match('GET', '//a:1/b/c')->route->handler);
+    }
 }
