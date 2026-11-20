@@ -71,7 +71,7 @@ final class CachedLocaleLoader implements LocaleLoaderInterface
         }
 
         /** @var \APCUIterator $iterator */
-        $iterator = new \APCUIterator('#^' . preg_quote($this->prefix, '#') . '#');
+        $iterator = new \APCUIterator('#^' . preg_quote($this->prefix . ':', '#') . '#');
         apcu_delete($iterator);
     }
 
