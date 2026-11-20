@@ -9,6 +9,8 @@ changes are listed first, each with the change to make in your code.
 
 ## [Unreleased]
 
+## [3.17.2] - 2026-11-20
+
 ### Fixed
 
 - An incomplete body no longer reaches the controller with its fields cut short: `Request::fromGlobals()` reads a body shorter than its `Content-Length` (unless it carries a `Content-Encoding`), or a multipart body holding an upload PHP ended without its boundary (`UPLOAD_ERR_PARTIAL`), as empty and malformed, and `HttpKernel` refuses it with `400` before any middleware or controller, unless a `RequestEvent` listener answers it first. A chunked multipart whose file PHP cut at `post_max_size` is refused with this `400`, not `413`.
@@ -486,7 +488,8 @@ Pages of zephyrus.ophelios.com that this version makes stale, each in English an
 
 Earlier releases have no notes.
 
-[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v3.17.1...HEAD
+[Unreleased]: https://github.com/ophelios-studio/zephyrus-core/compare/v3.17.2...HEAD
+[3.17.2]: https://github.com/ophelios-studio/zephyrus-core/compare/v3.17.1...v3.17.2
 [3.17.1]: https://github.com/ophelios-studio/zephyrus-core/compare/v3.17.0...v3.17.1
 [3.17.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.16.0...v3.17.0
 [0.16.0]: https://github.com/ophelios-studio/zephyrus-core/compare/v0.15.0...v0.16.0
