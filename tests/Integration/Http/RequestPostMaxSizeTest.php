@@ -126,11 +126,23 @@ final class RequestPostMaxSizeTest extends TestCase
         );
     }
 
-    public function testAFormPostCutAtPostMaxSizeUnderAMethodOverrideHeaderIsReportedWithPostMaxSize(): void
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function methodOverrideHeaders(): array
+    {
+        return [
+            'a lowercase override' => ['put'],
+            'an override followed by whitespace' => ['PUT '],
+        ];
+    }
+
+    #[DataProvider('methodOverrideHeaders')]
+    public function testAFormPostCutAtPostMaxSizeUnderAMethodOverrideHeaderIsReportedWithPostMaxSize(string $override): void
     {
         $query = '/submit?limit=' . self::READ_LIMIT . '&configured=' . self::READ_LIMIT;
 
-        $seen = self::send('POST', $query, self::FORM, 'notes=' . str_repeat('a', 100_000), headers: ['X-HTTP-Method-Override' => 'put']);
+        $seen = self::send('POST', $query, self::FORM, 'notes=' . str_repeat('a', 100_000), headers: ['X-HTTP-Method-Override' => $override]);
 
         self::assertSame(
             "PHP's post_max_size (65536 bytes) is below security.maxBodySize (1048576): PHP drops or cuts the fields and "
