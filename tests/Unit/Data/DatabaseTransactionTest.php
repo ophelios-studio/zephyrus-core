@@ -602,6 +602,26 @@ final class DatabaseTransactionTest extends TestCase
         self::assertSame(['outer'], $this->labels($db));
     }
 
+    public function testAWorkThatEndedTheTransactionItselfBeforeThrowingIsNotRolledBackAgain(): void
+    {
+        $pdo = new ScriptedTransactionPdo([]);
+        $db = new Database($pdo);
+        $failure = new RuntimeException('work failed');
+
+        try {
+            $db->transaction(static function () use ($pdo, $failure): never {
+                $pdo->commit();
+
+                throw $failure;
+            });
+            self::fail('expected the work to throw');
+        } catch (RuntimeException $e) {
+            self::assertSame($failure, $e);
+        }
+
+        self::assertSame(0, $pdo->rollBacks);
+    }
+
     private function swallowAFailedStatement(Database $db): void
     {
         try {
@@ -688,6 +708,8 @@ final class StatementRecordingPdo extends PDO
  */
 final class ScriptedTransactionPdo extends PDO
 {
+    public int $rollBacks = 0;
+
     private bool $inTransaction = false;
 
     /**
@@ -721,6 +743,7 @@ final class ScriptedTransactionPdo extends PDO
 
     public function rollBack(): bool
     {
+        $this->rollBacks++;
         $this->failIfScripted('rollBack');
         $this->inTransaction = false;
 

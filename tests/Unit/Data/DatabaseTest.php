@@ -65,6 +65,31 @@ final class DatabaseTest extends TestCase
         self::assertInstanceOf(Database::class, $database);
     }
 
+    public function testAGivenFactoryReplacesTheDefaultConnection(): void
+    {
+        $config = DatabaseConfig::fromArray([
+            'host' => '127.0.0.1',
+            'port' => 1,
+            'database' => 'zephyrus',
+            'username' => 'app',
+        ]);
+
+        try {
+            Database::fromConfig($config);
+            self::fail('expected the default connection to be refused');
+        } catch (DatabaseException) {
+        }
+
+        $calls = 0;
+        Database::fromConfig($config, static function () use (&$calls): PDO {
+            $calls++;
+
+            return new PDO('sqlite::memory:');
+        });
+
+        self::assertSame(1, $calls);
+    }
+
     public function testFromConfigAlwaysPinsEmulatePreparesOff(): void
     {
         // The key must be present and false: an absent key leaves the choice to the driver.

@@ -183,6 +183,21 @@ final class DatabasePersistentPostgresTest extends TestCase
         self::assertInstanceOf(\Pdo\Pgsql::class, $db->pdo());
     }
 
+    public function testTheReusedBackendIsDrainedThroughThePgsqlHandleAndNotTheLegacyAlias(): void
+    {
+        $db = Database::fromConfig(
+            $this->config,
+            static fn (string $dsn, string $username, string $password, array $options): PDO => new LegacyAliasRefusingPdo(
+                $dsn,
+                $username,
+                $password,
+                $options,
+            ),
+        );
+
+        self::assertInstanceOf(LegacyAliasRefusingPdo::class, $db->pdo());
+    }
+
     private static function sqlStateOf(callable $statement): ?string
     {
         try {
@@ -192,5 +207,14 @@ final class DatabasePersistentPostgresTest extends TestCase
         }
 
         return null;
+    }
+}
+
+/** A pgsql handle that fails when the PDO::pgsqlGetNotify() alias is called instead of getNotify(). */
+final class LegacyAliasRefusingPdo extends \Pdo\Pgsql
+{
+    public function pgsqlGetNotify(int $fetchMode = PDO::FETCH_DEFAULT, int $timeoutMilliseconds = 0): array|false
+    {
+        throw new \LogicException('The legacy pgsqlGetNotify() alias was called.');
     }
 }
