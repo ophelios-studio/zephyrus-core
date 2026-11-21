@@ -9,24 +9,37 @@ Each entry names the version that brought it. Skip the entries your current vers
 
 ## Contents
 
-1. [From 3.17.1 to 3.17.2](#from-3171-to-3172)
-2. [From 3.17.0 to 3.17.1](#from-3170-to-3171)
-3. [Upgrade procedure](#upgrade-procedure)
-4. [Requirements](#requirements)
-5. [Configuration and boot](#configuration-and-boot)
-6. [Sessions](#sessions)
-7. [CSRF](#csrf)
-8. [Routing](#routing)
-9. [HTTP](#http)
-10. [Security: headers, proxies, hosts and the debugger](#security-headers-proxies-hosts-and-the-debugger)
-11. [Views](#views)
-12. [Data](#data)
-13. [Validation](#validation)
-14. [Formatting and localization](#formatting-and-localization)
-15. [Files and uploads](#files-and-uploads)
-16. [Mail](#mail)
-17. [Container, exceptions and removed APIs](#container-exceptions-and-removed-apis)
-18. [What to search for](#what-to-search-for)
+1. [From 3.17.2 to 3.18.0](#from-3172-to-3180)
+2. [From 3.17.1 to 3.17.2](#from-3171-to-3172)
+3. [From 3.17.0 to 3.17.1](#from-3170-to-3171)
+4. [Upgrade procedure](#upgrade-procedure)
+5. [Requirements](#requirements)
+6. [Configuration and boot](#configuration-and-boot)
+7. [Sessions](#sessions)
+8. [CSRF](#csrf)
+9. [Routing](#routing)
+10. [HTTP](#http)
+11. [Security: headers, proxies, hosts and the debugger](#security-headers-proxies-hosts-and-the-debugger)
+12. [Views](#views)
+13. [Data](#data)
+14. [Validation](#validation)
+15. [Formatting and localization](#formatting-and-localization)
+16. [Files and uploads](#files-and-uploads)
+17. [Mail](#mail)
+18. [Container, exceptions and removed APIs](#container-exceptions-and-removed-apis)
+19. [What to search for](#what-to-search-for)
+
+## From 3.17.2 to 3.18.0
+
+No application has to change anything. The fixes (a `Content-Type` that starts with its parameters, two `CachedLocaleLoader` cache fixes, a directory swapped for a FIFO during `File::append()`) need no action.
+
+### File::append() lock wait (3.18.0)
+
+**Breaks (FileSystemException).** `File::append()` waited without limit for its file lock and, when it creates the file, its directory lock. It now waits 10 seconds by default, then throws `FileSystemException` (`Lock on the file not acquired within the 10-second wait: "<path>"`, or `Lock on the directory not acquired within ...`). Only an application that holds a lock on the file on purpose for longer is affected.
+
+**Change.** Pass a larger `$lockWaitSeconds`: `$file->append($line, 60.0)`. It is the longest total wait, in seconds, and takes `0.0` for a single attempt per lock. A negative, `NAN` or infinite value throws `InvalidArgumentException` (`Lock wait must be a finite number of seconds, zero or more: <value>`) before any file system access.
+
+**Check.** `rg -n 'append\(' src/` lists the calls; look at those whose file another process locks for long.
 
 ## From 3.17.1 to 3.17.2
 
