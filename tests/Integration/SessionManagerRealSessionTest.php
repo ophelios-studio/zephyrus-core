@@ -83,6 +83,7 @@ final class SessionManagerRealSessionTest extends TestCase
     #[RunInSeparateProcess]
     public function testStartEnablesStrictSessionIdMode(): void
     {
+        ini_set('session.use_strict_mode', '0');
         $session = new SessionManager();
 
         $session->start(SessionConfig::fromArray([]));

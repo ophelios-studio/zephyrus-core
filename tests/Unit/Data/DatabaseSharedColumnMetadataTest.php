@@ -930,6 +930,7 @@ final class ApcuSpy
     }
 }
 
+// Shadows the global APCu functions for Zephyrus\Data, where only Database calls them; each passes through unless ApcuSpy::$disabled.
 namespace Zephyrus\Data;
 
 use Zephyrus\Tests\Unit\Data\ApcuSpy;
