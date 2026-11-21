@@ -551,6 +551,23 @@ final class DatabaseSessionHandlerPostgresTest extends TestCase
         self::assertSame($crc, (int) $locks[0]->objid);
     }
 
+    public function testReadingTheSessionAlreadyLockedTakesNoSecondLock(): void
+    {
+        $id = $this->seedSession('user_id|i:1;');
+        $pdo = new StatementCountingPdo($this->dsn);
+        $handler = $this->handler(new Database($pdo));
+        $handler->read($id);
+        $pdo->queries = [];
+
+        $handler->read($id);
+
+        self::assertSame([], array_values(array_filter(
+            $pdo->queries,
+            static fn (string $query): bool => str_contains($query, 'advisory'),
+        )));
+        $handler->close();
+    }
+
     public function testAHandlerBuiltWithoutLockingTakesNoLockOnRead(): void
     {
         $id = $this->seedSession('user_id|i:1;');
@@ -683,12 +700,16 @@ final class StatementCountingPdo extends PDO
 {
     public int $statements = 0;
 
+    /** @var list<string> */
+    public array $queries = [];
+
     /**
      * @param array<int, mixed> $options
      */
     public function prepare(string $query, array $options = []): \PDOStatement|false
     {
         $this->statements++;
+        $this->queries[] = $query;
 
         return parent::prepare($query, $options);
     }
