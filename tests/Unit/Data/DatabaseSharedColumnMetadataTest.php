@@ -6,6 +6,7 @@ namespace Zephyrus\Tests\Unit\Data;
 
 use PDO;
 use PDOStatement;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionProperty;
@@ -39,6 +40,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         Database::setSharedColumnMetadataEnabled(true);
         Database::flushSharedColumnMetadata();
         MetaSpyStatement::reset();
+        ApcuSpy::reset();
     }
 
     public function testSecondInstanceOnTheSameDsnResolvesWithoutTouchingTheBackend(): void
@@ -456,6 +458,7 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
             ['count' => 2, 'types' => 'not-an-array'],
             ['count' => 2, 'types' => ['price' => 12345]],
             ['count' => 99, 'types' => ['price' => 'NUMERIC']],
+            new \ArrayObject(['count' => 2, 'types' => ['price' => 'NUMERIC']]),
         ] as $index => $poison) {
             apcu_store($key, $poison);
             self::clearProcessStaticOnly();
@@ -611,6 +614,100 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         self::assertSame($callsAfterCold, MetaSpyStatement::$calls, 'An empty version must still share the shape.');
     }
 
+    public function testTheProcessStaticServesTheShapeWhenAPCuHoldsNothing(): void
+    {
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+
+        $cold = $this->makeDatabase('static_only', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($cold);
+        $cold->selectOne($sql);
+        $callsAfterCold = MetaSpyStatement::$calls;
+
+        self::dropApcuEntries();
+
+        $warm = $this->makeDatabase('static_only', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($warm);
+        $warm->selectOne($sql);
+
+        self::assertSame($callsAfterCold, MetaSpyStatement::$calls);
+    }
+
+    public function testTheSharedKeyIsADigestOfTheConnectionAndTheStatementThenTheWidth(): void
+    {
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+
+        $db = $this->makeDatabase('key_format', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db);
+        $db->selectOne('SELECT id, price FROM records WHERE id = 1');
+
+        self::assertMatchesRegularExpression('~^[0-9a-f]{40}\|2$~', array_keys(self::sharedStore())[0]);
+    }
+
+    /**
+     * @param array<string, mixed> $first
+     * @param array<string, mixed> $second
+     */
+    #[DataProvider('keyBoundaries')]
+    public function testTwoConnectionsAndStatementsThatConcatenateAlikeDoNotShareAShape(
+        array $first,
+        string $firstSql,
+        array $second,
+        string $secondSql,
+    ): void {
+        MetaSpyStatement::$nativeTypeByName = ['id' => 'INT4', 'price' => 'NUMERIC'];
+
+        $one = $this->makeDatabaseFrom($first);
+        $this->seedTwoColumnRow($one);
+        $one->selectOne($firstSql);
+        $callsAfterFirst = MetaSpyStatement::$calls;
+
+        $two = $this->makeDatabaseFrom($second);
+        $this->seedTwoColumnRow($two);
+        $two->selectOne($secondSql);
+
+        self::assertGreaterThan($callsAfterFirst, MetaSpyStatement::$calls);
+        self::assertCount(2, self::sharedStore());
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string, array<string, mixed>, string}>
+     */
+    public static function keyBoundaries(): iterable
+    {
+        $sql = 'SELECT id, price FROM records WHERE id = 1';
+        $base = ['database' => 'boundary', 'username' => 'app'];
+
+        yield 'the DSN and the schema version' => [
+            [...$base, 'columnCacheVersion' => ';sslmode=require'],
+            $sql,
+            [...$base, 'sslMode' => 'require'],
+            $sql,
+        ];
+
+        yield 'the schema version and the statement' => [
+            [...$base, 'columnCacheVersion' => 'v1'],
+            '/**/' . $sql,
+            [...$base, 'columnCacheVersion' => 'v1/**/'],
+            $sql,
+        ];
+    }
+
+    public function testAnApcuSwitchedOffIsNeitherReadNorWrittenNorFlushed(): void
+    {
+        $this->requireApcu();
+        ApcuSpy::$disabled = true;
+        ApcuSpy::$calls = [];
+
+        MetaSpyStatement::$nativeTypeByName = ['price' => 'NUMERIC'];
+        $db = $this->makeDatabase('apcu_switched_off', self::TWO_COLUMN_TABLE);
+        $this->seedTwoColumnRow($db);
+        $db->selectOne('SELECT id, price FROM records WHERE id = 1');
+        Database::flushSharedColumnMetadata();
+
+        self::assertSame([], ApcuSpy::$calls);
+    }
+
     public function testDirectlyInjectedPdoNeverTouchesTheSharedLayer(): void
     {
         // A PDO injected through the constructor has no identity to key on, so it keeps the per-instance memo only.
@@ -652,6 +749,19 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         // fromConfig() runs a SET client_encoding that SQLite rejects; the framework swallows it.
         return Database::fromConfig(
             $config,
+            static fn (string $dsn, string $username, string $password, array $options): PDO => $pdo,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function makeDatabaseFrom(array $config): Database
+    {
+        $pdo = $this->makePdo(self::TWO_COLUMN_TABLE);
+
+        return Database::fromConfig(
+            DatabaseConfig::fromArray($config),
             static fn (string $dsn, string $username, string $password, array $options): PDO => $pdo,
         );
     }
@@ -735,6 +845,17 @@ final class DatabaseSharedColumnMetadataTest extends TestCase
         return $keys;
     }
 
+    private static function dropApcuEntries(): void
+    {
+        if (!function_exists('apcu_fetch') || !apcu_enabled()) {
+            return;
+        }
+
+        foreach (self::apcuKeysWithPrefix() as $key) {
+            apcu_delete($key);
+        }
+    }
+
     private function requireApcu(): void
     {
         if (!function_exists('apcu_fetch') || !apcu_enabled()) {
@@ -792,4 +913,52 @@ final class MetaSpyStatement extends PDOStatement
 
         return $meta;
     }
+}
+
+/** Lets a test pretend APCu is switched off, and records the calls Database makes to it. */
+final class ApcuSpy
+{
+    public static bool $disabled = false;
+
+    /** @var list<string> */
+    public static array $calls = [];
+
+    public static function reset(): void
+    {
+        self::$disabled = false;
+        self::$calls = [];
+    }
+}
+
+namespace Zephyrus\Data;
+
+use Zephyrus\Tests\Unit\Data\ApcuSpy;
+
+function apcu_enabled(): bool
+{
+    return !ApcuSpy::$disabled && \function_exists('apcu_enabled') && \apcu_enabled();
+}
+
+function apcu_fetch(string $key, ?bool &$success = null): mixed
+{
+    ApcuSpy::$calls[] = 'fetch';
+
+    return \apcu_fetch($key, $success);
+}
+
+/**
+ * @param array{count: int, types: array<string, string>} $value
+ */
+function apcu_store(string $key, array $value, int $ttl): bool
+{
+    ApcuSpy::$calls[] = 'store';
+
+    return \apcu_store($key, $value, $ttl);
+}
+
+function apcu_delete(\APCUIterator $key): mixed
+{
+    ApcuSpy::$calls[] = 'delete';
+
+    return \apcu_delete($key);
 }
