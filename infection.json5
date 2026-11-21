@@ -9,7 +9,7 @@
         "text": "build/infection/infection.log"
     },
     "minMsi": 97,
-    "minCoveredMsi": 97,
+    "minCoveredMsi": 99.5,
     "mutators": {
         "@default": true,
         "ArrayOneItem": {
