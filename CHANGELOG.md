@@ -20,6 +20,7 @@ changes are listed first, each with the change to make in your code.
 ### Fixed
 
 - `Request::fromGlobals()` and `HeaderBag::isJson()` take the media type of a `Content-Type` as the part before its first `;`: a value that starts with its parameters (`;application/json`) has an empty media type, and its body is no longer parsed as JSON.
+- `File::append()` no longer blocks without end when the directory of the file it creates is replaced by a FIFO between its check and its lock: the directory lock is opened without blocking, and anything that is not a directory is skipped.
 - `CachedLocaleLoader::flush()` deletes only the catalogs of its own prefix: a loader with prefix `app` no longer deletes the catalogs cached under `app2` or `app:x`.
 - `CachedLocaleLoader::load()` caches only non-empty catalogs of canonical locale tags: an unknown or non-canonical locale (`fr `, `FR`, `fr_CA`, `x:en`) is read from the inner loader each time instead of leaving a permanent APCu entry, and can no longer read another loader's catalog.
 
