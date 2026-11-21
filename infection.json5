@@ -128,6 +128,7 @@
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // differs only on a read limit of 0, which fromGlobals() never truncates at
                 "Zephyrus\\Data\\Database::floatLiteral::1154", // next width prints the same digits
                 "Zephyrus\\Data\\Database::transaction::943", // levels are never negative
+                "Zephyrus\\Data\\DatabaseActor::set::176", // implode() ignores the keys array_fill() starts at
                 "Zephyrus\\Data\\Entity::parseDate::190", // date parse never gives errors without warnings
                 "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::159", // same result on an unterminated literal
                 "Zephyrus\\Http\\BodySize::iniFlag::117", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
@@ -136,7 +137,7 @@
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::190", // initial value is always overwritten
                 "Zephyrus\\Http\\IpRange::contains::53", // the shifted mask has its low bit clear, so & 254 equals & 0xff; also hides 254 << and 7 - n, which testContainsMatchesAddressAgainstRange kills
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::227", // & truncates and the extra bytes are zero
-                "Zephyrus\\Http\\IpRange::netmask::235", // !== -1 only adds a zero byte that str_pad() adds anyway; also hides % 7, which testTheReasonNamesTheCoveredRangeWhateverByteHoldsTheHostBits kills
+                "Zephyrus\\Http\\IpRange::netmask::235", // !== -1 only adds a zero byte, which str_pad() adds anyway below the full width and every caller's & drops at it; also hides % 7, which testTheReasonNamesTheCoveredRangeWhateverByteHoldsTheHostBits kills
                 "Zephyrus\\Http\\IpRange::netmask::236", // & 254 equals & 0xff (low bit clear); also hides 254 << and % 7, which testTheReasonNamesTheCoveredRangeWhateverByteHoldsTheHostBits kills, and 7 - n, which testInvalidEntryReasonNamesTheIpv4RangeForEmbeddedIpv4WithHostBits kills
                 "Zephyrus\\Http\\Request::hasPort::712", // the substring starts at a bracket
                 "Zephyrus\\Http\\Request::parseQueryString::580", // NUL never reaches the query parser
@@ -165,6 +166,7 @@
                 "Zephyrus\\Console\\Console::run::113", // a cache path never equals a .gitignore
                 "Zephyrus\\Localization\\CachedLocaleLoader::load::54", // apcu_fetch() writes $success by reference before it is read
                 "Zephyrus\\Core\\Config\\SessionConfig::fromArray::140", // default of the secure key is never read
+                "Zephyrus\\Data\\Database::fetchColumnShapeFromApcu::1416", // apcu_fetch() writes $success by reference before it is read
                 "Zephyrus\\Http\\Request::resolveClientIp::897", // every caller passes the value
             ],
         },
@@ -208,6 +210,7 @@
             "ignore": [
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::150", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Core\\HttpKernel::reportReadLimitBelowConfiguration::152", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Data\\Entity::parseDate::190", // new DateTimeImmutable() throws on an error, so getLastErrors() only ever reports warnings here; also hides !== 0 on the warnings, which EntityTest::testAnInvalidDateValueIsRefused kills, and !== false, which EntityTest::testAnIsoDateStringIsHydrated kills
                 "Zephyrus\\Http\\BodySize::postMaxSize::55", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // same weights, same final choice
             ],
@@ -216,6 +219,7 @@
             "ignore": [
                 "Zephyrus\\Core\\Cache\\ConfigurationCache::prepare::90", // fileperms() and filegroup() fail only when the source is gone, and parseYaml() then throws before the fallback is used
                 "Zephyrus\\Core\\Config\\ConfigKeys::assertKnown::165", // limit and pad only test for null
+                "Zephyrus\\Data\\DatabaseActor::set::176", // implode() ignores the keys array_fill() starts at
                 "Zephyrus\\Data\\PostgresArrayParser::readQuotedElement::141", // same result on an unterminated literal
                 "Zephyrus\\Data\\PostgresArrayParser::readUnquotedElement::174", // same result on an unterminated literal
                 "Zephyrus\\Http\\BodySize::measure::44", // sentinel never exceeds a limit of 1 or more
@@ -328,6 +332,7 @@
         "MatchArmRemoval": {
             "ignore": [
                 "Zephyrus\\Http\\Request::readLimit::790", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
+                "Zephyrus\\Session\\SessionManager::cookieSameSite::148", // SessionConfig refuses every SameSite but the three arms, so the default never runs; also hides the three arms, which SessionManagerRealSessionTest::testStartAppliesTheConfiguredSameSiteValue (Strict, None) and SessionIdleTimeoutTest::testStartAppliesTheIdleTimeoutToTheStoredExpiry (Lax) kill
             ],
         },
         "MethodCallRemoval": {
@@ -384,6 +389,7 @@
         },
         "PregMatchRemoveFlags": {
             "ignore": [
+                "Zephyrus\\Data\\Database::shapeFollowsText::1356", // s only changes '.', which the pattern never uses; also hides dropping i, which DatabaseColumnTypeCacheTest::testAStatementLedByBlanksOrCommentsKeepsItsCachedShape kills
                 "Zephyrus\\Http\\BodySize::declared::103", // value is trimmed, D is inert
                 "Zephyrus\\Http\\Uri::isPortNumber::113", // the caller passes digits only
                 "Zephyrus\\Routing\\HandlerResolver::tryInt::350", // round-trip check refuses the value anyway
@@ -399,6 +405,11 @@
                 "Zephyrus\\Security\\ContentSecurityPolicyMiddleware::containsHashSource::232", // D is inert without $; also hides dropping i, which testDebugModeWarnsForAnUpperCaseHashSource kills
             ],
         },
+        "PregQuote": {
+            "ignore": [
+                "Zephyrus\\Data\\Database::flushSharedColumnMetadata::197", // the key prefix holds only letters, digits, ':' and '-', which are literal outside a class
+            ],
+        },
         "ReturnRemoval": {
             "ignore": [
                 "Zephyrus\\Core\\ApplicationBuilder::withJsonLocaleLayers::344", // an empty fallback loader loads nothing
@@ -408,6 +419,7 @@
                 "Zephyrus\\Core\\Config\\SessionConfig::assertCookieCanBeStored::226", // __Host- and __Secure- are exclusive
                 "Zephyrus\\Core\\DebugIntegration::declaredProperties::581", // a cache hit recomputes the same map
                 "Zephyrus\\Core\\HttpKernel::fireExceptionEvent::334", // the Error is caught and swallowed
+                "Zephyrus\\Data\\Database::fetchColumnShapeFromApcu::1422", // a miss yields false, which the is_array() test below turns into null too
                 "Zephyrus\\Data\\Database::floatLiteral::1138", // sprintf already prints NaN
                 "Zephyrus\\Data\\FilterRequest::toWhereClause::95", // duplicated by the empty parts return
                 "Zephyrus\\Event\\EventDispatcher::applicableListeners::233", // the empty path returns the same value
@@ -532,6 +544,7 @@
                 "Zephyrus\\Core\\DebugIntegration::installSecretMasking::402", // the spread that reads the list renumbers it
                 "Zephyrus\\Core\\DebugIntegration::installSecretMasking::425", // array_merge renumbers the list below
                 "Zephyrus\\Core\\Config\\LocalizationConfig::resolveLocalePath::201", // end() returns the same last element
+                "Zephyrus\\Data\\DatabaseActor::set::180", // quoteList() reads the values only
                 "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::259", // keys are never read
                 "Zephyrus\\Event\\EventDispatcher::matchingRegistryKeys::265", // keys are never read
                 "Zephyrus\\Event\\EventDispatcher::removeListener::49", // keys are never read

@@ -12,7 +12,7 @@ use PHPUnit\Framework\TestCase;
  */
 final class InfectionIgnoreLinesTest extends TestCase
 {
-    private const int MINIMUM_ENTRIES = 390;
+    private const int MINIMUM_ENTRIES = 399;
 
     private const string NO_CLASS = 'the class does not exist';
     private const string NO_METHOD = 'the class has no such method';
