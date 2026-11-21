@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 a breaking change waits for the next major, deprecated first. Before 3.17.0, a minor version could break the API: those
 changes are listed first, each with the change to make in your code.
 
-## [Unreleased]
+## [3.18.0] - 2026-11-20
 
 ### Added
 
