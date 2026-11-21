@@ -11,7 +11,7 @@ changes are listed first, each with the change to make in your code.
 
 ### Added
 
-- `File::append()` takes an optional `$lockWaitSeconds` (default `10.0`): the longest total wait for its file lock and, when it creates the file, its directory lock. `0.0` makes a single attempt per lock; a negative, `NAN` or infinite value throws `InvalidArgumentException` before any file system access.
+- `File::append()` takes an optional `$lockWaitSeconds` (default `10.0`): the longest total wait for its file lock and, when it creates the file on a thread-safe PHP build or a filesystem without hard links, its directory lock. `0.0` makes a single attempt per lock; a negative, `NAN` or infinite value throws `InvalidArgumentException` before any file system access.
 
 ### Changed
 
@@ -23,6 +23,13 @@ changes are listed first, each with the change to make in your code.
 - `File::append()` no longer blocks without end when the directory of the file it creates is replaced by a FIFO between its check and its lock: the directory lock is opened without blocking, and anything that is not a directory is skipped.
 - `CachedLocaleLoader::flush()` deletes only the catalogs of its own prefix: a loader with prefix `app` no longer deletes the catalogs cached under `app2` or `app:x`.
 - `CachedLocaleLoader::load()` caches only non-empty catalogs of canonical locale tags: an unknown or non-canonical locale (`fr `, `FR`, `fr_CA`, `x:en`) is read from the inner loader each time instead of leaving a permanent APCu entry, and can no longer read another loader's catalog.
+
+### Documentation
+
+Pages of zephyrus.ophelios.com that this version makes stale, each in English and in French (`content/fr/`):
+
+- `digging-deeper/filesystem.md`: the `append()` signature, its lock wait (10 seconds by default, `0.0` for a single attempt) and the two lock-wait `FileSystemException` messages.
+- `getting-started/installation.md`: the `^3.18` constraint and the links to the 3.18.0 changelog and upgrade guide.
 
 ## [3.17.2] - 2026-11-20
 

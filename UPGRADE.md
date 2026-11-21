@@ -1,7 +1,7 @@
-# Upgrading from 0.13 to 3.17.2
+# Upgrading from 0.13 to 3.18.0
 
 This guide takes an application that runs on Zephyrus 0.13.0, 0.14, 0.15, 0.16.0 or a `dev` commit between them to
-3.17.2. It lists every change that can make the application refuse to boot, throw or answer differently, grouped by
+3.18.0. It lists every change that can make the application refuse to boot, throw or answer differently, grouped by
 domain, each with the change to make and a way to check it. The [changelog](CHANGELOG.md) has the full list by version.
 
 Each entry names the version that brought it. Skip the entries your current version already has; an application on a
@@ -31,11 +31,11 @@ Each entry names the version that brought it. Skip the entries your current vers
 
 ## From 3.17.2 to 3.18.0
 
-No application has to change anything. The fixes (a `Content-Type` that starts with its parameters, two `CachedLocaleLoader` cache fixes, a directory swapped for a FIFO during `File::append()`) need no action.
+Nothing breaks unless your application holds a lock on a file that `File::append()` writes to for longer than 10 seconds. The fixes (a `Content-Type` that starts with its parameters, two `CachedLocaleLoader` cache fixes, a directory swapped for a FIFO during `File::append()`) need no action.
 
 ### File::append() lock wait (3.18.0)
 
-**Breaks (FileSystemException).** `File::append()` waited without limit for its file lock and, when it creates the file, its directory lock. It now waits 10 seconds by default, then throws `FileSystemException` (`Lock on the file not acquired within the 10-second wait: "<path>"`, or `Lock on the directory not acquired within ...`). Only an application that holds a lock on the file on purpose for longer is affected.
+**Breaks (FileSystemException).** `File::append()` waited without limit for its file lock and, when it creates the file on a thread-safe PHP build or a filesystem without hard links, its directory lock. It now waits 10 seconds by default, then throws `FileSystemException` (`Lock on the file not acquired within the 10-second wait: "<path>"`, or `Lock on the directory not acquired within ...`). Only an application that holds a lock on the file on purpose for longer is affected.
 
 **Change.** Pass a larger `$lockWaitSeconds`: `$file->append($line, 60.0)`. It is the longest total wait, in seconds, and takes `0.0` for a single attempt per lock. A negative, `NAN` or infinite value throws `InvalidArgumentException` (`Lock wait must be a finite number of seconds, zero or more: <value>`) before any file system access.
 
