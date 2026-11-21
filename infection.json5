@@ -189,6 +189,8 @@
                 "Zephyrus\\Data\\Database::floatLiteral::1142", // INF and 1/0 are never 0
                 "Zephyrus\\Http\\BodySize::add::174", // both branches give PHP_INT_MAX at equality
                 "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::198", // same weights, same final choice
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::203", // on a tie the specificity block rewrites the same values; also hides the q mutant, killed by HttpExceptionResponderTest::testTheErrorFormatFollowsTheAcceptHeader ("problem json beats a wildcard on a tie, reversed")
+                "Zephyrus\\Http\\Error\\HttpExceptionResponder::preferredFormat::215", // on a tie the specificity block rewrites the same values; also hides the q mutant, killed by HttpExceptionResponderTest::testTheErrorFormatFollowsTheAcceptHeader ("explicit json beats problem json on a tie" and "vendor json beats problem json on a tie")
                 "Zephyrus\\Http\\IpRange::containsIpv4MappedBlock::223", // refused earlier by the mapped address check
                 "Zephyrus\\Localization\\AcceptLanguageResolver::parseQuality::152", // same effective weight
                 "Zephyrus\\Localization\\AcceptLanguageResolver::resolveAcceptedLocale::205", // the empty tag is never accepted
@@ -331,6 +333,9 @@
         },
         "MatchArmRemoval": {
             "ignore": [
+                "Zephyrus\\Core\\Config\\Environment::fromString::18", // the default arm also gives Production; the other arms are killed by EnvironmentTest::testFromStringStaging, Testing and Development
+                "Zephyrus\\Core\\Config\\EnvironmentContract::violations::138", // withRule() only stores the three typed rules, so the default arm never runs; the typed arms are killed by EnvironmentContractTest
+                "Zephyrus\\Exceptions\\MessageValue::describe::75", // get_debug_type(null) is 'null'; the other arms are killed by MessageValueTest::testDescribesEachType
                 "Zephyrus\\Http\\Request::readLimit::790", // killed by RequestPostMaxSizeTest through php -S, out of Infection's reach
                 "Zephyrus\\Session\\SessionManager::cookieSameSite::148", // SessionConfig refuses every SameSite but the three arms, so the default never runs; also hides the three arms, which SessionManagerRealSessionTest::testStartAppliesTheConfiguredSameSiteValue (Strict, None) and SessionIdleTimeoutTest::testStartAppliesTheIdleTimeoutToTheStoredExpiry (Lax) kill
             ],
@@ -415,6 +420,7 @@
                 "Zephyrus\\Core\\ApplicationBuilder::withJsonLocaleLayers::344", // an empty fallback loader loads nothing
                 "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::fromConfigFiles::27", // no files builds the same default app
                 "Zephyrus\\Core\\Bootstrap\\ApplicationBootstrap::normalizeEnvironmentName::201", // the fall-through returns '' too
+                "Zephyrus\\Core\\Config\\ConfigSection::redactKey::288", // the loop ends after the last segment, the extra reference binds an existing key
                 "Zephyrus\\Core\\Config\\Configuration::fromFile::360", // same YAML read either way
                 "Zephyrus\\Core\\Config\\SessionConfig::assertCookieCanBeStored::226", // __Host- and __Secure- are exclusive
                 "Zephyrus\\Core\\DebugIntegration::declaredProperties::581", // a cache hit recomputes the same map
@@ -510,6 +516,12 @@
                 "Zephyrus\\Routing\\HandlerResolver::describeType::426", // type string equals the type name
                 "Zephyrus\\Routing\\RouteUrlGenerator::extractPlaceholderNames::92", // route names are unique and non-numeric
                 "Zephyrus\\Validation\\Rules::in::252", // implode casts like strval
+            ],
+        },
+        "UnwrapArrayMerge": {
+            "ignore": [
+                "Zephyrus\\Upload\\FileUpload::flattenPhpEntry::127", // $keys is [] there, so the merge returns the keys unchanged
+                "Zephyrus\\Upload\\FileUpload::flattenPhpEntry::130", // a key only in error has no tmp_name and yields nothing, and tmp_name keys come first
             ],
         },
         "UnwrapArraySlice": {
